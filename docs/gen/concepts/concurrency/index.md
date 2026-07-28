@@ -30,7 +30,7 @@ They solve different problems and neither replaces the other.
 ## Within one run: the scheduler
 
 A single `magus run`/`magus affected` invocation builds the dependency graph, then
-runs targets concurrently where the graph allows. `magus.needs` edges order the work
+runs targets concurrently where the graph allows. `magus\needs` edges order the work
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). When a daemon is present, that
 fan-out draws from **one shared concurrency pool** across every client
@@ -101,7 +101,7 @@ compose - the lock is the floor that holds even when nothing else is watching.
 
 ## See also
 
-- [Dependencies](dependencies.md): `magus.needs` and `depends_on`, how a single run is ordered.
+- [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
 - [Daemon](../guides/daemon.md): the persistent process and the shared concurrency pool.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.

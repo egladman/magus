@@ -9,7 +9,7 @@ tags: [semver, module, stdlib, magusfile]
 
 Semantic version parsing and comparison (SemVer 2.0.0).
 
-> **Naming convention:** import the module under its bare name (`import "semver"`) and call methods in `camelCase` (`semver.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "semver"`), reach members with a backslash, and call methods in `camelCase`: `semver\someMethod`.
 
 ## Methods
 
@@ -17,7 +17,7 @@ Semantic version parsing and comparison (SemVer 2.0.0).
 
 Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.
 
-**Signature:** `semver.compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L43)
+**Signature:** `semver\compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L43)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -31,7 +31,7 @@ Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true whe
 
 Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.
 
-**Signature:** `semver.parse(v) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
+**Signature:** `semver\parse(v) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

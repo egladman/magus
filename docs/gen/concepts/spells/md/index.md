@@ -37,7 +37,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/md";
 
-magus.project({ "spells": [md] });
+magus\project({ "spells": [md] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     md["markdownlint"]();
@@ -75,7 +75,7 @@ Replaces `--check` with `--write`.
 import "magus";
 import "magus/spell/md";
 
-magus.project({ "spells": [md] });
+magus\project({ "spells": [md] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     md["prettier"]();

@@ -96,7 +96,7 @@
 are authored: targets that must exist but don't, declarations that won't
 resolve, and similar. Magus raises them at <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> time (as a typed
 <code>DiagnosticError</code>) and, <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> applicable, as a <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> check so the
-gap is visible before <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runs.</p>
+gap is visible before <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runs.</p>
 <h2 id="codes">Codes</h2>
 <ul>
 <li><a href="MGS1001/">MGS1001</a>: no <code>ci</code> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> defined in the selected <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>(s).</li>
@@ -170,7 +170,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

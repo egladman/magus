@@ -50,7 +50,7 @@ Fix the charm declaration so its patch fits the target's argv:
 
 - **Prefer a value anchor over a counted index.** Replace a literal `"/7"` with
   a constructor that resolves the position at author time
-  (`charm.after(args, "run", [...])`), so the pointer tracks the argv instead of
+  (`charm\after(args, "run", [...])`), so the pointer tracks the argv instead of
   a stale count. See [the constructor reference](../../../concepts/charms.md#the-charm-constructor-reference).
 - **Check the base command.** Run `magus describe target <name>` with no charm
   to see the argv the charm must patch, then confirm the index or anchor the

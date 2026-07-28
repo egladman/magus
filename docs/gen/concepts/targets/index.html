@@ -269,7 +269,7 @@
 </tr>
 </tbody>
 </table></figure>
-<p>There is also <code>ci</code>: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with <code>magus.needs</code>. <code>Magus.RunCI</code> treats it specially in exactly three ways: it strips the <code>rw</code> charm (<a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a> always runs read-only), it is the anchor <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> and <code>magus <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code> key off, and it must not silently no-op - a selected scope with no project declaring <code>ci</code> is a load error (see <a href="../dependencies/">dependencies</a>), not a quiet success.</p>
+<p>There is also <code>ci</code>: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with <code>magus\needs</code>. <code>Magus.RunCI</code> treats it specially in exactly three ways: it strips the <code>rw</code> charm (<a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a> always runs read-only), it is the anchor <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> and <code>magus <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code> key off, and it must not silently no-op - a selected scope with no project declaring <code>ci</code> is a load error (see <a href="../dependencies/">dependencies</a>), not a quiet success.</p>
 <p>Tool operations compose <strong>into</strong> these targets; they are not targets of their own. All static analysis - <code>go-vet</code>, <code>golangci-lint</code>, <code>cargo-clippy</code>, type-checks - and security scanning (<code>govulncheck</code>) belong under <code>lint</code> (its definition is &quot;static analysis, type-check&quot;), not a bespoke <code>vet</code>, <code>audit</code>, or <code>security</code> target. A slow security scan can instead be gated in <code>ci</code>. Reserve custom target names for genuinely distinct work with no canonical home (a <code>deploy</code> or <code>release</code>), not for fragmenting a canonical phase.</p>
 <p>Custom target names must use the target-name charset: letters, digits, <code>-</code>, <code>_</code> (<code>types.ValidateTargetName</code>). <code>:</code>, <code>@</code>, and <code>/</code> are reserved for the grammar above.</p>
 <h3 id="when-does-a-name-earn-canonical-status">When does a name earn canonical status?</h3>
@@ -347,11 +347,11 @@ scripts, and docs can drift out of sync with whichever one you typed.</li>
 <td><code>magus run goBuild</code> reaches the target declared <code>go_build</code>.</td>
 </tr>
 <tr>
-<td><code>magus.needs</code> target handles</td>
+<td><code>magus\needs</code> target handles</td>
 <td><code>ctx.needs(goBuild)</code> resolves the target declared <code>go_build</code> (the handle's declared name is normalized).</td>
 </tr>
 <tr>
-<td>The per-target policy map (<code>magus.project</code>'s <code>targets</code>)</td>
+<td>The per-target policy map (<code>magus\project</code>'s <code>targets</code>)</td>
 <td>A policy keyed <code>&quot;goBuild&quot;</code> applies to a target declared <code>go_build</code>, and vice versa.</td>
 </tr>
 <tr>
@@ -479,13 +479,13 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 </tr>
 <tr>
 <td><strong><code>ci</code></strong></td>
-<td>An ordinary target you compose with <code>magus.needs</code>; <code>Magus.RunCI</code> only strips <code>rw</code>, anchors <code>magus affected</code>, and must-not-no-op.</td>
+<td>An ordinary target you compose with <code>magus\needs</code>; <code>Magus.RunCI</code> only strips <code>rw</code>, anchors <code>magus affected</code>, and must-not-no-op.</td>
 </tr>
 </tbody>
 </table></figure>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="../dependencies/">dependencies</a>: <code>magus.needs</code> versus <code>depends_on</code>, and how a cross-project <code>needs</code> folds into the affected set and the cache key.</li>
+<li><a href="../dependencies/">dependencies</a>: <code>magus\needs</code> versus <code>depends_on</code>, and how a cross-project <code>needs</code> folds into the affected set and the cache key.</li>
 <li><a href="../operations/">operations</a>: the formal Operation definition and the work hierarchy (Spell → Operation → Target).</li>
 <li><a href="../spells/">spells</a>: the operations a target composes, and <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</li>
 <li><a href="../charms/">charms</a>: the execution modifiers attached after <code>:</code>.</li>
@@ -572,7 +572,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>CI - magus</title>
-  <meta name="description" content="Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.">
+  <meta name="description" content="Compose a ci target from your magusfile, wire the flow with magus needs, and lock down shared-cache writes with Ed25519 trusted keys.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/concepts/targets/ci/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="CI - magus">
-  <meta property="og:description" content="Compose a ci target from your magusfile, wire the flow with magus.needs, and lock down shared-cache writes with Ed25519 trusted keys.">
+  <meta property="og:description" content="Compose a ci target from your magusfile, wire the flow with magus needs, and lock down shared-cache writes with Ed25519 trusted keys.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/concepts/targets/ci/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -72,10 +72,19 @@
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
     <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/concepts/targets/ci.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
-    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#recommendations" title="Recommendations">Recommendations</a></li><li><a href="#common-pitfalls" title="Common pitfalls">Common pitfalls</a><ul><li><a href="#the-workflow-drifts-out-from-under-a-release-branch" title="The workflow drifts out from under a release branch">The workflow drifts out from under a release branch</a></li><li><a href="#the-gate-goes-green-having-run-nothing" title="The gate goes green having run nothing">The gate goes green having run nothing</a></li><li><a href="#the-workflow-hardcodes-the-project-list" title="The workflow hardcodes the project list">The workflow hardcodes the project list</a></li><li><a href="#generated-files-pass-locally-and-fail-in-ci" title="Generated files pass locally and fail in CI">Generated files pass locally and fail in CI</a></li><li><a href="#a-volatile-test-fails-the-pipeline" title="A volatile test fails the pipeline">A volatile test fails the pipeline</a></li><li><a href="#a-maintenance-branch-silently-upgrades-magus" title="A maintenance branch silently upgrades magus">A maintenance branch silently upgrades magus</a></li><li><a href="#sharing-ci-logic-across-branches-and-what-it-costs" title="Sharing CI logic across branches, and what it costs">Sharing CI logic across branches, and what it costs</a></li></ul></li><li><a href="#shared-cache-trust" title="Shared cache trust">Shared cache trust</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
     <article>
 <h1 id="ci">CI</h1>
-<p><code>ci</code> is an ordinary <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>; magus does not hardcode its steps. Export a <code>ci</code> function, wire the flow with <code>magus.needs</code>, and magus runs it read-only.</p>
+<p><code>ci</code> is an ordinary <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>; magus does not hardcode its steps. Export a <code>ci</code> function, wire the flow with <code>magus\needs</code>, and magus runs it read-only.</p>
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../../tour/#step-11">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
 <pre><code class="language-buzz">export fun ci(ctx: magus\Context, args: [str]) &gt; void {
@@ -84,7 +93,7 @@
 }
 </code></pre>
 <h2 id="recommendations">Recommendations</h2>
-<p>We document this order; we don't enforce it. Chain steps with <code>magus.needs</code> <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
+<p>We document this order; we don't enforce it. Chain steps with <code>magus\needs</code> <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> order matters (e.g. <code>test</code> depends on <code>build</code>).</p>
 <div class="mermaid-src"><pre><code class="language-mermaid">flowchart TD
     cmd[&quot;magus affected ci&quot;] --&gt; preflight
     subgraph targets[&quot;Targets (composed in your magusfile)&quot;]
@@ -95,33 +104,104 @@
         build --&gt; test
     end
 </code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<h2 id="common-pitfalls">Common pitfalls</h2>
+<p>Each of these is a way a pipeline goes wrong slowly enough that nobody notices
+until it is expensive. magus does not prevent all of them, but it makes each one
+either impossible or loud.</p>
+<h3 id="the-workflow-drifts-out-from-under-a-release-branch">The workflow drifts out from under a release branch</h3>
+<p>A workflow that names steps directly - build here, test there, lint with these
+flags - encodes the shape of the repository at the moment it was written. That
+shape drifts, and on a long-lived release branch it drifts unwatched. Months
+later a security backport fails <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> for reasons unrelated to the patch, and the
+cherry-pick grows to carry workflow and infrastructure changes nobody wanted in a
+maintenance release. The release now contains CI plumbing that was never reviewed
+as part of it.</p>
+<p><strong>magus:</strong> reduce the workflow to one contract and it has nothing left to drift.</p>
+<pre><code class="language-yaml">- run: magus affected ci
+</code></pre>
+<p>Everything that varies moves into the magusfile, which is versioned with the code
+it builds - and should be. A <code>v2</code> branch legitimately builds differently from
+<code>v4</code>: different toolchain, different steps, possibly different projects. Each
+branch describes its own build, and no branch needs another's. The contract is
+one line: every branch exports a <code>ci</code> target. What it composes is that branch's
+business.</p>
+<h3 id="the-gate-goes-green-having-run-nothing">The gate goes green having run nothing</h3>
+<p>The failure mode a thin workflow could otherwise introduce: a branch falls out of
+the contract, <code>ci</code> resolves to nothing, and the pipeline passes without gating
+anything.</p>
+<p><strong>magus:</strong> this is an error, not a warning. <code><a class="code-xref" href="../../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> refuses to <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>
+when no <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in scope declares a <code>ci</code> target.</p>
+<pre><code>no &quot;ci&quot; target defined in the selected project(s); it is the anchor
+&quot;magus affected ci&quot; and &quot;magus affected --plan&quot; key off, so this run
+would do nothing
+</code></pre>
+<h3 id="the-workflow-hardcodes-the-project-list">The workflow hardcodes the project list</h3>
+<p>Sharding is the other place repository shape leaks into a workflow. A matrix
+listing projects by name is wrong the moment one is added or removed, and the
+branch that notices is whichever one fails next.</p>
+<p><strong>magus:</strong> <code>magus <a class="code-xref" href="../../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code> emits the shard matrix as JSON, so the
+workflow consumes a value instead of a list. A branch that gains or loses a
+project changes its plan output, not its workflow.</p>
+<h3 id="generated-files-pass-locally-and-fail-in-ci">Generated files pass locally and fail in CI</h3>
+<p>Codegen that runs locally and rewrites the tree makes a dirty checkout look
+clean, so drift ships and CI catches it later - or does not.</p>
+<p><strong>magus:</strong> <a href="../../charms/">charms</a> make writing and verifying the same target with
+different intent. Locally a <code>generate</code> target carries <code>rw</code> and writes; in CI the
+default <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> is stripped (<code>--no-default-charms</code>) and the same target acts as a
+pure drift gate. A target can also set <code>FailOnDrift</code> to fail outright when it
+leaves the tree dirty.</p>
+<h3 id="a-volatile-test-fails-the-pipeline">A volatile test fails the pipeline</h3>
+<p>Reruns-until-green is how a suite decays into one nobody trusts, because a real
+regression looks the same as a volatile failure from the outside.</p>
+<p><strong>magus:</strong> <a href="../../volatility/">volatility</a> detection decides statistically from
+per-target history rather than by rerunning blindly, and only targets that opt in
+with <code>RetryOnVolatile</code> are eligible.</p>
+<h3 id="a-maintenance-branch-silently-upgrades-magus">A maintenance branch silently upgrades magus</h3>
+<p>The same drift as the first pitfall, one layer down: a branch that picks up a
+newer magus than it was validated against.</p>
+<p><strong>magus:</strong> pin the <a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> per branch and verify its checksum. Whatever else is
+shared between branches, this should not be.</p>
+<h3 id="sharing-ci-logic-across-branches-and-what-it-costs">Sharing CI logic across branches, and what it costs</h3>
+<p>A related pattern: have a release branch check out <code>main</code> for its CI logic, so
+workflow fixes never need backporting. It does deliver that, and with thin
+workflows you rarely need it.</p>
+<p>Know the trade before adopting it. You lose the ability to reproduce what a
+release actually passed - re-running <code>v2</code>'s pipeline a year later runs today's
+logic, not the logic that approved it, which is exactly the property an audit or
+a regression hunt wants. It also makes the pinned version ambiguous, since the
+branch's magusfile may target a magus the shared workflow no longer installs.</p>
+<p>It is also the harder pattern to read: nothing in the branch says where its CI
+logic lives, so anyone - or any agent - reading only that branch cannot tell. If
+you adopt it, say so in the branch's <code>AGENTS.md</code> or <code>MAGUS.md</code>.</p>
 <h2 id="shared-cache-trust">Shared cache trust</h2>
 <p><strong>Who may write the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> is a trust boundary.</strong> The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in <code><a class="code-xref" href="../../../reference/config/#cache" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_CACHE_REMOTE_TRUSTED_KEYS">cache.remote.trusted_keys</a></code>. Wiring a remote backend without a trust set is refused.</p>
-<pre><code class="language-yaml"># magus.yaml  -  bind the backend in magusfile.buzz via magus.cache.remote(github)
+<pre><code class="language-yaml"># magus.yaml  -  bind the backend in magusfile.buzz via magus\cache.remote(github)
 cache:
   remote:
     trusted_keys:
       - &quot;&lt;base64 Ed25519 public key&gt;&quot; # magus config cache key generate
 </code></pre>
-<p>A complementary defense is to open the cache <strong>read-only on untrusted <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a></strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> history (the forecaster and <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a> detector read it): restore always, save only from trusted pushes.</p>
+<p>A complementary defense is to open the cache <strong>read-only on untrusted <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a></strong>: replay hits but never publish. Gate it on the event so only trusted pushes write, and apply the same rule to any persisted run history (the forecaster and <a class="glossary-term" href="../../../glossary/#volatility" data-def="A target that fails once and passes on rerun is **volatile**, as opposed to a regression that started failing and stays failing. magus keeps per-target pass/fail history and a Wilson-score volatility rate to tell them apart and auto-retry the noise.">volatility</a> detector read it): restore always, save only from trusted pushes.</p>
 <pre><code class="language-yaml"># PRs replay the cache and see main's history, but write neither
 MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
 </code></pre>
 <p>To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see <a href="../../remote-cache/">Remote caching</a>.</p>
     </article>
+    </div>
+    </div>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
         <a class="related-card" href="../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../search/?q=tag%3A%22ci+target%22">ci target</a><a class="tag" href="../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22remote+cache%22">remote cache</a><a class="tag" href="../../../search/?q=tag%3A%22trusted+keys%22">trusted keys</a><a class="tag" href="../../../search/?q=tag%3A%22magus.needs%22">magus.needs</a><a class="tag" href="../../../search/?q=tag%3A%22github+actions%22">github actions</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../search/?q=tag%3A%22ci+target%22">ci target</a><a class="tag" href="../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22remote+cache%22">remote cache</a><a class="tag" href="../../../search/?q=tag%3A%22trusted+keys%22">trusted keys</a><a class="tag" href="../../../search/?q=tag%3A%22magus+needs%22">magus needs</a><a class="tag" href="../../../search/?q=tag%3A%22github+actions%22">github actions</a></div>
+    <small>Last updated <time datetime="2026-07-28T15:33:11Z">July 28, 2026, 3:33 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a1c3ea0950687eed3c9b113a96c061632295fdbf" data-tooltip="a1c3ea0950687eed3c9b113a96c061632295fdbf" title="a1c3ea0950687eed3c9b113a96c061632295fdbf">a1c3ea09</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/2cc1163e0dd27d49cb0e4a992fff8cea93a8d386"><code>2cc1163e</code></a> <small><time datetime="2026-07-28T15:30:16Z">Jul 28, 2026</time></small> - document why a thin ci workflow survives release branches</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/targets/ci.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/targets/ci.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -183,7 +263,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

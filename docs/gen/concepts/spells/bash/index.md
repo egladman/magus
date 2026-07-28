@@ -39,7 +39,7 @@ One shellcheck invocation over every shell source: find feeds xargs with NUL sep
 import "magus";
 import "magus/spell/bash";
 
-magus.project({ "spells": [bash] });
+magus\project({ "spells": [bash] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     bash["shellcheck"]();

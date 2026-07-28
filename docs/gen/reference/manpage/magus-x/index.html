@@ -96,7 +96,7 @@ the candidate set: &quot;magus x dash mobile&quot; requires both substrings.</p>
 <p>When the filtered set is unique, the project picker is skipped. Otherwise
 a TTY picker opens, seeded with the survivors, sorted by score. After a
 project is chosen, a second picker offers the target set
-(build/test/lint/format/clean/generate/<a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>); the last target used for that
+(build/test/lint/format/clean/generate/<a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>); the last target used for that
 project (persisted in $XDG_STATE_HOME/magus/x-state.json, defaulting to
 $HOME/.local/state/magus/) is pre-highlighted.</p>
 <p>x refuses to <a class="code-xref" href="../magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> when stdin or stderr is not a terminal: shorthand is for
@@ -194,7 +194,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

@@ -162,7 +162,7 @@
 import &quot;magus&quot;;
 import &quot;magus/spell/py&quot;;
 
-magus.project({ &quot;spells&quot;: [py] });
+magus\project({ &quot;spells&quot;: [py] });
 
 export fun test(ctx: magus\Context, args: [str]) &gt; void {
     py[&quot;pytest&quot;]({ &quot;args&quot;: [&quot;-k&quot;, &quot;integration&quot;] });
@@ -215,7 +215,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/py&quot;;
 
-magus.project({ &quot;spells&quot;: [py] });
+magus\project({ &quot;spells&quot;: [py] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     py[&quot;ruff-check&quot;]();
@@ -241,7 +241,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/py&quot;;
 
-magus.project({ &quot;spells&quot;: [py] });
+magus\project({ &quot;spells&quot;: [py] });
 
 export fun format(ctx: magus\Context, args: [str]) &gt; void {
     py[&quot;ruff-format&quot;]();
@@ -259,7 +259,7 @@ export fun format(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/py&quot;;
 
-magus.project({ &quot;spells&quot;: [py] });
+magus\project({ &quot;spells&quot;: [py] });
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     py[&quot;uv-build&quot;]();
@@ -273,7 +273,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/py&quot;;
 
-magus.project({ &quot;spells&quot;: [py] });
+magus\project({ &quot;spells&quot;: [py] });
 
 export fun clean(ctx: magus\Context, args: [str]) &gt; void {
     py[&quot;uv-clean&quot;]();
@@ -360,7 +360,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

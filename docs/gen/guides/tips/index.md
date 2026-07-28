@@ -9,7 +9,7 @@ tags:
     watch,
     repl,
     recursion,
-    magus.cmd,
+    magus\cmd,
     magus status,
     output,
     template,
@@ -104,13 +104,13 @@ The field names are always the json keys - `-o json` and `-o template` share one
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
 - **`magus repl`** - standalone shell with magusfile bindings preloaded.
-- **`magus.pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
+- **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    os.exec("go", ["generate", "./..."]);
-    magus.pry();   // execution pauses here; inspect or modify state
-    os.exec("go", ["build", "./..."]);
+    os\exec("go", ["generate", "./..."]);
+    magus\pry();   // execution pauses here; inspect or modify state
+    os\exec("go", ["build", "./..."]);
 }
 ```
 
@@ -123,7 +123,7 @@ Full reference (meta-commands, pry stack navigation, `--step` keymap, multiline 
 Targets can call `magus` recursively. Child invocations forward work to the parent process over a local socket; concurrency limits are shared, so nested calls draw from the same budget instead of each grabbing their own slots.
 
 ```buzz
-magus.cmd(["run", "build", "api"]);
+magus\cmd(["run", "build", "api"]);
 ```
 
-`magus.cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.
+`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.

@@ -147,7 +147,7 @@
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-build&quot;]();
@@ -161,7 +161,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun clean(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-clean&quot;]();
@@ -189,7 +189,7 @@ export fun clean(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun format(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-fmt&quot;]();
@@ -204,7 +204,7 @@ export fun format(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-generate&quot;]();
@@ -231,7 +231,7 @@ export fun generate(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-mod-tidy&quot;]();
@@ -247,7 +247,7 @@ export fun tidy(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-run&quot;]({&quot;args&quot;: [&quot;./cmd/gen-docs&quot;, &quot;-out&quot;, &quot;./docs&quot;]});
@@ -294,7 +294,7 @@ export fun generate(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun test(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-test&quot;]({ &quot;args&quot;: [&quot;-race&quot;] });
@@ -310,7 +310,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-vet&quot;]();
@@ -351,7 +351,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;golangci-lint&quot;]();
@@ -368,7 +368,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;govulncheck&quot;]();
@@ -395,7 +395,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22golang%22">golang</a><a class="tag" href="../../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T14:00:34Z">July 28, 2026, 2:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/99ced4add50cf7abb4471a77f5ee6ce55f7ba71d" data-tooltip="99ced4add50cf7abb4471a77f5ee6ce55f7ba71d" title="99ced4add50cf7abb4471a77f5ee6ce55f7ba71d">99ced4ad</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/go.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/go.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -457,7 +457,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

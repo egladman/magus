@@ -138,7 +138,7 @@ a long-running process <code><a class="code-xref" href="../../reference/manpage/
 value, so one spell mixes both. A <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a> backend
 is not an op: it is a spell that exports the backend functions
 (<code>enabled</code>/<code>get_artifact</code>/<code>put_artifact</code>/<code>prune</code>), detected by name and wired with
-<code>magus.cache.remote</code> (see <a href="../remote-cache/">Remote caching</a>).</p>
+<code>magus\cache.remote</code> (see <a href="../remote-cache/">Remote caching</a>).</p>
 <p><strong>Doc-comment capture.</strong> Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; <code>FunDoc</code> reads it back), and
 <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> enforces one on each function-handler <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>. Note Buzz's
@@ -148,18 +148,18 @@ built-ins.</p>
 <h2 id="host-modules-are-a-superset-of-buzzs-stdlib">Host modules are a superset of Buzz's stdlib</h2>
 <p>magus layers its host methods onto Buzz's own stdlib modules under the <strong>same bare
 names</strong>: <code>import &quot;os&quot;</code> carries both Buzz's <code>os.*</code> (sleep, env, execute) and magus's
-additions (<code>os.exec</code>, <code>os.which</code>, ...); <code>import &quot;fs&quot;</code> carries Buzz's <code>fs</code> plus
-<code>fs.glob</code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
+additions (<code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a></code>, <code><a class="code-xref" href="../../reference/buzz/os/#which" data-kind="method" data-def="">os\which</a></code>, ...); <code>import &quot;fs&quot;</code> carries Buzz's <code>fs</code> plus
+<code><a class="code-xref" href="../../reference/buzz/fs/#glob" data-kind="method" data-def="">fs\glob</a></code>/<code>readFile</code>; and magus adds whole modules Buzz lacks (<code>vcs</code>, <code>archive</code>,
 <code>http</code>, <code>charm</code>, ...). One import per domain covers the union, with no separate
 <code>extra</code> namespace to remember which side a call lives on.</p>
 <p><a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a> a method overlaps a Buzz stdlib call, the magus form is <strong><a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware</strong>
-while the bare stdlib is not. For example, <code>env.get</code>/<code>lookup</code> honor the env
-allowlist, whereas Buzz's <code>os.env</code> is raw. Those overlaps are noted per-method in the
+while the bare stdlib is not. For example, <code><a class="code-xref" href="../../reference/buzz/env/#get" data-kind="method" data-def="">env\get</a></code>/<code>lookup</code> honor the env
+allowlist, whereas Buzz's <code>os\env</code> is raw. Those overlaps are noted per-method in the
 <a href="../../reference/buzz/">module reference</a> (either works); the cross-reference lives in
 <code>host/overlap.go</code>.</p>
 <p>A few entries are <em>not</em> treated as duplicates because the magus behavior the
-stdlib can't reproduce: magus's <code>os.exit</code> raises a lifecycle error (Buzz's
-hard-exits the process), magus's <code>os.sleep</code> is cancellable (Buzz's blocks), and
+stdlib can't reproduce: magus's <code><a class="code-xref" href="../../reference/buzz/os/#exit" data-kind="method" data-def="">os\exit</a></code> raises a lifecycle error (Buzz's
+hard-exits the process), magus's <code><a class="code-xref" href="../../reference/buzz/os/#sleep" data-kind="method" data-def="">os\sleep</a></code> is cancellable (Buzz's blocks), and
 magus's <code>crypto.*_file</code> hashes a file (Buzz's <code>hash</code> only takes a string). These
 stay on the magus <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>.</p>
 <p>A workspace spell lives at <code>spells/&lt;name&gt;/spell.buzz</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> (or flat
@@ -280,7 +280,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

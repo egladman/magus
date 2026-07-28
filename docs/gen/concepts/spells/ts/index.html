@@ -177,7 +177,7 @@
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;biome-check&quot;]();
@@ -207,7 +207,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun format(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;biome-format&quot;]();
@@ -224,14 +224,14 @@ export fun format(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun serve(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;dev-server&quot;]();
 }
 </code></pre>
 <h2 id="eslint">eslint</h2>
-<p>eslint has no built-in &quot;github&quot; formatter (unlike ruff's --output-format=github); &quot;unix&quot; is the built-in, no-extra-devDependency formatter closest to a <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>-friendly, one-line-per-problem shape for annotation/regex parsing.</p>
+<p>eslint has no built-in &quot;github&quot; formatter (unlike ruff's --output-format=github); &quot;unix&quot; is the built-in, no-extra-devDependency formatter closest to a <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>-friendly, one-line-per-problem shape for annotation/regex parsing.</p>
 <p><strong>Command:</strong> <code>pnpm exec eslint .</code></p>
 <h3 id="gha-1">gha</h3>
 <p>Inserts <code>--format=unix</code>.</p>
@@ -265,7 +265,7 @@ export fun serve(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;eslint&quot;]();
@@ -280,7 +280,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun preflight(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;preflight&quot;]();
@@ -307,7 +307,7 @@ export fun preflight(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun format(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;prettier&quot;]();
@@ -326,7 +326,7 @@ export fun format(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;tsc&quot;]();
@@ -342,7 +342,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;tsc-build&quot;]();
@@ -358,7 +358,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun clean(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;tsc-clean&quot;]();
@@ -385,7 +385,7 @@ export fun clean(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun test(ctx: magus\Context, args: [str]) &gt; void {
     ts[&quot;vitest&quot;]();
@@ -404,7 +404,7 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus.needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
+        <a class="related-card" href="../../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus\needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -471,7 +471,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

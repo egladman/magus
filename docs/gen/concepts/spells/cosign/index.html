@@ -97,7 +97,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="cosign">cosign</h1>
-<p>The <code>cosign</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> forks the Sigstore <code>cosign</code> CLI to sign, attest, and verify artifacts. Signing and attestation pass <code>--yes</code> for non-interactive (<a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>) use.</p>
+<p>The <code>cosign</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> forks the Sigstore <code>cosign</code> CLI to sign, attest, and verify artifacts. Signing and attestation pass <code>--yes</code> for non-interactive (<a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>) use.</p>
 <p><strong>Runtime name:</strong> <code>cosign</code> (source <code>spells/cosign/</code>)</p>
 <p><strong><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a> probe:</strong> <code>cosign version</code></p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
@@ -148,7 +148,7 @@
 import &quot;magus&quot;;
 import &quot;magus/spell/cosign&quot;;
 
-magus.project({ &quot;spells&quot;: [cosign] });
+magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun attest(ctx: magus\Context, args: [str]) &gt; void {
     cosign[&quot;cosign-attest&quot;]({ &quot;args&quot;: [&quot;--predicate&quot;, &quot;sbom.json&quot;, &quot;--type&quot;, &quot;cyclonedx&quot;, &quot;app:latest&quot;] });
@@ -164,7 +164,7 @@ export fun attest(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/cosign&quot;;
 
-magus.project({ &quot;spells&quot;: [cosign] });
+magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun sign(ctx: magus\Context, args: [str]) &gt; void {
     cosign[&quot;cosign-sign&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
@@ -179,7 +179,7 @@ export fun sign(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/cosign&quot;;
 
-magus.project({ &quot;spells&quot;: [cosign] });
+magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun verify(ctx: magus\Context, args: [str]) &gt; void {
     cosign[&quot;cosign-verify&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
@@ -266,7 +266,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

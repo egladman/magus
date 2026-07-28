@@ -187,7 +187,7 @@ that reference a symbol. Sort symbols by `coverage` ascending for "what is untes
 or cross it with `insight hotspots` to rank high-churn, low-coverage code first.
 
 **What does a target produce or consume, and is a file generated?** magus indexes each
-target's declared `magus.outputs` / `magus.inputs`, so the graph knows the build's file
+target's declared `magus\outputs` / `magus\inputs`, so the graph knows the build's file
 flow - which a pure code-graph cannot.
 
 ```sh
@@ -230,7 +230,7 @@ magus graph open --url <base>   # point at a self-hosted mirror of the explorer
 
 ### Open your target graph
 
-To open the **target dependency graph** (the `magus.needs` DAG, not the
+To open the **target dependency graph** (the `magus\needs` DAG, not the
 knowledge graph) in the same explorer:
 
 ```sh

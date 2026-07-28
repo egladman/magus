@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#camel-case" title="camel_case">camel_case</a></li><li><a href="#snake-case" title="snake_case">snake_case</a></li><li><a href="#kebab-case" title="kebab_case">kebab_case</a></li><li><a href="#pascal-case" title="pascal_case">pascal_case</a></li><li><a href="#capitalize" title="capitalize">capitalize</a></li><li><a href="#words" title="words">words</a></li><li><a href="#ellipsis" title="ellipsis">ellipsis</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#camelcase" title="camelCase">camelCase</a></li><li><a href="#snakecase" title="snakeCase">snakeCase</a></li><li><a href="#kebabcase" title="kebabCase">kebabCase</a></li><li><a href="#pascalcase" title="pascalCase">pascalCase</a></li><li><a href="#capitalize" title="capitalize">capitalize</a></li><li><a href="#words" title="words">words</a></li><li><a href="#ellipsis" title="ellipsis">ellipsis</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="strings">strings</h1>
 <p>Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;strings&quot;</code>) and call methods in <code>camelCase</code> (<code>strings.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;strings&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>strings\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="camel-case">camel_case</h3>
+<h3 id="camelcase">camelCase</h3>
 <p>Convert s to camelCase.</p>
-<p><strong>Signature:</strong> <code>strings.camelCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L77" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#camelcase" data-kind="method" data-def="">strings\camelCase</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L77" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -142,12 +142,12 @@
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.camelCase(&quot;hello world&quot;));
+std\print(strings\camelCase(&quot;hello world&quot;));
 // -&gt; &quot;helloWorld&quot;
 </code></pre>
-<h3 id="snake-case">snake_case</h3>
+<h3 id="snakecase">snakeCase</h3>
 <p>Convert s to snake_case.</p>
-<p><strong>Signature:</strong> <code>strings.snakeCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L82" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#snakecase" data-kind="method" data-def="">strings\snakeCase</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L82" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -172,12 +172,12 @@ std.print(strings.camelCase(&quot;hello world&quot;));
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.snakeCase(&quot;HelloWorld&quot;));
+std\print(strings\snakeCase(&quot;HelloWorld&quot;));
 // -&gt; &quot;hello_world&quot;
 </code></pre>
-<h3 id="kebab-case">kebab_case</h3>
+<h3 id="kebabcase">kebabCase</h3>
 <p>Convert s to kebab-case.</p>
-<p><strong>Signature:</strong> <code>strings.kebabCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L87" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#kebabcase" data-kind="method" data-def="">strings\kebabCase</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L87" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -202,12 +202,12 @@ std.print(strings.snakeCase(&quot;HelloWorld&quot;));
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.kebabCase(&quot;MyComponentName&quot;));
+std\print(strings\kebabCase(&quot;MyComponentName&quot;));
 // -&gt; &quot;my-component-name&quot;
 </code></pre>
-<h3 id="pascal-case">pascal_case</h3>
+<h3 id="pascalcase">pascalCase</h3>
 <p>Convert s to PascalCase.</p>
-<p><strong>Signature:</strong> <code>strings.pascalCase(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L92" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#pascalcase" data-kind="method" data-def="">strings\pascalCase</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L92" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -232,12 +232,12 @@ std.print(strings.kebabCase(&quot;MyComponentName&quot;));
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.pascalCase(&quot;user_profile&quot;));
+std\print(strings\pascalCase(&quot;user_profile&quot;));
 // -&gt; &quot;UserProfile&quot;
 </code></pre>
 <h3 id="capitalize">capitalize</h3>
 <p>Uppercase the first rune of s and lowercase the rest.</p>
-<p><strong>Signature:</strong> <code>strings.capitalize(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L97" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#capitalize" data-kind="method" data-def="">strings\capitalize</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L97" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -262,12 +262,12 @@ std.print(strings.pascalCase(&quot;user_profile&quot;));
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.capitalize(&quot;hELLO&quot;));
+std\print(strings\capitalize(&quot;hELLO&quot;));
 // -&gt; &quot;Hello&quot;
 </code></pre>
 <h3 id="words">words</h3>
 <p>Split s into its constituent words (splitting on case changes, digits, and separators).</p>
-<p><strong>Signature:</strong> <code>strings.words(s) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#words" data-kind="method" data-def="">strings\words</a>(s) → []string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -292,8 +292,8 @@ std.print(strings.capitalize(&quot;hELLO&quot;));
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-final parts = strings.words(&quot;parseHTTPResponse2&quot;);
-foreach (w in parts) { std.print(w); }
+final parts = strings\words(&quot;parseHTTPResponse2&quot;);
+foreach (w in parts) { std\print(w); }
 // -&gt; parse
 // -&gt; HTTP
 // -&gt; Response
@@ -301,7 +301,7 @@ foreach (w in parts) { std.print(w); }
 </code></pre>
 <h3 id="ellipsis">ellipsis</h3>
 <p>Trim s to at most length runes, appending &quot;...&quot; when truncated.</p>
-<p><strong>Signature:</strong> <code>strings.ellipsis(s, length) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#ellipsis" data-kind="method" data-def="">strings\ellipsis</a>(s, length) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/strings.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -332,7 +332,7 @@ foreach (w in parts) { std.print(w); }
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;strings&quot;;
 
-std.print(strings.ellipsis(&quot;the quick brown fox&quot;, 12));
+std\print(strings\ellipsis(&quot;the quick brown fox&quot;, 12));
 // -&gt; &quot;the quick...&quot;
 </code></pre>
     </article>
@@ -354,7 +354,7 @@ std.print(strings.ellipsis(&quot;the quick brown fox&quot;, 12));
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22strings%22">strings</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:41:45Z">July 28, 2026, 3:41 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/abf5b9de3e13198a0506a8b9f520c86b2a84af16" data-tooltip="abf5b9de3e13198a0506a8b9f520c86b2a84af16" title="abf5b9de3e13198a0506a8b9f520c86b2a84af16">abf5b9de</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8"><code>a1625126</code></a> <small><time datetime="2026-07-28T15:08:25Z">Jul 28, 2026</time></small> - document the name a caller types, not the one Go declares</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/strings.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/strings.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -416,7 +416,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

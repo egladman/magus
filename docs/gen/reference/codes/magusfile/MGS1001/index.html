@@ -95,7 +95,7 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1001-no-ci-target-defined">MGS1001: no ci target defined</h1>
-<p><code>magus ci</code> (or <code><a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code>, <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code>, <code><a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">magus x</a></code> <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>) was
+<p><code>magus ci</code> (or <code><a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code>, <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code>, <code><a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">magus x</a></code> <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>) was
 asked to <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> the <code>ci</code> <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, but no <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in the selected scope declares one.</p>
 <pre><code class="language-text">[MGS1001] no &quot;ci&quot; target defined in the selected project(s); it is the anchor
 &quot;magus affected ci&quot; and &quot;magus affected --plan&quot; key off, so this run would do nothing
@@ -103,7 +103,7 @@ asked to <a class="code-xref" href="../../../manpage/magus-run/" data-kind="comm
 </code></pre>
 <h2 id="why">Why</h2>
 <p><code>ci</code> is an ordinary <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> target. Magus does not hardcode a CI chain.
-You compose the gate yourself with <code>magus.needs</code>, ordering the stages your
+You compose the gate yourself with <code>magus\needs</code>, ordering the stages your
 <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> needs (build, test, lint, ...).</p>
 <p>It is the one target magus treats as the CI anchor: <code>magus affected ci</code> and <code>magus affected --plan</code> key off it to decide what the <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>
 set should build and gate. Every other target fans out and silently skips
@@ -121,7 +121,7 @@ workspace declares <code>ci</code>, surfacing the gap before CI ever runs it.</l
 </ul>
 <h2 id="resolution">Resolution</h2>
 <p>Define a <code>ci</code> target in your magusfile and compose the stages with
-<code>magus.needs</code>:</p>
+<code>magus\needs</code>:</p>
 <pre><code class="language-buzz">export fun ci(ctx: magus\Context, _a: [str]) &gt; void {
     ctx.needs(build, test, lint);
 }
@@ -134,7 +134,7 @@ for the anchor to resolve. Declare it wherever you compose the workspace gate.</
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not a missing-<a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> error.</strong> <code>ci</code> is never a spell op; it lives in the
-magusfile and composes spell-backed targets via <code>magus.needs</code>. Adding a
+magusfile and composes spell-backed targets via <code>magus\needs</code>. Adding a
 spell will not satisfy this check.</li>
 <li><strong>Not triggered by an empty affected set.</strong> <code>magus affected ci</code> with no
 changed projects is a real no-op and does not raise <a class="code-xref" href="./" data-kind="code" data-def="Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.">MGS1001</a>. The diagnostic
@@ -158,7 +158,7 @@ fires only when the scope has projects yet none declare <code>ci</code>.</li>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1003/"><span class="related-card-title">MGS1003: bespoke phase-fragment target name</span><span class="related-card-desc">Fires when a magusfile declares a target named after a static-analysis or formatting subset (typecheck, vet, audit, security, style, prettify) instead of composing it into lint or format.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus\needs.</span></a>
         <a class="related-card" href="../../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
@@ -226,7 +226,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

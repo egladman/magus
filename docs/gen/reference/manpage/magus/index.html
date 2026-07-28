@@ -160,7 +160,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.</p>
 <dt><strong>MAGUS_CACHE_SIZE_MB</strong></dt>
 <dd>Cache disk usage cap in MB (binary, 1&lt;&lt;20); 0 means unlimited (default: 0). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="int, flag --cache-size-mb, env MAGUS_CACHE_SIZE_MB">cache.size_mb</a></strong>.</dd>
 <dt><strong>MAGUS_CACHE_REMOTE_INSECURE</strong></dt>
-<dd>Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> only (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="bool, flag --cache-remote-insecure, env MAGUS_CACHE_REMOTE_INSECURE">cache.remote.insecure</a></strong>.</dd>
+<dd>Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> only (default: false). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#cache" data-kind="config" data-def="bool, flag --cache-remote-insecure, env MAGUS_CACHE_REMOTE_INSECURE">cache.remote.insecure</a></strong>.</dd>
 <dt><strong>MAGUS_LOG_FORMAT</strong></dt>
 <dd>Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.yaml key: <strong><a class="code-xref" href="../../config/#log" data-kind="config" data-def="string, flag --log-format, env MAGUS_LOG_FORMAT">log.format</a></strong>.</dd>
 <dt><strong>MAGUS_LOG_LEVEL</strong></dt>
@@ -265,9 +265,9 @@ MAGUS_CACHE_DIR.</dd>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
-        <a class="related-card" href="../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -334,7 +334,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

@@ -125,7 +125,7 @@ default (e.g. <code>pip</code> embeds the build tempdir <a class="code-xref" hre
 seed.</li>
 </ul>
 <p>This check is expensive: it doubles the wall-clock time of the <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>
-build, and the second pass cannot benefit from the cache. Run it for <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>
+build, and the second pass cannot benefit from the cache. Run it for <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>
 nightly or a manual audit rather than every push.</p>
 <h2 id="resolution">Resolution</h2>
 <h3 id="1-identify-the-source">1. Identify the source</h3>
@@ -251,7 +251,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

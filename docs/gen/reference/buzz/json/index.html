@@ -112,12 +112,12 @@
 <h1 id="json">json</h1>
 <p>JSON encode/decode.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;json&quot;</code>) and call methods in <code>camelCase</code> (<code>json.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;json&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>json\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="parse">parse</h3>
 <p>Decode a JSON string into a value (map, list, string, number, or boolean).</p>
-<p><strong>Signature:</strong> <code>json.parse(s) → any</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L40" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#parse" data-kind="method" data-def="">json\parse</a>(s) → any</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L40" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -142,15 +142,15 @@
 <pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
 import &quot;json&quot;;
 
-final v = json.parse(&quot;\{\&quot;name\&quot;: \&quot;api\&quot;, \&quot;port\&quot;: 8080\}&quot;);
-std.print(v[&quot;name&quot;]);
-std.print(v[&quot;port&quot;]);
+final v = json\parse(&quot;\{\&quot;name\&quot;: \&quot;api\&quot;, \&quot;port\&quot;: 8080\}&quot;);
+std\print(v[&quot;name&quot;]);
+std\print(v[&quot;port&quot;]);
 // -&gt; api
 // -&gt; 8080
 </code></pre>
 <h3 id="stringify">stringify</h3>
 <p>Encode a value as a JSON string. With no indent (or &quot;&quot;) the output is compact; pass an indent string (e.g. &quot;  &quot; or &quot;\t&quot;) for pretty, multi-line output.</p>
-<p><strong>Signature:</strong> <code>json.stringify(value, [indent]) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L53" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#stringify" data-kind="method" data-def="">json\stringify</a>(value, [indent]) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/json.go#L53" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -182,20 +182,20 @@ std.print(v[&quot;port&quot;]);
 import &quot;json&quot;;
 
 final config = { &quot;target&quot;: &quot;build&quot;, &quot;parallel&quot;: true };
-std.print(json.stringify(config));
+std\print(json\stringify(config));
 // -&gt; {&quot;parallel&quot;:true,&quot;target&quot;:&quot;build&quot;}
 
 // Pretty-printed with two-space indent:
-std.print(json.stringify(config, &quot;  &quot;));
+std\print(json\stringify(config, &quot;  &quot;));
 </code></pre>
 <div class="footnotes" role="doc-endnotes">
 <hr>
 <ol>
 <li id="fn:1">
-<p><code>json.parse</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>serialize.jsonDecode</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>json\parse</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>serialize.jsonDecode</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2">
-<p><code>json.stringify</code> is also in Buzz's standard library (<code>serialize.jsonEncode</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>json\stringify</code> is also in Buzz's standard library (<code>serialize.jsonEncode</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </div>
@@ -213,12 +213,12 @@ std.print(json.stringify(config, &quot;  &quot;));
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../../../reference/buzz/fs/"><span class="related-card-title">fs module</span><span class="related-card-desc">Filesystem and path primitives.</span></a>
         <a class="related-card" href="../../../reference/buzz/http/"><span class="related-card-title">http module</span><span class="related-card-desc">HTTP client with automatic retry on transient errors.</span></a>
-        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22json%22">json</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:41:45Z">July 28, 2026, 3:41 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/abf5b9de3e13198a0506a8b9f520c86b2a84af16" data-tooltip="abf5b9de3e13198a0506a8b9f520c86b2a84af16" title="abf5b9de3e13198a0506a8b9f520c86b2a84af16">abf5b9de</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8"><code>a1625126</code></a> <small><time datetime="2026-07-28T15:08:25Z">Jul 28, 2026</time></small> - document the name a caller types, not the one Go declares</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/json.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/json.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -280,7 +280,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

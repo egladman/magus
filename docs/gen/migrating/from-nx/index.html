@@ -119,7 +119,7 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td><code>nx:<a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>-commands</code></td>
-<td><code>os.exec(...)</code> in a target body</td>
+<td><code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a>(...)</code> in a target body</td>
 </tr>
 <tr>
 <td><code>dependsOn: [&quot;^build&quot;]</code></td>
@@ -127,7 +127,7 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td><code>implicitDependencies</code></td>
-<td><code>depends_on</code> in <code>magus.project</code></td>
+<td><code>depends_on</code> in <code>magus\project</code></td>
 </tr>
 <tr>
 <td><code>inputs</code> / <code>namedInputs</code></td>
@@ -159,7 +159,7 @@ plainly, and vice versa.</p>
 </tr>
 <tr>
 <td>task pipeline (<code>targetDefaults</code> in <code>nx.json</code>)</td>
-<td>composed <code>magus.needs</code> calls in the magusfile</td>
+<td>composed <code>magus\needs</code> calls in the magusfile</td>
 </tr>
 </tbody>
 </table></figure>
@@ -250,7 +250,7 @@ import (see <a href="../../concepts/dependencies/#the-fold-a-cross-project-needs
 import &quot;project/../shared-lib&quot; as shared;
 import &quot;magus/spell/ts&quot;;
 
-magus.project({ &quot;spells&quot;: [ts] });
+magus\project({ &quot;spells&quot;: [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     ctx.needs(shared.build);   // folds into depends_on automatically
@@ -276,7 +276,7 @@ from-scratch walkthrough.</p>
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../../guides/getting-started/">Getting started</a>: install to first <code>ci</code> pipeline, magus-native.</li>
-<li><a href="../../concepts/dependencies/">Dependencies</a>: the <code>magus.needs</code> / <code>depends_on</code> model this page's <code>dependsOn</code> row maps to.</li>
+<li><a href="../../concepts/dependencies/">Dependencies</a>: the <code>magus\needs</code> / <code>depends_on</code> model this page's <code>dependsOn</code> row maps to.</li>
 <li><a href="../../concepts/remote-cache/">Remote caching</a>: the signed trust model behind the Nx Cloud comparison row.</li>
 <li><a href="../../concepts/spells/">Spells</a>: the executor/plugin equivalent, and the built-in spell list.</li>
 </ul>
@@ -360,7 +360,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

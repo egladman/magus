@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
-  <title>Concurrency - magus</title>
-  <meta name="description" content="How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/concepts/concurrency/">
+  <title>CI providers - magus</title>
+  <meta name="description" content="Teach magus your CI system&#39;s job-log structure with a provider spell - fold markers around failures and annotations that surface on a pull request - without magus itself knowing any vendor&#39;s syntax.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/concepts/ci-providers/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="Concurrency - magus">
-  <meta property="og:description" content="How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.">
-  <meta property="og:url" content="https://eli.gladman.cc/magus/concepts/concurrency/">
+  <meta property="og:title" content="CI providers - magus">
+  <meta property="og:description" content="Teach magus your CI system&#39;s job-log structure with a provider spell - fold markers around failures and annotations that surface on a pull request - without magus itself knowing any vendor&#39;s syntax.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/concepts/ci-providers/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../public/atom/releases.atom.xml">
@@ -67,119 +67,271 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Concepts</li><li aria-current="page">Concurrency</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Concepts</li><li aria-current="page">CI providers</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/concepts/concurrency.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/concepts/ci-providers.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#within-one-run-the-scheduler" title="Within one run: the scheduler">Within one run: the scheduler</a></li><li><a href="#across-separate-runs-the-workspace-lock" title="Across separate runs: the workspace lock">Across separate runs: the workspace lock</a><ul><li><a href="#when-a-run-is-waiting" title="When a run is waiting">When a run is waiting</a></li></ul></li><li><a href="#relationship-to-the-daemon" title="Relationship to the daemon">Relationship to the daemon</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#wiring-one-up" title="Wiring one up">Wiring one up</a></li><li><a href="#what-magus-does-with-it" title="What magus does with it">What magus does with it</a></li><li><a href="#the-contract" title="The contract">The contract</a><ul><li><a href="#why-the-arguments-look-the-way-they-do" title="Why the arguments look the way they do">Why the arguments look the way they do</a></li></ul></li><li><a href="#security" title="Security">Security</a><ul><li><a href="#replayed-output-is-quoted" title="Replayed output is quoted">Replayed output is quoted</a></li></ul></li><li><a href="#one-exception-concurrency" title="One exception: concurrency">One exception: concurrency</a></li><li><a href="#writing-a-provider" title="Writing a provider">Writing a provider</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
-<h1 id="concurrency">Concurrency</h1>
-<p>magus coordinates parallel work at two distinct scopes, and it helps to keep them
-apart:</p>
-<ul>
-<li><strong>Within one <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a></strong> - the scheduler fans a single invocation out across projects
-and targets, ordered by the dependency <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>. This is <a href="../dependencies/">dependencies</a>
-and per-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> policy (<code>slots</code>, <code>exclusive</code>) doing their job.</li>
-<li><strong>Across separate runs</strong> - the <strong><a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> lock</strong> stops two <em>independent</em> <code>magus</code>
-processes from mutating the same <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> at the same time.</li>
-</ul>
-<p>The first is about <em>ordering and fan-out</em>; the second is about <em>mutual exclusion</em>.
-They solve different problems and neither replaces the other.</p>
-<h2 id="within-one-run-the-scheduler">Within one run: the scheduler</h2>
-<p>A single <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> invocation builds the dependency graph, then
-runs targets concurrently <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the graph allows. <code>magus\needs</code> edges order the work
-(<a href="../dependencies/">dependencies</a>); a target's <code>slots</code> and <code>exclusive</code> policy tune how
-much of it runs at once (<a href="../targets/">targets</a>). When a <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> is present, that
-fan-out draws from <strong>one shared <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a></strong> across every client
-(<a href="../../guides/daemon/">daemon</a>).</p>
-<p>All of this lives inside one process. It has no bearing on a <em>second</em> <code>magus</code> you
-start in another terminal - the two invocations have separate graphs and separate
-schedulers, and neither can see the other.</p>
-<h2 id="across-separate-runs-the-workspace-lock">Across separate runs: the workspace lock</h2>
-<p>That second invocation is the problem the workspace lock exists for. Two <code>magus</code>
-processes running at once - two terminals, or two agents - can collide: one running
-<code>generate</code> or <code>clean</code> rewrites or deletes a project's declared outputs while the
-other is reading or writing them, and work is lost. Both also write the project's
-<a href="../cache/">cache</a>. Serializing that is <strong>mutual exclusion</strong>, which is why <code>needs</code>
-cannot solve it: <code>needs</code> orders targets <em>inside one run</em> and has no visibility into a
-separate process. Only a lock does.</p>
-<p>So before a non-dry run begins mutating, magus takes a <strong>per-project advisory lock</strong>
-for every project the run will touch, holds it for the whole invocation, and releases
-it at the end. A second <code>magus</code> that wants the same project waits for the first to
-finish, then proceeds automatically.</p>
-<p>Key properties:</p>
-<ul>
-<li><strong>Per project, not per workspace.</strong> Runs on <em>different</em> projects proceed in
-parallel; only runs on the <em>same</em> project serialize. The lock is not directory- or
-target-scoped - a project's outputs and <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> are the unit being protected, and
-that is exactly a project.</li>
-<li><strong>Advisory.</strong> It serializes <em>magus</em> processes and nothing else. A raw <code>git clean</code>,
-an <code>rm</code>, or any other tool ignores it. The guarantee is &quot;no two magus invocations
-mutate the same project at once,&quot; not &quot;the tree is untouchable.&quot;</li>
-<li><strong>Crash-safe.</strong> It is an OS file lock (<code>flock</code>), which the kernel releases when the
-holding process exits or crashes - never a stale PID file that would wedge a project
-after a <code>Ctrl-C</code>.</li>
-<li><strong>Taken by every real run</strong>, not just <code>generate</code>/<code>clean</code>. Even <code>magus test</code> writes
-the project's cache and run log, so two concurrent runs on one project are
-serialized regardless of whether either touches the source tree.</li>
-</ul>
-<h3 id="when-a-run-is-waiting">When a run is waiting</h3>
-<p>If another magus holds the lock, your run does not fail and does not hang silently -
-it prints one line up front and starts the moment the other finishes:</p>
-<pre><code class="language-text">magus: project web is being changed by another magus process; waiting for it to
-finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail
-fast instead.
-magus: lock on project web released; starting.
+<h1 id="ci-providers">CI providers</h1>
+<p>A <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> system renders a job log with structure a plain terminal has no notion of:
+foldable sections, and annotations that <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> on a pull request rather than in
+the log. Every system spells that differently, and several have no syntax for it
+at all.</p>
+<p>magus emits that structure through a <strong>provider <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a></strong>. The binary knows the
+generic shape - open a section, close it, raise a notice - and a spell knows one
+vendor's syntax. This is the same arrangement as <a href="../remote-cache/">remote caching</a>:
+the extension point is a spell so a provider magus has never heard of is
+something you write, not something you wait for.</p>
+<div class="mermaid-src"><pre><code class="language-mermaid">flowchart LR
+  subgraph core[&quot;magus binary - names no CI system&quot;]
+    run[&quot;run / cache&lt;br/&gt;a project failed&quot;]
+    contract[&quot;Annotator contract&lt;br/&gt;internal/ci/annotate&quot;]
+    quote[&quot;QuoteWith&lt;br/&gt;per-line, in Go&quot;]
+  end
+
+  subgraph spell[&quot;provider spell - Buzz&quot;]
+    ops[&quot;enabled, group_start,&lt;br/&gt;group_end, annotate&quot;]
+    prefixes[&quot;quote_prefixes&lt;br/&gt;read once&quot;]
+  end
+
+  vendor[&quot;CI system&lt;br/&gt;job log + pull request&quot;]
+
+  run --&gt; contract
+  contract --&gt;|&quot;generic verbs&quot;| ops
+  ops --&gt;|&quot;vendor syntax&quot;| vendor
+  prefixes -.-&gt;|&quot;declared once&quot;| quote
+  quote --&gt;|&quot;replayed output, de-fanged&quot;| vendor
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<p>The dotted line is the one performance-shaped seam: quoting runs over every
+replayed line, so the spell declares its command prefixes once and magus does the
+matching. Everything else crosses into the spell at most once per failure.</p>
+<h2 id="wiring-one-up">Wiring one up</h2>
+<p>A provider is an ordinary spell, selected in your <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>:</p>
+<pre><code class="language-buzz">import &quot;spells/github/actions&quot; as github;
+
+magus\ci.provider(github);
 </code></pre>
-<p>Set <code>MAGUS_NO_WAIT=1</code> to make a contended run <strong>fail fast</strong> instead of blocking -
-useful in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> or a script that would rather error than queue behind another process.</p>
-<p>The wait happens at the very start of the invocation, before the concurrency pool is
-even set up, so a blocked run does not yet appear in <code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code> (there is nothing
-running to report - it is <a class="glossary-term" href="../../glossary/#queued" data-def="A target that wants a slot while the pool is full; it blocks first-in-first-out until a slot frees. The dashboard colors a sample with queued > 0 accordingly.">queued</a> behind the lock). The stderr line above is how you
-know why.</p>
-<h2 id="relationship-to-the-daemon">Relationship to the daemon</h2>
-<p>The <a href="../../guides/daemon/">daemon</a> is the long-lived process that hosts the shared pool and
-serves clients. When it is coordinating your work, it is the natural single point
-that knows what is running. The workspace lock is what protects the case the daemon
-does <em>not</em> cover: two plain <code>magus</code> invocations with no daemon in the loop. The two
-compose - the lock is the floor that holds even when nothing else is watching.</p>
-<h2 id="see-also">See also</h2>
+<p>magus ships two: <code>spells/github/actions</code> (which also carries the Actions remote
+<a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> backend - one spell per vendor, two contracts) and <code>spells/gitlab/ci</code>.</p>
+<p>Wiring one unconditionally is the intended usage. A provider reports whether it
+is active, magus probes that once per <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>, and an inactive provider costs
+nothing - so the same magusfile works on your laptop, in GitHub Actions, and on a
+system neither of them knows about.</p>
+<h2 id="what-magus-does-with-it">What magus does with it</h2>
+<p>Only two things today, both on failure:</p>
 <ul>
-<li><a href="../dependencies/">Dependencies</a>: <code>magus\needs</code> and <code>depends_on</code>, how a single run is ordered.</li>
-<li><a href="../targets/">Targets</a>: per-target <code>slots</code> and <code>exclusive</code> policy.</li>
-<li><a href="../../guides/daemon/">Daemon</a>: the persistent process and the shared concurrency pool.</li>
-<li><a href="../cache/">Cache</a>: what a run writes, and why concurrent writers are serialized.</li>
+<li>The failing <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s output is wrapped in a section, so a fan-out log stays
+navigable.</li>
+<li>The failure is raised as an error annotation, so it reaches a reviewer without
+anyone opening the log.</li>
 </ul>
+<p>Sections request <strong>expanded</strong> for a failure. That is a request, not a guarantee -
+see the capability table below - and a provider that cannot honour it leaves the
+output inline rather than folding it. A collapsed failure is a failure nobody
+sees, which is worse than no fold at all.</p>
+<h2 id="the-contract">The contract</h2>
+<p>Every op is optional. A spell implements the verbs its provider supports and
+omits the rest; magus treats an undeclared op as &quot;this provider does not do
+that&quot;, which is the normal case rather than an error.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Op</th>
+<th>Returns</th>
+<th>Called</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled()</code></td>
+<td>bool</td>
+<td>once per run, cached</td>
+</tr>
+<tr>
+<td><code>group_start({id, title, collapsed})</code></td>
+<td>bool</td>
+<td>once per failing project</td>
+</tr>
+<tr>
+<td><code>group_end({id})</code></td>
+<td>bool</td>
+<td>once per failing project</td>
+</tr>
+<tr>
+<td><code>annotate({level, message, title, code, file, line, end_line, col, end_col})</code></td>
+<td>bool</td>
+<td>once per failure</td>
+</tr>
+<tr>
+<td><code>quote_prefixes()</code></td>
+<td>[str]</td>
+<td>once per run, cached</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Nothing here is called per log line. That is deliberate: crossing into a spell's
+VM for every line of a failing build's output would cost more than the whole
+feature is worth. <code>quote_prefixes</code> is the shape that keeps the one per-line job
+affordable - the spell declares its command prefixes once and magus does the
+matching itself.</p>
+<h3 id="why-the-arguments-look-the-way-they-do">Why the arguments look the way they do</h3>
+<p>The vocabulary is the <strong>union</strong> of what real systems need, not the intersection -
+the intersection is nearly empty:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>System</th>
+<th>Section open</th>
+<th>Section close</th>
+<th>Collapse</th>
+<th>Annotations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub Actions</td>
+<td><code>::group::TITLE</code></td>
+<td><code>::endgroup::</code></td>
+<td>always collapsed</td>
+<td><code>::error/warning/notice::</code> with file, line, col, title</td>
+</tr>
+<tr>
+<td>GitLab CI</td>
+<td><code>section_start:&lt;unix&gt;:&lt;id&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
+<td><code>section_end:&lt;unix&gt;:&lt;id&gt;</code></td>
+<td><code>[collapsed=true]</code></td>
+<td>none in-log (report artifacts)</td>
+</tr>
+<tr>
+<td>Azure Pipelines</td>
+<td><code>##[group]TITLE</code></td>
+<td><code>##[endgroup]</code></td>
+<td>-</td>
+<td><code>##vso[task.logissue ...]</code> with a <code>code</code> field</td>
+</tr>
+<tr>
+<td>Buildkite</td>
+<td><code>--- TITLE</code> / <code>+++</code> / <code>~~~</code></td>
+<td>none - implicit</td>
+<td>three modes</td>
+<td>out-of-band: <code>buildkite-agent annotate</code></td>
+</tr>
+<tr>
+<td>TeamCity</td>
+<td><code>##teamcity[blockOpened name=...]</code></td>
+<td><code>blockClosed name=...</code></td>
+<td>-</td>
+<td><code>message <a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a>='ERROR'</code></td>
+</tr>
+<tr>
+<td>AWS CodeBuild, CircleCI</td>
+<td>none</td>
+<td>none</td>
+<td>-</td>
+<td>none</td>
+</tr>
+</tbody>
+</table></figure>
+<p>Hence: a section carries an <code>id</code> distinct from its <code>title</code>, because GitLab and
+TeamCity key sections by name while GitHub and Azure use only a title.
+<code>group_end</code> may legitimately do nothing, because Buildkite has no end marker - a
+new section closes the previous one. Annotations carry a source location and a
+<code>code</code>, because every system that supports annotations at all supports those, and
+<code>code</code> is <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> magus's <code>MGSxxxx</code> diagnostics belong. And nothing assumes the
+output is a stream, because Buildkite raises annotations by running a binary.</p>
+<p><code>id</code> is opaque. magus passes something readable, such as a project <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>, and does
+<strong>not</strong> normalise the character set - what is legal differs per system, and
+encoding one system's rule into the shared contract would put that system back
+into the layer that is supposed to name nobody. GitLab's spell folds the id with
+<code><a class="code-xref" href="../../reference/buzz/strings/#kebabcase" data-kind="method" data-def="">strings\kebabCase</a></code> because GitLab rejects slashes; that rule lives in the spell
+that needs it.</p>
+<h2 id="security">Security</h2>
+<p>A provider spell is third-party code running in your magus process, and the
+values magus hands it are influenced by whatever your build printed. Read this
+before writing or adopting one.</p>
+<div class="admonition admonition-warning"><p class="admonition-title">Warning<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
+<p><code>message</code> and <code>title</code> are <strong>untrusted</strong>. They carry a failing process's own
+output, so their content is whatever some test, compiler, or transitive
+dependency chose to print. Never interpolate them into a shell command, a URL,
+or anywhere else their content becomes syntax. A dependency that printed a
+payload would otherwise be executing it on every machine that builds the
+project.</p>
+</div>
+<p>What magus guarantees at the boundary:</p>
+<ul>
+<li><strong>Bounded.</strong> Messages are truncated (with the cut marked) and short fields
+clamped, so a process that printed megabytes cannot make a spell's string
+handling a denial-of-<a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> vector.</li>
+<li><strong>De-fanged.</strong> Control characters are stripped before a value reaches a spell,
+keeping tab and newline. A message cannot smuggle escape sequences that
+re-take control of a terminal when echoed.</li>
+<li><strong>Time-bounded.</strong> Every op runs under a short deadline. A spell that blocks on
+a network call costs one timeout, not the build.</li>
+<li><strong>Clamped prefixes.</strong> <code>quote_prefixes</code> is capped in count and length, and an
+empty prefix is rejected - it would match every line.</li>
+</ul>
+<p>What magus does <strong>not</strong> guarantee: a spell has the full host <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> surface,
+including <code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a></code> and <code>http</code>. Loading a spell is trusting it, exactly as with a
+<a href="../remote-cache/">remote cache backend</a>. Spells are not individually sandboxed;
+they run with the magus process's privileges, constrained only by the
+process-wide <a href="../sandbox/">sandbox</a> policy where that applies. If your build
+output can contain secrets, a hostile provider spell could exfiltrate them.</p>
+<h3 id="replayed-output-is-quoted">Replayed output is quoted</h3>
+<p>magus captures a failing process's output and replays it into the job log. Left
+alone, a test printing <code>::error::</code> would have the runner execute it - forging
+annotations, or closing a section magus opened. Providers declare their command
+prefixes via <code>quote_prefixes</code>, and magus neutralises matching lines before replay
+by dropping the prefix's first character, leaving text a reader can still read.</p>
+<h2 id="one-exception-concurrency">One exception: concurrency</h2>
+<p>magus caps build <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> on GitHub-hosted runners, which report their host's
+CPU count while giving the job a slice of it. That check lives in Go
+(<code>internal/cache/defaults.go</code>) rather than in the GitHub spell, and it is the only
+place magus names a CI system outside a spell.</p>
+<p>The reason is ordering, not preference: the concurrency limiter is built before
+the magusfile is evaluated, so no provider spell is loaded in time to answer.
+Anything a spell <em>can</em> answer, a spell does.</p>
+<h2 id="writing-a-provider">Writing a provider</h2>
+<p>Start from <code>spells/gitlab/ci/spell.buzz</code> - it is the shorter of the two and
+exercises the parts of the contract GitHub does not (an id distinct from the
+title, a timestamp per marker, collapse as a flag, and no annotation support at
+all).</p>
+<p>Reach for the host modules rather than reimplementing them: <code>strings\kebabCase</code>
+folds an id, <code>os\env</code> reads the runner environment, <code>std\print</code> writes a marker.
+Method names are <code>camelCase</code> even where the <a href="../../reference/buzz/">module reference</a>
+declares them otherwise, and namespace access is a backslash.</p>
+<p>Gate everything on <code>enabled()</code>. A provider that returns false outside its own
+system makes an unconditional <code>magus\ci.provider(...)</code> free everywhere else.</p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../ci-providers/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">CI providers</span></a>
-      <a class="page-nav-next" href="../dependencies/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Dependencies</span></a>
+      <a class="page-nav-prev" href="../charms/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Charms</span></a>
+      <a class="page-nav-next" href="../concurrency/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Concurrency</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus-status/"><span class="related-card-title">magus status</span><span class="related-card-desc">Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.</span></a>
+        <a class="related-card" href="../../concepts/engines/"><span class="related-card-title">Engines</span><span class="related-card-desc">Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../../search/?q=tag%3A%22parallelism%22">parallelism</a><a class="tag" href="../../search/?q=tag%3A%22workspace-lock%22">workspace-lock</a><a class="tag" href="../../search/?q=tag%3A%22scheduler%22">scheduler</a><a class="tag" href="../../search/?q=tag%3A%22daemon%22">daemon</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22MAGUS_NO_WAIT%22">MAGUS_NO_WAIT</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../search/?q=tag%3A%22ci-provider%22">ci-provider</a><a class="tag" href="../../search/?q=tag%3A%22annotations%22">annotations</a><a class="tag" href="../../search/?q=tag%3A%22log-grouping%22">log-grouping</a><a class="tag" href="../../search/?q=tag%3A%22github-actions%22">github-actions</a><a class="tag" href="../../search/?q=tag%3A%22gitlab%22">gitlab</a><a class="tag" href="../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../search/?q=tag%3A%22extension%22">extension</a><a class="tag" href="../../search/?q=tag%3A%22security%22">security</a></div>
+    <small>Last updated <time datetime="2026-07-28T15:27:48Z">July 28, 2026, 3:27 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/0a4bd9ad36588f99f2ca5e55aa96a31e43d4dedc" data-tooltip="0a4bd9ad36588f99f2ca5e55aa96a31e43d4dedc" title="0a4bd9ad36588f99f2ca5e55aa96a31e43d4dedc">0a4bd9ad</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/f2739c4b610367e85251282d9174e1b90bce7ea7"><code>f2739c4b</code></a> <small><time datetime="2026-07-28T15:19:58Z">Jul 28, 2026</time></small> - document CI providers as an extension point</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/ci-providers.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/ci-providers.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

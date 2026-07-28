@@ -96,7 +96,7 @@ form is produced by the pinned release and you are running a dev build (v0.1.0-5
 </code></pre>
 <p>Three things come with every code, for free:</p>
 <ul>
-<li><strong>A stable code (<code>MGSxxxx</code>)</strong> you can search, grep your <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> logs for, or paste to a
+<li><strong>A stable code (<code>MGSxxxx</code>)</strong> you can search, grep your <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> logs for, or paste to a
 teammate. Codes never move once assigned.</li>
 <li><strong>A handwritten resolution page</strong> at the <code>see:</code> URL - a real Why and Resolution
 written by a person, so neither you nor an agent has to reverse-engineer the fix.</li>
@@ -155,7 +155,7 @@ page. Nothing is ad-hoc free text.</li>
 <h2 id="a-worked-example-drift-classification">A worked example: drift classification</h2>
 <p>The clearest expression of the philosophy is what magus does when a generated file
 drifts. A <code>generate</code> gate re-runs the generators and checks whether the tree went
-dirty. When it did, <code>vcs.diagnoseDrift</code> names <em>why</em>, instead of just failing:</p>
+dirty. When it did, <code><a class="code-xref" href="../buzz/vcs/#diagnosedrift" data-kind="method" data-def="">vcs\diagnoseDrift</a></code> names <em>why</em>, instead of just failing:</p>
 <ul>
 <li><strong><a href="../codes/race/MGS4006/">MGS4006</a> - stale generated output.</strong> A declared input
 actually changed. Real drift: regenerate and commit.</li>
@@ -195,8 +195,8 @@ tool, not re-paid by every person and every agent that hits it.</p>
     <div class="related-grid">
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../concepts/engines/"><span class="related-card-title">Engines</span><span class="related-card-desc">Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.</span></a>
-        <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -263,7 +263,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

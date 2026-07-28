@@ -135,8 +135,8 @@ TTY the screen is cleared between reprints; piped output appends each
     <div class="related-grid">
         <a class="related-card" href="../../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
         <a class="related-card" href="../../../concepts/concurrency/"><span class="related-card-title">Concurrency</span><span class="related-card-desc">How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other&#39;s outputs and cache.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -203,7 +203,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

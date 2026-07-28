@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#base64-encode" title="base64_encode">base64_encode</a></li><li><a href="#base64-decode" title="base64_decode">base64_decode</a></li><li><a href="#base64url-encode" title="base64url_encode">base64url_encode</a></li><li><a href="#base64url-decode" title="base64url_decode">base64url_decode</a></li><li><a href="#hex-encode" title="hex_encode">hex_encode</a></li><li><a href="#hex-decode" title="hex_decode">hex_decode</a></li><li><a href="#url-encode" title="url_encode">url_encode</a></li><li><a href="#url-decode" title="url_decode">url_decode</a></li><li><a href="#parse-url" title="parse_url">parse_url</a></li><li><a href="#build-url" title="build_url">build_url</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#base64encode" title="base64Encode">base64Encode</a></li><li><a href="#base64decode" title="base64Decode">base64Decode</a></li><li><a href="#base64urlencode" title="base64urlEncode">base64urlEncode</a></li><li><a href="#base64urldecode" title="base64urlDecode">base64urlDecode</a></li><li><a href="#hexencode" title="hexEncode">hexEncode</a></li><li><a href="#hexdecode" title="hexDecode">hexDecode</a></li><li><a href="#urlencode" title="urlEncode">urlEncode</a></li><li><a href="#urldecode" title="urlDecode">urlDecode</a></li><li><a href="#parseurl" title="parseUrl">parseUrl</a></li><li><a href="#buildurl" title="buildUrl">buildUrl</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="encoding">encoding</h1>
 <p>Base64/hex/URL text codecs.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;encoding&quot;</code>) and call methods in <code>camelCase</code> (<code>encoding.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;encoding&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>encoding\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="base64-encode">base64_encode</h3>
+<h3 id="base64encode">base64Encode</h3>
 <p>Encode data as standard (padded) base64.</p>
-<p><strong>Signature:</strong> <code>encoding.base64Encode(data) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#base64encode" data-kind="method" data-def="">encoding\base64Encode</a>(data) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L102" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -137,9 +137,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="base64-decode">base64_decode</h3>
+<h3 id="base64decode">base64Decode</h3>
 <p>Decode a standard (padded) base64 string; errors on malformed input.</p>
-<p><strong>Signature:</strong> <code>encoding.base64Decode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#base64decode" data-kind="method" data-def="">encoding\base64Decode</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L107" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -159,9 +159,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="base64url-encode">base64url_encode</h3>
+<h3 id="base64urlencode">base64urlEncode</h3>
 <p>Encode data as URL-safe (padded) base64.</p>
-<p><strong>Signature:</strong> <code>encoding.base64urlEncode(data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L116" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#base64urlencode" data-kind="method" data-def="">encoding\base64urlEncode</a>(data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L116" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -181,9 +181,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="base64url-decode">base64url_decode</h3>
+<h3 id="base64urldecode">base64urlDecode</h3>
 <p>Decode a URL-safe (padded) base64 string; errors on malformed input.</p>
-<p><strong>Signature:</strong> <code>encoding.base64urlDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L121" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#base64urldecode" data-kind="method" data-def="">encoding\base64urlDecode</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L121" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -203,9 +203,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="hex-encode">hex_encode</h3>
+<h3 id="hexencode">hexEncode</h3>
 <p>Encode data as lowercase hex.</p>
-<p><strong>Signature:</strong> <code>encoding.hexEncode(data) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L130" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#hexencode" data-kind="method" data-def="">encoding\hexEncode</a>(data) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L130" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -225,9 +225,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="hex-decode">hex_decode</h3>
+<h3 id="hexdecode">hexDecode</h3>
 <p>Decode a hex string; errors on malformed input.</p>
-<p><strong>Signature:</strong> <code>encoding.hexDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#hexdecode" data-kind="method" data-def="">encoding\hexDecode</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -247,9 +247,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="url-encode">url_encode</h3>
+<h3 id="urlencode">urlEncode</h3>
 <p>Percent-encode s for use in a URL <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> component.</p>
-<p><strong>Signature:</strong> <code>encoding.urlEncode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L144" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#urlencode" data-kind="method" data-def="">encoding\urlEncode</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L144" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -269,9 +269,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="url-decode">url_decode</h3>
+<h3 id="urldecode">urlDecode</h3>
 <p>Decode a percent-encoded URL query component; errors on malformed input.</p>
-<p><strong>Signature:</strong> <code>encoding.urlDecode(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L149" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#urldecode" data-kind="method" data-def="">encoding\urlDecode</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L149" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -291,9 +291,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="parse-url">parse_url</h3>
+<h3 id="parseurl">parseUrl</h3>
 <p>Parse a URL string into {scheme, host, port, <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>, query, fragment}; errors on malformed input.</p>
-<p><strong>Signature:</strong> <code>encoding.parseUrl(raw_url) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L158" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#parseurl" data-kind="method" data-def="">encoding\parseUrl</a>(raw_url) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L158" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -313,9 +313,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="build-url">build_url</h3>
+<h3 id="buildurl">buildUrl</h3>
 <p>Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.</p>
-<p><strong>Signature:</strong> <code>encoding.buildUrl(parts) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L175" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#buildurl" data-kind="method" data-def="">encoding\buildUrl</a>(parts) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/encoding.go#L175" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -339,10 +339,10 @@
 <hr>
 <ol>
 <li id="fn:1">
-<p><code>encoding.base64Encode</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>str.encodeBase64 (built-in string method)</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>encoding\base64Encode</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>str.encodeBase64 (built-in string method)</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2">
-<p><code>encoding.hexEncode</code> is also in Buzz's standard library (<code>str.hex (built-in string method)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>encoding\hexEncode</code> is also in Buzz's standard library (<code>str.hex (built-in string method)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </div>
@@ -365,7 +365,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22encoding%22">encoding</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/encoding.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/encoding.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -427,7 +427,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

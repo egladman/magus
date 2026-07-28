@@ -30,7 +30,7 @@ An Operation is one of two declarative shapes, and the shape is its **kind**. A
 (no shell, one process, run to completion), the default. A **service** op returns a
 `Service` (`{command, readiness?, stop?, distinct?, idle?}`), a long-running process.
 Run directly (`magus run dev`) a service forks in the foreground and magus **blocks**
-on it; reached as a dependency (`magus.needs`) it is instead **supervised in the
+on it; reached as a dependency (`magus\needs`) it is instead **supervised in the
 background**: started, readiness-gated, and shared across dependents (see
 [services.md](services.md)). You author either as a function that returns it
 (`fun(Target) > Command` or `fun(Target) > Service`) or as a bare record; the kind is
@@ -74,13 +74,13 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
 
 | Result              | Layer     | Shape                                               | Returned or emitted                                                                      | Status          |
 | ------------------- | --------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------- |
-| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os.exec`, `magus.cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
+| **`ExecResult`**    | Process   | `{stdout, stderr, code, ok}`                        | **returned** by `os\exec`, `magus\cmd`/`run`/`describe`/`insight`/`doctor`, a Capture op | exists          |
 | `OpResult`          | Operation | `ExecResult` + op identity (`spell`, `op`)          | would be returned by the op handler                                                      | **(not built)** |
 | **`target.result`** | Target    | `{project, target, status, cache_hit, duration_ms}` | **emitted** by the dispatcher (`internal/report`)                                        | exists          |
 
 - **`ExecResult` exists in both worlds.** It is the Go `run.ExecResult` and the
   spell-op **capture record** a `Capture: true` op returns "instead of void": the
-  same `{stdout, stderr, code, ok}` shape `os.exec` returns.
+  same `{stdout, stderr, code, ok}` shape `os\exec` returns.
 
 - **The target result is emitted, not returned.** A target is cacheable, and on a
   **cache hit the body never runs**: outputs are replayed without executing the
@@ -133,7 +133,7 @@ The serializable Buzz value types model the _nouns_ around this hierarchy:
 | **`ExecResult`** | the `{stdout, stderr, code, ok}` outcome of one process                                                                    | Process          |
 
 A `Target` is run as a set of `Operation`s; each `Operation` yields an
-`ExecResult`. A `magus.needs` edge points straight at another `Target`'s
+`ExecResult`. A `magus\needs` edge points straight at another `Target`'s
 function - there is no intermediate query value.
 
 ## Glossary

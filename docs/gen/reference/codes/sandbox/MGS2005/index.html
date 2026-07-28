@@ -158,7 +158,7 @@ are not possible today.</li>
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
         <a class="related-card" href="../../../../concepts/sandbox/"><span class="related-card-title">Sandbox model</span><span class="related-card-desc">The threat model and allowlist semantics that magus enforces around spell execution, and how the MGS2xxx diagnostics map onto that model.</span></a>
         <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -225,7 +225,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

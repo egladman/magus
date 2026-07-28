@@ -196,13 +196,13 @@ A workspace spell (imported by path) or a magusfile runs with host bindings, so 
 import "charm";
 final args = ["tool", "golangci-lint", "run", "./..."];
 charms = {
-    "rw":    charm.after(args, "run", ["--fix"]),  // insert after "run"
-    "debug": charm.append(["-v"]),                 // append
-    "stamp": charm.move(args, "run", charm.path(args, "./...")), // advanced: see below
+    "rw":    charm\after(args, "run", ["--fix"]),  // insert after "run"
+    "debug": charm\append(["-v"]),                 // append
+    "stamp": charm\move(args, "run", charm\path(args, "./...")), // advanced: see below
 };
 ```
 
-> The argument-removing constructor is named **`drop`** (`charm.drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a _constructor name only_. `charm.drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
+> The argument-removing constructor is named **`drop`** (`charm\drop`), not `remove`: a charm module is a Buzz map, and the built-in map `.remove()` method would shadow `remove`. This is a _constructor name only_. `charm\drop` emits the standard RFC 6902 `{"op": "remove", ...}` op. The patch vocabulary does not change; magus never deviates from RFC 6902.
 
 ### 3. Raw RFC 6902 data (the lowest level)
 
@@ -227,7 +227,7 @@ When the argv needs to be computed, branch in code. A magusfile function target 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os.exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
+    os\exec("golangci-lint", if (fix) ["run", "--fix"] else ["run"]);
 }
 ```
 
@@ -248,7 +248,7 @@ Spell op methods receive the active charm set as `opts.charms` (a lookup table: 
 
 Both charm modules build a charm's patch; every constructor returns `{ ops = [...] }`. The `argv`-taking constructors resolve a _value anchor_ (or predicate for the `*Func` variants) to a numeric JSON Pointer at author time, so the stored patch is pure positional RFC 6902.
 
-The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm.after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
+The table is the **full** set, available on the host `charm` module (`import "charm"`, called `charm\after(...)`). The pure-Buzz `magus/charm` module (`import "magus/charm"`, called bare as `after(...)`) exports the **core** rows (append, prepend, after, before, set, drop) for self-contained built-in spells.
 
 | Constructor                          | Builds                                                                                       |
 | ------------------------------------ | -------------------------------------------------------------------------------------------- |
@@ -269,7 +269,7 @@ The table is the **full** set, available on the host `charm` module (`import "ch
 | `path(argv, anchor)`                 | the JSON Pointer (`"/N"`) of `anchor`, for use as a `to` destination or in a hand-written op |
 | `pathFunc(argv, fn)`                 | `path`, by predicate                                                                         |
 
-Method names are camelCase (`charm.afterFunc`, `charm.pathFunc`), following Buzz's convention.
+Method names are camelCase (`charm\afterFunc`, `charm\pathFunc`), following Buzz's convention.
 
 A missing anchor is a **load-time error**, not a silently wrong index.
 
@@ -280,7 +280,7 @@ The examples use the host module (`charm.*`); inside a self-contained built-in s
 **Append a flag** (e.g. a `debug` charm adding `-v`):
 
 ```buzz
-debug = charm.append(["-v"]);
+debug = charm\append(["-v"]);
 // {"ops":[{"op":"add","path":"/-","value":"-v"}]}
 ```
 
@@ -288,21 +288,21 @@ debug = charm.append(["-v"]);
 
 ```buzz
 // base ["test", "./..."]: add -race right after "test"
-race = charm.after(["test", "./..."], "test", ["-race"]);
+race = charm\after(["test", "./..."], "test", ["-race"]);
 // {"ops":[{"op":"add","path":"/1","value":"-race"}]}
 ```
 
 **Swap a flag** (e.g. `gofmt -l .` → `-w .`):
 
 ```buzz
-rw = charm.set(["-l", "."], "-l", "-w");
+rw = charm\set(["-l", "."], "-l", "-w");
 // {"ops":[{"op":"replace","path":"/0","value":"-w"}]}
 ```
 
 **Drop a flag** (e.g. `ruff format --check .` → `ruff format .`):
 
 ```buzz
-rw = charm.drop(base, "--check");   // host; bare drop(base, "--check") in magus/charm
+rw = charm\drop(base, "--check");   // host; bare drop(base, "--check") in magus/charm
 // {"ops":[{"op":"remove","path":"/3"}]}
 ```
 
@@ -319,16 +319,16 @@ rw = { "ops": [
 **Move/copy/test (advanced, host module only).** Reposition an existing arg, or guard that one is where you think:
 
 ```buzz
-// move the matched flag to the end; charm.path resolves an anchor to its pointer
-reorder = charm.move(base, "--config", "/-");
+// move the matched flag to the end; charm\path resolves an anchor to its pointer
+reorder = charm\move(base, "--config", "/-");
 // assert "run" is still at its index when the patch applies, else the run errors
-guard   = charm.test(base, "run");
+guard   = charm\test(base, "run");
 ```
 
 **Match by predicate** (the `*Func` variants, host module only):
 
 ```buzz
-cap = charm.setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j16");
+cap = charm\setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j16");
 ```
 
 Conditional or per-invocation logic belongs in a **function target**, not a charm. Charms are static data resolved at author time.
@@ -359,7 +359,7 @@ Conditional or per-invocation logic belongs in a **function target**, not a char
 
 ### When you've left the charm layer
 
-**Function target** (most common): write an exported function and call the tool via `os.exec`:
+**Function target** (most common): write an exported function and call the tool via `os\exec`:
 
 ```buzz
 // magusfile.buzz
@@ -367,7 +367,7 @@ import "os";
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
-    os.exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
+    os\exec("golangci-lint", if (fix) ["run", "--fix", "./..."] else ["run", "./..."]);
 }
 ```
 
@@ -384,7 +384,7 @@ Charm args are **literal**: there is no `${VAR}` interpolation, by design. The h
   ```buzz
   import "charm";
   import "env";
-  charms = { "rw": charm.after(base, "run", ["--config={env.get("LINT_CONFIG")}"]) };
+  charms = { "rw": charm\after(base, "run", ["--config={env\get("LINT_CONFIG")}"]) };
   ```
 
 - **Per-invocation:** use a function target. Charms are static data; they cannot read the env at run time.

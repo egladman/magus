@@ -122,8 +122,8 @@ store and is never a revoke <a class="glossary-term" href="../../../../glossary/
     <div class="related-grid">
         <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../../reference/buzz/os/"><span class="related-card-title">os module</span><span class="related-card-desc">Process execution.</span></a>
+        <a class="related-card" href="../../../../reference/config/"><span class="related-card-title">magus.yaml configuration</span><span class="related-card-desc">Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.</span></a>
         <a class="related-card" href="../../../../reference/console/"><span class="related-card-title">Console API</span><span class="related-card-desc">Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.</span></a>
-        <a class="related-card" href="../../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -190,7 +190,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

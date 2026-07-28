@@ -248,7 +248,7 @@ magus query &quot;kind:file&quot; -o json  # each file node's attrs.coverage (co
 that reference a symbol. Sort symbols by <code>coverage</code> ascending for &quot;what is untested&quot;,
 or cross it with <code><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a> hotspots</code> to rank high-churn, low-coverage code first.</p>
 <p><strong>What does a target produce or consume, and is a file generated?</strong> magus indexes each
-target's declared <code>magus.outputs</code> / <code>magus.inputs</code>, so the graph knows the build's file
+target's declared <code>magus\outputs</code> / <code>magus\inputs</code>, so the graph knows the build's file
 flow - which a pure code-graph cannot.</p>
 <pre><code class="language-sh">magus explain &quot;target:.:content-generate&quot;   # the files a target produces and consumes
 magus explain &quot;doc:docs/spells/go.md&quot;        # a &quot;produced by&quot; edge means it is generated
@@ -277,7 +277,7 @@ magus graph open --print   # print the URL instead of opening a browser
 magus graph open --url &lt;base&gt;   # point at a self-hosted mirror of the explorer
 </code></pre>
 <h3 id="open-your-target-graph">Open your target graph</h3>
-<p>To open the <strong>target dependency graph</strong> (the <code>magus.needs</code> DAG, not the
+<p>To open the <strong>target dependency graph</strong> (the <code>magus\needs</code> DAG, not the
 knowledge graph) in the same explorer:</p>
 <pre><code class="language-sh">magus graph open --targets                # whole workspace
 magus graph open --targets .              # scope to root project
@@ -342,7 +342,7 @@ the shard directory: over the cap, least-recently-used shard files are evicted
 (their manifest entries stay, so an evicted shard is restored from the remote
 cache or rebuilt on the next query; 0, the default, is unlimited). When a remote
 build cache is configured, deterministic shards ride it - pushed on build,
-restored by fingerprint - so teammates and <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> can reuse them. The <code>@runtime</code> shard
+restored by fingerprint - so teammates and <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> can reuse them. The <code>@runtime</code> shard
 is never pushed: it is local run history, not shareable derived data.</p>
 <h2 id="runtime-enrichment">Runtime enrichment</h2>
 <p>Beyond the static graph, magus records which diagnostics (<code>MGSxxxx</code> codes) each
@@ -558,15 +558,15 @@ visible instead of quietly skipping them.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../guides/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-07-27T03:51:44Z">July 27, 2026, 3:51 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d" data-tooltip="b1b786d34804d09a1e1292b444bb68735a0bea2d" title="b1b786d34804d09a1e1292b444bb68735a0bea2d">b1b786d3</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-28T14:00:34Z">July 28, 2026, 2:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/99ced4add50cf7abb4471a77f5ee6ce55f7ba71d" data-tooltip="99ced4add50cf7abb4471a77f5ee6ce55f7ba71d" title="99ced4add50cf7abb4471a77f5ee6ce55f7ba71d">99ced4ad</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d"><code>b1b786d3</code></a> <small><time datetime="2026-07-27T03:51:44Z">Jul 27, 2026</time></small> - refine CI, agents, and developer experience</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -628,7 +628,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

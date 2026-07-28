@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#format" title="format">format</a></li><li><a href="#parse" title="parse">parse</a></li><li><a href="#parse-duration" title="parse_duration">parse_duration</a></li><li><a href="#now-iso" title="now_iso">now_iso</a></li><li><a href="#add" title="add">add</a></li><li><a href="#diff" title="diff">diff</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#format" title="format">format</a></li><li><a href="#parse" title="parse">parse</a></li><li><a href="#parseduration" title="parseDuration">parseDuration</a></li><li><a href="#nowiso" title="nowIso">nowIso</a></li><li><a href="#add" title="add">add</a></li><li><a href="#diff" title="diff">diff</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="time">time</h1>
 <p>Timestamp formatting/parsing and duration parsing (Go time, UTC).</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;time&quot;</code>) and call methods in <code>camelCase</code> (<code>time.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;time&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>time\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="format">format</h3>
 <p>Render Unix-millis as a string using a Go reference layout (UTC).</p>
-<p><strong>Signature:</strong> <code>time.format(layout, unix_millis) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L71" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#format" data-kind="method" data-def="">time\format</a>(layout, unix_millis) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L71" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -145,7 +145,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="parse">parse</h3>
 <p>Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.</p>
-<p><strong>Signature:</strong> <code>time.parse(layout, value) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L86" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#parse" data-kind="method" data-def="">time\parse</a>(layout, value) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L86" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -171,9 +171,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> float64</p>
-<h3 id="parse-duration">parse_duration</h3>
+<h3 id="parseduration">parseDuration</h3>
 <p>Parse a Go duration string (e.g. &quot;168h&quot;, &quot;1h30m&quot;) into milliseconds; errors on mismatch.</p>
-<p><strong>Signature:</strong> <code>time.parseDuration(duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L95" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#parseduration" data-kind="method" data-def="">time\parseDuration</a>(duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L95" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -193,13 +193,13 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> float64</p>
-<h3 id="now-iso">now_iso</h3>
+<h3 id="nowiso">nowIso</h3>
 <p>Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s os.time().</p>
-<p><strong>Signature:</strong> <code>time.nowIso() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L79" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#nowiso" data-kind="method" data-def="">time\nowIso</a>() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L79" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
 <h3 id="add">add</h3>
 <p>Add a Go duration string (e.g. &quot;24h&quot;, &quot;-1h30m&quot;) to a Unix-millis timestamp; returns the new Unix-millis timestamp.</p>
-<p><strong>Signature:</strong> <code>time.add(unix_millis, duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#add" data-kind="method" data-def="">time\add</a>(unix_millis, duration) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -227,7 +227,7 @@
 <p><strong>Returns:</strong> float64</p>
 <h3 id="diff">diff</h3>
 <p>Return a minus b in milliseconds (positive when a is later than b).</p>
-<p><strong>Signature:</strong> <code>time.diff(a, b) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L115" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#diff" data-kind="method" data-def="">time\diff</a>(a, b) → float64</code> · <a href="https://github.com/egladman/magus/blob/main/std/time.go#L115" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -272,7 +272,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22time%22">time</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/time.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/time.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -334,7 +334,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

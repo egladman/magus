@@ -105,7 +105,7 @@ dependent, not just its direct neighbors.</li>
 <li><strong>Direct.</strong> One of its source files (its spells' declared globs, plus the
 <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>) appears in the diff.</li>
 <li><strong>Transitive.</strong> A project it depends on is affected. Dependencies come from
-<a href="../../concepts/dependencies/">the two dependency mechanisms</a>: a <code>magus.needs</code> edge, a
+<a href="../../concepts/dependencies/">the two dependency mechanisms</a>: a <code>magus\needs</code> edge, a
 project-level <code>depends_on</code>, or a cross-project target reference (folded
 into <code>depends_on</code> - see <a href="../../concepts/dependencies/#the-fold-a-cross-project-needs-also-declares-depends_on">the fold</a>).</li>
 </ol>
@@ -127,7 +127,7 @@ is available (a release tarball, a fresh container) so a build still runs.</li>
 <ul>
 <li><code>--explain &lt;project&gt;</code> - why a project is in the set (changed file or affected dep).</li>
 <li><code>--graph</code> - render the affected scope as a dependency graph (<code>--depth</code> caps it).</li>
-<li><code>--plan</code> - emit a provider-neutral JSON <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the set. It always keys
+<li><code>--plan</code> - emit a provider-neutral JSON <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the set. It always keys
 off the <code>ci</code> anchor, so a matrix job fans the affected work across shards.</li>
 <li><code>--bisect &lt;project&gt;</code> - drive VCS bisect using run history to find the commit that
 introduced a regression.</li>
@@ -148,7 +148,7 @@ watcher can drive continuous rebuilds:</p>
 newlines. See <a href="../tips/">tips</a> for the continuous-build loop.</p>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="../../concepts/dependencies/">dependencies</a> - <code>magus.needs</code> versus <code>depends_on</code>, the edges the closure walks.</li>
+<li><a href="../../concepts/dependencies/">dependencies</a> - <code>magus\needs</code> versus <code>depends_on</code>, the edges the closure walks.</li>
 <li><a href="../../concepts/targets/">targets</a> - the target grammar these edges resolve against.</li>
 <li><a href="../../concepts/operations/">operations</a> - what a target dispatches to per project.</li>
 <li><a href="../../concepts/cache/">cache</a> - why an affected-but-unchanged target still replays from <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>.</li>
@@ -233,7 +233,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

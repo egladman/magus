@@ -89,12 +89,12 @@
           <li><a href="../../concepts/spells/ts/" title="ts spell">ts spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#built-in-spells" title="Built-in spells">Built-in spells</a></li><li><a href="#spells-vs-targets" title="Spells vs Targets">Spells vs Targets</a><ul><li><a href="#when-to-use-which" title="When to use which">When to use which</a></li></ul></li><li><a href="#what-a-spell-provides" title="What a spell provides">What a spell provides</a><ul><li><a href="#an-operation-is-a-command-or-a-service" title="An operation is a command or a service">An operation is a command or a service</a></li></ul></li><li><a href="#binding-a-spell-to-a-project" title="Binding a spell to a project">Binding a spell to a project</a><ul><li><a href="#built-in" title="Built-in">Built-in</a></li><li><a href="#file-spell" title="File spell">File spell</a></li></ul></li><li><a href="#composing-spells" title="Composing spells">Composing spells</a></li><li><a href="#naming-operations" title="Naming operations">Naming operations</a><ul><li><a href="#explicitness-over-magic-why-gogo-fmt-stutters" title="Explicitness over magic (why go::go-fmt stutters)">Explicitness over magic (why go::go-fmt stutters)</a></li></ul></li><li><a href="#authoring-a-custom-spell" title="Authoring a custom spell">Authoring a custom spell</a></li><li><a href="#lifecycle-bind--contribute--compose--run" title="Lifecycle: bind → contribute → compose → run">Lifecycle: bind → contribute → compose → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#worked-examples-in-this-repo" title="Worked examples in this repo">Worked examples in this repo</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#built-in-spells" title="Built-in spells">Built-in spells</a></li><li><a href="#spells-vs-targets" title="Spells vs Targets">Spells vs Targets</a><ul><li><a href="#when-to-use-which" title="When to use which">When to use which</a></li></ul></li><li><a href="#what-a-spell-provides" title="What a spell provides">What a spell provides</a><ul><li><a href="#an-operation-is-a-command-or-a-service" title="An operation is a command or a service">An operation is a command or a service</a></li></ul></li><li><a href="#binding-a-spell-to-a-project" title="Binding a spell to a project">Binding a spell to a project</a><ul><li><a href="#built-in" title="Built-in">Built-in</a></li><li><a href="#file-spell" title="File spell">File spell</a></li></ul></li><li><a href="#composing-spells" title="Composing spells">Composing spells</a></li><li><a href="#naming-operations" title="Naming operations">Naming operations</a><ul><li><a href="#explicitness-over-magic-why-gogo-fmt-stutters" title="Explicitness over magic (why go::go-fmt stutters)">Explicitness over magic (why go::go-fmt stutters)</a></li></ul></li><li><a href="#authoring-a-custom-spell" title="Authoring a custom spell">Authoring a custom spell</a></li><li><a href="#what-magus-bounds-and-what-it-does-not" title="What magus bounds, and what it does not">What magus bounds, and what it does not</a><ul><li><a href="#what-magus-does-not-restrict" title="What magus does not restrict">What magus does not restrict</a></li><li><a href="#what-magus-bounds" title="What magus bounds">What magus bounds</a></li><li><a href="#the-runaway-guard" title="The runaway guard">The runaway guard</a></li><li><a href="#a-gap-worth-knowing" title="A gap worth knowing">A gap worth knowing</a></li></ul></li><li><a href="#lifecycle-bind--contribute--compose--run" title="Lifecycle: bind → contribute → compose → run">Lifecycle: bind → contribute → compose → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#worked-examples-in-this-repo" title="Worked examples in this repo">Worked examples in this repo</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">14 min read</small>
+    <small class="reading-time" title="Estimated reading time">17 min read</small>
     <article>
 <h1 id="spells">Spells</h1>
 <p>A <strong><a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">Spell</a></strong> is a <em>library of tool-native operations</em> for one toolchain, plus the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> and <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>-set metadata that toolchain needs. The <code>go</code> spell exposes <code>go-build</code>/<code>go-test</code>/<code>go-vet</code>/<code>go-fmt</code>/<code>golangci-lint</code>/...; the <code>rust</code> spell exposes <code>cargo-build</code>/<code>cargo-test</code>/<code>cargo-clippy</code>/<code>cargo-fmt</code>/.... Each op is named after the CLI command it runs (see <a href="#naming-operations">Naming operations</a>). A spell is <strong>bound to a <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></strong> and <strong>runs nothing on its own</strong>: it contributes operations your <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> composes into <a href="../targets/">targets</a>, and it tells the cache which files are inputs and outputs.</p>
@@ -210,7 +210,7 @@
 </tr>
 <tr>
 <td><strong>How it enters a run</strong></td>
-<td><strong>bound</strong> to a project via <code>magus.project.register</code></td>
+<td><strong>bound</strong> to a project via <code>magus\project.register</code></td>
 <td><strong>invoked</strong> via <code>magus run &lt;name&gt;</code></td>
 </tr>
 <tr>
@@ -237,7 +237,7 @@
 </table></figure>
 <p>The relationship is <strong>compositional</strong>: a target's body calls spell ops.</p>
 <pre><code class="language-buzz">import &quot;magus/spell/go&quot;;
-magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });   // bind the spell (runs nothing)
+magus\project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });   // bind the spell (runs nothing)
 
 // targets are the runnable verbs; their bodies call the spell's ops. Op keys are
 // the CLI command, so kebab names are reached by subscript (see Naming operations).
@@ -249,9 +249,9 @@ export fun test(ctx: magus\Context, args: [str])  &gt; void { go[&quot;go-test&q
 </code></pre>
 <h3 id="when-to-use-which">When to use which</h3>
 <ul>
-<li><strong>Reach for a target</strong> when you want a <em>runnable verb</em>: the thing a teammate or <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> types (<code>magus run test api</code>). Targets are your <strong>public <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a></strong>; declare one per lifecycle step you want runnable. Until you export a target for an operation, <code>magus run &lt;op&gt;</code> is a graceful no-op.</li>
+<li><strong>Reach for a target</strong> when you want a <em>runnable verb</em>: the thing a teammate or <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> types (<code>magus run test api</code>). Targets are your <strong>public <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a></strong>; declare one per lifecycle step you want runnable. Until you export a target for an operation, <code>magus run &lt;op&gt;</code> is a graceful no-op.</li>
 <li><strong>Reach for a spell</strong> when you want to <em>package a toolchain's operations</em> and <em>tell the cache which files matter</em>. Bind a built-in or load a spell file. Call its ops from inside target bodies.</li>
-<li><strong>Skip the spell entirely</strong> for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a> step with arbitrary logic: write the target body directly with the host modules (e.g. <code>os.exec(...)</code>). A spell earns its keep when an operation recurs and has cache inputs worth declaring.</li>
+<li><strong>Skip the spell entirely</strong> for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a> step with arbitrary logic: write the target body directly with the host modules (e.g. <code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a>(...)</code>). A spell earns its keep when an operation recurs and has cache inputs worth declaring.</li>
 <li><strong>Use the <code>::</code> escape hatch</strong> (<code>magus run go::go-vet api</code>) only for ad-hoc runs or introspection. The everyday surface is your composed targets.</li>
 </ul>
 <p>magus deliberately does <strong>not</strong> decide what &quot;lint&quot; or &quot;format&quot; means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).</p>
@@ -293,7 +293,7 @@ export fun test(ctx: magus\Context, args: [str])  &gt; void { go[&quot;go-test&q
 <p>An op is one of two declarative shapes, and the shape it returns is its <strong>kind</strong>:</p>
 <ul>
 <li>A <strong>command op</strong> returns a <code>Command</code>: a <code>{bin, args, charms}</code> object naming a program on PATH, its argument vector, and any <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> modifiers. magus forks it directly (no shell, no variable expansion) and runs it to <a class="code-xref" href="../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>. This is the default and the vast majority of ops.</li>
-<li>A <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op</strong> returns a <code>Service</code>, a long-running process. <code>command</code> (required) is the process; <code>readiness</code> (a probe polled until it exits 0, the Kubernetes exec-probe model) and <code>stop</code> (a graceful-shutdown command) are <strong>optional</strong>, as are <code>distinct</code> and <code>idle</code> (see <a href="../services/">services</a>). A service run <strong>directly</strong> (<code>magus run dev</code>) is forked in the <strong>foreground</strong> and blocked on (Ctrl-C signals it). A service reached as a <strong>dependency</strong> (via <code>magus.needs</code>) is instead <strong>supervised in the background</strong>: started, gated on its readiness probe, and shared by configuration fingerprint so several dependents run one instance, and, when a <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> is running, kept warm across invocations. (<code>Service</code> is a distinct return type so the op's kind is inferred from what it returns.) A service op's target is <strong>uncached</strong>: magus never replays or snapshots it, so a re-run restarts the process instead of a cache hit doing nothing.</li>
+<li>A <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> op</strong> returns a <code>Service</code>, a long-running process. <code>command</code> (required) is the process; <code>readiness</code> (a probe polled until it exits 0, the Kubernetes exec-probe model) and <code>stop</code> (a graceful-shutdown command) are <strong>optional</strong>, as are <code>distinct</code> and <code>idle</code> (see <a href="../services/">services</a>). A service run <strong>directly</strong> (<code>magus run dev</code>) is forked in the <strong>foreground</strong> and blocked on (Ctrl-C signals it). A service reached as a <strong>dependency</strong> (via <code>magus\needs</code>) is instead <strong>supervised in the background</strong>: started, gated on its readiness probe, and shared by configuration fingerprint so several dependents run one instance, and, when a <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> is running, kept warm across invocations. (<code>Service</code> is a distinct return type so the op's kind is inferred from what it returns.) A service op's target is <strong>uncached</strong>: magus never replays or snapshots it, so a re-run restarts the process instead of a cache hit doing nothing.</li>
 </ul>
 <p>Either way the op is declarative <em>data</em>, so its argv is charm-patchable, hashes into the cache key, and previews under <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a></code> without executing. The kind lives on the <strong>op</strong>, not the spell: one spell freely mixes command ops and service ops under one name (a <code>node</code> spell builds <em>and</em> serves). Both shapes are static data, unlike the imperative two-op-kinds split magus removed; they differ only in lifecycle (run-to-completion vs long-running).</p>
 <p>You author an op as a function (the usual form) or a bare record; the kind is inferred from what it returns. <code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> enforces a doc comment on each function-authored op, captured by the Buzz parser at compile time.</p>
@@ -311,13 +311,13 @@ fun nodeServe(target: Target) &gt; Service {
 // a map that mixes op kinds is typed `any` (its values have different function types)
 export fun mgs_listTargets() &gt; any { return {&quot;go-fmt&quot;: goFmt, &quot;serve&quot;: nodeServe}; }
 </code></pre>
-<p><strong>In-VM work is still not an op.</strong> Custom logic magus neither forks nor blocks on (HTTP, signing, a <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a> backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see <a href="../remote-cache/">Remote caching</a>); any other one-off logic belongs in a magusfile target body written directly with the host modules (<code>os.exec</code>, <code>http</code>, <code>crypto</code>).</p>
+<p><strong>In-VM work is still not an op.</strong> Custom logic magus neither forks nor blocks on (HTTP, signing, a <a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a> backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see <a href="../remote-cache/">Remote caching</a>); any other one-off logic belongs in a magusfile target body written directly with the host modules (<code>os\exec</code>, <code>http</code>, <code>crypto</code>).</p>
 <h2 id="binding-a-spell-to-a-project">Binding a spell to a project</h2>
-<p>A spell only takes effect when its <strong>handle</strong> is passed to <code>magus.project.register</code>. Importing a spell is pure; it registers nothing on its own.</p>
+<p>A spell only takes effect when its <strong>handle</strong> is passed to <code>magus\project.register</code>. Importing a spell is pure; it registers nothing on its own.</p>
 <h3 id="built-in">Built-in</h3>
 <p>Built-in spells are compiled into the magus binary.</p>
 <pre><code class="language-buzz">import &quot;magus/spell/go&quot;;
-magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });
+magus\project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); return true; });
 </code></pre>
 <p>Available built-ins: <code>go</code>, <code>typescript</code>, <code>python</code>, <code>rust</code>, <code>bash</code>, <code>buf</code>, <code>buzz</code>, <code>docker</code>, <code>cosign</code>, <code>markdown</code>.</p>
 <h3 id="file-spell">File spell</h3>
@@ -325,13 +325,13 @@ magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go] }); 
 resolves <code>./spells/ruby.buzz</code> and binds the handle under the basename; <code>as</code>
 renames it):</p>
 <pre><code class="language-buzz">import &quot;spells/ruby&quot; as rb;
-magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
+magus\project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
 </code></pre>
 <h2 id="composing-spells">Composing spells</h2>
 <p>Spells do <strong>not</strong> import one another. There is no spell-to-spell <code>import</code>, and a built-in spell may import only the pure-types <code>magus/target</code> <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> (enforced by <code>SelfContainedBuiltinSource</code>). Composition happens one level up, at the <strong>project</strong>: bind several spells to the same project and let your targets call across them.</p>
 <pre><code class="language-buzz">import &quot;magus/spell/go&quot;;
 import &quot;magus/spell/docker&quot;;
-magus.project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go, docker] }); return true; });   // co-bound
+magus\project.register(fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [go, docker] }); return true; });   // co-bound
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-build&quot;]({ &quot;cwd&quot;: &quot;.&quot; });
@@ -339,7 +339,12 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <p>The go/docker relationship is exactly this <strong>co-binding</strong>, not an import: both are bound to a project and their ops are composed in target bodies. The cache sees the union of every bound spell's <code>needs</code>/<code>provides</code>/<code>claims</code>.</p>
-<p>One magus API does take a spell handle as an argument: <code>magus.cache.remote(github)</code> wires a <strong>cache-backend</strong> spell (e.g. <code>actions</code>, <code>s3-cache</code>) as the remote cache backend. That is a magus call consuming a spell, not a spell importing a spell. For the shipped backends and how to set one up, see <a href="../remote-cache/">Remote caching</a>.</p>
+<p>Two magus APIs take a spell handle as an argument, and both are a magus call consuming a spell rather than a spell importing a spell:</p>
+<ul>
+<li><code>magus\cache.remote(github)</code> wires a <strong>cache-backend</strong> spell (e.g. <code>actions</code>, <code>s3-cache</code>) as the remote cache backend. See <a href="../remote-cache/">Remote caching</a>.</li>
+<li><code>magus\ci.provider(github)</code> wires a <strong>CI-provider</strong> spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See <a href="../ci-providers/">CI providers</a>.</li>
+</ul>
+<p>Both are extension points on purpose. magus itself knows neither a cache service's API nor a CI system's log syntax, so supporting one it has never heard of is a spell you write rather than a release you wait for.</p>
 <h2 id="naming-operations">Naming operations</h2>
 <p>An op's public name is the <strong>map key</strong> in <code>mgs_listTargets</code> (or the <code>ops</code> table). That key is what a magusfile calls and what <code>magus run spell::op</code> invokes. The implementation function is private. Name both after the CLI command, not after a magus lifecycle verb, so the spell is <a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-documenting and a developer who knows the toolchain can invoke an op without reading the magusfile.</p>
 <p><strong>Op key: the CLI command, kebab-case, lowercase, no flags.</strong> Write the command as you type it and replace spaces with hyphens. The golang spell:</p>
@@ -397,6 +402,10 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 </ul>
 <h2 id="authoring-a-custom-spell">Authoring a custom spell</h2>
 <p>A spell file exposes the spell contract as <code>mgs_</code>-prefixed functions: the required <code>mgs_getName</code>, plus optional <code>mgs_listRequiredGlobs</code>, <code>mgs_listProvidedGlobs</code>, <code>mgs_listClaimedGlobs</code>, <code>mgs_listIgnoreDirs</code>, <code>mgs_getVersionCommand</code>, <code>mgs_isOpaque</code>, and <code>mgs_listTargets</code>.</p>
+<p>A spell is the layer that carries logic, so it is also the layer worth testing -
+unlike the magusfile that binds it, which should stay thin enough that the
+question never arises. See <a href="../../guides/testing/">Testing</a> for where that line
+sits and how to write in-file <code>test &quot;...&quot; {}</code> blocks.</p>
 <p><code>mgs_listIgnoreDirs</code> names the non-source directories your ecosystem generates (a Rust spell returns <code>[&quot;target&quot;]</code>; a Node spell, <code>[&quot;node_modules&quot;]</code>). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.</p>
 <p>Buzz (<code>spells/ruby.buzz</code>):</p>
 <pre><code class="language-buzz">export fun mgs_getName() &gt; str { return &quot;ruby&quot;; }
@@ -415,12 +424,89 @@ export fun mgs_listTargets() &gt; any {
 </code></pre>
 <p>Then import it by path, bind it, and compose targets that call its ops:</p>
 <pre><code class="language-buzz">import &quot;spells/ruby&quot; as rb;
-magus.project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
+magus\project.register(&quot;gems/&quot;, fun(p, cb) &gt; bool { cb({ &quot;spells&quot;: [rb] }); return true; });
 
 export fun test(ctx: magus\Context, args: [str]) &gt; void { rb.rspec({ &quot;cwd&quot;: &quot;gems/&quot; }); }
 export fun lint(ctx: magus\Context, args: [str]) &gt; void { rb.rubocop({ &quot;cwd&quot;: &quot;gems/&quot; }); }
 </code></pre>
 <p>For cache-correctness rules (declare every input in <code>needs</code>, declare <code>provides</code> so outputs replay, toolchain-<a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> footguns), see <a href="../../#custom-spells">Spells in the README</a>.</p>
+<h2 id="what-magus-bounds-and-what-it-does-not">What magus bounds, and what it does not</h2>
+<p>A spell is code. That is the design, not a compromise: a build system whose
+configuration cannot express a loop or a conditional pushes that logic into shell
+scripts nobody can cache, or into the CI provider nobody can run locally. <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">Config</a>
+as code means the config is code, and code runs.</p>
+<p>So the question is not &quot;how do we stop a spell doing things&quot; - it is &quot;which
+things does magus govern, and which are yours&quot;. Being explicit about that line is
+the point of this section.</p>
+<h3 id="what-magus-does-not-restrict">What magus does not restrict</h3>
+<p>A spell has the whole <a href="../../reference/buzz/">host module</a> surface:
+<code>os\exec</code>, <code>http</code>, <code>fs</code>, <code>crypto</code>, the lot. It can run any command your shell
+can, reach the network, and read and write files. Nothing here is sandboxed
+per-spell, and importing a spell is trusting it, the same way adding a dependency
+is trusting it.</p>
+<p>magus does not attempt to make an untrusted spell safe. It cannot: the feature
+being asked for is arbitrary code execution. What it does instead is make the
+governed path the convenient one, so a spell that behaves ordinarily is
+automatically accounted for.</p>
+<h3 id="what-magus-bounds">What magus bounds</h3>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Bound</th>
+<th>Applies to</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">Concurrency</a> <a class="glossary-term" href="../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a></td>
+<td>every <code>os\exec</code>, so parallel work respects <code>-j</code></td>
+<td>on</td>
+</tr>
+<tr>
+<td>Own process group</td>
+<td>subprocesses, so Ctrl+C reaches magus and not them</td>
+<td>on</td>
+</tr>
+<tr>
+<td>Target deadline</td>
+<td>a whole target, subprocesses included</td>
+<td><strong>off</strong> (<code>target_timeout</code>)</td>
+</tr>
+<tr>
+<td>Filesystem <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a></td>
+<td>the magus process, where the platform supports it</td>
+<td>per <a href="../sandbox/">sandbox</a> config</td>
+</tr>
+<tr>
+<td>CI provider op deadline</td>
+<td>each provider spell op</td>
+<td>5s, fixed</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="the-runaway-guard">The runaway guard</h3>
+<p>A magusfile can express a loop, so a loop that never terminates is something
+someone can write by accident. Nothing else reclaims a CI runner that hit one, so
+<code>target_timeout</code> bounds a single target:</p>
+<pre><code class="language-yaml"># magus.yaml
+target_timeout: 30m
+</code></pre>
+<p>The Buzz VM samples cancellation on loop back edges, so a spinning target notices
+promptly without the interpreter paying for a check on every instruction.</p>
+<p>It is <strong>off by default</strong>, deliberately. The deadline covers the whole target,
+subprocesses included - cancelling the context kills what the target spawned - so
+a value set near a legitimate target's runtime turns a slow compile into a failed
+build. Set it well above your slowest target, as a runaway guard rather than a
+performance budget.</p>
+<h3 id="a-gap-worth-knowing">A gap worth knowing</h3>
+<p>The Buzz language stdlib ships its own <code>os\execute</code>, separate from magus's
+<code>os\exec</code>. It spawns a subprocess without taking a concurrency slot, without its
+own process group, and without appearing in the run log. It is the one way a
+spell can run work that magus does not account for, and telling the two apart by
+name alone is not obvious.</p>
+<p>Prefer <code>os\exec</code>. It is the governed path, and everything in the table above
+applies to it.</p>
 <h2 id="lifecycle-bind--contribute--compose--run">Lifecycle: bind → contribute → compose → run</h2>
 <pre><code class="language-text">import &quot;magus/spell/&lt;name&gt;&quot; or &quot;spells/&lt;name&gt;&quot;  → a Spell handle (registers nothing)
       │
@@ -456,7 +542,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 </tr>
 <tr>
 <td><strong>Handle</strong></td>
-<td>The value bound by importing a spell (<code>import &quot;magus/spell/&lt;name&gt;&quot;</code> for a built-in, <code>import &quot;spells/&lt;name&gt;&quot;</code> for a workspace-local one). Inert until passed to <code>magus.project.register</code>.</td>
+<td>The value bound by importing a spell (<code>import &quot;magus/spell/&lt;name&gt;&quot;</code> for a built-in, <code>import &quot;spells/&lt;name&gt;&quot;</code> for a workspace-local one). Inert until passed to <code>magus\project.register</code>.</td>
 </tr>
 <tr>
 <td><strong><code>needs</code></strong></td>
@@ -498,12 +584,12 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <tr>
 <td><a href="../../spells/buf/spell.buzz"><code>buf</code></a></td>
 <td>fork (built-in)</td>
-<td>A <strong>codegen producer</strong>: <code>needs</code> (<code>.proto</code> + buf <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>) and <code>provides</code> (generated code), so editing a <code>.proto</code> reruns codegen and invalidates everything downstream of the generated files.</td>
+<td>A <strong>codegen producer</strong>: <code>needs</code> (<code>.proto</code> + buf config) and <code>provides</code> (generated code), so editing a <code>.proto</code> reruns codegen and invalidates everything downstream of the generated files.</td>
 </tr>
 <tr>
 <td><a href="../../spells/github/actions/spell.buzz"><code>actions</code></a></td>
 <td>cache backend</td>
-<td>A <strong>remote cache backend</strong> over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the <code>http</code> byte primitives), wired with <code>magus.cache.remote</code>.</td>
+<td>A <strong>remote cache backend</strong> over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the <code>http</code> byte primitives), wired with <code>magus\cache.remote</code>.</td>
 </tr>
 <tr>
 <td><a href="../../spells/aws/s3-cache/spell.buzz"><code>s3-cache</code></a></td>
@@ -519,7 +605,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
 <li><a href="../charms/">Charms</a>: execution modifiers that spell ops and targets both honor.</li>
 <li><a href="../engines/">Engines</a>: how a magusfile runs on the embedded Buzz VM and the <code>mgs_</code> spell contract.</li>
 <li><a href="../../#spells">Spells (README)</a>: built-ins list, extending a built-in, and custom-spell best practices.</li>
-<li><a href="../../reference/buzz/magus/"><code>magus</code> module API</a>: <code>magus.project.register</code>, <code>magus.cache.remote</code>.</li>
+<li><a href="../../reference/buzz/magus/"><code>magus</code> module API</a>: <code>magus\project.register</code>, <code>magus\cache.remote</code>.</li>
 </ul>
     </article>
     </div>
@@ -531,7 +617,7 @@ magus run &lt;name&gt; &lt;project&gt;             → executes the target; spel
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../search/?q=tag%3A%22operations%22">operations</a><a class="tag" href="../../search/?q=tag%3A%22toolchain%22">toolchain</a><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../search/?q=tag%3A%22rust%22">rust</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:49:16Z">July 28, 2026, 3:49 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/af9ff76f5682a62c44a260eb18a7bb6b26f869a9" data-tooltip="af9ff76f5682a62c44a260eb18a7bb6b26f869a9" title="af9ff76f5682a62c44a260eb18a7bb6b26f869a9">af9ff76f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0a4bd9ad36588f99f2ca5e55aa96a31e43d4dedc"><code>0a4bd9ad</code></a> <small><time datetime="2026-07-28T15:27:48Z">Jul 28, 2026</time></small> - correct nested access: backslash qualifies, dot reaches members</li><li><a href="https://github.com/egladman/magus/commit/f2739c4b610367e85251282d9174e1b90bce7ea7"><code>f2739c4b</code></a> <small><time datetime="2026-07-28T15:19:58Z">Jul 28, 2026</time></small> - document CI providers as an extension point</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -593,7 +679,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than
