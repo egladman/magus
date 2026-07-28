@@ -219,9 +219,26 @@ func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 // RunAffected computes the VCS-diff target set and runs target on it.
 func (m *Magus) RunAffected(ctx context.Context, target string, opts ...RunOption) error {
 	o := applyRunOpts(opts)
-	targets, _, _, err := m.ExpandAffected(ctx, target, o.BaseRef)
+	targets, source, fellBack, err := m.ExpandAffected(ctx, target, o.BaseRef)
 	if err != nil {
 		return err
+	}
+	if fellBack {
+		// Selecting every project is the SAFE direction - magus would rather over-build
+		// than let a gate pass having checked nothing - but a run that quietly reverts to
+		// a full build while looking incremental is worth saying out loud. The commonest
+		// cause is a CI checkout too shallow to contain the base ref; source carries the
+		// underlying reason.
+		//
+		// This is for the NON-TERMINAL callers. `magus affected` already reveals it on a
+		// terminal, because the scope line renders source ("projects: . (affected: cannot
+		// compute affected set ...)"). RunAffected's real caller is the MCP run_affected
+		// tool, where there is no scope line and an agent would otherwise be told only
+		// that the run passed - with no way to know it had just built the whole workspace.
+		interactive.Emit(os.Stderr, fmt.Sprintf(
+			"[%s] affected: could not compute a changed-file set, so EVERY project was selected. "+
+				"This runs a full build, not an incremental one. Reason: %s (see %s)",
+			types.AffectedSetUncomputable, source, types.CodeURL(types.AffectedSetUncomputable)))
 	}
 	if len(targets) == 0 {
 		return nil
@@ -305,9 +322,23 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, g)
 		}
 	}
-	for _, g := range p.TargetOutputs[target] {
-		if jg := joinGlob(p.Path, g); !slices.Contains(step.Outputs, jg) {
+	for _, ref := range p.TargetOutputs[target] {
+		owner := ref.Project
+		if owner == "" {
+			owner = p.Path
+		}
+		jg := joinGlob(owner, ref.Glob)
+		if !slices.Contains(step.Outputs, jg) {
 			step.Outputs = append(step.Outputs, jg)
+		}
+		// A cross-project output must actually be produced, so it is required rather
+		// than best-effort. Another project's build order hangs off it: the owner runs
+		// after this target specifically to see the finished bytes. If the write silently
+		// produced nothing, the snapshot's "did ANY glob match" check would still pass on
+		// this target's own outputs, the manifest would omit the file, and every later
+		// cache hit would replay a partial output set into someone else's tree.
+		if owner != p.Path && !slices.Contains(step.RequiredOutputs, jg) {
+			step.RequiredOutputs = append(step.RequiredOutputs, jg)
 		}
 	}
 	step.DependsOn = p.DependsOn
@@ -321,29 +352,43 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	return step
 }
 
-// effectiveOutputs is a target's full output-glob set: the project-wide Outputs
-// unioned with the per-target globs it declared via magus.outputs. It keeps the race
-// detector and race-replay diagnostics consistent with the cache, which sees the same
-// deduped union via buildStep's step.Outputs. Globs are project-relative (as p.Outputs
-// and the per-target values are stored pre-join); callers join to p.Dir themselves.
+// outputWatchDirs are the base directories the race detector and the race-replay
+// snapshots must watch for one target: the project-wide Outputs plus every per-target
+// glob declared via ctx.outputs, each already resolved to an absolute directory. It keeps
+// those diagnostics consistent with the cache, which sees the same union via buildStep's
+// step.Outputs.
 //
-// There is no effectiveSources twin: the sources union has a single consumer (buildStep,
-// which folds it inline into the cache key), whereas outputs need the union in three
-// places (the race detector plus the pre/post race-replay snapshots), so only outputs
-// earn a named helper.
-func effectiveOutputs(p *types.Project, target string) []string {
-	extra := p.TargetOutputs[target]
-	if len(extra) == 0 {
-		return p.Outputs
-	}
-	out := make([]string, 0, len(p.Outputs)+len(extra))
-	out = append(out, p.Outputs...)
-	for _, g := range extra {
-		if !slices.Contains(out, g) {
-			out = append(out, g)
+// It returns directories rather than globs deliberately. Every caller used to join the
+// globs to p.Dir itself, which silently assumed one root per target - true until a target
+// could declare an output into another project's tree, and the assumption then had to be
+// paid for by dropping those globs entirely. Resolving here is what lets one target's
+// outputs span two roots.
+//
+// There is no sources twin: the sources union has a single consumer (buildStep, which
+// folds it inline into the cache key), whereas outputs need it in three places (the race
+// detector plus the pre/post replay snapshots), so only outputs earn a named helper.
+func outputWatchDirs(ws *types.Workspace, p *types.Project, target string) []string {
+	dirs := diff.GlobBaseDirs(p.Dir, p.Outputs)
+	for _, ref := range p.TargetOutputs[target] {
+		// Resolve each glob against the dir of the project that OWNS it. A
+		// cross-project glob is relative to the tree it writes into, so joining it to
+		// p.Dir would watch a path that does not exist - but dropping it is worse: it
+		// leaves the one file two projects can now both write as the only output no
+		// race (MGS4001), overlap (MGS4002), replay (MGS4003), or missing-dependency
+		// (MGS4004) check ever looks at. The feature widens the race surface, so the
+		// detector widens with it.
+		root := p.Dir
+		if ref.Project != "" && ref.Project != p.Path {
+			owner := ws.Get(ref.Project)
+			if owner == nil {
+				continue
+			}
+			root = owner.Dir
 		}
+		dirs = append(dirs, diff.GlobBaseDirs(root, []string{ref.Glob})...)
 	}
-	return out
+	slices.Sort(dirs)
+	return slices.Compact(dirs)
 }
 
 // servesTarget reports whether target is backed by a service op in any of the
@@ -464,11 +509,31 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
+	addProj := func(p *types.Project) {
+		if _, ok := seenProj[p.Path]; !ok {
+			seenProj[p.Path] = struct{}{}
+			uniqueProjects = append(uniqueProjects, p)
+		}
+	}
 	for _, st := range stages {
 		for _, p := range st.projects {
-			if _, ok := seenProj[p.Path]; !ok {
-				seenProj[p.Path] = struct{}{}
-				uniqueProjects = append(uniqueProjects, p)
+			addProj(p)
+			// A target declaring ctx.outputs(<alias>.file(...)) mutates ANOTHER
+			// project's tree, so that project belongs in the lock set too. Without it the
+			// advisory lock's guarantee - no two magus invocations mutating one project at
+			// once - is false by construction here: a concurrent `magus clean` locks the
+			// owner, this run locks only the writer, and the two delete and write the same
+			// file unserialized. It also serializes two writers into one tree, which
+			// otherwise interleave with no contention and no ordering.
+			for _, refs := range p.TargetOutputs {
+				for _, ref := range refs {
+					if ref.Project == "" || ref.Project == p.Path {
+						continue
+					}
+					if owner := m.ws.Get(ref.Project); owner != nil {
+						addProj(owner)
+					}
+				}
 			}
 		}
 	}
@@ -679,7 +744,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		var err error
 		if raceRT != nil {
-			outDirs := diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, s.Target))
+			outDirs := outputWatchDirs(m.ws, p, s.Target)
 			err = raceRT.TrackProject(s.ProjectPath, s.Target, outDirs, func() error {
 				return handler(spanCtx, p)
 			})
@@ -698,7 +763,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	if opts.RaceReplay && runErr == nil {
 		for _, st := range stages {
-			runReplay(ctx, st.projects, st.target, byPath, st.handler, opts.Report)
+			runReplay(ctx, m.ws, st.projects, st.target, byPath, st.handler, opts.Report)
 		}
 	}
 
@@ -752,13 +817,13 @@ func (m *Magus) buildRaceRuntime() *race.Runtime {
 
 // runReplay re-executes projects and compares output content hashes to detect
 // non-determinism (MGS4003). Bypasses cache so spells actually re-execute.
-func runReplay(ctx context.Context, projects []*types.Project, target string,
+func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Project, target string,
 	byPath map[string]*types.Project, handler TargetHandler,
 	w *report.Writer,
 ) {
 	var replayable []*types.Project
 	for _, p := range projects {
-		if len(effectiveOutputs(p, target)) > 0 {
+		if len(outputWatchDirs(ws, p, target)) > 0 {
 			replayable = append(replayable, p)
 		}
 	}
@@ -768,7 +833,7 @@ func runReplay(ctx context.Context, projects []*types.Project, target string,
 
 	snapsA := make(map[string]diff.ContentSnap, len(replayable))
 	for _, p := range replayable {
-		snapsA[p.Path] = diff.HashContent(diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, target)))
+		snapsA[p.Path] = diff.HashContent(outputWatchDirs(ws, p, target))
 	}
 
 	for _, p := range replayable {
@@ -778,7 +843,7 @@ func runReplay(ctx context.Context, projects []*types.Project, target string,
 	}
 
 	for _, p := range replayable {
-		postSnap := diff.HashContent(diff.GlobBaseDirs(p.Dir, effectiveOutputs(p, target)))
+		postSnap := diff.HashContent(outputWatchDirs(ws, p, target))
 		changed := diff.DiffContent(snapsA[p.Path], postSnap)
 		if len(changed) == 0 {
 			continue
@@ -996,15 +1061,31 @@ func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) er
 		return err
 	}
 	// Resolve the active VCS (git/hg/jj) rather than shelling out to git, so the
-	// cleanliness gate works under any backend. No VCS or a failed probe skips the
-	// check, matching the prior "skip when git is unavailable" behavior.
+	// cleanliness gate works under any backend.
+	//
+	// The three outcomes below are deliberately not collapsed, following the rule
+	// this file already applies to a missing ci target: "definitely absent" and
+	// "could not tell" are different answers, and only the first is safe to read
+	// as a pass. A target reaches here only by declaring FailOnDrift, so it has
+	// explicitly asked to be checked; reporting "clean" when the check never ran
+	// would silently retract the guarantee it opted into.
 	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
-	if err != nil || res.VCS == nil {
-		return nil //nolint:nilerr // VCS unavailable or unresolved: skip the post-write cleanliness check
+	if err != nil {
+		// Resolve fails only for an explicitly requested VCS that does not exist
+		// (MAGUS_VCS_NAME naming an unknown backend). That is misconfiguration, not
+		// an absent VCS, and silently skipping it would hide the typo forever.
+		return fmt.Errorf("%s: %s declares FailOnDrift but the VCS could not be resolved: %w", dir, target, err)
+	}
+	if res.VCS == nil {
+		// No VCS, or VCS explicitly disabled. There is genuinely nothing to diff
+		// against, so the check does not apply - this is the no-op that keeps magus
+		// usable outside a repository (a container build, an extracted tarball).
+		return nil
 	}
 	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
 	if err != nil {
-		return nil //nolint:nilerr // VCS status unavailable: skip the post-write cleanliness check
+		return fmt.Errorf("%s: %s declares FailOnDrift but %s could not report working-tree status, so drift was not verified: %w",
+			dir, target, res.VCS.Name(), err)
 	}
 	if len(files) > 0 {
 		return fmt.Errorf("%s: %s produced uncommitted changes; re-run with the rw charm (%s:rw) to apply:\n%s",

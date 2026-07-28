@@ -14,9 +14,9 @@ func TestProjectAllOutputs(t *testing.T) {
 	// Per-target outputs union in, deduped against project-wide, sorted for determinism.
 	p = &Project{
 		Outputs: []string{"dist/**"},
-		TargetOutputs: map[string][]string{
-			"docs":     {"docs/*.md", "dist/**"}, // dist/** duplicates project-wide -> dropped
-			"generate": {"MAGUS.md"},
+		TargetOutputs: map[string][]OutputRef{
+			"docs":     {{Glob: "docs/*.md"}, {Glob: "dist/**"}}, // dist/** duplicates project-wide -> dropped
+			"generate": {{Glob: "MAGUS.md"}},
 		},
 	}
 	assert.Equal(t, []string{"dist/**", "MAGUS.md", "docs/*.md"}, p.AllOutputs())

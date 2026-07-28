@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/egladman/magus/internal/cache"
+
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
@@ -329,15 +331,44 @@ func firstExistingConfig(dir string) string {
 	return ""
 }
 
-func (r *runner) checkCacheWritable() Check {
-	cacheDir := filepath.Join(r.root, ".magus")
+// cacheDir resolves the workspace's cache directory, honoring an absolute or
+// root-relative cache.dir override.
+func (r *runner) cacheDir() string {
 	if d := r.opts.cfg.Cache.Dir; d != "" {
 		if filepath.IsAbs(d) {
-			cacheDir = filepath.Clean(d)
-		} else {
-			cacheDir = filepath.Join(r.root, d)
+			return filepath.Clean(d)
 		}
+		return filepath.Join(r.root, d)
 	}
+	return filepath.Join(r.root, ".magus")
+}
+
+// checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
+// doctor` gives the whole picture rather than only the target you happened to run.
+func (r *runner) checkCacheYield() Check {
+	const name = "cache yield"
+	stalled := cache.StalledTargets(r.cacheDir(), nil)
+	if len(stalled) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no target is running uncached"}
+	}
+	details := make([]string, 0, len(stalled)+1)
+	for _, s := range stalled {
+		details = append(details, fmt.Sprintf("%s %s: %d runs, 0 cached, %.0fs spent (%.0fs avg)",
+			s.Project, s.Target, s.Runs, float64(s.TotalMs)/1000, float64(s.AvgMs())/1000))
+	}
+	details = append(details,
+		"a target that never replays usually declares a footprint wider than it reads, so unrelated edits keep changing its key")
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("[%s] %d target(s) executed repeatedly and never replayed from cache",
+			types.TargetNeverReplays, len(stalled)),
+		Details: details,
+	}
+}
+
+func (r *runner) checkCacheWritable() Check {
+	cacheDir := r.cacheDir()
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return Check{
 			Name:    "cache writable",
@@ -609,10 +640,15 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 				}
 			}
 		}
-		for target, globs := range p.TargetOutputs {
-			for _, g := range globs {
-				if slices.Contains(p.Outputs, g) {
-					details = append(details, fmt.Sprintf("%s: ctx.outputs(%q) already in project outputs", target, g))
+		for target, refs := range p.TargetOutputs {
+			for _, ref := range refs {
+				// A cross-project output is never redundant with THIS project's globs:
+				// its glob is relative to the tree it writes into, not to this one.
+				if ref.Project != "" && ref.Project != p.Path {
+					continue
+				}
+				if slices.Contains(p.Outputs, ref.Glob) {
+					details = append(details, fmt.Sprintf("%s: ctx.outputs(%q) already in project outputs", target, ref.Glob))
 				}
 			}
 		}

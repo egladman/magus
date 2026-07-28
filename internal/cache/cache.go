@@ -25,6 +25,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 )
@@ -86,9 +87,17 @@ type Step struct {
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
 	// The field itself is not written into the key - only the resulting file set is, so
 	// two ignore sets that yield the same files hash identically.
-	IgnoreDirs      []string
-	EnvAllow        []string // env var names whose values contribute to the key
-	Outputs         []string // globs snapshotted into cache and replayed on hit
+	IgnoreDirs []string
+	EnvAllow   []string // env var names whose values contribute to the key
+	Outputs    []string // globs snapshotted into cache and replayed on hit
+	// RequiredOutputs is the subset of Outputs that must each match at least one file,
+	// rather than the whole set merely matching something. It carries the globs another
+	// project's build order depends on (a cross-project output), where producing nothing
+	// is a build failure rather than an empty result: the manifest would omit the file
+	// and later cache hits would replay a partial output set into a tree this target does
+	// not own. Ordinary outputs stay lenient - a glob that legitimately matches nothing
+	// is common, and only a total miss is suspicious.
+	RequiredOutputs []string
 	Deps            []string // upstream project hashes folded into the key
 	DependsOn       []string // upstream project paths for scheduling (not hashed)
 	WorkspaceRoot   string
@@ -263,6 +272,13 @@ func (c *Cache) Fresh(ctx context.Context, s Step) (bool, error) {
 // otherwise fn runs and its outputs are snapshotted. Per-hash locking prevents
 // manifest races when multiple RunAll goroutines share the same key.
 func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
+	// One recorder per step, so remote-cache waiting is attributed to the target that
+	// waited rather than smeared across the run. Installed here because Run is the only
+	// place a step's context is established, and both the hit and miss paths report from
+	// it below.
+	netRec := &httpx.Recorder{}
+	ctx = httpx.WithRecorder(ctx, netRec)
+
 	rc := &runCtx{step: &s}
 	for _, o := range opts {
 		o(rc)
@@ -390,12 +406,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				}
 				c.log.Info(
 					event,
-					slog.String("project", s.ProjectPath),
-					slog.String("label", s.Label),
-					slog.String("target", reproTarget(s)),
-					slog.Int64("duration", int64(result.Duration)),
-					slog.String("hash", shortHash(hash)),
-					slog.String("ref", ref),
+					append(netAttrs(netRec),
+						slog.String("project", s.ProjectPath),
+						slog.String("label", s.Label),
+						slog.String("target", reproTarget(s)),
+						slog.Int64("duration", int64(result.Duration)),
+						slog.String("hash", shortHash(hash)),
+						slog.String("ref", ref),
+					)...,
 				)
 				result.Ref = ref
 				if rc.onHit != nil {
@@ -471,11 +489,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	result.Ref = ref
 	c.log.Info(
 		"cache.miss",
-		slog.String("project", s.ProjectPath),
-		slog.String("label", s.Label),
-		slog.String("target", reproTarget(s)),
-		slog.Int64("duration", int64(result.Duration)),
-		slog.String("ref", ref),
+		append(netAttrs(netRec),
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.Int64("duration", int64(result.Duration)),
+			slog.String("ref", ref),
+		)...,
 	)
 	if rc.onMiss != nil {
 		rc.onMiss(&result)
@@ -1120,4 +1140,15 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		// `magus query ref...`. It is overwritten on the next run of the same key.
 	}
 	return rawBuf.Bytes(), runErr
+}
+
+// netAttrs returns the remote-I/O attribute for a step, or nothing when the step did
+// no remote work. Absent rather than zero: a "remote: 0s" on every local build is noise
+// that trains people to skip the line, and the number is only interesting when it is
+// large enough to explain a wait.
+func netAttrs(rec *httpx.Recorder) []any {
+	if rec.Calls() == 0 {
+		return nil
+	}
+	return []any{slog.Int64("remote_ns", int64(rec.Elapsed()))}
 }

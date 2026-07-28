@@ -41,7 +41,10 @@ func collapseOnSuccess(l config.Log) bool {
 	default:
 		return false
 	}
-	if l.IsSilent() || l.SlogLevel() < slog.LevelInfo {
+	// Keyed on Stream, not on Level. Raising the log level asks for more RECORDS;
+	// it is not a request to stop withholding each target's own output. -vv sets
+	// Stream explicitly for callers who do want that.
+	if l.IsSilent() || l.IsStream() {
 		return false
 	}
 	return true
