@@ -279,13 +279,13 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
+			return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
+				return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)

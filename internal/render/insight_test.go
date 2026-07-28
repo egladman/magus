@@ -94,19 +94,19 @@ func TestWriteInsightMarkdown(t *testing.T) {
 	assert.Contains(t, s, "## Affinity")
 	assert.Contains(t, s, "## Ownership")
 	assert.Contains(t, s, "```mermaid", "flowcharts provide dependency context")
-	assert.NotContains(t, s, "quadrantChart", "GitHub does not render this chart type reliably")
+	assert.NotContains(t, s, "quadrantChart", "the rich default omits the GitHub-incompatible quadrant chart")
 	assert.Contains(t, s, "## Trend")
 	assert.Contains(t, s, "**Next:**", "each lens gives an actionable next step")
 	assert.Contains(t, s, "`api/a.go`", "lists the hottest file")
 }
 
-func TestWriteInsightGitHubMarkdown(t *testing.T) {
+func TestWriteInsightMarkdownGitHubSafe(t *testing.T) {
 	report := types.InsightReport{
 		Hotspots: types.HotspotOutput{Nodes: []types.Node{{Path: ".", Name: "magus", Dir: "/repo/magus"}}},
 		Affinity: types.AffinityOutput{Pairs: []types.CoChange{{A: ".", AName: "magus", B: "docs", BName: "docs", Count: 1}}},
 	}
 	var b strings.Builder
-	require.NoError(t, WriteInsightGitHubMarkdown(&b, report))
+	require.NoError(t, WriteInsightMarkdown(&b, report, WithMermaidSafe()))
 	got := b.String()
 	assert.Contains(t, got, "```mermaid")
 	assert.NotContains(t, got, "quadrantChart")

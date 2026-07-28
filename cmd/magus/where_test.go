@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/types"
 
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
 )
 
@@ -43,37 +44,37 @@ func TestWhereNoMatch(t *testing.T) {
 
 func TestResolveProjectArg(t *testing.T) {
 	t.Run("all projects empty sentinel", func(t *testing.T) {
-		got, err := resolveProjectArg("", "web/studio")
+		got, err := file.ResolveProject("", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "", got)
 	})
 	t.Run("all projects slash sentinel", func(t *testing.T) {
-		got, err := resolveProjectArg("/", "web/studio")
+		got, err := file.ResolveProject("/", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "/", got)
 	})
 	t.Run("bare stays workspace-relative", func(t *testing.T) {
-		got, err := resolveProjectArg("api", "web/studio")
+		got, err := file.ResolveProject("api", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "api", got)
 	})
 	t.Run("dot up resolves against cwd", func(t *testing.T) {
-		got, err := resolveProjectArg("../api", "web/studio")
+		got, err := file.ResolveProject("../api", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "web/api", got)
 	})
 	t.Run("dot sibling resolves against cwd", func(t *testing.T) {
-		got, err := resolveProjectArg("./peer", "extensions/drape")
+		got, err := file.ResolveProject("./peer", "extensions/drape")
 		require.NoError(t, err)
 		assert.Equal(t, "extensions/drape/peer", got)
 	})
 	t.Run("escape rejected", func(t *testing.T) {
-		_, err := resolveProjectArg("../../../foo", "a/b")
+		_, err := file.ResolveProject("../../../foo", "a/b")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "escapes workspace root")
 	})
 	t.Run("absolute rejected", func(t *testing.T) {
-		_, err := resolveProjectArg("/etc", "web/studio")
+		_, err := file.ResolveProject("/etc", "web/studio")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be repo-relative")
 	})
