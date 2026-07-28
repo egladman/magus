@@ -61,9 +61,15 @@ func (l Level) String() string {
 
 // Group describes a foldable section of the job log.
 type Group struct {
-	// ID is the machine name providers key a section by (GitLab, TeamCity).
-	// Providers that address sections only by title ignore it. Keep it to
-	// letters, digits, underscore, dot, and dash: GitLab rejects the rest.
+	// ID is a stable, opaque identifier for the section. Providers that key
+	// sections by name (GitLab, TeamCity) match a close against its open by
+	// this; providers that address sections only by title ignore it.
+	//
+	// magus passes something meaningful and readable, such as a project
+	// path. It does NOT normalize the character set, because what is legal
+	// differs per provider and encoding one provider's rule here would put
+	// that provider back into the generic layer. A provider with charset
+	// restrictions normalizes in its own spell.
 	ID string
 	// Title is the human-readable heading.
 	Title string
@@ -167,31 +173,6 @@ func Detect(w io.Writer) Annotator {
 		}
 	}
 	return Nop{}
-}
-
-// SanitizeID reduces s to the character set every provider accepts for a
-// section name: letters, digits, underscore, dot, and dash. GitLab
-// rejects anything else outright, so a project path (which contains
-// slashes) has to be folded before it can key a section.
-//
-// Runs of rejected characters collapse to a single dash, so two distinct
-// paths do not produce one long unreadable run of separators.
-func SanitizeID(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	lastDash := false
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
-			r == '_', r == '.', r == '-':
-			b.WriteRune(r)
-			lastDash = false
-		case !lastDash:
-			b.WriteByte('-')
-			lastDash = true
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }
 
 // QuoteWith neutralises any line in text that begins with one of the

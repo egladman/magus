@@ -29,35 +29,6 @@ func TestNopIsInertButUsable(t *testing.T) {
 		"with no provider there is no syntax to neutralise")
 }
 
-func TestSanitizeID(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct{ in, want string }{
-		{"libs/textsearch", "libs-textsearch"},
-		{"magus-fail-api build", "magus-fail-api-build"},
-		{"keeps_dots.and-dashes", "keeps_dots.and-dashes"},
-		{"collapses///runs", "collapses-runs"},
-		{"/leading/and/trailing/", "leading-and-trailing"},
-		{"", ""},
-	} {
-		t.Run(tc.in, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tc.want, SanitizeID(tc.in))
-		})
-	}
-}
-
-// TestSanitizeIDProducesOnlyAcceptedCharacters pins the constraint that
-// motivated the helper: GitLab rejects a section name containing anything
-// outside this set, so a project path cannot key a section unsanitised.
-func TestSanitizeIDProducesOnlyAcceptedCharacters(t *testing.T) {
-	t.Parallel()
-	for _, r := range SanitizeID("a/b:c d\\e@f#g") {
-		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
-			(r >= '0' && r <= '9') || r == '_' || r == '.' || r == '-'
-		assert.True(t, ok, "character %q is not accepted in a section name", r)
-	}
-}
-
 // TestDetectIsNopWithoutAProvider is the shipped default: magus carries no
 // CI syntax of its own, so a workspace that names no provider gets none.
 func TestDetectIsNopWithoutAProvider(t *testing.T) {

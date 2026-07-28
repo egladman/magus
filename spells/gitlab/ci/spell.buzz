@@ -30,6 +30,7 @@ namespace ci;
 
 import "os";
 import "std";
+import "strings";
 import "magus/target";
 
 export fun mgs_getName() > str { return "ci"; }
@@ -62,30 +63,17 @@ fun nowSeconds() > int {
     return (os.time() / 1000).floor();
 }
 
-// sanitizeID reduces an id to what GitLab accepts for a section name: letters,
-// digits, underscore, dot, and dash. magus keys sections by project path, which
-// contains slashes, so this is not optional. Runs of rejected characters
-// collapse to one dash rather than a long unreadable stretch of separators.
-fun sanitizeID(s: str) > str {
-    var acc = "";
-    var lastDash = false;
-    for (var i = 0; i < s.len(); i = i + 1) {
-        final ch = s.sub(i, 1);
-        final keep = (ch >= "a" and ch <= "z")
-            or (ch >= "A" and ch <= "Z")
-            or (ch >= "0" and ch <= "9")
-            or ch == "_" or ch == "." or ch == "-";
-        if (keep) {
-            acc = acc + ch;
-            lastDash = false;
-        } else if (!lastDash) {
-            acc = acc + "-";
-            lastDash = true;
-        }
-    }
-    while (acc.len() > 0 and acc.sub(0, 1) == "-") { acc = acc.sub(1, acc.len() - 1); }
-    while (acc.len() > 0 and acc.sub(acc.len() - 1, 1) == "-") { acc = acc.sub(0, acc.len() - 1); }
-    return acc;
+// sectionID reduces an id to what GitLab accepts for a section name:
+// letters, digits, underscore, dot, and dash. magus keys sections by
+// project path, which contains slashes, so this is not optional.
+//
+// strings.kebabCase does the whole job in Go rather than a character loop
+// here: a spell should reach for the host modules, not reimplement them.
+// It is lossier than strictly required (it lowercases, and folds _ and .
+// to dashes) but every output is legal, which is what matters - the id is
+// a key GitLab matches start against end, never something a reader reads.
+fun sectionID(s: str) > str {
+    return strings.kebabCase(s);
 }
 
 // group_start opens a section. Unlike Actions, GitLab can show one expanded, so
@@ -93,7 +81,7 @@ fun sanitizeID(s: str) > str {
 export fun group_start(target: Target, cb: fun(any)) > bool {
     final io = {<str, any>};
     cb(io);
-    final id = sanitizeID("" + io["id"]);
+    final id = sectionID("" + io["id"]);
     // A section with no name could never be closed, so emit nothing.
     if (id == "") { return true; }
     var collapsed = "";
@@ -106,7 +94,7 @@ export fun group_start(target: Target, cb: fun(any)) > bool {
 export fun group_end(target: Target, cb: fun(any)) > bool {
     final io = {<str, any>};
     cb(io);
-    final id = sanitizeID("" + io["id"]);
+    final id = sectionID("" + io["id"]);
     if (id == "") { return true; }
     std.print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
     return true;
@@ -128,14 +116,22 @@ export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
 
 import "assert";
 
-test "sanitizeID folds a project path into a legal section name" {
-    assert\equal(sanitizeID("libs/textsearch"), "libs-textsearch", "slashes become dashes");
-    assert\equal(sanitizeID("magus-fail-api build"), "magus-fail-api-build", "spaces become dashes");
-    assert\equal(sanitizeID("keeps_dots.and-dashes"), "keeps_dots.and-dashes", "legal characters survive");
+test "sectionID folds a project path into a legal section name" {
+    assert\equal(sectionID("libs/textsearch"), "libs-textsearch", "slashes become dashes");
+    assert\equal(sectionID("magus-fail-api build"), "magus-fail-api-build", "spaces become dashes");
+    assert\equal(sectionID("/leading/and/trailing/"), "leading-and-trailing", "edges are trimmed");
 }
 
-test "sanitizeID collapses runs and trims separators" {
-    assert\equal(sanitizeID("collapses///runs"), "collapses-runs", "a run of rejects is one dash");
-    assert\equal(sanitizeID("/leading/and/trailing/"), "leading-and-trailing", "edges are trimmed");
-    assert\equal(sanitizeID(""), "", "empty stays empty");
+test "sectionID output is always a legal GitLab section name" {
+    final samples = ["a/b:c d", "MGS1002 api", "weird@@@chars", "libs/textsearch"];
+    foreach (sample in samples) {
+        final got = sectionID(sample);
+        foreach (i in 0..got.len()) {
+            final ch = got.sub(i, 1);
+            final legal = (ch >= "a" and ch <= "z")
+                or (ch >= "0" and ch <= "9")
+                or ch == "_" or ch == "." or ch == "-";
+            assert\isTrue(legal, "character " + ch + " is not legal in a section name");
+        }
+    }
 }

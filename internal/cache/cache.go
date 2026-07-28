@@ -1067,12 +1067,10 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 			// Expanded, not folded: a failure is the one thing the reader must
 			// not have to click for. Providers that cannot express an expanded
 			// section leave the output inline instead of hiding it.
-			_ = ann.StartGroup(annotate.Group{
-				ID:    annotate.SanitizeID("magus-fail-" + what),
-				Title: "failed: " + what,
-			})
+			groupID := "magus-fail-" + what
+			_ = ann.StartGroup(annotate.Group{ID: groupID, Title: "failed: " + what})
 			defer func() {
-				_ = ann.EndGroup(annotate.SanitizeID("magus-fail-" + what))
+				_ = ann.EndGroup(groupID)
 				_ = ann.Annotate(annotate.Annotation{
 					Level:   annotate.LevelError,
 					Title:   "magus: " + what,
