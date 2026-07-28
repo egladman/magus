@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"slices"
 
 	"github.com/egladman/magus/internal/sandbox/env"
@@ -115,20 +114,6 @@ func (p *Policy) Fingerprint() string {
 	h := sha256.New()
 	fmt.Fprintf(h, "rules=%v;envAllow=%v;globs=%v", rules, envAllow, globs)
 	return hex.EncodeToString(h.Sum(nil)[:8]) // first 8 bytes → 16 hex chars
-}
-
-// RecordConnect logs an outbound network connection attempt for audit
-// purposes. It does not block. A nil policy is a no-op.
-func (p *Policy) RecordConnect(ctx context.Context, method, rawURL string) {
-	if p == nil {
-		return
-	}
-	slog.InfoContext(
-		ctx, "[MGS2009] sandbox: outbound network request",
-		"method", method,
-		"url", rawURL,
-		"see", "https://github.com/egladman/magus/blob/main/docs/codes/sandbox/MGS2009.md",
-	)
 }
 
 // UnionPolicies returns the set-union of all input policies (for multi-workspace daemons).

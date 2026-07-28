@@ -225,19 +225,23 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	label := displayProjectLabel(recordStr(r, "label"), project)
 	dur := recordDur(r, "duration")
 	ref := recordStr(r, "ref") // target-output reference id (see internal/cache/output_store.go)
+	// Time this step spent waiting on magus's own remote I/O. Rendered INSIDE the parens
+	// beside the duration, because it qualifies that number rather than adding a fact:
+	// "6.1s" and "6.1s, 4.2s remote" describe different problems with opposite fixes.
+	remote := remoteSuffix(recordDur(r, "remote_ns"), dur)
 
 	switch r.Message {
 	case "cache.hit":
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
 		// mirroring the cross-tool convention (e.g. Bazel's "(cached) PASSED").
-		h.printf("%s %s (cached, %s)\n", h.glyph(colorize, "pass", colDimGreen), label, fmtDur(dur))
+		h.printf("%s %s (cached, %s%s)\n", h.glyph(colorize, "pass", colDimGreen), label, fmtDur(dur), remote)
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
 		h.status.cached++
 		h.paintStatus()
 	case "cache.miss":
-		h.printf("%s %s (ran, %s)\n", h.glyph(colorize, "pass", colGreen), label, fmtDur(dur))
+		h.printf("%s %s (ran, %s%s)\n", h.glyph(colorize, "pass", colGreen), label, fmtDur(dur), remote)
 		h.printRepro(colorize, project, recordStr(r, "target"))
 		h.printRef(colorize, ref)
 		h.status.passed++
@@ -267,7 +271,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			h.printf("\nSummary: %d cached, %d ran, %d failed (%s)\n",
 				cached, ran, failed, fmtDur(elapsed))
 		} else {
-			h.printf("[summary] %d cached, %d ran, %d failed (%s)\n",
+			h.printf("summary: %d cached, %d ran, %d failed (%s)\n",
 				cached, ran, failed, fmtDur(elapsed))
 		}
 		// End of run: release the sticky error region so the user's
@@ -572,4 +576,19 @@ func recordInt(r slog.Record, key string) int {
 		return true
 	})
 	return i
+}
+
+// remoteSuffix renders the remote-I/O share of a step's duration, or "" when there was
+// none or it was too small to explain anything.
+//
+// The threshold is deliberate. A number that appears on every line stops being read, and
+// a 30ms cache probe is not why your build felt slow - so this stays silent until remote
+// waiting is both material in absolute terms and a real share of the step. What survives
+// is the case worth interrupting for: most of your wait was the network, not your build.
+func remoteSuffix(remote, total time.Duration) string {
+	const minRemote = 500 * time.Millisecond
+	if remote < minRemote || total <= 0 || remote*4 < total {
+		return ""
+	}
+	return ", " + fmtDur(remote) + " remote"
 }

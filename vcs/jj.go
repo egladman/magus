@@ -115,6 +115,13 @@ func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
 }
 
+// Tags reports none. jj models named pointers as bookmarks, not tags, and its
+// Describe already answers tag questions with "" - returning bookmarks here
+// would quietly answer a different question than the caller asked.
+func (v jjVCS) Tags(_ context.Context, _, _ string) ([]types.Tag, error) {
+	return nil, nil
+}
+
 func (v jjVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error) {
 	// ShortHash is the short commit_id (a prefix of Hash), not change_id, so it
 	// stays consistent with Hash and the agnostic Commit.ID model.

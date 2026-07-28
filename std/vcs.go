@@ -114,6 +114,15 @@ var Vcs = Module{
 			Impl:    VcsExe,
 		},
 		{
+			Name: "tags",
+			Doc:  "Repository tags, newest first. Each is a record {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone legitimately fetches no tags, so an empty list still means \"none present here\", not \"none exist\".",
+			Args: []Arg{
+				{Name: "pattern", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny}},
+			Impl:    VcsTags,
+		},
+		{
 			Name:    "describe",
 			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
@@ -410,6 +419,23 @@ func VcsDescribe(ctx context.Context) (string, error) {
 		return "", nil //nolint:nilerr // describe unavailable: empty, matching the metadata accessors
 	}
 	return out, nil
+}
+
+// VcsTags returns the repository's tags newest-first, filtered by pattern. An
+// empty list when no VCS is resolved; a failed query is returned, not swallowed.
+func VcsTags(ctx context.Context, pattern string) ([]types.Tag, error) {
+	v, _ := resolveVCS(ctx)
+	if v == nil {
+		return nil, nil
+	}
+	// Errors propagate, deliberately breaking with the metadata accessors above.
+	// Those return "" for a failed query because a magusfile reading vcs.branch()
+	// outside a repo wants a blank, not an exception. Tags differ: resolveVCS
+	// already covers "no VCS", a repository with no tags exits 0 with no output,
+	// so a non-nil error here is a real fault - git missing, not a repository, or
+	// a malformed pattern. Swallowing it would report "no releases" for "could not
+	// read releases", which is exactly the confusion a release page must not make.
+	return v.Tags(ctx, "", pattern) // host bindings run in the project cwd
 }
 
 // VcsExe returns the absolute path of the active VCS executable, or "" when

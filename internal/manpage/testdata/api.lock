@@ -36,6 +36,7 @@ config knowledge.workspaces
 config log.format
 config log.level
 config log.silent
+config log.stream
 config mcp.address
 config mcp.enabled
 config report.filter

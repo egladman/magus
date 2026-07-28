@@ -164,6 +164,27 @@ func (v hgVCS) Describe(ctx context.Context, dir string) (string, error) {
 	return tag, nil
 }
 
+// Tags lists tags newest-first. hg always reports a synthetic "tip" tag - a
+// moving pointer at the newest revision rather than a marker anyone set - so it
+// is filtered out; leaving it in would make every repository look freshly tagged.
+func (v hgVCS) Tags(ctx context.Context, dir, pattern string) ([]types.Tag, error) {
+	out, err := vcsOutput(ctx, dir, "hg", "tags", "--template", "{tag}\t{date|rfc3339date}\t{node}\n")
+	if err != nil {
+		return nil, err
+	}
+	tags, err := parseTags(out, pattern)
+	if err != nil {
+		return nil, err
+	}
+	kept := tags[:0]
+	for _, t := range tags {
+		if t.Name != "tip" {
+			kept = append(kept, t)
+		}
+	}
+	return kept, nil
+}
+
 // hgCommitTemplate emits the NUL-delimited fields parseCommit expects: node,
 // short node, author name/email, the record date (RFC 3339), parents, and the
 // full message. \0 is the field delimiter Mercurial converts to NUL.

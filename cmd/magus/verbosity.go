@@ -82,6 +82,11 @@ func expandVerbosityArgs(args []string) []string {
 }
 
 // effectiveLevel maps verbosity/quiet flags to a slog.Level; quiet wins over -v.
+//
+// -v and -vv share the debug level on purpose: they differ in whether each
+// target's own output streams (Log.Stream, set in applyDisplay), not in which
+// records are admitted. Splitting them by level instead would mean -v silently
+// dropping debug records, which is the opposite of what the flag is for.
 func effectiveLevel(v verbosity, quiet bool) slog.Level {
 	switch {
 	case quiet:
@@ -153,6 +158,17 @@ func applyDisplay() {
 	if global.silent {
 		s := true
 		globalCfg.Log.Silent = &s
+	}
+	// -vv is where target output starts streaming live; -v deliberately keeps the
+	// collapsed scoreboard so "a bit more detail" stays readable. -vvv implies -vv.
+	// Only set on an explicit -vv so a magus.yaml log.stream is not overwritten by
+	// a plain run.
+	// quiet dominates: -vv -q asked for silence, and streaming every target's output
+	// would be the loudest possible reading of that. Set explicitly in both directions
+	// so a magus.yaml log.stream cannot resurrect it under --quiet either.
+	if global.verbose >= 2 || quiet {
+		stream := global.verbose >= 2 && !quiet
+		globalCfg.Log.Stream = &stream
 	}
 
 	opts := &slog.HandlerOptions{Level: lvl, AddSource: addSource}

@@ -318,6 +318,18 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 		return nil
 	}, WithConcurrency(4))
 	assert.Error(t, err, "expected RunAll to reject the 3-node cycle")
+	assert.NotContains(t, err.Error(), nodeKeySep,
+		"the cycle report must not leak the raw node-key separator into a user-facing error")
+}
+
+// TestFormatCycle pins the rendering of a node-key cycle. The keys join project and
+// target with a control byte, so the naive %v puts an unprintable character in front of
+// the user - and this is the error they see when a build order cannot be satisfied, which
+// is exactly when the text has to be readable.
+func TestFormatCycle(t *testing.T) {
+	cycle := []string{DepKey("site", "build"), DepKey("producer", "build"), DepKey("site", "build")}
+
+	assert.Equal(t, "site build -> producer build -> site build", formatCycle(cycle))
 }
 
 // TestRunAllNoDependencies is a regression guard: steps with no DependsOn run
