@@ -70,7 +70,7 @@
         {
           "name": "bindings-generate",
           "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
+          "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
           "outputs": [
             "host/gen/*.go"
           ]
@@ -111,7 +111,10 @@
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary."
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
+          "charms": [
+            "gha"
+          ]
         },
         {
           "name": "generate",
@@ -253,12 +256,6 @@
           ]
         },
         {
-          "name": "security",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
           "name": "format",
           "doc": "Regenerates, then formats Go and tidies `go.mod`.",
           "dependencies": [
@@ -279,7 +276,6 @@
           "doc": "Runs the CI gates through their declared dependencies.",
           "dependencies": [
             "lint",
-            "security",
             "build",
             "test"
           ]
@@ -398,6 +394,7 @@
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
           "dependencies": [
+            "preflight",
             "lint",
             "test",
             "build"
@@ -533,7 +530,7 @@
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
           ]
@@ -541,7 +538,7 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
           ]

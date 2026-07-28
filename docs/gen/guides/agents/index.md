@@ -107,14 +107,40 @@ duplicated line in every session:
 
 ## Install and update
 
+`magus agent` is a pure data generator: it writes nothing to disk by default
+unless you pass a destination directory. Two subcommands and two output modes
+cover every install case.
+
 ```sh
-magus agent install .claude/skills          # name your host's skill dir; refuses to overwrite
+magus agent install .claude/skills          # write to repo-relative dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
-magus agent install .agents/skills --agents-md          # Codex: skills + always-on guidance
-magus agent install .agents/skills --agents-md --force  # refresh both after an upgrade
-magus agent install --agents-md             # write/refresh the AGENTS.md section
+magus agent install-agents-md               # write/refresh the AGENTS.md managed section
+magus agent install --tar                   # stream a tar of every skill to stdout
+magus agent install-agents-md --tar         # stream a tar containing AGENTS.md to stdout
 magus graph verify                          # are the installed skills current? (per location)
 magus graph verify --strict                 # CI gate: non-zero exit when stale
+```
+
+The `--tar` form is the supported way to install skills anywhere your shell
+can reach. Pipe to `tar -xf - -C <dir>` and the shell does the file writes -
+so the guard hook, the sandbox, and your audit log all see the same operation
+the user typed:
+
+```sh
+magus agent install --tar | tar -xf - -C .claude/skills
+magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
+magus agent install-agents-md --tar | tar -xf - -C ~/my-project
+```
+
+Write-mode destinations are paths relative to `--dir` (default `.`). Absolute
+paths and `~` prefixes are refused unless `--global` is set, to keep magus
+from silently writing outside the working tree. The supported escape hatch
+for absolute destinations is `--tar`:
+
+```sh
+magus agent install /tmp/skills              # refused: "outside the working tree"
+magus agent install /tmp/skills --global     # accepts; you take responsibility
+magus agent install --tar | tar -xf - -C /tmp/skills   # preferred
 ```
 
 A host discovers skills at session start, so restart the agent session after a
@@ -136,7 +162,8 @@ through re-running install.
 Codex needs both the focused skills and the repository guidance:
 
 ```sh
-magus agent install .agents/skills --agents-md
+magus agent install .agents/skills
+magus agent install-agents-md
 magus server start
 ```
 
@@ -181,6 +208,55 @@ that into a blocker: at task start, or after an MCP error, it should run
 `magus status --probe=mcp`; if unavailable, tell the user once to run
 `magus server start`, then use the CLI fallback. The next task picks up the
 full surface after the daemon is running and the client is restarted.
+
+## Project references
+
+Every magus command that names a project accepts the same two forms, and
+every command that prints one picks the form that suits its audience. Agents
+sit on both sides of that line, so it is worth knowing which is which.
+
+```mermaid
+flowchart LR
+  subgraph IN["accepted as input (interchangeable)"]
+    A["workspace://pkg/api"]
+    B["pkg/api"]
+    C["./pkg/api"]
+    D["workspace:// (root alias)"]
+  end
+  IN --> P{{"parse"}}
+  P --> R["one project reference<br/>path: pkg/api"]
+  R --> H["human output<br/>pkg/api"]
+  R --> M["machine output<br/>workspace://pkg/api"]
+```
+
+The scheme is metadata, not content. It behaves like `https://` in a browser
+bar: present in the canonical reference, hidden when a human is reading.
+
+| Form                    | Where it appears                                                  |
+| ----------------------- | ----------------------------------------------------------------- |
+| `workspace://pkg/api`   | Structured output (`-o json`), error messages, generated docs      |
+| `pkg/api`               | Human-facing logs, run output, Mermaid node labels                 |
+| `workspace://`          | Alias for the workspace root, equivalent to `.`                    |
+
+Two rules cover the whole surface:
+
+- **Reading magus output**: never string-strip the scheme yourself. Wherever a
+  command takes a project path - `magus run`, `magus affected` - both forms
+  parse identically, so `magus run build workspace://pkg/api` and
+  `magus run build pkg/api` are the same invocation. Commands that take fuzzy
+  search tokens rather than paths, such as `magus where`, match on the bare
+  name; give those the path without the scheme.
+- **Quoting a project back to a user**: prefer whatever magus printed. The
+  workspace root is the case that bites, because it is the one project whose
+  path is a bare `.`; magus renders it as the repository's directory name in
+  human output and as `workspace://.` in machine output, so a `.` never leaks
+  into a sentence where it reads as punctuation.
+
+> [!NOTE]
+> The root alias exists because `.` is ambiguous in almost every context an
+> agent works in: a shell argument, a JSON value, the end of a sentence.
+> magus has already made that choice in whichever form it handed you, so
+> passing the value through unmodified is always correct.
 
 ## Guard hooks
 
@@ -251,9 +327,12 @@ Claude Code's response dialect, emitting nothing on a `pass`:
 
 > [!NOTE]
 > Only the Claude Code setup above is tested end-to-end; it is the guard this
-> repository dogfoods. The OpenCode and Cursor examples below were written against
-> each product's published hook spec but have not been run end-to-end here, so
-> double-check them against the upstream docs:
+> repository dogfoods. For the OpenCode and Cursor examples below, the magus
+> half is verified - the `magus agent hook -o json` verdict shape each one
+> parses is checked against this repository's binary. The host half (plugin
+> loading, hook registration, whether a thrown `reason` reaches the model) is
+> written against each product's published spec and has not been run here, so
+> double-check it against the upstream docs:
 > [OpenCode plugins](https://opencode.ai/docs/plugins) and
 > [Cursor hooks](https://docs.cursor.com/agent/hooks).
 
@@ -307,12 +386,39 @@ export const MagusGuard: Plugin = async ({ $ }) => ({
   "tool.execute.before": async (input, output) => {
     if (input.tool !== "bash") return
     const command = output.args.command ?? ""
-    const out = await $`magus agent hook -o json -- ${command}`.nothrow().text()
-    const verdict = JSON.parse(out || "{}")
+    const res = await $`magus agent hook -o json -- ${command}`.nothrow()
+    // Fail closed: a missing binary, a non-zero exit, or unparseable output
+    // must block, not wave the command through. `.nothrow()` keeps Bun from
+    // throwing on exit status so this decision stays ours to make.
+    if (res.exitCode !== 0) {
+      throw new Error(`magus agent hook unavailable (exit ${res.exitCode}); blocking`)
+    }
+    let verdict: { schema_version?: number; decision?: string; reason?: string }
+    try {
+      verdict = JSON.parse(res.text())
+    } catch {
+      throw new Error("magus agent hook returned unparseable output; blocking")
+    }
+    if (verdict.schema_version !== 1) {
+      throw new Error(`unsupported hook schema ${verdict.schema_version}; blocking`)
+    }
     if (verdict.decision === "deny") throw new Error(verdict.reason)
   },
 })
 ```
+
+The verdict contract this plugin codes against is verified against the binary
+in this repository: `magus agent hook -o json` exits 0 whether or not it
+blocks, and prints `{"schema_version": 1, "decision": "pass"}` or
+`{"schema_version": 1, "decision": "deny", "reason": "..."}`. Because a pass
+and a deny are both exit 0, the `decision` field is the only signal - a plugin
+that branches on exit status alone would never block anything.
+
+> [!NOTE]
+> The failure handling above is the part worth copying even if you rewrite the
+> rest. A guard that treats "magus is not installed" as "allowed" silently
+> stops guarding the first time a PATH changes, and nothing in the agent's
+> output says so.
 
 #### Cursor
 
@@ -346,6 +452,19 @@ JSON unless the hook sets `failClosed`.
 # .cursor/hooks/magus-guard.sh  (chmod +x)
 command -v magus >/dev/null 2>&1 || { echo '{"permission":"allow"}'; exit 0; }
 exec magus agent hook --from-json command -o 'template={{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+```
+
+Note that this script and the OpenCode plugin above take opposite stances when
+magus itself is missing: this one allows the command, the plugin blocks it.
+That is a real choice, not an oversight. Cursor's hook contract already fails
+open on a crash or malformed JSON unless you set `failClosed`, so a wrapper
+that pretended otherwise would give false assurance; OpenCode's plugin throws,
+so blocking is the natural default there. If you want the strict behaviour in
+Cursor, set `failClosed` on the hook and swap the first line for an explicit
+denial:
+
+```sh
+command -v magus >/dev/null 2>&1 || { echo '{"permission":"deny","agent_message":"magus not on PATH; guard cannot evaluate"}'; exit 0; }
 ```
 
 ## The MCP daemon

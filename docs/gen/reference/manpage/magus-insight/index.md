@@ -43,9 +43,13 @@ volatility Each (project, target) pair's recent pass/fail/volatile record scored
              targets. It reads the shared runtime-history file, not git, so it takes
              no --commits/--since window and is always workspace-wide.
 
-report     Every lens plus graph stats as one whole-workspace Markdown document
-             (the magusfile's postflight target writes this to the GitHub Actions
-             step summary).
+report     Every lens plus graph stats as one whole-workspace Markdown document.
+             With --mermaid-style=safe the Mermaid subset is restricted to what
+             older or partial renderers (GitHub step summaries, blog renderers)
+             reliably handle; the default "standard" emits the full Mermaid spec
+             for tools that render it. The magusfile's postflight target
+             consumes this on the workflow side, writing the doc to a sink
+             supplied via the generic MAGUS_INSIGHT_OUTPUT_PATH env var.
 
 The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
 date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and

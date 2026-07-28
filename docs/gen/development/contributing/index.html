@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
+        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#dogfooding-how-magus-builds-magus" title="Dogfooding: how magus builds magus">Dogfooding: how magus builds magus</a></li><li><a href="#workflow-targets-not-inline-shell" title="Workflow targets, not inline shell">Workflow targets, not inline shell</a></li><li><a href="#workspace-references-workspacepath-and-friends" title="Workspace references: workspace://path and friends">Workspace references: workspace://path and friends</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -136,6 +136,64 @@ aliases: [install] # clean, gen-root-relative old paths
 </code></pre>
 <p>The build emits a redirect stub at each alias and fails if an alias collides with
 a real page or is claimed twice.</p>
+<h2 id="dogfooding-how-magus-builds-magus">Dogfooding: how magus builds magus</h2>
+<p>The CI never uses HEAD to build the workspace. The binary that compiles
+this repo is the latest released version; any feature the <code>magusfile.buzz</code>
+uses must ship in a release first. This is the only stance that keeps the
+dogfooding contract deterministic - a CI run that compiled magus with a
+newer magus would be testing its own next release, not the one users have.</p>
+<p>In practice the workflow uses the <code>setup-magus</code> action with
+<code>installation-strategy: source</code> and <code>git-ref: ${{ github.sha }}</code> for the
+<em>rare</em> case where no prebuilt artifact exists for the SHA (right after a
+push to main before a release). For the common case, the prebuilt artifact
+from the previous release is the binary every step uses. The source-build
+fallback carries a supply-chain gate - the commit must be reachable from
+<code>main</code> - because the build is unverified otherwise.</p>
+<p>If your change adds a flag, a target, or a host-binding shape the
+magusfile uses, that change ships in a release <em>before</em> the magusfile
+change merges. The other way around is a breaking-change signal, not
+something to paper over.</p>
+<h2 id="workflow-targets-not-inline-shell">Workflow targets, not inline shell</h2>
+<p>The GitHub Actions workflow files are intentionally thin. Every meaningful
+CI operation lives in a target in <code>magusfile.buzz</code>, not in a workflow YAML
+step. The workflow just orchestrates: it sets up the toolchain, calls the
+target, and uploads artifacts. Host-specific knowledge (GitHub Actions
+concepts like <code>$GITHUB_STEP_SUMMARY</code>, the <code>gha</code> charm, the
+<code>MAGUS_INSIGHT_OUTPUT_PATH</code> env var) lives at one boundary, and every other
+piece of the pipeline stays portable.</p>
+<p>Concretely:</p>
+<ul>
+<li><strong>The workflow YAML</strong> names jobs and steps, sets <code>MAGUS_*</code> env vars that
+host the host-specific plumbing, and uploads artifacts. It never
+contains logic that could live in a target.</li>
+<li><strong>The magusfile targets</strong> hold the actual work: which projects to fan out
+over, what to render, how to interpret drift, what to write to a sink
+the workflow supplies via env.</li>
+<li><strong>A target that wants host-specific behavior</strong> declares it via a charm
+(<code>gha</code>, <code>cd</code>, <code>rw</code>) and reads env vars whose names are generic
+(<code>MAGUS_INSIGHT_OUTPUT_PATH</code>, not <code>GITHUB_STEP_SUMMARY</code>). The workflow
+sets the env to whatever the host provides.</li>
+</ul>
+<p>This way a future port to a different CI system only needs a thin
+workflow file plus the same magusfile. The targets, charms, and env-var
+naming are portable.</p>
+<h2 id="workspace-references-workspacepath-and-friends">Workspace references: <code>workspace://path</code> and friends</h2>
+<p>Project paths accept four equivalent forms; only one canonical form survives
+on the wire:</p>
+<pre><code class="language-sh">.                     # bare path, shell convention
+pkg/foo               # bare nested path
+workspace://.         # explicit root, scheme form
+workspace://pkg/foo   # explicit nested path, scheme form
+</code></pre>
+<p>The CLI accepts all four at every project-arg surface. The canonical form
+that appears in error messages (where a user can copy-paste it back as a
+command) is <code>workspace://pkg/foo</code> - rendered via <code>types.WorkspaceRef</code>. The
+form that appears in logs, Mermaid labels, and table cells is the bare
+path (<code>pkg/foo</code>) - rendered via <code>types.ProjectLabel</code>. The browser shows
+<code>example.com</code> until you hover; magus shows <code>pkg/foo</code> until you pipe it.</p>
+<p>Both forms route through <code>types.ProjectRef{Path, Dir}</code> so the two helpers
+share one definition. New rendering rules go on the struct's methods, and
+both helpers pick them up automatically.</p>
 <h2 id="release-signing-key-rotation">Release-signing key rotation</h2>
 <p>The release public key has a few intentional, reviewable copies: the binary's
 <code>internal/selfupdate/release.pub</code>, <code>docs/gen/install</code>, the setup action, and

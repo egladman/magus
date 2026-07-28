@@ -117,8 +117,12 @@ distinct author count (the bus factor), and abandonment (projects gone quiet).</
 delta is a rising <a class="glossary-term" href="../../glossary/#hotspot" data-def="An insight lens: edit frequency times complexity, the prime refactoring targets. The project view heat-colours the dependency graph by churn; --files ranks individual files.">hotspot</a>; a negative one is cooling.</li>
 <li><strong>report</strong> - every lens, plus the <a class="glossary-term" href="../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>'s shape from
 <a href="../../reference/manpage/magus-graph/"><code>magus graph stats</code></a>, as one whole-workspace
-Markdown document. The <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>'s postflight <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> writes it to the GitHub
-Actions step summary.</li>
+Markdown document. With <code>--mermaid-style=safe</code> the Mermaid subset is
+restricted to what older or partial renderers (GitHub step summaries, blog
+renderers) reliably handle; the default <code>standard</code> emits the full Mermaid spec
+for tools that render it. The <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>'s postflight <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> consumes this on
+the workflow side, writing the doc to a sink supplied via the generic
+<code>MAGUS_<a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">INSIGHT</a>_OUTPUT_<a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> env var.</li>
 </ul>
 <h2 id="bounding-the-scan">Bounding the scan</h2>
 <p><code>--commits</code> caps the scan by count; <code>--since</code> bounds it by date (<code>90d</code>, <code>12w</code>,
@@ -127,7 +131,7 @@ question: recent hotspots want a short window, an ownership audit a long one.</p
 <p>Each lens accepts <code>-o text|json|yaml|name</code>; <code>hotspots</code> and <code>affinity</code> also render
 <code>-o mermaid</code> for a diagram you can paste into a review.</p>
 <h2 id="where-it-fits">Where it fits</h2>
-<p><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">Insight</a> is a read-only lens, never part of a build. Reach for it when you are
+<p>Insight is a read-only lens, never part of a build. Reach for it when you are
 deciding <em>what to work on</em> rather than running work: picking a refactor target
 (hotspots), questioning an architecture (affinity), or planning ownership
 (ownership). The <code>report</code> lens in CI turns that into a recurring signal on every

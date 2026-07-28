@@ -358,6 +358,10 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 ## Working with AI agents
 
+> The fastest way to make your agent better at your code base isn't a smarter model. It's a tighter feedback loop. Most of these are scripts you already have because you had to set up environments for developers. You just need to hook them up the right way.
+
+That hookup is what magus is. The build, test, lint, format, and cache scripts that already run for human developers become the same feedback loop an agent gets - deterministic, fast, and answerable through the knowledge graph instead of through guess and grep.
+
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 
 - **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. For Codex, install both its Agent Skills and the managed always-on guidance: `magus agent install .agents/skills --agents-md`. Claude Code uses `.claude/skills`; see [Agents](docs/guides/agents.md) for the full host setup.

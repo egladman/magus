@@ -76,12 +76,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#claude-code" title="Claude Code">Claude Code</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
+        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#claude-code" title="Claude Code">Claude Code</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">14 min read</small>
+    <small class="reading-time" title="Estimated reading time">18 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
@@ -201,13 +201,32 @@ conventions and team working style.</li>
 the workspace WHAT. Both are generated - edit neither by hand.</li>
 </ul>
 <h2 id="install-and-update">Install and update</h2>
-<pre><code class="language-sh">magus agent install .claude/skills          # name your host's skill dir; refuses to overwrite
+<p><code>magus agent</code> is a pure data generator: it writes nothing to disk by default
+unless you pass a destination directory. Two subcommands and two output modes
+cover every install case.</p>
+<pre><code class="language-sh">magus agent install .claude/skills          # write to repo-relative dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
-magus agent install .agents/skills --agents-md          # Codex: skills + always-on guidance
-magus agent install .agents/skills --agents-md --force  # refresh both after an upgrade
-magus agent install --agents-md             # write/refresh the AGENTS.md section
+magus agent install-agents-md               # write/refresh the AGENTS.md managed section
+magus agent install --tar                   # stream a tar of every skill to stdout
+magus agent install-agents-md --tar         # stream a tar containing AGENTS.md to stdout
 magus graph verify                          # are the installed skills current? (per location)
 magus graph verify --strict                 # CI gate: non-zero exit when stale
+</code></pre>
+<p>The <code>--tar</code> form is the supported way to install skills anywhere your shell
+can reach. Pipe to <code>tar -xf - -C &lt;dir&gt;</code> and the shell does the file writes -
+so the guard hook, the <a class="glossary-term" href="../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>, and your audit log all see the same <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>
+the user typed:</p>
+<pre><code class="language-sh">magus agent install --tar | tar -xf - -C .claude/skills
+magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
+magus agent install-agents-md --tar | tar -xf - -C ~/my-project
+</code></pre>
+<p>Write-mode destinations are paths relative to <code>--dir</code> (default <code>.</code>). Absolute
+paths and <code>~</code> prefixes are refused unless <code>--global</code> is set, to keep magus
+from silently writing outside the working tree. The supported escape hatch
+for absolute destinations is <code>--tar</code>:</p>
+<pre><code class="language-sh">magus agent install /tmp/skills              # refused: &quot;outside the working tree&quot;
+magus agent install /tmp/skills --global     # accepts; you take responsibility
+magus agent install --tar | tar -xf - -C /tmp/skills   # preferred
 </code></pre>
 <p>A host discovers skills at session start, so restart the agent session after a
 fresh install (or a <code>--force</code> refresh) before it can invoke the new skills - an
@@ -223,7 +242,8 @@ silently wrong instructions. Do not hand-edit installed skills; change flows
 through re-running install.</p>
 <h3 id="codex">Codex</h3>
 <p>Codex needs both the focused skills and the repository guidance:</p>
-<pre><code class="language-sh">magus agent install .agents/skills --agents-md
+<pre><code class="language-sh">magus agent install .agents/skills
+magus agent install-agents-md
 magus server start
 </code></pre>
 <p>Register the local Streamable HTTP <a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> in your user-level
@@ -259,6 +279,66 @@ that into a blocker: at task start, or after an MCP error, it should run
 <code><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a> --probe=mcp</code>; if unavailable, tell the user once to run
 <code>magus server start</code>, then use the CLI fallback. The next task picks up the
 full surface after the daemon is running and the client is restarted.</p>
+<h2 id="project-references">Project references</h2>
+<p>Every magus command that names a project accepts the same two forms, and
+every command that prints one picks the form that suits its audience. Agents
+sit on both sides of that line, so it is worth knowing which is which.</p>
+<div class="mermaid-src"><pre><code class="language-mermaid">flowchart LR
+  subgraph IN[&quot;accepted as input (interchangeable)&quot;]
+    A[&quot;workspace://pkg/api&quot;]
+    B[&quot;pkg/api&quot;]
+    C[&quot;./pkg/api&quot;]
+    D[&quot;workspace:// (root alias)&quot;]
+  end
+  IN --&gt; P{{&quot;parse&quot;}}
+  P --&gt; R[&quot;one project reference&lt;br/&gt;path: pkg/api&quot;]
+  R --&gt; H[&quot;human output&lt;br/&gt;pkg/api&quot;]
+  R --&gt; M[&quot;machine output&lt;br/&gt;workspace://pkg/api&quot;]
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
+<p>The scheme is metadata, not content. It behaves like <code>https://</code> in a browser
+bar: present in the canonical reference, hidden when a human is reading.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Where it appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>workspace://pkg/api</code></td>
+<td>Structured output (<code>-o json</code>), error messages, generated docs</td>
+</tr>
+<tr>
+<td><code>pkg/api</code></td>
+<td>Human-facing logs, run output, Mermaid node labels</td>
+</tr>
+<tr>
+<td><code>workspace://</code></td>
+<td>Alias for the workspace root, equivalent to <code>.</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>Two rules cover the whole surface:</p>
+<ul>
+<li><strong>Reading magus output</strong>: never string-strip the scheme yourself. Wherever a
+command takes a project path - <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code>, <code>magus <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a></code> - both forms
+parse identically, so <code>magus run build workspace://pkg/api</code> and
+<code>magus run build pkg/api</code> are the same invocation. Commands that take fuzzy
+search tokens rather than paths, such as <code><a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">magus where</a></code>, match on the bare
+name; give those the path without the scheme.</li>
+<li><strong>Quoting a project back to a user</strong>: prefer whatever magus printed. The
+workspace root is the case that bites, because it is the one project whose
+path is a bare <code>.</code>; magus renders it as the repository's directory name in
+human output and as <code>workspace://.</code> in machine output, so a <code>.</code> never leaks
+into a sentence where it reads as punctuation.</li>
+</ul>
+<div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
+<p>The root alias exists because <code>.</code> is ambiguous in almost every context an
+agent works in: a shell argument, a JSON value, the end of a sentence.
+magus has already made that choice in whichever form it handed you, so
+passing the value through unmodified is always correct.</p>
+</div>
 <h2 id="guard-hooks">Guard hooks</h2>
 <p>Most agent hosts can run a hook before executing a shell command. magus
 supplies the rule evaluation; the host supplies the hook that calls it.
@@ -318,9 +398,12 @@ Claude Code's response dialect, emitting nothing on a <code>pass</code>:</p>
 <h3 id="other-agents">Other agents</h3>
 <div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
 <p>Only the Claude Code setup above is tested end-to-end; it is the guard this
-repository dogfoods. The OpenCode and Cursor examples below were written against
-each product's published hook spec but have not been run end-to-end here, so
-double-check them against the upstream docs:
+repository dogfoods. For the OpenCode and Cursor examples below, the magus
+half is verified - the <code>magus agent hook -o json</code> verdict shape each one
+parses is checked against this repository's binary. The host half (plugin
+loading, hook registration, whether a thrown <code>reason</code> reaches the model) is
+written against each product's published spec and has not been run here, so
+double-check it against the upstream docs:
 <a href="https://opencode.ai/docs/plugins" rel="noopener noreferrer" target="_blank" data-external>OpenCode plugins</a> and
 <a href="https://docs.cursor.com/agent/hooks" rel="noopener noreferrer" target="_blank" data-external>Cursor hooks</a>.</p>
 </div>
@@ -364,12 +447,38 @@ export const MagusGuard: Plugin = async ({ $ }) =&gt; ({
   &quot;tool.execute.before&quot;: async (input, output) =&gt; {
     if (input.tool !== &quot;bash&quot;) return
     const command = output.args.command ?? &quot;&quot;
-    const out = await $`magus agent hook -o json -- ${command}`.nothrow().text()
-    const verdict = JSON.parse(out || &quot;{}&quot;)
+    const res = await $`magus agent hook -o json -- ${command}`.nothrow()
+    // Fail closed: a missing binary, a non-zero exit, or unparseable output
+    // must block, not wave the command through. `.nothrow()` keeps Bun from
+    // throwing on exit status so this decision stays ours to make.
+    if (res.exitCode !== 0) {
+      throw new Error(`magus agent hook unavailable (exit ${res.exitCode}); blocking`)
+    }
+    let verdict: { schema_version?: number; decision?: string; reason?: string }
+    try {
+      verdict = JSON.parse(res.text())
+    } catch {
+      throw new Error(&quot;magus agent hook returned unparseable output; blocking&quot;)
+    }
+    if (verdict.schema_version !== 1) {
+      throw new Error(`unsupported hook schema ${verdict.schema_version}; blocking`)
+    }
     if (verdict.decision === &quot;deny&quot;) throw new Error(verdict.reason)
   },
 })
 </code></pre>
+<p>The verdict contract this plugin codes against is verified against the binary
+in this repository: <code>magus agent hook -o json</code> exits 0 whether or not it
+blocks, and prints <code>{&quot;schema_version&quot;: 1, &quot;decision&quot;: &quot;pass&quot;}</code> or
+<code>{&quot;schema_version&quot;: 1, &quot;decision&quot;: &quot;deny&quot;, &quot;reason&quot;: &quot;...&quot;}</code>. Because a pass
+and a deny are both exit 0, the <code>decision</code> field is the only signal - a plugin
+that branches on exit status alone would never block anything.</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
+<p>The failure handling above is the part worth copying even if you rewrite the
+rest. A guard that treats &quot;magus is not installed&quot; as &quot;allowed&quot; silently
+stops guarding the first time a PATH changes, and nothing in the agent's
+output says so.</p>
+</div>
 <h4 id="cursor">Cursor</h4>
 <p>Cursor does not read Agent Skills directories; it reads an <code>AGENTS.md</code> at the
 repo root. Install the managed section there:</p>
@@ -394,6 +503,16 @@ JSON unless the hook sets <code>failClosed</code>.</p>
 # .cursor/hooks/magus-guard.sh  (chmod +x)
 command -v magus &gt;/dev/null 2&gt;&amp;1 || { echo '{&quot;permission&quot;:&quot;allow&quot;}'; exit 0; }
 exec magus agent hook --from-json command -o 'template={{if eq .decision &quot;deny&quot;}}{&quot;permission&quot;:&quot;deny&quot;,&quot;agent_message&quot;:{{toJson .reason}}}{{else}}{&quot;permission&quot;:&quot;allow&quot;}{{end}}'
+</code></pre>
+<p>Note that this script and the OpenCode plugin above take opposite stances when
+magus itself is missing: this one allows the command, the plugin blocks it.
+That is a real choice, not an oversight. Cursor's hook contract already fails
+open on a crash or malformed JSON unless you set <code>failClosed</code>, so a wrapper
+that pretended otherwise would give false assurance; OpenCode's plugin throws,
+so blocking is the natural default there. If you want the strict behaviour in
+Cursor, set <code>failClosed</code> on the hook and swap the first line for an explicit
+denial:</p>
+<pre><code class="language-sh">command -v magus &gt;/dev/null 2&gt;&amp;1 || { echo '{&quot;permission&quot;:&quot;deny&quot;,&quot;agent_message&quot;:&quot;magus not on PATH; guard cannot evaluate&quot;}'; exit 0; }
 </code></pre>
 <h2 id="the-mcp-daemon">The MCP daemon</h2>
 <p><code>magus server start</code> brings up the daemon, and the MCP server with it. Agents
@@ -459,13 +578,13 @@ model; the value is in the graph and the curation.</p>
     <div class="related-grid">
         <a class="related-card" href="../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../search/?q=tag%3A%22agent+install%22">agent install</a><a class="tag" href="../../search/?q=tag%3A%22MCP%22">MCP</a><a class="tag" href="../../search/?q=tag%3A%22MAGUS.md%22">MAGUS.md</a><a class="tag" href="../../search/?q=tag%3A%22AGENTS.md%22">AGENTS.md</a><a class="tag" href="../../search/?q=tag%3A%22hooks%22">hooks</a><a class="tag" href="../../search/?q=tag%3A%22guard%22">guard</a><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22memory%22">memory</a><a class="tag" href="../../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../../search/?q=tag%3A%22codex%22">codex</a><a class="tag" href="../../search/?q=tag%3A%22opencode%22">opencode</a><a class="tag" href="../../search/?q=tag%3A%22drift%22">drift</a></div>
-    <small>Last updated <time datetime="2026-07-23T18:02:03Z">July 23, 2026, 6:02 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/9240fc507b570e67ed6588c5cd3955d3954a49c3" data-tooltip="9240fc507b570e67ed6588c5cd3955d3954a49c3" title="9240fc507b570e67ed6588c5cd3955d3954a49c3">9240fc50</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/d7943206f8ba706c4f7511dbe4842c256ecf9ecf"><code>d7943206</code></a> <small><time datetime="2026-07-23T16:57:01Z">Jul 23, 2026</time></small> - regenerate docs and routing for the record-oriented memory model: update the agents and mcp guides to describe typed-pointer records, and refresh MAGUS.md, the rendered site, glossary backlinks, and search index</li><li><a href="https://github.com/egladman/magus/commit/0ad6829796ce09581dedf6eebe29da4303764c12"><code>0ad68297</code></a> <small><time datetime="2026-07-23T12:16:18Z">Jul 23, 2026</time></small> - document guard hook setup for opencode and cursor; magus emits a neutral verdict; hosts map it through their own config; magus owns the rules not per host integration code</li><li><a href="https://github.com/egladman/magus/commit/adf5debbd3e5f36ae8170334e4913cc3b8a2ce3c"><code>adf5debb</code></a> <small><time datetime="2026-07-23T02:45:13Z">Jul 23, 2026</time></small> - make the agent surface host-agnostic: agent install takes explicit destination dirs plus --agents-md, dropping platform names; agent hook reads the command from args, raw stdin, or --from-json &lt;dot.path&gt; over any host&#39;s event JSON and renders its deny/advise/pass verdict through -o json/yaml/name/template; remove the settings.json hook installer in favor of documented per-host recipes (this repo&#39;s .claude/settings.json becomes the worked Claude Code example); document guard hooks and per-host wiring in docs/guides/agents.md; bump agent skills to v13 and reinstall the dogfooded copies</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-27T03:51:44Z">July 27, 2026, 3:51 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d" data-tooltip="b1b786d34804d09a1e1292b444bb68735a0bea2d" title="b1b786d34804d09a1e1292b444bb68735a0bea2d">b1b786d3</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/9240fc507b570e67ed6588c5cd3955d3954a49c3"><code>9240fc50</code></a> <small><time datetime="2026-07-23T18:02:03Z">Jul 23, 2026</time></small> - note that only the claude code agent integration is tested end to end and link the opencode and cursor hook specs; rename the section to Other agents; drop the recipe wording for examples</li><li><a href="https://github.com/egladman/magus/commit/d7943206f8ba706c4f7511dbe4842c256ecf9ecf"><code>d7943206</code></a> <small><time datetime="2026-07-23T16:57:01Z">Jul 23, 2026</time></small> - regenerate docs and routing for the record-oriented memory model: update the agents and mcp guides to describe typed-pointer records, and refresh MAGUS.md, the rendered site, glossary backlinks, and search index</li><li><a href="https://github.com/egladman/magus/commit/0ad6829796ce09581dedf6eebe29da4303764c12"><code>0ad68297</code></a> <small><time datetime="2026-07-23T12:16:18Z">Jul 23, 2026</time></small> - document guard hook setup for opencode and cursor; magus emits a neutral verdict; hosts map it through their own config; magus owns the rules not per host integration code</li><li><a href="https://github.com/egladman/magus/commit/adf5debbd3e5f36ae8170334e4913cc3b8a2ce3c"><code>adf5debb</code></a> <small><time datetime="2026-07-23T02:45:13Z">Jul 23, 2026</time></small> - make the agent surface host-agnostic: agent install takes explicit destination dirs plus --agents-md, dropping platform names; agent hook reads the command from args, raw stdin, or --from-json &lt;dot.path&gt; over any host&#39;s event JSON and renders its deny/advise/pass verdict through -o json/yaml/name/template; remove the settings.json hook installer in favor of documented per-host recipes (this repo&#39;s .claude/settings.json becomes the worked Claude Code example); document guard hooks and per-host wiring in docs/guides/agents.md; bump agent skills to v13 and reinstall the dogfooded copies</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
