@@ -18,7 +18,7 @@ import "magus/spell/ts";
 // oversubscribe the machine. Keeping the two equal is the whole trick.
 final LINT_SLOTS: int = 4;
 
-magus.project({
+magus\project({
     "spells": [go, ts],
     "targets": {
         // js-lint reserves LINT_SLOTS; while it holds them, the cheap checks wait

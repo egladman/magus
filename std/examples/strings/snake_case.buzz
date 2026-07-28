@@ -1,5 +1,5 @@
 import "std";
 import "strings";
 
-std.print(strings.snakeCase("HelloWorld"));
+std\print(strings\snakeCase("HelloWorld"));
 // -> "hello_world"

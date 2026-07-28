@@ -10,7 +10,7 @@ import "magus";
 import "magus/spell/go";
 import "magus/spell/buf";
 
-magus.project({ "spells": [go, buf] });
+magus\project({ "spells": [go, buf] });
 
 // One target per generator, all sharing the -generate suffix.
 export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](); }

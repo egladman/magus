@@ -5,6 +5,6 @@ import "fs";
 // the method rather than the stat field. The time key is `mtime` (Unix millis), not
 // `modTime` - dot access on a missing key is silent, which is how this example went
 // unnoticed while printing nothing useful.
-final info = fs.stat("go.mod");
-std.print(info["size"]);
-std.print(info["mtime"]);
+final info = fs\stat("go.mod");
+std\print(info["size"]);
+std\print(info["mtime"]);

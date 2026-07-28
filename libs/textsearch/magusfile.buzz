@@ -31,7 +31,7 @@ import "vcs";
 import "magus/spell/magusfile";
 import "magus/spell/ts";
 
-magus.project({
+magus\project({
     "spells": [magusfile, ts],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +
@@ -57,8 +57,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
 // local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.
 fun install() > void {
-    if (!fs.isDir("node_modules")) {
-        os.exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    if (!fs\isDir("node_modules")) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
 }
 
@@ -68,19 +68,19 @@ fun install() > void {
 // clean file fails.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    final clean_before = vcs.isDirty(["MAGUS.md"]) == false;
+    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
     ctx.needs(md_generate);
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs.isDirty(["MAGUS.md"])) {
+    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
         throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/textsearch` and commit";
     }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.
 export fun md_generate(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
-    fs.writeFile("MAGUS.md", doc + "\n");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
 }
 
 // lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit)
@@ -89,15 +89,15 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     install();
-    os.exec("pnpm", ["run", "typecheck"], ".", {});
-    os.exec("pnpm", ["run", "biome"], ".", {});
+    os\exec("pnpm", ["run", "typecheck"], ".", {});
+    os\exec("pnpm", ["run", "biome"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     install();
-    os.exec("pnpm", ["run", "test"], ".", {});
+    os\exec("pnpm", ["run", "test"], ".", {});
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.

@@ -3,7 +3,7 @@
 // B2). Wire it in a magusfile:
 //
 //   import "spells/aws/s3-cache" as s3
-//   magus.cache.remote(s3)
+//   magus\cache.remote(s3)
 //
 // magus knows nothing about S3: it speaks only the generic spell contract. It
 // exports the cache contract, four functions typed fun(Target, fun(any)) bool
@@ -57,7 +57,7 @@ export fun mgs_getName() > str { return "s3-cache"; }
 
 // A cache backend exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact / prune), which the remote-cache subsystem detects
-// by name and invokes via magus.cache.remote(s3). It declares no mgs_listTargets -
+// by name and invokes via magus\cache.remote(s3). It declares no mgs_listTargets -
 // a cache backend contributes no operations a target could compose.
 
 // SHA-256 of the empty string — the x-amz-content-sha256 for a bodyless GET.
@@ -74,7 +74,7 @@ final S3_TIME_LAYOUT = "2006-01-02T15:04:05Z07:00";
 // module for it yet (extracting one needs the embed+register plumbing magus/charm
 // uses). Track for follow-up; keep the two copies in sync.
 fun getenv(name: str) > str {
-    final v = os.env(name);
+    final v = os\env(name);
     if (v == null) { return ""; }
     return "" + v;
 }
@@ -122,7 +122,7 @@ fun cache_key(hash: str) > str { return "magus-" + hash + "-" + CACHE_VERSION; }
 // hood). os.time() returns epoch millis as a double — exactly what the time
 // module speaks — so it flows straight through with no conversion.
 fun amzTimestamp() > str {
-    return time.format("20060102T150405Z", os.time());
+    return time\format("20060102T150405Z", os\time());
 }
 
 // sign builds the signed request headers for an S3 path-style request. path is
@@ -159,15 +159,15 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     final stringToSign = "AWS4-HMAC-SHA256\n"
         + amzdate + "\n"
         + scope + "\n"
-        + crypto.hash(crypto.HashAlgorithm.Sha256, canonicalRequest);
+        + crypto\hash(crypto\HashAlgorithm.Sha256, canonicalRequest);
 
     // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.
-    final kDate = crypto.hmacSha256("AWS4" + secret(), datestamp);
-    final kRegion = crypto.hmacSha256(kDate, reg);
-    final kService = crypto.hmacSha256(kRegion, "s3");
-    final kSigning = crypto.hmacSha256(kService, "aws4_request");
-    final signature = crypto.hmacSha256Hex(kSigning, stringToSign);
+    final kDate = crypto\hmacSha256("AWS4" + secret(), datestamp);
+    final kRegion = crypto\hmacSha256(kDate, reg);
+    final kService = crypto\hmacSha256(kRegion, "s3");
+    final kSigning = crypto\hmacSha256(kService, "aws4_request");
+    final signature = crypto\hmacSha256Hex(kSigning, stringToSign);
 
     final authorization = "AWS4-HMAC-SHA256 Credential=" + access() + "/" + scope
         + ", SignedHeaders=" + signedHeaders
@@ -196,7 +196,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
     final headers = sign("GET", path, "", EMPTY_SHA256);
-    return http.download(endpoint() + path, "" + io["dest"], headers) == 200;
+    return http\download(endpoint() + path, "" + io["dest"], headers) == 200;
 }
 
 // put_artifact uploads the file at io.src as the object for io.hash. true on a 200
@@ -208,8 +208,8 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     cb(io);
     final src = "" + io["src"];
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
-    final headers = sign("PUT", path, "", crypto.sha256File(src));
-    final res = http.upload_chunked("PUT", endpoint() + path, src, 0, headers);
+    final headers = sign("PUT", path, "", crypto\sha256File(src));
+    final res = http\upload_chunked("PUT", endpoint() + path, src, 0, headers);
     return res[0] == 200;
 }
 
@@ -224,7 +224,7 @@ fun listPage(marker: str) > str {
     if (marker != "") { query = "marker=" + marker + "&prefix=magus-"; }
     final path = "/" + bucket();
     final headers = sign("GET", path, query, EMPTY_SHA256);
-    final res = http.get(endpoint() + path + "?" + query, headers);
+    final res = http\get(endpoint() + path + "?" + query, headers);
     if (res["status"] != 200) { return ""; }
     return "" + res["body"];
 }
@@ -265,7 +265,7 @@ fun listing() > any {
 fun deleteObject(key: str) > bool {
     final path = "/" + bucket() + "/" + key;
     final headers = sign("DELETE", path, "", EMPTY_SHA256);
-    final res = http.request("DELETE", endpoint() + path, "", headers);
+    final res = http\request("DELETE", endpoint() + path, "", headers);
     return res["status"] == 204 or res["status"] == 200;
 }
 
@@ -282,8 +282,8 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     if (access() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
-    final olderSecs = std.toInt(io["older_than_secs"]);
-    final keepLast = std.toInt(io["keep_last"]);
+    final olderSecs = std\toInt(io["older_than_secs"]);
+    final keepLast = std\toInt(io["keep_last"]);
     final dry = io["dry_run"] == true;
 
     // Drain the pagination fiber, parsing each object's S3 timestamp to epoch
@@ -292,7 +292,7 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     final gen = &listing();
     var e = resume(gen);
     while (e != null) {
-        e["ms"] = time.parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
+        e["ms"] = time\parse(S3_TIME_LAYOUT, "" + e["lastModified"]);
         artifacts.append(e);
         e = resume(gen);
     }
@@ -300,7 +300,7 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     // Select objects to evict, de-duplicated by key across the two bounds.
     var doomed = mut {};
     if (olderSecs > 0) {
-        final cutoffMs = os.time() - olderSecs * 1000;
+        final cutoffMs = os\time() - olderSecs * 1000;
         foreach (it in artifacts) {
             if (it["ms"] < cutoffMs) { doomed["" + it["key"]] = it; }
         }
@@ -321,16 +321,16 @@ export fun prune(target: Target, cb: fun(any)) > bool {
     foreach (key in doomed.keys()) {
         final it = doomed[key];
         if (dry) {
-            std.print("s3 prune: would delete " + key + " (" + ("" + it["lastModified"]) + ")");
+            std\print("s3 prune: would delete " + key + " (" + ("" + it["lastModified"]) + ")");
             removed = removed + 1;
         } else {
             if (deleteObject(key)) { removed = removed + 1; }
         }
     }
     if (dry) {
-        std.print("s3 prune: " + removed + " object(s) would be deleted, " + artifacts.len() + " scanned");
+        std\print("s3 prune: " + removed + " object(s) would be deleted, " + artifacts.len() + " scanned");
     } else {
-        std.print("s3 prune: deleted " + removed + " object(s), " + artifacts.len() + " scanned");
+        std\print("s3 prune: deleted " + removed + " object(s), " + artifacts.len() + " scanned");
     }
     return true;
 }

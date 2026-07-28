@@ -3,7 +3,7 @@
 import "magus";
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ts["tsc-build"]();

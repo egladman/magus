@@ -2,7 +2,7 @@
 // job log by. Wire it in a magusfile:
 //
 //   import "spells/gitlab/ci" as gitlab
-//   magus.ci.provider(gitlab)
+//   magus\ci.provider(gitlab)
 //
 // magus knows nothing about GitLab: it speaks only the generic CI provider
 // contract (see internal/ci/annotate), calling group_start / group_end /
@@ -37,7 +37,7 @@ export fun mgs_getName() > str { return "ci"; }
 
 // ESC is built from its code point: a literal escape byte in source would be
 // invisible to anyone reading this file.
-final ESC = std.char(27);
+final ESC = std\char(27);
 // HIDE is the "erase to end of line" pair GitLab uses to keep the marker itself
 // out of the rendered log.
 final HIDE = ESC + "[0K";
@@ -45,7 +45,7 @@ final HIDE = ESC + "[0K";
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; callers test against "").
 fun getenv(name: str) > str {
-    final v = os.env(name);
+    final v = os\env(name);
     if (v == null) { return ""; }
     return "" + v;
 }
@@ -60,7 +60,7 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // nowSeconds is the wall-clock second every section marker carries. os.time()
 // is epoch millis.
 fun nowSeconds() > int {
-    return (os.time() / 1000).floor();
+    return (os\time() / 1000).floor();
 }
 
 // sectionID reduces an id to what GitLab accepts for a section name:
@@ -73,7 +73,7 @@ fun nowSeconds() > int {
 // to dashes) but every output is legal, which is what matters - the id is
 // a key GitLab matches start against end, never something a reader reads.
 fun sectionID(s: str) > str {
-    return strings.kebabCase(s);
+    return strings\kebabCase(s);
 }
 
 // group_start opens a section. Unlike Actions, GitLab can show one expanded, so
@@ -86,7 +86,7 @@ export fun group_start(target: Target, cb: fun(any)) > bool {
     if (id == "") { return true; }
     var collapsed = "";
     if (io["collapsed"] == true) { collapsed = "[collapsed=true]"; }
-    std.print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
+    std\print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
         + "\r" + HIDE + ("" + io["title"]));
     return true;
 }
@@ -96,7 +96,7 @@ export fun group_end(target: Target, cb: fun(any)) > bool {
     cb(io);
     final id = sectionID("" + io["id"]);
     if (id == "") { return true; }
-    std.print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
+    std\print(HIDE + "section_end:" + nowSeconds() + ":" + id + "\r" + HIDE);
     return true;
 }
 

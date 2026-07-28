@@ -1,7 +1,7 @@
 import "http";
 
 // request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http.request(
+final r = http\request(
     "PUT",
     "https://httpbin.org/put",
     "hello",
