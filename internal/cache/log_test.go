@@ -3,6 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -20,10 +21,19 @@ func buildRecord(msg string, attrs ...slog.Attr) slog.Record {
 	return r
 }
 
-// newTestHandler returns a prettyHandler that writes to a bytes.Buffer
-// in non-TTY (plain) mode — suitable for output assertions in tests.
-func newTestHandler(buf *bytes.Buffer) *prettyHandler {
-	return &prettyHandler{w: buf} // fd nil → non-TTY
+// plainProbe reports every descriptor as a pipe, so a handler built with
+// it renders plain text and reserves no region.
+type plainProbe struct{}
+
+func (plainProbe) IsTerminal(uintptr) bool        { return false }
+func (plainProbe) Size(uintptr) (int, int, error) { return 0, 0, nil }
+
+// newTestHandler returns a PrettyHandler that writes to a bytes.Buffer in
+// non-TTY (plain) mode, suitable for output assertions. It goes through
+// the real constructor rather than a struct literal so the handler under
+// test is wired exactly like a production one.
+func newTestHandler(buf *bytes.Buffer) *PrettyHandler {
+	return newPrettyHandler(buf, slog.LevelInfo, plainProbe{})
 }
 
 // TestPrettyHandlerPlainOutput verifies the plain ([cache] prefix) output
@@ -342,14 +352,202 @@ func TestRecordAttrExtraction(t *testing.T) {
 }
 
 // TestWithLoggerOption verifies that WithLogger replaces the cache's logger.
+// The test applies the option directly to a zero-value Cache so it does not
+// need a temp dir, the cache machinery, or any env-var gymnastics.
 func TestWithLoggerOption(t *testing.T) {
-	var buf bytes.Buffer
-	customHandler := &prettyHandler{w: &buf} // fd nil → non-TTY
-	l := slog.New(customHandler)
-
-	dir := t.TempDir()
-	t.Setenv("MAGUS_CACHE_MODE", "off")
-	c, err := Open(dir, WithLogger(l))
-	require.NoError(t, err)
+	t.Parallel()
+	var c Cache
+	l := slog.New(slog.NewTextHandler(io.Discard, nil))
+	WithLogger(l)(&c)
 	assert.Same(t, l, c.log, "WithLogger did not replace the cache logger")
+}
+
+// terminalProbe answers as an 80x24 terminal for every descriptor, so a
+// handler under test reserves a region without needing a pty. It is a
+// value passed to the handler, not global state, which is what lets these
+// tests run in parallel.
+type terminalProbe struct{}
+
+func (terminalProbe) IsTerminal(uintptr) bool        { return true }
+func (terminalProbe) Size(uintptr) (int, int, error) { return 80, 24, nil }
+
+// ttyBuf is a bytes.Buffer carrying a synthetic descriptor, so tty.Fd
+// reports one and the region treats it as a real terminal.
+type ttyBuf struct{ bytes.Buffer }
+
+func (*ttyBuf) Fd() uintptr { return 2 }
+
+// newTerminalHandler returns a handler wired to a fake 80x24 terminal.
+func newTerminalHandler(buf *ttyBuf) *PrettyHandler {
+	return newPrettyHandler(buf, slog.LevelInfo, terminalProbe{})
+}
+
+// TestPrettyHandlerErrorWritesHeadingToStickyRegion verifies that on a TTY
+// writer, the [fail] heading reaches the sticky region (DECSTBM + bold-red
+// SGR + heading text) while the trailing cause/output/inspect lines stay
+// in the scrolling region above.
+func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
+	t.Parallel()
+
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	require.NotNil(t, h.region, "region should be reserved on a TTY writer")
+	require.True(t, h.region.Enabled(), "region should be enabled for 24x80 writer")
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "api"),
+		slog.String("target", "build"),
+		slog.Int64("duration", int64(250*time.Millisecond)),
+		slog.String("error", "exit status 2"),
+		slog.String("ref", "out-42"),
+	)), "Handle cache.error")
+
+	out := buf.String()
+	assert.Contains(t, out, "\x1b[1;31m", "heading should use bold-red SGR")
+	assert.Contains(t, out, "[fail] api build (ran,", "heading should be present")
+	assert.Contains(t, out, "cause: exit status 2", "cause line stays in scroll region")
+	assert.Contains(t, out, "output: out-42", "output line stays in scroll region")
+	assert.Contains(t, out, "inspect: magus query output out-42", "inspect line stays in scroll region")
+	assert.Contains(t, out, "\x1b[1;18r", "scroll margins reserve the bottom rows for the sticky region")
+}
+
+// TestPrettyHandlerSummaryReleasesStickyRegion verifies that a cache.summary
+// record ends the sticky region so the user's shell prompt returns to a
+// clean full-screen terminal.
+func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
+	t.Parallel()
+
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "api"),
+		slog.String("target", "build"),
+		slog.Int64("duration", int64(100*time.Millisecond)),
+		slog.String("error", "boom"),
+	)), "Handle cache.error")
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.summary",
+		slog.Int("hits", 3),
+		slog.Int("misses", 1),
+		slog.Int("errors", 1),
+		slog.Int64("elapsed", int64(2*time.Second)),
+	)), "Handle cache.summary")
+
+	out := buf.String()
+	// The writer reports a descriptor and the probe calls it a terminal,
+	// so the summary takes the "Summary:" form. The sticky-region
+	// lifecycle is what this test cares about.
+	assert.Contains(t, out, "3 cached, 1 ran, 1 failed", "summary line present")
+	assert.Regexp(t, `\x1b\[\d+;\d+r`, out, "DECSTBM was set by the sticky region")
+	assert.Contains(t, out, "\x1b[r", "DECSTBM is reset on cache.summary")
+}
+
+// TestPrettyHandlerCloseIsIdempotent verifies Close() can be called multiple
+// times and on a non-TTY handler without panicking, so defer h.Close() is
+// always safe at call sites.
+func TestPrettyHandlerCloseIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	require.NotPanics(t, func() {
+		h.Close()
+		h.Close()
+	}, "Close() must be safe to call twice on a non-TTY writer")
+}
+
+// TestPrettyHandlerNonTTYSkipsStickyRegion verifies the fallback path: a
+// bytes.Buffer writer (no fd, no TTY probe) gets plain output and no
+// DECSTBM escape.
+func TestPrettyHandlerNonTTYSkipsStickyRegion(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := NewPrettyHandler(&buf, slog.LevelInfo)
+	assert.False(t, h.region.Enabled(), "region should be disabled on a non-TTY writer")
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.error",
+		slog.String("project", "api"),
+		slog.String("target", "build"),
+		slog.Int64("duration", int64(100*time.Millisecond)),
+		slog.String("error", "boom"),
+	)), "Handle cache.error")
+
+	out := buf.String()
+	assert.NotContains(t, out, "\x1b[r", "non-TTY must not emit DECSTBM")
+	assert.NotContains(t, out, "\x1b[1;31m", "non-TTY must not emit colour SGR")
+	assert.Contains(t, out, "[fail] api build (ran,", "plain prefix still present")
+}
+
+func TestFormatPool(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                      string
+		running, capacity, queued int
+		want                      string
+	}{
+		{"nothing queued omits the clause", 3, 8, 0, "pool 3/8 running"},
+		{"queued work is shown", 8, 8, 2, "pool 8/8 running, 2 queued"},
+		{"idle pool", 0, 4, 0, "pool 0/4 running"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, formatPool(tc.running, tc.capacity, tc.queued))
+		})
+	}
+}
+
+// TestPrettyHandlerPoolEventPaintsTheStatusRow verifies a cache.pool
+// record lands in the region's status row rather than the scrolling
+// output, so it repaints in place instead of accumulating.
+func TestPrettyHandlerPoolEventPaintsTheStatusRow(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.pool",
+		slog.Int("capacity", 8),
+		slog.Int("running", 3),
+		slog.Int("queued", 1),
+	)), "Handle cache.pool")
+
+	out := buf.String()
+	assert.Contains(t, out, "pool 3/8 running, 1 queued", "the pool sample is rendered")
+	assert.Contains(t, out, "\x1b[19;1H", "it is pinned to the region's first row")
+}
+
+// TestPrettyHandlerPoolEventIsSilentOffATerminal is what keeps two events
+// per step out of CI logs and out of stdout JSON.
+func TestPrettyHandlerPoolEventIsSilentOffATerminal(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+
+	require.NoError(t, h.Handle(context.Background(), buildRecord(
+		"cache.pool",
+		slog.Int("capacity", 8),
+		slog.Int("running", 3),
+		slog.Int("queued", 1),
+	)), "Handle cache.pool")
+
+	assert.Empty(t, buf.String(), "a non-TTY run must not see pool samples at all")
+}
+
+// TestPrettyHandlerRendersStatusGatesEmission mirrors the check the cache
+// makes before sampling the limiter, so the cheap path stays cheap.
+func TestPrettyHandlerRendersStatusGatesEmission(t *testing.T) {
+	t.Parallel()
+
+	var plain bytes.Buffer
+	assert.False(t, newTestHandler(&plain).rendersStatus(),
+		"a buffer-backed handler has no region to paint into")
+
+	var term ttyBuf
+	assert.True(t, newTerminalHandler(&term).rendersStatus(),
+		"a terminal-backed handler does")
 }

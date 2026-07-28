@@ -638,7 +638,16 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := lim.AcquireN(gctx, slots); err != nil {
 				return err
 			}
-			defer lim.ReleaseN(slots)
+			// Report occupancy as it changes, so an interactive run can show
+			// a live pool counter. Emitted on both edges of the slot's life:
+			// once here (this step is now running) and once after release
+			// (the slot is free again). Handlers that do not render a status
+			// line ignore the event, so piped and CI output are unchanged.
+			c.logPool(gctx, lim)
+			defer func() {
+				lim.ReleaseN(slots)
+				c.logPool(gctx, lim)
+			}()
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
