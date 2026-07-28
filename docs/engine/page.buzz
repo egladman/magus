@@ -272,9 +272,12 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // the .with-toc two-column grid) appears when at least one is present; else the article
     // goes full-width.
     final sectionNav = site.renderSectionNav(srcRel, canonUrl, root);
+    // The whole branch beneath this page, when there is more of it than the
+    // direct children sectionNav already lists.
+    final subtree = site.renderSubtree(canonUrl, root);
     final tocList = renderTocList(content);
     var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
-    if (sectionNav != "" or tocList != "") {
+    if (sectionNav != "" or subtree != "" or tocList != "") {
         // Muted closing hint at the foot of the aside, shown only when it is the mobile
         // bottom sheet; CSS hides it on the desktop sidebar, where there's nothing to dismiss.
         final aside = "    <aside class=\"toc\">\n      <nav>\n" + sectionNav + tocList
