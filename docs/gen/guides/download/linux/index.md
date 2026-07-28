@@ -11,7 +11,7 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ## Quick install
 
 ```sh
-VERSION=v0.2.1
+VERSION=v0.3.0
 ARCH=amd64            # or arm64 on ARM
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}-static.tar.gz"
 mkdir -p ~/.local/bin
@@ -21,7 +21,7 @@ magus version
 ```
 
 `${VERSION}` above is the current release. This is the static build, the default for
-the installer. Dynamic builds are also listed at [/public/release/](../../../public/release/)
+the installer. Dynamic builds are also attached to each [GitHub release](https://github.com/egladman/magus/releases)
 when you need one.
 
 ## Verify the download

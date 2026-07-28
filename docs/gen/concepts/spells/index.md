@@ -112,7 +112,7 @@ fun nodeServe(target: Target) > Service {
 export fun mgs_listTargets() > any { return {"go-fmt": goFmt, "serve": nodeServe}; }
 ```
 
-**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](remote-cache.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`os\exec`, `http`, `crypto`).
+**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](cache/remote.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`os\exec`, `http`, `crypto`).
 
 ## Binding a spell to a project
 
@@ -159,7 +159,7 @@ The go/docker relationship is exactly this **co-binding**, not an import: both a
 
 Two magus APIs take a spell handle as an argument, and both are a magus call consuming a spell rather than a spell importing a spell:
 
-- `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `actions`, `s3-cache`) as the remote cache backend. See [Remote caching](remote-cache.md).
+- `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `actions`, `s3-cache`) as the remote cache backend. See [Remote caching](cache/remote.md).
 - `magus\ci.provider(github)` wires a **CI-provider** spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See [CI providers](ci-providers.md).
 
 Both are extension points on purpose. magus itself knows neither a cache service's API nor a CI system's log syntax, so supporting one it has never heard of is a spell you write rather than a release you wait for.

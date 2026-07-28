@@ -24,7 +24,7 @@ at all.
 
 magus emits that structure through a **provider spell**. The binary knows the
 generic shape - open a section, close it, raise a notice - and a spell knows one
-vendor's syntax. This is the same arrangement as [remote caching](remote-cache.md):
+vendor's syntax. This is the same arrangement as [remote caching](cache/remote.md):
 the extension point is a spell so a provider magus has never heard of is
 something you write, not something you wait for.
 
@@ -164,7 +164,7 @@ What magus guarantees at the boundary:
 
 What magus does **not** guarantee: a spell has the full host module surface,
 including `os\exec` and `http`. Loading a spell is trusting it, exactly as with a
-[remote cache backend](remote-cache.md). Spells are not individually sandboxed;
+[remote cache backend](cache/remote.md). Spells are not individually sandboxed;
 they run with the magus process's privileges, constrained only by the
 process-wide [sandbox](sandbox.md) policy where that applies. If your build
 output can contain secrets, a hostile provider spell could exfiltrate them.

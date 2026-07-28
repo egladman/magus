@@ -7,6 +7,24 @@
 // version in localStorage and re-hide - until a newer release changes the version,
 // when the bar reveals again. No-ops when the bar is absent (no release shipped); when
 // localStorage is unavailable the bar simply always reveals.
+//
+// The bar also EXPIRES: it reveals only while the release is recent (data-released,
+// within ANNOUNCE_DAYS). An announcement that never goes away stops being an
+// announcement, and the version-based dismissal alone could not solve that - a reader
+// who never clicks the close button saw the same bar until the next release, however
+// many months that took. An unreadable or absent date reveals nothing: for a
+// decorative banner, "cannot tell how old this is" should fail quiet.
+
+/** Days after a release during which the announcement bar still shows. */
+const ANNOUNCE_DAYS = 7;
+
+function isRecent(released: string): boolean {
+  const at = Date.parse(released);
+  if (Number.isNaN(at)) return false;
+  // A future date (the reader's clock is behind, or a timezone edge) counts as recent
+  // rather than as infinitely old, so skew hides the bar late instead of never showing it.
+  return Date.now() - at < ANNOUNCE_DAYS * 24 * 60 * 60 * 1000;
+}
 
 export function initAnnouncement(): void {
   const bar = document.getElementById("announcement-bar");
@@ -21,7 +39,8 @@ export function initAnnouncement(): void {
   } catch {}
   // Reveal only when this version is undismissed. Hidden-by-default + opt-in reveal is
   // the inverse of the old "show then hide", so nothing paints that will be taken away.
-  if (!dismissed) bar.classList.add("is-shown");
+  const recent = isRecent(bar.getAttribute("data-released") || "");
+  if (!dismissed && recent) bar.classList.add("is-shown");
 
   const close = bar.querySelector(".announcement-close");
   if (close) {

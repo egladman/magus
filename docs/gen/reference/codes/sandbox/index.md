@@ -110,5 +110,4 @@ Two layers run together:
 - [MGS2006](MGS2006.md): likely PATH-shim manager (mise/asdf/direnv) stripped.
 - [MGS2007](MGS2007.md): exec denied.
 - [MGS2008](MGS2008.md): daemon socket withheld from sandboxed children.
-- [MGS2009](MGS2009.md): outbound network request (audited, not blocked).
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).

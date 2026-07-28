@@ -84,7 +84,7 @@ per-project attribute.
 
 ### Remote cache
 
-The [shared backend](remote-cache.md) (S3, GitHub Actions, ...), exported only
+The [shared backend](cache/remote.md) (S3, GitHub Actions, ...), exported only
 when one is wired via `magus\cache.remote(...)`. These mirror the local-cache
 vocabulary under a `.remote` prefix so a remote hit is **never** folded into the
 local counters: a remote hit is still a _local_ miss, because the remote fetch

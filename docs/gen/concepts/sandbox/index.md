@@ -143,7 +143,7 @@ Because `landlock_restrict_self` is process-global and irreversible, a long-runn
 
 Being explicit about the boundary is part of the threat model:
 
-- **Network egress is audited, not blocked.** A compromised spell with no token in its environment can still reach an arbitrary host. Every request through the built-in `http.*` bindings is recorded at info level with method and URL before it is sent ([MGS2009](../reference/codes/sandbox/MGS2009.md)), including localhost, RFC1918 ranges, and the cloud metadata endpoint (`169.254.169.254`). There is no SSRF allow/deny yet; treat any URL reachable from a magusfile as trusted. A future opt-in network policy is the intended fix.
+- **Network egress is not sandboxed at all.** A compromised spell with no token in its environment can still reach an arbitrary host, including localhost, RFC1918 ranges, and the cloud metadata endpoint (`169.254.169.254`). Treat any URL reachable from a magusfile as trusted. An audit log for the `http.*` bindings used to sit here and was removed: it observed only that one binding, so it saw neither magus's own traffic (self update, remote cache) nor anything a subprocess did, which is where nearly all outbound traffic originates. A record of one narrow slice, presented as network auditing, invites more trust than it earns. An opt-in network policy remains the intended fix, and it has to sit below the subprocess boundary to mean anything.
 - **In-memory secret theft from magus itself.** If magus holds a secret in memory when a spell runs, landlock cannot help; the sandbox confines the tool's filesystem and environment, not magus's own address space.
 - **Descendant-boundary writes** fail the target through [MGS3001](../reference/codes/sandbox/MGS3001.md); the audit cannot undo an external tool's prior write.
 
@@ -161,7 +161,6 @@ Every sandbox violation maps to a boundary described above.
 | [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                             |
 | [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                   |
 | [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                           |
-| [MGS2009](../reference/codes/sandbox/MGS2009.md) NetEgress                 | outbound request through `http.*` while sandboxed                                                | audited, **not** blocked                   |
 | [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                |
 | [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; target fails, write not rolled back |
 

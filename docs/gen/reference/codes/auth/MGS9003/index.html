@@ -32,9 +32,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div id="announcement-bar" data-version="v0.2.1">
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
     <div class="container">
-      <span>magus <strong>v0.2.1</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.2.1">See what's new</a></span>
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
@@ -67,7 +67,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../../../index.html">Home</a></li><li><a href="../../../../documentation/">Documentation</a></li><li>Reference</li><li>Codes</li><li>Auth</li><li aria-current="page">MGS9003: connector store is too new</li></ul>
+      <ul><li><a href="../../../../index.html">Home</a></li><li><a href="../../../../documentation/">Documentation</a></li><li><a href="../../../../reference/">Reference</a></li><li><a href="../../../../reference/codes/">Codes</a></li><li><a href="../../../../reference/codes/auth/">Auth</a></li><li aria-current="page">MGS9003: connector store is too new</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -75,6 +75,15 @@
     <div class="with-toc">
     <aside class="toc">
       <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../../../reference/codes/auth/MGS9001/" title="MGS9001: bearer token rejected">MGS9001: bearer token rejected</a></li>
+          <li><a href="../../../../reference/codes/auth/MGS9002/" title="MGS9002: insecure token file permissions">MGS9002: insecure token file permissions</a></li>
+          <li><a href="../../../../reference/codes/auth/MGS9003/" aria-current="page" title="MGS9003: connector store is too new">MGS9003: connector store is too new</a></li>
+          <li><a href="../../../../reference/codes/auth/MGS9004/" title="MGS9004: no auth token configured">MGS9004: no auth token configured</a></li>
+          <li><a href="../../../../reference/codes/auth/MGS9005/" title="MGS9005: connector name already exists">MGS9005: connector name already exists</a></li>
+          <li><a href="../../../../reference/codes/auth/MGS9006/" title="MGS9006: connector token not found">MGS9006: connector token not found</a></li>
+        </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
@@ -115,10 +124,10 @@ version.</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../../../reference/codes/auth/"><span class="related-card-title">Auth</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../../../reference/codes/auth/MGS9001/"><span class="related-card-title">MGS9001: bearer token rejected</span><span class="related-card-desc">The daemon refused a request because its bearer token was missing, wrong, expired, or revoked. This is the usual reason an MCP client cannot connect.</span></a>
         <a class="related-card" href="../../../../reference/codes/auth/MGS9002/"><span class="related-card-title">MGS9002: insecure token file permissions</span><span class="related-card-desc">A magus auth token or connector store file is readable beyond its owner. Magus refuses to use it until the permissions are tightened to 0600.</span></a>
         <a class="related-card" href="../../../../reference/codes/auth/MGS9005/"><span class="related-card-title">MGS9005: connector name already exists</span><span class="related-card-desc">Creating a connector token with a name already in use. Connector names are unique; pass a different --name or revoke the existing one first.</span></a>
-        <a class="related-card" href="../../../../reference/codes/auth/MGS9006/"><span class="related-card-title">MGS9006: connector token not found</span><span class="related-card-desc">Revoking or looking up a connector token by a name or fingerprint that matches nothing in the store.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

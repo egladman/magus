@@ -2199,20 +2199,44 @@ a code {
   text-decoration: underline;
 }
 
-/* Glossary page: each term's "referenced on" backlinks, injected under its definition by
-   the render pass (injectBacklinks) from the whole-corpus cross-reference set. A quiet,
-   compact line so it annotates the entry without competing with the definition. */
+/* Glossary page: the "referenced on" list injected under each term by the render
+   pass (injectBacklinks) from the whole-corpus cross-reference set. A wrapping list
+   of chips, not a run-on sentence: the busiest terms are referenced on ~70 pages,
+   and comma-joining those produced a paragraph of prose where the reader wanted a
+   scannable index. Square, not rounded, and no uppercasing - the site's chip
+   vocabulary. */
 .glossary-backlinks {
-  margin: 0.35rem 0 0;
-  font-size: 0.82rem;
-  color: var(--pico-muted-color);
-  line-height: 1.6;
+  margin: 0.5rem 0 0;
 }
-.glossary-backlinks-label {
+.glossary-backlinks h4 {
+  margin: 0 0 0.35rem;
   font-size: 0.72rem;
-  text-transform: uppercase;
+  font-weight: 600;
   letter-spacing: 0.04em;
-  margin-right: 0.35rem;
+  color: var(--pico-muted-color);
+}
+.glossary-backlinks ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.glossary-backlinks li {
+  margin: 0;
+}
+.glossary-backlinks a {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  text-decoration: none;
+}
+.glossary-backlinks a:hover {
+  color: var(--pico-primary);
+  border-color: var(--pico-primary);
 }
 
 /* Charm JSON-Patch disclosure (spell docs). The default Pico <details> reads as
