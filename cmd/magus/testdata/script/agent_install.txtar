@@ -12,10 +12,10 @@ exec magus agent install .opencode/skills .agents/skills
 exists .opencode/skills/magus-query/SKILL.md
 exists .agents/skills/magus-query/SKILL.md
 
-# --agents-md maintains a managed AGENTS.md section; re-install replaces, never duplicates
-exec magus agent install --agents-md
+# install-agents-md maintains a managed AGENTS.md section; re-install replaces, never duplicates
+exec magus agent install-agents-md
 grep 'magus:skills:begin' AGENTS.md
-exec magus agent install --agents-md
+exec magus agent install-agents-md
 grep -count=1 'magus:skills:begin' AGENTS.md
 
 # a second skill-dir install refuses to clobber without --force
@@ -26,7 +26,14 @@ stderr 'already exists'
 exec magus agent install .claude/skills --force
 exists .claude/skills/magus-query/SKILL.md
 
-# no destination and no --agents-md is an explicit error
+# absolute destinations are refused unless --global is set; --tar is the supported
+# way to install skills outside the working tree
+! exec magus agent install /tmp/abs/skills
+stderr 'outside the working tree'
+exec magus agent install --tar
+stdout 'magus-query/SKILL.md'
+
+# no destination is an explicit error
 ! exec magus agent install
 stderr 'destination directory'
 

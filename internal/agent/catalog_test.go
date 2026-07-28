@@ -23,7 +23,7 @@ func testCatalog(t *testing.T) *Catalog {
 func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	written, err := catalog.InstallSkillTree(dir, ".agents/skills", false)
+	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources))
 
@@ -48,15 +48,36 @@ func TestCatalogMaintainsOnlyManagedAgentsSection(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "AGENTS.md")
 	require.NoError(t, os.WriteFile(path, []byte("# Local rules\n\nkeep this\n"), 0o644))
-	_, err := catalog.InstallAgentsSection(dir)
+	_, err := catalog.WriteAgentsSection(dir)
 	require.NoError(t, err)
-	_, err = catalog.InstallAgentsSection(dir)
+	_, err = catalog.WriteAgentsSection(dir)
 	require.NoError(t, err)
 
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "keep this")
 	assert.Equal(t, 1, strings.Count(string(body), "magus:skills:begin"))
+}
+
+func TestCatalogSkillTarIsByteStable(t *testing.T) {
+	catalog := testCatalog(t)
+	a, err := catalog.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	b, err := catalog.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	assert.Equal(t, a, b, "SkillTar must be reproducible; no embedded timestamps in the body")
+	assert.NotEmpty(t, a)
+}
+
+func TestCatalogSkillBytesByName(t *testing.T) {
+	catalog := testCatalog(t)
+	body, err := catalog.SkillBytes("magus-architecture")
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "name: magus-architecture")
+	assert.Contains(t, string(body), "skill-content: "+catalog.contentDigest)
+
+	_, err = catalog.SkillBytes("does-not-exist")
+	assert.ErrorContains(t, err, "unknown skill")
 }
 
 func TestCatalogRenderAndStamp(t *testing.T) {

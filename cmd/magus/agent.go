@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -36,11 +37,12 @@ var agentsSection string
 var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// `install` writes the embedded skills into explicitly named destinations, and
-// `hook` evaluates one shell command to a guard verdict. Destinations and event
-// shapes are explicit arguments, never auto-detected (per the explicit-and-
-// granular preference); writing into a repo's agent-config dirs happens only
-// through this command, never as a side effect of another.
+// `install` writes the embedded skills into explicitly named destinations,
+// `install-agents-md` maintains the managed magus section in AGENTS.md, and
+// `hook` evaluates one shell command to a guard verdict. Destinations and
+// event shapes are explicit arguments, never auto-detected (per the
+// explicit-and-granular preference); writing into a repo's agent-config dirs
+// happens only through these commands, never as a side effect of another.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
@@ -48,6 +50,8 @@ func agentCmd(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
+	case "install-agents-md":
+		return agentInstallAgentsMDCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
 	case "hook":
@@ -56,39 +60,35 @@ func agentCmd(ctx context.Context, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return fmt.Errorf("agent: unknown subcommand %q (try: install, sample, hook)", args[0])
+		return fmt.Errorf("agent: unknown subcommand %q (try: install, install-agents-md, sample, hook)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent install <dir>... [--agents-md] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|install-agents-md|sample|hook> [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Install the magus agent skills into the current repo so an agent knows")
-	fmt.Fprintln(w, "how to use the knowledge graph instead of grepping, run work through")
-	fmt.Fprintln(w, "targets instead of raw tools, triage generated files, and ground")
-	fmt.Fprintln(w, "refactoring proposals in the graph.")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "magus is agent-host agnostic: the skills are one shared source in the")
-	fmt.Fprintln(w, "cross-agent Agent Skills format, and you name the directory your host")
-	fmt.Fprintln(w, "discovers skills in. Common destinations:")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  .agents/skills     Agent Skills spec generic project location")
-	fmt.Fprintln(w, "  .claude/skills     Claude Code")
-	fmt.Fprintln(w, "  .opencode/skills   OpenCode")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  --agents-md        maintain a managed magus section in AGENTS.md for")
-	fmt.Fprintln(w, "                     hosts that read that contract instead of skill dirs")
+	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
+	fmt.Fprintln(w, "                     into named destinations (.claude/skills, .agents/skills,")
+	fmt.Fprintln(w, "                     .opencode/skills, ...)")
+	fmt.Fprintln(w, "  install-agents-md  maintain the managed magus section in AGENTS.md")
 	fmt.Fprintln(w, "                     (created if absent, replaced in place on re-install,")
 	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
+	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
+	fmt.Fprintln(w, "                     never writes a file")
+	fmt.Fprintln(w, "  hook               evaluate one shell command against the magus guard")
+	fmt.Fprintln(w, "                     rules and emit a deny/advise/pass verdict")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Other subcommands:")
-	fmt.Fprintln(w, "  sample     print a starter AGENTS.md to stdout to own and tweak; never")
-	fmt.Fprintln(w, "             writes a file, so it cannot clobber an existing one")
-	fmt.Fprintln(w, "  hook       evaluate one shell command against the magus guard rules and")
-	fmt.Fprintln(w, "             emit a deny/advise/pass verdict. Input: arguments, raw stdin,")
-	fmt.Fprintln(w, "             or --from-json <dot.path> to extract it from a JSON event on")
-	fmt.Fprintln(w, "             stdin. Shape the verdict for your host with -o json|yaml|")
-	fmt.Fprintln(w, "             template=<go-template> (bare -o template lists the fields)")
+	fmt.Fprintln(w, "Stdout philosophy: `magus agent` is a pure data generator. To install")
+	fmt.Fprintln(w, "skills anywhere your shell can reach, use --tar and pipe to tar:")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C .claude/skills")
+	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C ~/.config/opencode/skills")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "The write-to-disk form is only for the in-repo, paths-relative-to-<dir>")
+	fmt.Fprintln(w, "case, where it preserves the previous one-line ergonomics. Absolute")
+	fmt.Fprintln(w, "destinations are refused unless --global is set, to keep magus from")
+	fmt.Fprintln(w, "silently writing outside the working tree.")
 }
 
 func agentUsageErr() error {
@@ -96,36 +96,58 @@ func agentUsageErr() error {
 	return fmt.Errorf("agent: a subcommand is required (try: install)")
 }
 
-// agentInstallCmd writes the embedded skills into every destination directory
-// named as a positional (repo-relative under --dir), and maintains the AGENTS.md
-// section when --agents-md is set. Destinations are explicit, never inferred
-// from an agent-host name: magus writes the standard format where told and stays
-// out of the host-specific business.
+// agentInstallCmd renders the embedded skills and either writes them under
+// <dir>/<dest>... or streams a tar archive to stdout (--tar). Destinations
+// are explicit, never inferred from an agent-host name: magus writes the
+// standard format where told and stays out of the host-specific business.
+// Absolute destinations are refused unless --global is set; the supported
+// way to install skills outside the working tree is `magus agent install
+// --tar | tar -xf - -C <absolute path>`.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	dir := fset.String("dir", ".", "Repo directory to install into")
-	force := fset.Bool("force", false, "Overwrite existing installed skill files")
-	agentsMD := fset.Bool("agents-md", false, "Maintain the managed magus section in AGENTS.md")
+	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
+	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
+	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	dests := fset.Args()
-	if len(dests) == 0 && !*agentsMD {
+
+	if *tarMode {
+		if len(dests) > 1 {
+			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
+		}
+		prefix := "."
+		if len(dests) == 1 {
+			prefix = dests[0]
+		}
+		body, err := agentSkills.SkillTar(prefix)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stdout.Write(body); err != nil {
+			return fmt.Errorf("agent install --tar: write stdout: %w", err)
+		}
+		return nil
+	}
+
+	if len(dests) == 0 {
 		agentUsage(os.Stderr)
-		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --agents-md")
+		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --tar")
+	}
+	if !*global {
+		for _, d := range dests {
+			if filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
+				return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global, or use --tar | tar -xf - -C %q instead", d, d)
+			}
+		}
 	}
 
 	var written []string
 	for _, dest := range dests {
-		w, err := agentSkills.InstallSkillTree(*dir, dest, *force)
-		if err != nil {
-			return err
-		}
-		written = append(written, w...)
-	}
-	if *agentsMD {
-		w, err := agentSkills.InstallAgentsSection(*dir)
+		w, err := agentSkills.WriteSkillTree(*dir, dest, *force)
 		if err != nil {
 			return err
 		}
@@ -133,6 +155,41 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	}
 	for _, p := range written {
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
+	}
+	printAgentInstallNextSteps(written)
+	return nil
+}
+
+// agentInstallAgentsMDCmd renders the managed magus section for <dir>/AGENTS.md
+// and either writes it back in place or streams it on stdout (--tar).
+// Bytes outside the begin/end markers are preserved from any existing file.
+func agentInstallAgentsMDCmd(ctx context.Context, args []string) error {
+	fset := flag.NewFlagSet("agent install-agents-md", flag.ContinueOnError)
+	dir := fset.String("dir", ".", "Repo directory whose AGENTS.md to manage")
+	tarMode := fset.Bool("tar", false, "Stream a tar archive containing AGENTS.md to stdout instead of writing")
+	fset.Usage = func() { agentUsage(os.Stderr) }
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+		return err
+	}
+	if rest := fset.Args(); len(rest) > 0 {
+		return fmt.Errorf("agent install-agents-md: takes no positional arguments")
+	}
+	if *tarMode {
+		body, err := agentSkills.AgentsSectionTar(*dir)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stdout.Write(body); err != nil {
+			return fmt.Errorf("agent install-agents-md --tar: write stdout: %w", err)
+		}
+		return nil
+	}
+	written, err := agentSkills.WriteAgentsSection(*dir)
+	if err != nil {
+		return err
+	}
+	for _, p := range written {
+		slog.InfoContext(ctx, "agent install-agents-md: wrote", slog.String("path", p))
 	}
 	printAgentInstallNextSteps(written)
 	return nil
