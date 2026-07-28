@@ -31,6 +31,22 @@ type Config struct {
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
+	// TargetTimeout bounds how long any single target may run before magus
+	// cancels it. Zero, the default, means no limit.
+	//
+	// This is a runaway guard, not a performance budget. A magusfile is code,
+	// so a loop that never terminates is a thing someone can write by
+	// accident, and without a deadline nothing reclaims a CI runner that hit
+	// one. The Buzz VM samples cancellation on loop back edges, so a spinning
+	// target notices promptly.
+	//
+	// It bounds the WHOLE target, subprocesses included: cancelling the
+	// context kills the commands the target spawned. Set it above your
+	// slowest legitimate target, not near it, or a long compile becomes a
+	// timeout. Off by default for exactly that reason - a wrong value here
+	// fails builds that were fine.
+	TargetTimeout time.Duration `yaml:"target_timeout"`
+
 	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
 	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
 	HistoryPath string `yaml:"history_path"`

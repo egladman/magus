@@ -236,6 +236,11 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Concurrency = n
 		}
 	}
+	if v := getenv("MAGUS_TARGET_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.TargetTimeout = d
+		}
+	}
 	if v := getenv("MAGUS_HISTORY_PATH"); v != "" {
 		cfg.HistoryPath = v
 	}

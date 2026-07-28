@@ -36,7 +36,7 @@ Return paths matching pattern (doublestar-style).
 import "std";
 import "fs";
 
-foreach (path in fs.glob("cmd/**/*.go")) { std.print(path); }
+foreach (path in fs\glob("cmd/**/*.go")) { std\print(path); }
 ```
 
 ### dirname
@@ -57,7 +57,7 @@ Directory portion of path.
 import "std";
 import "fs";
 
-std.print(fs.dirname("cmd/magus/main.go"));
+std\print(fs\dirname("cmd/magus/main.go"));
 // -> "cmd/magus"
 ```
 
@@ -79,7 +79,7 @@ Final element of path.
 import "std";
 import "fs";
 
-std.print(fs.basename("cmd/magus/main.go"));
+std\print(fs\basename("cmd/magus/main.go"));
 // -> "main.go"
 ```
 
@@ -101,7 +101,7 @@ True iff path exists.
 import "std";
 import "fs";
 
-if (fs.exists("go.mod")) { std.print("Go module"); }
+if (fs\exists("go.mod")) { std\print("Go module"); }
 ```
 
 ### readFile
@@ -122,8 +122,8 @@ Return the contents of path as a string.
 import "std";
 import "fs";
 
-final version = fs.readFile("VERSION");
-std.print(version);
+final version = fs\readFile("VERSION");
+std\print(version);
 ```
 
 ### writeFile
@@ -142,7 +142,7 @@ Write content to path (mode 0644).
 ```buzz
 import "fs";
 
-fs.writeFile("dist/manifest.txt", "artifact list here\n");
+fs\writeFile("dist/manifest.txt", "artifact list here\n");
 ```
 
 ### mkdirall
@@ -162,7 +162,7 @@ Create path and parents (default mode 0755).
 import "fs";
 
 // Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
-fs.mkdirall("dist/reports", 493);
+fs\mkdirall("dist/reports", 493);
 ```
 
 ### join
@@ -183,7 +183,7 @@ Join path elements with the OS separator.
 import "std";
 import "fs";
 
-std.print(fs.join(["cmd", "magus", "main.go"]));
+std\print(fs\join(["cmd", "magus", "main.go"]));
 // -> "cmd/magus/main.go"
 ```
 
@@ -202,7 +202,7 @@ Recursively remove path (no error if missing).
 ```buzz
 import "fs";
 
-fs.removeAll("dist/");
+fs\removeAll("dist/");
 ```
 
 ### listDir
@@ -223,7 +223,7 @@ Return directory entries; empty if path does not exist.
 import "std";
 import "fs";
 
-foreach (name in fs.listDir("cmd")) { std.print(name); }
+foreach (name in fs\listDir("cmd")) { std\print(name); }
 ```
 
 ### ext
@@ -244,7 +244,7 @@ File-name extension of path, including the leading dot ("" if none).
 import "std";
 import "fs";
 
-std.print(fs.ext("archive.tar.gz"));
+std\print(fs\ext("archive.tar.gz"));
 // -> ".gz"
 ```
 
@@ -266,7 +266,7 @@ True iff path exists and is a directory (a sandbox-denied path reads as false).
 import "std";
 import "fs";
 
-if (fs.isDir("internal")) { std.print("internal is a directory"); }
+if (fs\isDir("internal")) { std\print("internal is a directory"); }
 ```
 
 ### isFile
@@ -287,7 +287,7 @@ True iff path exists and is a regular file (a sandbox-denied path reads as false
 import "std";
 import "fs";
 
-if (fs.isFile("go.mod")) { std.print("go.mod is a file"); }
+if (fs\isFile("go.mod")) { std\print("go.mod is a file"); }
 ```
 
 ### stat
@@ -312,9 +312,9 @@ import "fs";
 // the method rather than the stat field. The time key is `mtime` (Unix millis), not
 // `modTime` - dot access on a missing key is silent, which is how this example went
 // unnoticed while printing nothing useful.
-final info = fs.stat("go.mod");
-std.print(info["size"]);
-std.print(info["mtime"]);
+final info = fs\stat("go.mod");
+std\print(info["size"]);
+std\print(info["mtime"]);
 ```
 
 ### copyFile
@@ -333,7 +333,7 @@ Copy the file at src to dst (overwriting), preserving its permission bits.
 ```buzz
 import "fs";
 
-fs.copyFile("dist/magus", "/usr/local/bin/magus");
+fs\copyFile("dist/magus", "/usr/local/bin/magus");
 ```
 
 ### copyDir
@@ -353,7 +353,7 @@ Recursively copy the directory tree at src to dst, preserving permission bits.
 import "fs";
 
 // Recursive copy; preserves file mode and dir structure.
-fs.copyDir("assets/", "dist/assets/");
+fs\copyDir("assets/", "dist/assets/");
 ```
 
 ### watch
@@ -374,8 +374,8 @@ import "std";
 import "fs";
 
 // Blocks; the callback fires per change batch. Return true to keep watching.
-fs.watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
-    foreach (p in paths) { std.print("changed: " + p); }
+fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
+    foreach (p in paths) { std\print("changed: " + p); }
     return true;
 });
 ```
@@ -397,11 +397,11 @@ Recursively walk the directory tree rooted at root, calling callback(path, is_di
 import "std";
 import "fs";
 
-fs.walk(".", fun (path: str, isDir: bool) > bool {
-    if (isDir and fs.basename(path) == "node_modules") {
+fs\walk(".", fun (path: str, isDir: bool) > bool {
+    if (isDir and fs\basename(path) == "node_modules") {
         return false;   // skip descent
     }
-    if (fs.ext(path) == ".go") { std.print(path); }
+    if (fs\ext(path) == ".go") { std\print(path); }
     return true;
 });
 ```
@@ -422,7 +422,7 @@ Append content to path (creating if absent, mode 0644).
 ```buzz
 import "fs";
 
-fs.appendFile("dist/build.log", "compile done\n");
+fs\appendFile("dist/build.log", "compile done\n");
 ```
 
 ### chmod
@@ -443,7 +443,7 @@ import "fs";
 
 // Mark the release binary executable. Buzz has no octal literal
 // (matches upstream); Unix mode 0755 = 493 decimal.
-fs.chmod("dist/magus", 493);
+fs\chmod("dist/magus", 493);
 ```
 
 ### symlink
@@ -462,7 +462,7 @@ Create a symbolic link at link pointing to target.
 ```buzz
 import "fs";
 
-fs.symlink("dist/magus", "/usr/local/bin/magus");
+fs\symlink("dist/magus", "/usr/local/bin/magus");
 ```
 
 ### readlink
@@ -483,7 +483,7 @@ Return the target of the symbolic link at path.
 import "std";
 import "fs";
 
-std.print(fs.readlink("/usr/local/bin/magus"));
+std\print(fs\readlink("/usr/local/bin/magus"));
 ```
 
 ### tempDir
@@ -504,8 +504,8 @@ Create a new temporary directory (in os.TempDir()) with an optional name prefix 
 import "std";
 import "fs";
 
-final tmp = fs.tempDir("magus-build-");
-std.print(tmp);
+final tmp = fs\tempDir("magus-build-");
+std\print(tmp);
 // -> "/tmp/magus-build-abc123"
 ```
 
@@ -527,7 +527,7 @@ Read path and return its lines as a list, with the line terminators stripped. A 
 import "std";
 import "fs";
 
-foreach (line in fs.readLines("targets.txt")) { std.print(line); }
+foreach (line in fs\readLines("targets.txt")) { std\print(line); }
 ```
 
 ### writeLines
@@ -546,7 +546,7 @@ Write lines to path (mode 0644), each followed by a newline. The companion to re
 ```buzz
 import "fs";
 
-fs.writeLines("dist/targets.txt", ["build", "test", "lint"]);
+fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
 ```
 
 [^buzz-stdlib-fs-exists]: `fs\exists` is also in Buzz's standard library (`fs.exists`); the magus form is sandbox-aware.

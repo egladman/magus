@@ -32,7 +32,7 @@ Convert s to camelCase.
 import "std";
 import "strings";
 
-std.print(strings.camelCase("hello world"));
+std\print(strings\camelCase("hello world"));
 // -> "helloWorld"
 ```
 
@@ -55,7 +55,7 @@ Convert s to snake_case.
 import "std";
 import "strings";
 
-std.print(strings.snakeCase("HelloWorld"));
+std\print(strings\snakeCase("HelloWorld"));
 // -> "hello_world"
 ```
 
@@ -78,7 +78,7 @@ Convert s to kebab-case.
 import "std";
 import "strings";
 
-std.print(strings.kebabCase("MyComponentName"));
+std\print(strings\kebabCase("MyComponentName"));
 // -> "my-component-name"
 ```
 
@@ -101,7 +101,7 @@ Convert s to PascalCase.
 import "std";
 import "strings";
 
-std.print(strings.pascalCase("user_profile"));
+std\print(strings\pascalCase("user_profile"));
 // -> "UserProfile"
 ```
 
@@ -124,7 +124,7 @@ Uppercase the first rune of s and lowercase the rest.
 import "std";
 import "strings";
 
-std.print(strings.capitalize("hELLO"));
+std\print(strings\capitalize("hELLO"));
 // -> "Hello"
 ```
 
@@ -147,8 +147,8 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 import "std";
 import "strings";
 
-final parts = strings.words("parseHTTPResponse2");
-foreach (w in parts) { std.print(w); }
+final parts = strings\words("parseHTTPResponse2");
+foreach (w in parts) { std\print(w); }
 // -> parse
 // -> HTTP
 // -> Response
@@ -175,7 +175,7 @@ Trim s to at most length runes, appending "..." when truncated.
 import "std";
 import "strings";
 
-std.print(strings.ellipsis("the quick brown fox", 12));
+std\print(strings\ellipsis("the quick brown fox", 12));
 // -> "the quick..."
 ```
 

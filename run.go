@@ -1016,6 +1016,8 @@ func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) er
 func (m *Magus) makeHandler(name string) TargetHandler {
 	if name == "preflight" || name == "generate" {
 		return func(ctx context.Context, p *types.Project) error {
+			ctx, cancel := m.withTargetDeadline(ctx)
+			defer cancel()
 			run := func() error { return runTarget(ctx, p, name) }
 			pol := p.TargetPolicies[name]
 			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
@@ -1025,8 +1027,29 @@ func (m *Magus) makeHandler(name string) TargetHandler {
 		}
 	}
 	return func(ctx context.Context, p *types.Project) error {
+		ctx, cancel := m.withTargetDeadline(ctx)
+		defer cancel()
 		return runTarget(ctx, p, name)
 	}
+}
+
+// withTargetDeadline bounds one target's execution when config.TargetTimeout
+// is set, and is a pass-through otherwise.
+//
+// It is the runaway guard: a magusfile is code, so a loop that never
+// terminates is something someone can write by accident, and nothing else
+// reclaims a CI runner that hit one. The Buzz VM samples cancellation on loop
+// back edges (see vm.checkCancel), so a spinning target notices without the
+// dispatch loop paying for a check per instruction.
+//
+// The deadline covers the whole target, subprocesses included - cancelling the
+// context kills what the target spawned - which is why it is off by default.
+// A value set near a legitimate target's runtime fails builds that were fine.
+func (m *Magus) withTargetDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+	if m.cfg.TargetTimeout <= 0 {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, m.cfg.TargetTimeout)
 }
 
 // makeSpellFilteredHandler returns a handler that runs name on a single named spell.
