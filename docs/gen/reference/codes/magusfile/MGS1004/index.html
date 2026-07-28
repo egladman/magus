@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS1004: unreached footprint declaration - magus</title>
-  <meta name="description" content="Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
+  <meta name="description" content="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1004/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS1004: unreached footprint declaration - magus">
-  <meta property="og:description" content="Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
+  <meta property="og:description" content="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1004/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -107,7 +107,7 @@ body (see .../MGS1004.md)
 </code></pre>
 <h2 id="why">Why</h2>
 <p>A per-target footprint has to be known <em>before</em> the target runs, because on a
-cache hit the body never executes. So magus recovers <code>magus.inputs</code>/<code>outputs</code>
+cache hit the body never executes. So magus recovers <code>magus\inputs</code>/<code>outputs</code>
 statically: it walks each <code>export fun</code> target and the helper functions it calls
 by a plain name (<code>srcGlobs()</code>), and collects the string-literal globs it finds.</p>
 <p>A declaration outside that reach is invisible to the cache:</p>
@@ -115,7 +115,7 @@ by a plain name (<code>srcGlobs()</code>), and collects the string-literal globs
 <li>a call in a helper that no target (transitively) calls by name - often dead
 code;</li>
 <li>a call reached only through indirection - the identifier used as a value
-(<code>final f = magus.inputs; f(&quot;src/**&quot;)</code>) or dynamic dispatch, which the static
+(<code>final f = magus\inputs; f(&quot;src/**&quot;)</code>) or dynamic dispatch, which the static
 read cannot follow.</li>
 </ul>
 <p>The danger is silent under-declaration: the input you thought you declared is not
@@ -126,7 +126,7 @@ magus can see and rejects immediately; an <em>unreached</em> call it can only wa
 <p>This is a <strong>warning</strong>, not a load error: an unreached call may simply be dead
 code, which is harmless.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Call <code>magus.inputs</code>/<code>magus.outputs</code> directly in the target body, or from a helper
+<p>Call <code>magus\inputs</code>/<code>magus\outputs</code> directly in the target body, or from a helper
 the target invokes by name:</p>
 <pre><code class="language-buzz">// Before: the glob lives in a helper nothing calls, so it never keys anything.
 fun srcGlobs() &gt; void { ctx.inputs(&quot;src/**&quot;); }
@@ -144,15 +144,15 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 <li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus <a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> finding.</li>
 <li><strong>Not the non-literal-argument error.</strong> A computed argument in a <em>reachable</em>
 call (<code>ctx.inputs(<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
-but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
+but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
 because it never reaches the call.</li>
 </ul>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="../../../../concepts/cache/#per-target-inputs-and-outputs">cache</a>: how <code>magus.inputs</code> and
-<code>magus.outputs</code> declare a target's per-target footprint.</li>
+<li><a href="../../../../concepts/cache/#per-target-inputs-and-outputs">cache</a>: how <code>magus\inputs</code> and
+<code>magus\outputs</code> declare a target's per-target footprint.</li>
 <li><a href="../../../../concepts/dependencies/">dependencies</a>: the static-extraction discipline
-magus.inputs shares with <code>magus.needs</code>.</li>
+magus\inputs shares with <code>magus\needs</code>.</li>
 </ul>
     </article>
     </div>
@@ -166,7 +166,7 @@ magus.inputs shares with <code>magus.needs</code>.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1005/"><span class="related-card-title">MGS1005: redundant footprint glob</span><span class="related-card-desc">Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1005/"><span class="related-card-title">MGS1005: redundant footprint glob</span><span class="related-card-desc">Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1008/"><span class="related-card-title">MGS1008: target missing its context parameter</span><span class="related-card-desc">Fires when an exported magusfile function is not a valid target because its first parameter is not a magus\Context. The signature is the contract magus reads statically to build the graph.</span></a>
     </div>
@@ -235,7 +235,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

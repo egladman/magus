@@ -1,6 +1,6 @@
 ---
 title: "MGS1004: unreached footprint declaration"
-description: Fires when a magus.inputs or magus.outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.
+description: Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.
 tags: [MGS1004, magusfile, cache, inputs, outputs, doctor]
 ---
 
@@ -22,7 +22,7 @@ body (see .../MGS1004.md)
 ## Why
 
 A per-target footprint has to be known _before_ the target runs, because on a
-cache hit the body never executes. So magus recovers `magus.inputs`/`outputs`
+cache hit the body never executes. So magus recovers `magus\inputs`/`outputs`
 statically: it walks each `export fun` target and the helper functions it calls
 by a plain name (`srcGlobs()`), and collects the string-literal globs it finds.
 
@@ -31,7 +31,7 @@ A declaration outside that reach is invisible to the cache:
 - a call in a helper that no target (transitively) calls by name - often dead
   code;
 - a call reached only through indirection - the identifier used as a value
-  (`final f = magus.inputs; f("src/**")`) or dynamic dispatch, which the static
+  (`final f = magus\inputs; f("src/**")`) or dynamic dispatch, which the static
   read cannot follow.
 
 The danger is silent under-declaration: the input you thought you declared is not
@@ -45,7 +45,7 @@ code, which is harmless.
 
 ## Resolution
 
-Call `magus.inputs`/`magus.outputs` directly in the target body, or from a helper
+Call `magus\inputs`/`magus\outputs` directly in the target body, or from a helper
 the target invokes by name:
 
 ```buzz
@@ -72,7 +72,7 @@ If the flagged call is genuinely dead code, delete it.
 
 ## See also
 
-- [cache.md](../../../concepts/cache.md#per-target-inputs-and-outputs): how `magus.inputs` and
-  `magus.outputs` declare a target's per-target footprint.
+- [cache.md](../../../concepts/cache.md#per-target-inputs-and-outputs): how `magus\inputs` and
+  `magus\outputs` declare a target's per-target footprint.
 - [dependencies.md](../../../concepts/dependencies.md): the static-extraction discipline
-  magus.inputs shares with `magus.needs`.
+  magus\inputs shares with `magus\needs`.

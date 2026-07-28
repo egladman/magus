@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#sha256-hex" title="sha256_hex">sha256_hex</a></li><li><a href="#sha256-file" title="sha256_file">sha256_file</a></li><li><a href="#sha512-hex" title="sha512_hex">sha512_hex</a></li><li><a href="#sha512-file" title="sha512_file">sha512_file</a></li><li><a href="#sha1-hex" title="sha1_hex">sha1_hex</a></li><li><a href="#sha1-file" title="sha1_file">sha1_file</a></li><li><a href="#md5-hex" title="md5_hex">md5_hex</a></li><li><a href="#md5-file" title="md5_file">md5_file</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#sha256hex" title="sha256Hex">sha256Hex</a></li><li><a href="#sha256file" title="sha256File">sha256File</a></li><li><a href="#sha512hex" title="sha512Hex">sha512Hex</a></li><li><a href="#sha512file" title="sha512File">sha512File</a></li><li><a href="#sha1hex" title="sha1Hex">sha1Hex</a></li><li><a href="#sha1file" title="sha1File">sha1File</a></li><li><a href="#md5hex" title="md5Hex">md5Hex</a></li><li><a href="#md5file" title="md5File">md5File</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="crypto">crypto</h1>
 <p>Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop).</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;crypto&quot;</code>) and call methods in <code>camelCase</code> (<code>crypto.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;crypto&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>crypto\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
-<h3 id="sha256-hex">sha256_hex</h3>
+<h3 id="sha256hex">sha256Hex</h3>
 <p>Return the lowercase hex SHA-256 digest of data.</p>
-<p><strong>Signature:</strong> <code>crypto.sha256Hex(data) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L121" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha256hex" data-kind="method" data-def="">crypto\sha256Hex</a>(data) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L121" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -137,9 +137,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="sha256-file">sha256_file</h3>
+<h3 id="sha256file">sha256File</h3>
 <p>Return the lowercase hex SHA-256 digest of the file at <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>.</p>
-<p><strong>Signature:</strong> <code>crypto.sha256File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L126" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha256file" data-kind="method" data-def="">crypto\sha256File</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L126" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -159,9 +159,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="sha512-hex">sha512_hex</h3>
+<h3 id="sha512hex">sha512Hex</h3>
 <p>Return the lowercase hex SHA-512 digest of data.</p>
-<p><strong>Signature:</strong> <code>crypto.sha512Hex(data) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L131" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha512hex" data-kind="method" data-def="">crypto\sha512Hex</a>(data) → string</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L131" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -181,9 +181,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="sha512-file">sha512_file</h3>
+<h3 id="sha512file">sha512File</h3>
 <p>Return the lowercase hex SHA-512 digest of the file at path.</p>
-<p><strong>Signature:</strong> <code>crypto.sha512File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L136" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha512file" data-kind="method" data-def="">crypto\sha512File</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L136" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -203,9 +203,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="sha1-hex">sha1_hex</h3>
+<h3 id="sha1hex">sha1Hex</h3>
 <p>Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
-<p><strong>Signature:</strong> <code>crypto.sha1Hex(data) → string</code><sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L141" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha1hex" data-kind="method" data-def="">crypto\sha1Hex</a>(data) → string</code><sup id="fnref:3"><a href="#fn:3" class="footnote-ref" role="doc-noteref">3</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L141" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -225,9 +225,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="sha1-file">sha1_file</h3>
+<h3 id="sha1file">sha1File</h3>
 <p>Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.</p>
-<p><strong>Signature:</strong> <code>crypto.sha1File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L146" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#sha1file" data-kind="method" data-def="">crypto\sha1File</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L146" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -247,9 +247,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="md5-hex">md5_hex</h3>
+<h3 id="md5hex">md5Hex</h3>
 <p>Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.</p>
-<p><strong>Signature:</strong> <code>crypto.md5Hex(data) → string</code><sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L151" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#md5hex" data-kind="method" data-def="">crypto\md5Hex</a>(data) → string</code><sup id="fnref:4"><a href="#fn:4" class="footnote-ref" role="doc-noteref">4</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L151" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -269,9 +269,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="md5-file">md5_file</h3>
+<h3 id="md5file">md5File</h3>
 <p>Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.</p>
-<p><strong>Signature:</strong> <code>crypto.md5File(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L156" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#md5file" data-kind="method" data-def="">crypto\md5File</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/crypto.go#L156" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -295,16 +295,16 @@
 <hr>
 <ol>
 <li id="fn:1">
-<p><code>crypto.sha256Hex</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>crypto.hash(HashAlgorithm.Sha256, …)</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>crypto\sha256Hex</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>crypto.hash(HashAlgorithm.Sha256, …)</code>); the magus form is <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2">
-<p><code>crypto.sha512Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha512, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>crypto\sha512Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha512, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:3">
-<p><code>crypto.sha1Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha1, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>crypto\sha1Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Sha1, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:3" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:4">
-<p><code>crypto.md5Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Md5, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>crypto\md5Hex</code> is also in Buzz's standard library (<code>crypto.hash(HashAlgorithm.Md5, …)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:4" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </div>
@@ -327,7 +327,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22crypto%22">crypto</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/crypto.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/crypto.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -389,7 +389,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

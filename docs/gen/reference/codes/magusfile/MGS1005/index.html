@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS1005: redundant footprint glob - magus</title>
-  <meta name="description" content="Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <meta name="description" content="Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1005/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS1005: redundant footprint glob - magus">
-  <meta property="og:description" content="Fires when a per-target magus.inputs or magus.outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <meta property="og:description" content="Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1005/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -107,14 +107,14 @@ declaration (a no-op under the additive model); drop the duplicate (see
 <h2 id="why">Why</h2>
 <p>A target's <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint is the <strong>union</strong> of three layers: the globs a bound
 spell contributes, the project-wide <code>sources</code>/<code>outputs</code>, and the per-target
-<code>magus.inputs</code>/<code>magus.outputs</code>. Per-target declarations only ever <em>add</em> to the
+<code>magus\inputs</code>/<code>magus\outputs</code>. Per-target declarations only ever <em>add</em> to the
 footprint - they never shrink the project-wide baseline.</p>
 <p>So a per-target glob that repeats one already present project-wide changes
 nothing about the cache key or the <a class="glossary-term" href="../../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> set. It is harmless, but it reads as
 if it narrowed or specialized the target's footprint when it did not - a
 misleading no-op worth removing.</p>
 <p>This most often happens by copy-paste: the same glob declared both in
-<code>magus.project({sources = [...]})</code> and in a target body, or a <code>magus.inputs</code>
+<code>magus\project({sources = [...]})</code> and in a target body, or a <code>magus\inputs</code>
 glob that a bound spell's <code>needs</code> already covers.</p>
 <p>This is a <strong>warning</strong>, not a load error: a duplicate is a no-op, not a fault.</p>
 <h2 id="resolution">Resolution</h2>
@@ -123,17 +123,17 @@ glob that a bound spell's <code>needs</code> already covers.</p>
 <li>if the glob is relevant to <strong>every</strong> target, keep the project-wide
 <code>sources</code>/<code>outputs</code> and drop the per-target copy;</li>
 <li>if it is relevant to <strong>one</strong> target, drop the project-wide declaration and keep
-the <code>magus.inputs</code>/<code>magus.outputs</code> in that target's body.</li>
+the <code>magus\inputs</code>/<code>magus\outputs</code> in that target's body.</li>
 </ul>
 <pre><code class="language-buzz">// Before: &quot;src/**&quot; declared twice - the per-target copy is a no-op.
-magus.project({sources = [&quot;src/**&quot;]});
+magus\project({sources = [&quot;src/**&quot;]});
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     ctx.inputs(&quot;src/**&quot;);
     go[&quot;go-build&quot;]();
 }
 
 // After: one home. Here it affects every target, so keep it project-wide.
-magus.project({sources = [&quot;src/**&quot;]});
+magus\project({sources = [&quot;src/**&quot;]});
 export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
 </code></pre>
 <h2 id="what-this-is-not">What this is NOT</h2>
@@ -231,7 +231,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

@@ -106,7 +106,7 @@ magus affected build --step
 done
 </code></pre>
 <h2 id="one-shot-daemon-health-probe">One-shot daemon health probe</h2>
-<p><code>magus <a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></code> exits 0 even when the daemon is down (the <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> block reads <code>daemon: off</code>). Use it as a cheap, non-blocking reachability probe in scripts or <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> <a class="glossary-term" href="../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> checks, with no risk of hanging on a network timeout:</p>
+<p><code>magus <a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></code> exits 0 even when the daemon is down (the <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> block reads <code>daemon: off</code>). Use it as a cheap, non-blocking reachability probe in scripts or <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> <a class="glossary-term" href="../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a> checks, with no risk of hanging on a network timeout:</p>
 <pre><code class="language-sh">magus status
 magus status -o json   # machine-readable output
 </code></pre>
@@ -135,21 +135,21 @@ ProjectEntry:
 <p>Two entry points into an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL, sharing one evaluator:</p>
 <ul>
 <li><strong><code>magus repl</code></strong> - standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
-<li><strong><code>magus.pry()</code></strong> - <code>binding.pry</code>-style breakpoint that opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
+<li><strong><code>magus\pry()</code></strong> - <code>binding.pry</code>-style breakpoint that opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
 </ul>
 <pre><code class="language-buzz">export fun build(ctx: magus\Context, args: [str]) &gt; void {
-    os.exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
-    magus.pry();   // execution pauses here; inspect or modify state
-    os.exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;]);
+    os\exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
+    magus\pry();   // execution pauses here; inspect or modify state
+    os\exec(&quot;go&quot;, [&quot;build&quot;, &quot;./...&quot;]);
 }
 </code></pre>
 <p><code>magus run build --step</code> pauses before every subprocess instead (concurrency forced to 1) so you can step, skip, or drop into a REPL command-by-command.</p>
 <p>Full reference (meta-commands, pry stack navigation, <code>--step</code> keymap, multiline behavior) is in <a href="../debugging/">debugging</a>.</p>
 <h2 id="recursive-invocation">Recursive invocation</h2>
 <p>Targets can call <code>magus</code> recursively. Child invocations forward work to the parent process over a local socket; concurrency limits are shared, so nested calls draw from the same budget instead of each grabbing their own slots.</p>
-<pre><code class="language-buzz">magus.cmd([&quot;run&quot;, &quot;build&quot;, &quot;api&quot;]);
+<pre><code class="language-buzz">magus\cmd([&quot;run&quot;, &quot;build&quot;, &quot;api&quot;]);
 </code></pre>
-<p><code>magus.cmd</code> is the in-magusfile entry point for invoking magus recursively. When a <a href="../daemon/">daemon</a> is running, the call rides the existing socket connection instead of spawning a new process.</p>
+<p><code><a class="code-xref" href="../../reference/buzz/magus/#cmd" data-kind="method" data-def="">magus\cmd</a></code> is the in-magusfile entry point for invoking magus recursively. When a <a href="../daemon/">daemon</a> is running, the call rides the existing socket connection instead of spawning a new process.</p>
     </article>
     </div>
     </div>
@@ -160,14 +160,14 @@ ProjectEntry:
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../reference/manpage/magus/"><span class="related-card-title">magus command</span><span class="related-card-desc">Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.</span></a>
-        <a class="related-card" href="../../guides/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../../search/?q=tag%3A%22magus.cmd%22">magus.cmd</a><a class="tag" href="../../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../../search/?q=tag%3A%22template%22">template</a><a class="tag" href="../../search/?q=tag%3A%22fields%22">fields</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22tips%22">tips</a><a class="tag" href="../../search/?q=tag%3A%22status%22">status</a><a class="tag" href="../../search/?q=tag%3A%22step%22">step</a><a class="tag" href="../../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../../search/?q=tag%3A%22repl%22">repl</a><a class="tag" href="../../search/?q=tag%3A%22recursion%22">recursion</a><a class="tag" href="../../search/?q=tag%3A%22magus%5Ccmd%22">magus\cmd</a><a class="tag" href="../../search/?q=tag%3A%22magus+status%22">magus status</a><a class="tag" href="../../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../../search/?q=tag%3A%22template%22">template</a><a class="tag" href="../../search/?q=tag%3A%22fields%22">fields</a></div>
     <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
@@ -230,7 +230,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

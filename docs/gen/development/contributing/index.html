@@ -216,6 +216,15 @@ path as an automatic update.</p>
     </div>
     </div>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../development/docs/"><span class="related-card-title">docs targets</span><span class="related-card-desc">Target catalog and run-order graph for the docs project, generated from its magusfile.</span></a>
+        <a class="related-card" href="../../development/magus/"><span class="related-card-title">magus targets</span><span class="related-card-desc">Target catalog and run-order graph for the magus project, generated from its magusfile.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+    </div>
+  </section>
   <details class="ref-section" open>
     <summary>Glossary</summary>
     <div class="disclosure-body ref-embed"><h1 id="glossary">Glossary</h1>
@@ -276,7 +285,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

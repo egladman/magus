@@ -125,7 +125,7 @@ deterministic-but-invisible gap <code>describe</code> exists to close.</p>
 <ul>
 <li><strong>Prefer a value anchor over a counted index.</strong> Replace a literal <code>&quot;/7&quot;</code> with
 a constructor that resolves the position at author time
-(<code>charm.after(args, &quot;run&quot;, [...])</code>), so the pointer tracks the argv instead of
+(<code><a class="code-xref" href="../../../buzz/charm/#after" data-kind="method" data-def="">charm\after</a>(args, &quot;run&quot;, [...])</code>), so the pointer tracks the argv instead of
 a stale count. See <a href="../../../../concepts/charms/#the-charm-constructor-reference">the constructor reference</a>.</li>
 <li><strong>Check the base command.</strong> Run <code>magus describe target &lt;name&gt;</code> with no charm
 to see the argv the charm must patch, then confirm the index or anchor the
@@ -226,7 +226,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

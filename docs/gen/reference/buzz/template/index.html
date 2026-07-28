@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#render" title="render">render</a></li><li><a href="#render-partials" title="render_partials">render_partials</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#render" title="render">render</a></li><li><a href="#renderpartials" title="renderPartials">renderPartials</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="template">template</h1>
 <p>Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;template&quot;</code>) and call methods in <code>camelCase</code> (<code>template.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;template&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>template\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="render">render</h3>
 <p>Render a Mustache template against a context value (usually a name-&gt;value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.</p>
-<p><strong>Signature:</strong> <code>template.render(template, data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L40" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#render" data-kind="method" data-def="">template\render</a>(template, data) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L40" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -150,12 +150,12 @@ import &quot;template&quot;;
 
 // Backtick raw strings hold the Mustache verbatim; a double-quoted &quot;{{name}}&quot;
 // would collide with Buzz's own {expr} string interpolation.
-std.print(template.render(`Hello {{name}}`, {&quot;name&quot;: &quot;world&quot;}));
+std\print(template\render(`Hello {{name}}`, {&quot;name&quot;: &quot;world&quot;}));
 // -&gt; &quot;Hello world&quot;
 </code></pre>
-<h3 id="render-partials">render_partials</h3>
+<h3 id="renderpartials">renderPartials</h3>
 <p>Render a Mustache template that includes partials via {{&gt;name}}, resolving each name against the partials map (name-&gt;template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.</p>
-<p><strong>Signature:</strong> <code>template.renderPartials(template, data, partials) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L51" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#renderpartials" data-kind="method" data-def="">template\renderPartials</a>(template, data, partials) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/template.go#L51" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -201,7 +201,7 @@ final partials = {
     &quot;footer&quot;: `&lt;footer&gt;{{title}}&lt;/footer&gt;`,
 };
 
-std.print(template.renderPartials(page, {&quot;title&quot;: &quot;magus&quot;, &quot;body&quot;: &quot;hi&quot;}, partials));
+std\print(template\renderPartials(page, {&quot;title&quot;: &quot;magus&quot;, &quot;body&quot;: &quot;hi&quot;}, partials));
 // -&gt; &quot;&lt;header&gt;magus&lt;/header&gt;&lt;main&gt;hi&lt;/main&gt;&lt;footer&gt;magus&lt;/footer&gt;&quot;
 </code></pre>
     </article>
@@ -223,7 +223,7 @@ std.print(template.renderPartials(page, {&quot;title&quot;: &quot;magus&quot;, &
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22template%22">template</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:41:45Z">July 28, 2026, 3:41 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/abf5b9de3e13198a0506a8b9f520c86b2a84af16" data-tooltip="abf5b9de3e13198a0506a8b9f520c86b2a84af16" title="abf5b9de3e13198a0506a8b9f520c86b2a84af16">abf5b9de</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8"><code>a1625126</code></a> <small><time datetime="2026-07-28T15:08:25Z">Jul 28, 2026</time></small> - document the name a caller types, not the one Go declares</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/template.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/template.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -285,7 +285,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

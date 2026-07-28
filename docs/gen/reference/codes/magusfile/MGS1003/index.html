@@ -113,8 +113,8 @@ tools. A standalone <code>typecheck</code> (or <code>vet</code>, <code>audit</co
 <code>prettify</code>) target carves one tool's check out of that composition into its own
 name.</p>
 <p>The practical cost is that <code>ci</code> is composed from the canonical phases via
-<code>magus.needs</code>. A bespoke <code>typecheck</code> target sitting beside <code>lint</code> is invisible to
-any <code>ci</code> that only needs <code>lint</code> - the type-check silently never runs in <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> unless
+<code>magus\needs</code>. A bespoke <code>typecheck</code> target sitting beside <code>lint</code> is invisible to
+any <code>ci</code> that only needs <code>lint</code> - the type-check silently never runs in <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> unless
 someone remembers to add it separately. Folding the op into <code>lint</code> means it rides
 along automatically wherever <code>lint</code> already does.</p>
 <p>This is a <strong>warning</strong>, not a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error: unlike <a href="../MGS1002/">MGS1002</a>
@@ -167,7 +167,7 @@ names and what composes into <code>lint</code>/<code>format</code>.</li>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus\needs.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
@@ -235,7 +235,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

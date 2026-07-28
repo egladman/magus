@@ -90,7 +90,7 @@ previous output instead of rebuilding. That <a class="glossary-term" href="../..
 <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root) and is <strong>local</strong> to one machine.</p>
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-6">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
-<p>A <strong><a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a></strong> shares those artifacts across <strong><a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runners</strong>, machine to
+<p>A <strong><a class="glossary-term" href="../../glossary/#remote-cache" data-def="A CI-only backend that shares content-addressed artifacts across runners: a cold machine replays a build another runner already did instead of rebuilding. Every remote artifact must be signed by a trusted key.">remote cache</a></strong> shares those artifacts across <strong><a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runners</strong>, machine to
 machine. When the local cache misses, magus asks the remote backend for the
 artifact; if found, it downloads and replays it instead of building. After a genuine
 build, magus uploads the result so the next machine gets a hit. A cold CI runner can
@@ -146,7 +146,7 @@ logic, so it lives in YAML <a class="code-xref" href="../../reference/manpage/ma
 configured (e.g. a developer machine with no credentials):</p>
 <pre><code class="language-buzz">// magusfile.buzz
 import &quot;spells/github/actions&quot; as github;
-magus.cache.remote(github);
+magus\cache.remote(github);
 </code></pre>
 <pre><code class="language-yaml"># magus.yaml
 cache:
@@ -154,7 +154,7 @@ cache:
     trusted_keys:
       - &quot;&lt;base64 Ed25519 public key&gt;&quot;
 </code></pre>
-<p><code>magus.cache.remote(handle)</code> records the backend; magus resolves and drives it
+<p><code>magus\cache.remote(handle)</code> records the backend; magus resolves and drives it
 during a <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>. Bind <strong>one</strong> backend. A non-empty <code>cache.remote.trusted_keys</code> is
 <strong>required</strong> alongside it: a remote backend with no trust set fails at load (see
 the next section). Generate a key with <code><a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> cache key generate</code>.</p>
@@ -162,7 +162,7 @@ the next section). Generate a key with <code><a class="code-xref" href="../../re
 <p>The <code>actions</code> spell (<a href="../../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
 stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.</p>
 <pre><code class="language-buzz">import &quot;spells/github/actions&quot; as github;
-magus.cache.remote(github);
+magus\cache.remote(github);
 </code></pre>
 <p>It reads everything it needs from the runner environment, all provided
 automatically inside a GitHub Actions job:</p>
@@ -201,7 +201,7 @@ evicts old artifacts on its own (7-day idle / repo size cap).</p>
 stores artifacts in any S3-compatible bucket, signing every request with AWS
 Signature V4.</p>
 <pre><code class="language-buzz">import &quot;spells/aws/s3-cache&quot; as s3;
-magus.cache.remote(s3);
+magus\cache.remote(s3);
 </code></pre>
 <p>Configuration comes from the environment (standard AWS variables plus a bucket):</p>
 <figure class="table-scroll"><table>
@@ -328,8 +328,8 @@ under their own <code>.remote</code> prefix and are never folded into the local
 <p>Any store reachable over HTTP can be a backend. Implement the three functions
 (<code>enabled</code>/<code>get_artifact</code>/<code>put_artifact</code>) in a spell: read inputs from the <code>cb(io)</code>
 callback (<code>io.hash</code>, <code>io.dest</code>/<code>io.src</code>), use the <code>http</code> byte primitives
-(<code>http.download</code>/<code>upload_chunked</code>/<code>byteSize</code>) and <code>crypto</code> for request signing
-(e.g. AWS SigV4 via <code>crypto.hmacSha256</code>), and
+(<code>http\download</code>/<code>upload_chunked</code>/<code>byteSize</code>) and <code>crypto</code> for request signing
+(e.g. AWS SigV4 via <code>crypto\hmacSha256</code>), and
 return the boolean result. The two shipped backends are worked examples; start
 from whichever transport is closest.</p>
 <p>A backend is a pure byte mover: <strong>artifact signing and verification happen in
@@ -417,7 +417,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

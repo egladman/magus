@@ -37,7 +37,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/rs";
 
-magus.project({ "spells": [rs] });
+magus\project({ "spells": [rs] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     rs["cargo-build"]();
@@ -56,7 +56,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/rs";
 
-magus.project({ "spells": [rs] });
+magus\project({ "spells": [rs] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     rs["cargo-clean"]();
@@ -75,7 +75,7 @@ export fun clean(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/rs";
 
-magus.project({ "spells": [rs] });
+magus\project({ "spells": [rs] });
 
 export fun clippy(ctx: magus\Context, args: [str]) > void {
     rs["cargo-clippy"]();
@@ -116,7 +116,7 @@ Drops `--check`, drops `--`.
 import "magus";
 import "magus/spell/rs";
 
-magus.project({ "spells": [rs] });
+magus\project({ "spells": [rs] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     rs["cargo-fmt"]();
@@ -135,7 +135,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/rs";
 
-magus.project({ "spells": [rs] });
+magus\project({ "spells": [rs] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     rs["cargo-test"]();

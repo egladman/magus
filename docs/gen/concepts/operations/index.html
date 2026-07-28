@@ -108,7 +108,7 @@ target body calls ops, ops do the tool work.</p>
 (no shell, one process, run to <a class="code-xref" href="../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>), the default. A <strong><a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a></strong> op returns a
 <code>Service</code> (<code>{command, readiness?, stop?, distinct?, idle?}</code>), a long-running process.
 Run directly (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> dev</code>) a service forks in the foreground and magus <strong>blocks</strong>
-on it; reached as a dependency (<code>magus.needs</code>) it is instead <strong>supervised in the
+on it; reached as a dependency (<code>magus\needs</code>) it is instead <strong>supervised in the
 background</strong>: started, readiness-gated, and shared across dependents (see
 <a href="../services/">services</a>). You author either as a function that returns it
 (<code>fun(Target) &gt; Command</code> or <code>fun(Target) &gt; Service</code>) or as a bare record; the kind is
@@ -187,7 +187,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <td><strong><code>ExecResult</code></strong></td>
 <td>Process</td>
 <td><code>{stdout, stderr, code, ok}</code></td>
-<td><strong>returned</strong> by <code>os.exec</code>, <code>magus.cmd</code>/<code>run</code>/<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code>, a Capture op</td>
+<td><strong>returned</strong> by <code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a></code>, <code><a class="code-xref" href="../../reference/buzz/magus/#cmd" data-kind="method" data-def="">magus\cmd</a></code>/<code>run</code>/<code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a></code>/<code><a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code>, a Capture op</td>
 <td>exists</td>
 </tr>
 <tr>
@@ -210,7 +210,7 @@ Operation's argv (<em>in what manner</em> it runs), it is not a layer of its own
 <li>
 <p><strong><code>ExecResult</code> exists in both worlds.</strong> It is the Go <code>run.ExecResult</code> and the
 spell-op <strong>capture record</strong> a <code>Capture: true</code> op returns &quot;instead of void&quot;: the
-same <code>{stdout, stderr, code, ok}</code> shape <code>os.exec</code> returns.</p>
+same <code>{stdout, stderr, code, ok}</code> shape <code>os\exec</code> returns.</p>
 </li>
 <li>
 <p><strong>The target result is emitted, not returned.</strong> A target is cacheable, and on a
@@ -297,7 +297,7 @@ protected <code>ispell.Target</code>, which was the actual offender.</p>
 </tbody>
 </table></figure>
 <p>A <code>Target</code> is run as a set of <code>Operation</code>s; each <code>Operation</code> yields an
-<code>ExecResult</code>. A <code>magus.needs</code> edge points straight at another <code>Target</code>'s
+<code>ExecResult</code>. A <code>magus\needs</code> edge points straight at another <code>Target</code>'s
 function - there is no intermediate <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> value.</p>
 <h2 id="glossary">Glossary</h2>
 <figure class="table-scroll"><table>
@@ -351,8 +351,8 @@ function - there is no intermediate <a class="code-xref" href="../knowledge/" da
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
@@ -421,7 +421,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

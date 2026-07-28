@@ -131,7 +131,7 @@ bisects the target across commits until it isolates the break. See
 (<a class="code-xref" href="../../reference/codes/race/MGS4001/" data-kind="code" data-def="Fires when two or more concurrent projects modify the same git-tracked file during overlapping execution windows under the same target.">MGS4001</a>-4004), not the language toolchain's race detector. It always runs the
 target fresh (never a <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> replay) and watches for concurrent-write conflicts
 and non-deterministic output. A race is the most common source of &quot;passes
-locally, fails in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>.&quot;</li>
+locally, fails in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>.&quot;</li>
 <li><strong>Order and isolation</strong> - run the single target alone (<code>magus run test api</code>) and
 compare to the full run. A difference points to shared state or test ordering.</li>
 <li><strong>Under-declared inputs</strong> - if a target passes fresh but fails from cache (or the
@@ -151,7 +151,7 @@ surfaces retried and regression outcomes as GitHub Actions annotations.</p>
 <ul>
 <li><a href="../../guides/affected/">affected</a> - the <code>--bisect</code> regression hunt.</li>
 <li><a href="../cache/">cache</a> - why an under-declared input reads as volatility.</li>
-<li><a href="../../guides/debugging/">debugging</a> - the interactive REPL and <code>magus.pry</code> breakpoints.</li>
+<li><a href="../../guides/debugging/">debugging</a> - the interactive REPL and <code>magus\pry</code> breakpoints.</li>
 </ul>
     </article>
     </div>
@@ -234,7 +234,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

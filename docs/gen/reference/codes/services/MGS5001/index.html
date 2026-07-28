@@ -119,7 +119,7 @@ appear only in the <code><a class="code-xref" href="../../../manpage/magus-docto
 <h2 id="fix">Fix</h2>
 <ul>
 <li>If they are meant to be one instance, extract a single shared service target and
-have each project <code>magus.needs</code> it, so the dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> runs it once.</li>
+have each project <code>magus\needs</code> it, so the dependency <a class="code-xref" href="../../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> runs it once.</li>
 <li>If the difference is intentional (for example, a test that pins a different
 Postgres major version), mark the service distinct with a reason so the warning
 stays meaningful and the decision is auditable.</li>
@@ -204,7 +204,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

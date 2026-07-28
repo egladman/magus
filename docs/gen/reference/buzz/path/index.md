@@ -9,7 +9,7 @@ tags: [path, module, stdlib, magusfile]
 
 Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
-> **Naming convention:** import the module under its bare name (`import "path"`) and call methods in `camelCase` (`path.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "path"`), reach members with a backslash, and call methods in `camelCase`: `path\someMethod`.
 
 ## Methods
 
@@ -17,7 +17,7 @@ Pure path-string math: abs, rel, clean, is_abs, expand_user.
 
 Return the absolute form of path, resolved against the current directory and lexically cleaned.
 
-**Signature:** `path.abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L64)
+**Signature:** `path\abs(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L64)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -29,7 +29,7 @@ Return the absolute form of path, resolved against the current directory and lex
 
 Return a relative path from base to target; errors if no relative path exists.
 
-**Signature:** `path.rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L73)
+**Signature:** `path\rel(base, target) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L73)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -42,7 +42,7 @@ Return a relative path from base to target; errors if no relative path exists.
 
 Return the shortest lexically-equivalent path (resolves . and .., collapses separators).
 
-**Signature:** `path.clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L82)
+**Signature:** `path\clean(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L82)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -50,11 +50,11 @@ Return the shortest lexically-equivalent path (resolves . and .., collapses sepa
 
 **Returns:** string
 
-### is_abs
+### isAbs
 
 Report whether path is absolute.
 
-**Signature:** `path.isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L87)
+**Signature:** `path\isAbs(path) → bool` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L87)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -62,11 +62,11 @@ Report whether path is absolute.
 
 **Returns:** bool
 
-### expand_user
+### expandUser
 
 Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.
 
-**Signature:** `path.expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L94)
+**Signature:** `path\expandUser(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/path.go#L94)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

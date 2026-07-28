@@ -27,7 +27,7 @@ test.
 | Image                               | Base                  | Platforms                | Notes                                                                                              |
 | ----------------------------------- | --------------------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | `ghcr.io/egladman/magus:latest`     | distroless/static     | linux/amd64, linux/arm64 | Pure-Go static build. The default; use this unless you have a reason not to.                       |
-| `ghcr.io/egladman/magus:latest-cgo` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs.watch` work inside the container. |
+| `ghcr.io/egladman/magus:latest-cgo` | distroless/cc (glibc) | linux/amd64              | glibc build that bundles `inotify-tools`, so `magus watch` / `fs\watch` work inside the container. |
 
 ## Tags
 

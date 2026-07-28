@@ -121,7 +121,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+man%22">magus man</a><a class="tag" href="../../../search/?q=tag%3A%22manpage%22">manpage</a><a class="tag" href="../../../search/?q=tag%3A%22documentation%22">documentation</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a></div>
-    <small>Last updated <time datetime="2026-07-27T03:51:44Z">July 27, 2026, 3:51 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d" data-tooltip="b1b786d34804d09a1e1292b444bb68735a0bea2d" title="b1b786d34804d09a1e1292b444bb68735a0bea2d">b1b786d3</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T13:58:55Z">July 28, 2026, 1:58 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/6da8472c865c21503edb3c2b17c76a61a26d9d6c" data-tooltip="6da8472c865c21503edb3c2b17c76a61a26d9d6c" title="6da8472c865c21503edb3c2b17c76a61a26d9d6c">6da8472c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d"><code>b1b786d3</code></a> <small><time datetime="2026-07-27T03:51:44Z">Jul 27, 2026</time></small> - refine CI, agents, and developer experience</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-man.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-man.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -183,7 +183,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

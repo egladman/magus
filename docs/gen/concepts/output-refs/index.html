@@ -88,6 +88,8 @@
 stdout and stderr. Two things are then hard: telling magus chrome from a target's
 output, and pulling out ONE target's full output - especially a failure - to share
 with a teammate, an agent, or another tool.</p>
+<aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-17">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
+
 <p>Output references fix this. Every target that runs is given a short <strong>reference id</strong>
 for its captured output, printed on its own line:</p>
 <pre><code class="language-text">[pass] docs test (1.2s)
@@ -275,7 +277,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

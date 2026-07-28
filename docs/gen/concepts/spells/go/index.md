@@ -37,7 +37,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();
@@ -56,7 +56,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     go["go-clean"]();
@@ -95,7 +95,7 @@ Replaces `-l` with `-w`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"]();
@@ -115,7 +115,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     go["go-generate"]();
@@ -153,7 +153,7 @@ Drops `--diff`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun tidy(ctx: magus\Context, args: [str]) > void {
     go["go-mod-tidy"]();
@@ -174,7 +174,7 @@ export fun tidy(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     go["go-run"]({"args": ["./cmd/gen-docs", "-out", "./docs"]});
@@ -238,7 +238,7 @@ Appends `-v`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     go["go-test"]({ "args": ["-race"] });
@@ -259,7 +259,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"]();
@@ -317,7 +317,7 @@ Inserts `--fix`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["golangci-lint"]();
@@ -339,7 +339,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"]();

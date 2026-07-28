@@ -108,7 +108,7 @@ test &quot;collectAlias trims slashes and records every alias&quot; {
     s.collectAlias(&quot;/old-path/&quot;, &quot;new-path/&quot;);
 
     // Buzz's == is reference identity for maps, so compare by value with assert.
-    assert.equal(s.aliasTarget, {&quot;old-path&quot;: &quot;new-path/&quot;}, &quot;alias recorded, slashes trimmed&quot;);
+    assert\equal(s.aliasTarget, {&quot;old-path&quot;: &quot;new-path/&quot;}, &quot;alias recorded, slashes trimmed&quot;);
 }
 </code></pre>
 <p><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> the tests:</p>
@@ -171,16 +171,16 @@ easier to read).</p>
 </tbody>
 </table></figure>
 <p>Reach for <code>equal</code> most often. <code>==</code> compares identity for maps, lists, and objects, so
-<code>{a: 1} == {a: 1}</code> is <code>false</code>; <code>assert.equal</code> compares by value, recursing to any
+<code>{a: 1} == {a: 1}</code> is <code>false</code>; <code>assert\equal</code> compares by value, recursing to any
 depth and ignoring map key order.</p>
-<p><code>assert.skip(message)</code> stops the current test and marks it skipped instead of failed
+<p><code>assert\skip(message)</code> stops the current test and marks it skipped instead of failed
 (Go's <code>t.Skip</code>). Use it for a case that cannot run in the current environment. The
 runner reports skipped tests apart from failures:</p>
 <pre><code class="language-buzz">test &quot;reads the platform keychain&quot; {
     if (os\env(&quot;CI&quot;) != null) {
-        assert.skip(&quot;no keychain in CI&quot;);
+        assert\skip(&quot;no keychain in CI&quot;);
     }
-    assert.notNull(readKey(), &quot;key present&quot;);
+    assert\notNull(readKey(), &quot;key present&quot;);
 }
 </code></pre>
 <h2 id="the-suite-module">The <code>suite</code> module</h2>
@@ -341,7 +341,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

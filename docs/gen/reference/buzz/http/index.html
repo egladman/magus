@@ -112,7 +112,7 @@
 <h1 id="http">http</h1>
 <p>HTTP client with automatic retry on transient errors.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;http&quot;</code>) and call methods in <code>camelCase</code> (<code>http.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;http&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>http\someMethod</code>.</p>
 </blockquote>
 <!-- -->
 <div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
@@ -121,7 +121,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="get">get</h3>
 <p>Send a GET request; returns {<a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a>, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.get(url, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#get" data-kind="method" data-def="">http\get</a>(url, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -157,13 +157,13 @@
 <pre><code class="language-buzz">import &quot;std&quot;;
 import &quot;http&quot;;
 
-final r = http.get(&quot;https://api.github.com/repos/egladman/magus&quot;);
-std.print(r.status);
-std.print(r.body.sub(0, 80) + &quot;...&quot;);
+final r = http\get(&quot;https://api.github.com/repos/egladman/magus&quot;);
+std\print(r.status);
+std\print(r.body.sub(0, 80) + &quot;...&quot;);
 </code></pre>
 <h3 id="post">post</h3>
 <p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.post(url, body, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L118" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#post" data-kind="method" data-def="">http\post</a>(url, body, [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L118" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -206,7 +206,7 @@ std.print(r.body.sub(0, 80) + &quot;...&quot;);
 
 // Post JSON with a curl-style opts map for retry behaviour.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
-final r = http.post(
+final r = http\post(
     &quot;https://httpbin.org/post&quot;,
     &quot;\{\&quot;target\&quot;:\&quot;build\&quot;\}&quot;,
     {&quot;Content-Type&quot;: &quot;application/json&quot;},
@@ -215,7 +215,7 @@ final r = http.post(
 </code></pre>
 <h3 id="request">request</h3>
 <p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code>http.request(method, url, [body], [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L124" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#request" data-kind="method" data-def="">http\request</a>(method, url, [body], [headers], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L124" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -263,7 +263,7 @@ final r = http.post(
 <pre><code class="language-buzz">import &quot;http&quot;;
 
 // request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http.request(
+final r = http\request(
     &quot;PUT&quot;,
     &quot;https://httpbin.org/put&quot;,
     &quot;hello&quot;,
@@ -273,7 +273,7 @@ final r = http.request(
 </code></pre>
 <h3 id="server">server</h3>
 <p>Start a static file <a class="code-xref" href="../../manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -&gt; dir, e.g. {&quot;/&quot;: &quot;docs/gen&quot;, &quot;/<a class="glossary-term" href="../../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>/&quot;: &quot;console/gen&quot;}) serves multiple roots <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a request routes to the LONGEST matching prefix, so &quot;/console/&quot; wins over &quot;/&quot; for a /console/ <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.<a class="code-xref" href="../../manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a>.</p>
-<p><strong>Signature:</strong> <code>http.server(opts) → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L136" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#server" data-kind="method" data-def="">http\server</a>(opts) → int</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L136" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -298,7 +298,7 @@ final r = http.request(
 
 // Serve the current build output over http on port 8080 for quick sharing.
 // Blocks until the process exits.
-http.server({&quot;dir&quot;: &quot;dist/&quot;, &quot;port&quot;: 8080});
+http\server({&quot;dir&quot;: &quot;dist/&quot;, &quot;port&quot;: 8080});
 </code></pre>
     </article>
     </div>
@@ -312,14 +312,14 @@ http.server({&quot;dir&quot;: &quot;dist/&quot;, &quot;port&quot;: 8080});
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../reference/buzz/fs/"><span class="related-card-title">fs module</span><span class="related-card-desc">Filesystem and path primitives.</span></a>
-        <a class="related-card" href="../../../reference/buzz/json/"><span class="related-card-title">json module</span><span class="related-card-desc">JSON encode/decode.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22http%22">http</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:41:45Z">July 28, 2026, 3:41 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/abf5b9de3e13198a0506a8b9f520c86b2a84af16" data-tooltip="abf5b9de3e13198a0506a8b9f520c86b2a84af16" title="abf5b9de3e13198a0506a8b9f520c86b2a84af16">abf5b9de</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8"><code>a1625126</code></a> <small><time datetime="2026-07-28T15:08:25Z">Jul 28, 2026</time></small> - document the name a caller types, not the one Go declares</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/http.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/http.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -381,7 +381,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

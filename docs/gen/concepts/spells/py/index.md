@@ -58,7 +58,7 @@ Appends `-v`.
 import "magus";
 import "magus/spell/py";
 
-magus.project({ "spells": [py] });
+magus\project({ "spells": [py] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     py["pytest"]({ "args": ["-k", "integration"] });
@@ -134,7 +134,7 @@ Inserts `--fix`.
 import "magus";
 import "magus/spell/py";
 
-magus.project({ "spells": [py] });
+magus\project({ "spells": [py] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     py["ruff-check"]();
@@ -171,7 +171,7 @@ Drops `--check`.
 import "magus";
 import "magus/spell/py";
 
-magus.project({ "spells": [py] });
+magus\project({ "spells": [py] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     py["ruff-format"]();
@@ -198,7 +198,7 @@ build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, 
 import "magus";
 import "magus/spell/py";
 
-magus.project({ "spells": [py] });
+magus\project({ "spells": [py] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     py["uv-build"]();
@@ -217,7 +217,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/py";
 
-magus.project({ "spells": [py] });
+magus\project({ "spells": [py] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     py["uv-clean"]();

@@ -146,9 +146,9 @@ a cycle - the dependency graph itself has no valid order.</li>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../../reference/codes/race/MGS4001/"><span class="related-card-title">MGS4001: filesystem race condition</span><span class="related-card-desc">Fires when two or more concurrent projects modify the same git-tracked file during overlapping execution windows under the same target.</span></a>
-        <a class="related-card" href="../../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -215,7 +215,7 @@ one-shot target. See <a href="../../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

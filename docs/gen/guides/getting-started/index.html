@@ -101,7 +101,7 @@
 <li>Stubs a starter <strong><code>magusfile.buzz</code></strong> in the repo root: a working file with every canonical stage already declared as a no-op, ready for you to fill in.</li>
 <li>Wires the <strong>VCS merge driver</strong> so <code>magus.yaml</code> and the magusfile merge cleanly. The VCS is taken from <code>--vcs</code> (<code>git</code> or <code>hg</code>), or chosen interactively when stdin is a terminal.</li>
 </ul>
-<p>For a non-interactive run (for example in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>), pick the VCS explicitly and write the config into the repo:</p>
+<p>For a non-interactive run (for example in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>), pick the VCS explicitly and write the config into the repo:</p>
 <pre><code class="language-sh">magus init --local --vcs git
 </code></pre>
 <p>Other flags: <code>--force</code> overwrites an existing config file, and <code>--global</code> writes only the global config and skips the per-repo magusfile stub and merge driver.</p>
@@ -116,7 +116,7 @@ export fun preflight(ctx: magus\Context, args: [str]) &gt; void {}
 export fun generate(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(preflight); }
 export fun format(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(generate); }
 export fun lint(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(format); }
-export fun build(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(format); os.exec(&quot;echo&quot;, [&quot;Hello from magus&quot;]); }
+export fun build(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(format); os\exec(&quot;echo&quot;, [&quot;Hello from magus&quot;]); }
 export fun test(ctx: magus\Context, args: [str]) &gt; void { ctx.needs(format); }
 
 // 'ci' is the conventional anchor that `magus affected ci` keys off.
@@ -127,8 +127,8 @@ export fun ci(ctx: magus\Context, args: [str]) &gt; void {
 <p>Three ideas carry the whole model:</p>
 <ul>
 <li><strong>Targets are exported functions.</strong> There is no registration call for a target: export a <code>fun</code>, and its name becomes a runnable target. See <a href="../../concepts/targets/">targets</a> for the full model and the CLI grammar.</li>
-<li><strong><code>magus.needs</code> declares prerequisites.</strong> <code>ctx.needs(format)</code> says &quot;run <code>format</code> first&quot; - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.</li>
-<li><strong><code>ci</code> is the anchor.</strong> It is an ordinary target you compose with <code>magus.needs</code>. magus does not hardcode its steps, but it is the target <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> keys off, and it always runs read-only.</li>
+<li><strong><code>magus\needs</code> declares prerequisites.</strong> <code>ctx.needs(format)</code> says &quot;run <code>format</code> first&quot; - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.</li>
+<li><strong><code>ci</code> is the anchor.</strong> It is an ordinary target you compose with <code>magus\needs</code>. magus does not hardcode its steps, but it is the target <code><a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> keys off, and it always runs read-only.</li>
 </ul>
 <p>List what magus discovered, then run the starter <code>build</code>:</p>
 <pre><code class="language-sh">magus ls            # list every discovered project, its files, outputs, and deps
@@ -136,12 +136,12 @@ magus run build     # run the build target for the project under the cwd
 </code></pre>
 <p><code><a class="code-xref" href="../../reference/manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> prints every project it found; <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> build</code> runs your <code>build</code> target (the starter one echoes a greeting after <code>format</code>). With no project argument, <code>magus run</code> selects the project containing the current directory.</p>
 <h2 id="4-bind-your-first-spell">4. Bind your first spell</h2>
-<p>The starter <code>build</code> shells out with <code>os.exec</code>. That is fine for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a>, but real toolchains belong in a <strong>spell</strong>: a library of tool-native operations plus the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (<code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See <a href="../../concepts/spells/">spells</a>, and <a href="../../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the line falls.</p>
-<p>Bind the built-in <code>go</code> spell by importing it and listing it in <code>magus.project</code>, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (<code>go[&quot;go-build&quot;]</code>):</p>
+<p>The starter <code>build</code> shells out with <code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a></code>. That is fine for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a>, but real toolchains belong in a <strong>spell</strong>: a library of tool-native operations plus the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (<code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See <a href="../../concepts/spells/">spells</a>, and <a href="../../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the line falls.</p>
+<p>Bind the built-in <code>go</code> spell by importing it and listing it in <code>magus\project</code>, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (<code>go[&quot;go-build&quot;]</code>):</p>
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
-magus.project({ &quot;spells&quot;: [go] });
+magus\project({ &quot;spells&quot;: [go] });
 
 // Each exported function is a runnable target; its body calls the spell's ops.
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
@@ -176,7 +176,7 @@ magus run lint:rw     # golangci-lint --fix (apply autofixes)
 </code></pre>
 <p>Charms are shared, composable execution modifiers attached after <code>:</code>; see <a href="../../concepts/charms/">charms</a>. If you want autofix as the local default so you do not type <code>:rw</code> each time, set <code>default_charms: [rw]</code> in <code>magus.yaml</code> (charms.md covers the safeguards that keep CI read-only regardless).</p>
 <h2 id="5-compose-a-ci-target-and-run-only-what-changed">5. Compose a <code>ci</code> target and run only what changed</h2>
-<p><code>ci</code> is where the pieces come together. Compose it from your other targets with <code>magus.needs</code>; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:</p>
+<p><code>ci</code> is where the pieces come together. Compose it from your other targets with <code>magus\needs</code>; magus fans them out in parallel where the DAG allows and runs shared prerequisites once:</p>
 <pre><code class="language-buzz">export fun ci(ctx: magus\Context, args: [str]) &gt; void {
     ctx.needs(lint, build, test);
 }
@@ -199,7 +199,7 @@ magus affected ci --base main # compare against a specific base ref
 <li>Exported functions in <code>magusfile.buzz</code> became your targets.</li>
 <li><code>magus <a class="code-xref" href="../../reference/manpage/magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a></code> and <code>magus run build</code> listed and ran them.</li>
 <li>Binding the <code>go</code> spell let your targets compose real ops (<code>go-build</code>, <code>go-test</code>, <code>go-fmt</code>, ...).</li>
-<li>A <code>ci</code> target composed with <code>magus.needs</code> runs the pipeline, and <code>magus affected ci</code> runs it only for what changed.</li>
+<li>A <code>ci</code> target composed with <code>magus\needs</code> runs the pipeline, and <code>magus affected ci</code> runs it only for what changed.</li>
 </ol>
 <h2 id="next-steps">Next steps</h2>
 <p>The <a href="../../documentation/">documentation index</a> is the map. From here, the core concepts:</p>
@@ -228,8 +228,8 @@ magus affected ci --base main # compare against a specific base ref
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
         <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
     </div>
@@ -298,7 +298,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

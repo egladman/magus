@@ -125,7 +125,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2103 nodes</strong> and <strong>4590 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2129 nodes</strong> and <strong>4644 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -198,25 +198,25 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">196</td>
+<td style="text-align:right">197</td>
 <td><code>magus query kind:doc</code></td>
 <td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/reference/manpage/magus-affected.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
-<td style="text-align:right">107</td>
+<td style="text-align:right">109</td>
 <td><code>magus query kind:dir</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/reference/buzz</code></td>
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">225</td>
+<td style="text-align:right">228</td>
 <td><code>magus query kind:file</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1072</td>
+<td style="text-align:right">1092</td>
 <td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
@@ -698,6 +698,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
     </div>
     </div>
   </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
+    </div>
+  </section>
   <details class="ref-section" open>
     <summary>Glossary</summary>
     <div class="disclosure-body ref-embed"><h1 id="glossary">Glossary</h1>
@@ -758,7 +767,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

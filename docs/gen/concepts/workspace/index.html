@@ -76,7 +76,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#what-a-workspace-is" title="What a workspace is">What a workspace is</a></li><li><a href="#what-a-project-is" title="What a project is">What a project is</a></li><li><a href="#project-discovery" title="Project discovery">Project discovery</a></li><li><a href="#the-magusfile" title="The magusfile">The magusfile</a><ul><li><a href="#magusproject-layering-policy" title="magus.project({...}): layering policy">magus.project({...}): layering policy</a></li></ul></li><li><a href="#depends-on-cross-project-dependencies" title="depends_on: cross-project dependencies">depends_on: cross-project dependencies</a></li><li><a href="#monorepo-patterns" title="Monorepo patterns">Monorepo patterns</a><ul><li><a href="#the-central-monorepo-form" title="The central (monorepo) form">The central (monorepo) form</a></li><li><a href="#addressing-projects-on-the-cli" title="Addressing projects on the CLI">Addressing projects on the CLI</a></li></ul></li><li><a href="#how-this-connects-to-affected-and-the-cache" title="How this connects to affected and the cache">How this connects to affected and the cache</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#what-a-workspace-is" title="What a workspace is">What a workspace is</a></li><li><a href="#what-a-project-is" title="What a project is">What a project is</a></li><li><a href="#project-discovery" title="Project discovery">Project discovery</a></li><li><a href="#the-magusfile" title="The magusfile">The magusfile</a><ul><li><a href="#magusproject-layering-policy" title="magus\project({...}): layering policy">magus\project({...}): layering policy</a></li></ul></li><li><a href="#depends-on-cross-project-dependencies" title="depends_on: cross-project dependencies">depends_on: cross-project dependencies</a></li><li><a href="#monorepo-patterns" title="Monorepo patterns">Monorepo patterns</a><ul><li><a href="#the-central-monorepo-form" title="The central (monorepo) form">The central (monorepo) form</a></li><li><a href="#addressing-projects-on-the-cli" title="Addressing projects on the CLI">Addressing projects on the CLI</a></li></ul></li><li><a href="#how-this-connects-to-affected-and-the-cache" title="How this connects to affected and the cache">How this connects to affected and the cache</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -89,7 +89,7 @@
 <h2 id="design-intent">Design intent</h2>
 <ul>
 <li><strong>Files first.</strong> A directory becomes a project because it <em>contains a magusfile</em>, not because you list it in a central manifest. Discovery reads the tree; there is no registry to keep in sync.</li>
-<li><strong>Convention over ceremony.</strong> A bare magusfile with nothing but exported target functions is a complete project on defaults. The optional <code>magus.project({...})</code> call only layers extra policy on top.</li>
+<li><strong>Convention over ceremony.</strong> A bare magusfile with nothing but exported target functions is a complete project on defaults. The optional <code>magus\project({...})</code> call only layers extra policy on top.</li>
 <li><strong>One root, repo-relative paths.</strong> Every project <code>Path</code> is stored relative to the workspace root. This keeps target identity portable across machines and lets the CLI, <code>depends_on</code>, and the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> all speak the same coordinate system.</li>
 <li><strong>Explicit dependencies.</strong> Cross-project edges are declared, never inferred. <code>depends_on</code> is the single source of truth for ordering, the <a class="code-xref" href="../../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> set, and cache-key propagation.</li>
 </ul>
@@ -129,7 +129,7 @@
 <ul>
 <li><strong>its targets</strong> - the exported functions in its magusfile become the runnable operations (<code>build</code>, <code>test</code>, <code>lint</code>, ...); no registration call is needed (see <a href="../targets/">targets</a>).</li>
 <li><strong>its bound spells</strong> - the tool libraries whose ops the targets compose (see <a href="../spells/">spells</a> and <a href="../operations/">operations</a>).</li>
-<li><strong>its policy</strong> - dependencies, outputs, <a class="code-xref" href="../../reference/manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a>-ignore patterns, and per-target execution flags, all layered on by an optional <code>magus.project({...})</code> call.</li>
+<li><strong>its policy</strong> - dependencies, outputs, <a class="code-xref" href="../../reference/manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a>-ignore patterns, and per-target execution flags, all layered on by an optional <code>magus\project({...})</code> call.</li>
 </ul>
 <h2 id="project-discovery">Project discovery</h2>
 <p><code>project.Discover</code> walks the workspace root once with <code>filepath.WalkDir</code> and registers every directory that <code>hasDeclaration</code> reports true. The rules:</p>
@@ -145,7 +145,7 @@
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;spells/hello&quot;;          // ./spells/hello/spell.buzz
 
-magus.project({ &quot;spells&quot;: [hello] });
+magus\project({ &quot;spells&quot;: [hello] });
 
 // Each exported function becomes a runnable target.
 export fun build(ctx: magus\Context, args: [str]) &gt; void { hello.build(); }
@@ -156,8 +156,8 @@ export fun ci(ctx: magus\Context, args: [str]) &gt; void {
     ctx.needs(build, test);
 }
 </code></pre>
-<h3 id="magusproject-layering-policy"><code>magus.project({...})</code>: layering policy</h3>
-<p><code>magus.project({...})</code> is <strong>optional</strong>. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:</p>
+<h3 id="magusproject-layering-policy"><code>magus\project({...})</code>: layering policy</h3>
+<p><code>magus\project({...})</code> is <strong>optional</strong>. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -223,7 +223,7 @@ nearest known one.</p>
 </tr>
 </tbody>
 </table></figure>
-<pre><code class="language-buzz">magus.project({
+<pre><code class="language-buzz">magus\project({
     &quot;spells&quot;: [go],
     &quot;depends_on&quot;: [&quot;../shared&quot;],
     &quot;outputs&quot;: [&quot;dist/**&quot;],
@@ -255,9 +255,9 @@ nearest known one.</p>
     magusfile.buzz    # project &quot;shared&quot;, an upstream of api and web/studio
 </code></pre>
 <h3 id="the-central-monorepo-form">The central (monorepo) form</h3>
-<p><code>magus.project</code> also accepts an explicit path as its first argument. This is the rarer <strong>central form</strong>: one magusfile declares options for a discovered project at another workspace path.</p>
-<pre><code class="language-buzz">magus.project({ &quot;spells&quot;: [go] });          // configures THIS project (path from context)
-magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] });  // configures the discovered &quot;api&quot; project
+<p><code>magus\project</code> also accepts an explicit path as its first argument. This is the rarer <strong>central form</strong>: one magusfile declares options for a discovered project at another workspace path.</p>
+<pre><code class="language-buzz">magus\project({ &quot;spells&quot;: [go] });          // configures THIS project (path from context)
+magus\project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] });  // configures the discovered &quot;api&quot; project
 </code></pre>
 <p>The explicit-path form configures a project that <strong>discovery already found</strong> - it does not create one. The path is relative to the workspace root, not to the declaring magusfile's directory. Passing the magusfile's own directory name here is the classic footgun; to configure the calling project, omit the path. An explicit path that matches no discovered project is a hard error that lists the known projects.</p>
 <h3 id="addressing-projects-on-the-cli">Addressing projects on the CLI</h3>
@@ -326,7 +326,7 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
 <td><code>magusfile.buzz</code> (or <code>magusfiles/*.buzz</code>); its presence registers a project. Exported functions become targets.</td>
 </tr>
 <tr>
-<td><strong><code>magus.project</code></strong></td>
+<td><strong><code>magus\project</code></strong></td>
 <td>The optional call that layers policy (spells, <code>depends_on</code>, outputs, watch-ignore, per-target flags) onto a project.</td>
 </tr>
 <tr>
@@ -342,7 +342,7 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
 <h2 id="see-also">See also</h2>
 <ul>
 <li><a href="../targets/">targets</a>: the addressable unit of work, project-path resolution, and the CLI grammar.</li>
-<li><a href="../dependencies/">dependencies</a>: <code>depends_on</code> versus <code>magus.needs</code>, the fold between them, and how they feed the cache and the affected set.</li>
+<li><a href="../dependencies/">dependencies</a>: <code>depends_on</code> versus <code>magus\needs</code>, the fold between them, and how they feed the cache and the affected set.</li>
 <li><a href="../operations/">operations</a>: the Spell to Operation to Target hierarchy and where affected computation sits.</li>
 <li><a href="../spells/">spells</a>: the tool libraries a project binds and composes into targets.</li>
 <li><a href="../cache/">cache</a>: the content-addressed cache key, including the <code>dep:</code> lines that propagate cross-project changes.</li>
@@ -358,9 +358,9 @@ magus.project(&quot;api&quot;, { &quot;depends_on&quot;: [&quot;shared&quot;] })
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/targets/"><span class="related-card-title">Targets</span><span class="related-card-desc">A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
     </div>
   </section>
@@ -428,7 +428,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

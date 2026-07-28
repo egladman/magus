@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#get" title="get">get</a></li><li><a href="#lookup" title="lookup">lookup</a></li><li><a href="#set" title="set">set</a></li><li><a href="#list" title="list">list</a></li><li><a href="#unset" title="unset">unset</a></li><li><a href="#expand" title="expand">expand</a></li><li><a href="#home" title="home">home</a></li><li><a href="#get-or" title="get_or">get_or</a></li><li><a href="#require" title="require">require</a></li><li><a href="#parse-dotenv" title="parse_dotenv">parse_dotenv</a></li><li><a href="#read-dotenv" title="read_dotenv">read_dotenv</a></li><li><a href="#load-dotenv" title="load_dotenv">load_dotenv</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#get" title="get">get</a></li><li><a href="#lookup" title="lookup">lookup</a></li><li><a href="#set" title="set">set</a></li><li><a href="#list" title="list">list</a></li><li><a href="#unset" title="unset">unset</a></li><li><a href="#expand" title="expand">expand</a></li><li><a href="#home" title="home">home</a></li><li><a href="#getor" title="getOr">getOr</a></li><li><a href="#require" title="require">require</a></li><li><a href="#parsedotenv" title="parseDotenv">parseDotenv</a></li><li><a href="#readdotenv" title="readDotenv">readDotenv</a></li><li><a href="#loaddotenv" title="loadDotenv">loadDotenv</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="env">env</h1>
 <p>Process environment variable access.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;env&quot;</code>) and call methods in <code>camelCase</code> (<code>env.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;env&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>env\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="get">get</h3>
 <p>Return the value of name, or &quot;&quot; if unset. Use lookup to tell unset from set-but-empty.</p>
-<p><strong>Signature:</strong> <code>env.get(name) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#get" data-kind="method" data-def="">env\get</a>(name) → string</code><sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -139,7 +139,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="lookup">lookup</h3>
 <p>Return (value, found); found is false when name is unset or stripped by the <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>.</p>
-<p><strong>Signature:</strong> <code>env.lookup(name) → string, bool</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L126" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#lookup" data-kind="method" data-def="">env\lookup</a>(name) → string, bool</code><sup id="fnref:2"><a href="#fn:2" class="footnote-ref" role="doc-noteref">2</a></sup> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L126" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -161,7 +161,7 @@
 <p><strong>Returns:</strong> string, bool</p>
 <h3 id="set">set</h3>
 <p>Set name to value in the current process environment.</p>
-<p><strong>Signature:</strong> <code>env.set(name, value)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#set" data-kind="method" data-def="">env\set</a>(name, value)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L135" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -188,11 +188,11 @@
 </table></figure>
 <h3 id="list">list</h3>
 <p>Return all environment variables as a name→value map.</p>
-<p><strong>Signature:</strong> <code>env.list() → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L216" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#list" data-kind="method" data-def="">env\list</a>() → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L216" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> map[string]string</p>
 <h3 id="unset">unset</h3>
 <p>Remove name from the current process environment.</p>
-<p><strong>Signature:</strong> <code>env.unset(name)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L152" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#unset" data-kind="method" data-def="">env\unset</a>(name)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L152" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -213,7 +213,7 @@
 </table></figure>
 <h3 id="expand">expand</h3>
 <p>Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to &quot;&quot;).</p>
-<p><strong>Signature:</strong> <code>env.expand(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L167" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#expand" data-kind="method" data-def="">env\expand</a>(s) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L167" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -235,11 +235,11 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="home">home</h3>
 <p>Return the current user's home directory.</p>
-<p><strong>Signature:</strong> <code>env.home() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L178" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#home" data-kind="method" data-def="">env\home</a>() → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L178" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> string</p>
-<h3 id="get-or">get_or</h3>
+<h3 id="getor">getOr</h3>
 <p>Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.</p>
-<p><strong>Signature:</strong> <code>env.getOr(name, def) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L189" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#getor" data-kind="method" data-def="">env\getOr</a>(name, def) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L189" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -266,8 +266,8 @@
 </table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="require">require</h3>
-<p>Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).</p>
-<p><strong>Signature:</strong> <code>env.require(name) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L204" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p>Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).</p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#require" data-kind="method" data-def="">env\require</a>(name) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L204" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -287,9 +287,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="parse-dotenv">parse_dotenv</h3>
+<h3 id="parsedotenv">parseDotenv</h3>
 <p>Parse .env-format content into a name-&gt;value map. Supports KEY=VALUE, blank lines, # comments, a leading <code>export</code> keyword, single/double quotes (double-quoted values honor \n \t &quot; \ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.</p>
-<p><strong>Signature:</strong> <code>env.parseDotenv(content) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L237" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#parsedotenv" data-kind="method" data-def="">env\parseDotenv</a>(content) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L237" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -309,9 +309,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]string</p>
-<h3 id="read-dotenv">read_dotenv</h3>
+<h3 id="readdotenv">readDotenv</h3>
 <p>Read a .env file and return its name-&gt;value map (parse_dotenv over the file contents). Errors if the file cannot be read.</p>
-<p><strong>Signature:</strong> <code>env.readDotenv(<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L242" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#readdotenv" data-kind="method" data-def="">env\readDotenv</a>(<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>) → map[string]string</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L242" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -331,9 +331,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]string</p>
-<h3 id="load-dotenv">load_dotenv</h3>
+<h3 id="loaddotenv">loadDotenv</h3>
 <p>Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-<a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
-<p><strong>Signature:</strong> <code>env.loadDotenv(path)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L253" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#loaddotenv" data-kind="method" data-def="">env\loadDotenv</a>(path)</code> · <a href="https://github.com/egladman/magus/blob/main/std/env.go#L253" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -356,10 +356,10 @@
 <hr>
 <ol>
 <li id="fn:1">
-<p><code>env.get</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>os.env</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>env\get</code> is also in <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>'s standard library (<code>os.env</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 <li id="fn:2">
-<p><code>env.lookup</code> is also in Buzz's standard library (<code>os.env (returns null when unset)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+<p><code>env\lookup</code> is also in Buzz's standard library (<code>os.env (returns null when unset)</code>); the magus form is sandbox-aware.&#160;<a href="#fnref:2" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
 </li>
 </ol>
 </div>
@@ -376,13 +376,13 @@
     <div class="related-grid">
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../../../reference/buzz/fs/"><span class="related-card-title">fs module</span><span class="related-card-desc">Filesystem and path primitives.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../concepts/engines/"><span class="related-card-title">Engines</span><span class="related-card-desc">Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22env%22">env</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/env.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/env.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -444,7 +444,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

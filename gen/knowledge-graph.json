@@ -3,8 +3,8 @@
   "schema_version": 6,
   "directed": true,
   "multigraph": false,
-  "node_count": 2103,
-  "edge_count": 4590,
+  "node_count": 2129,
+  "edge_count": 4644,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -733,7 +733,7 @@
       "source": "docs/concepts",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "30",
+        "dir_files": "31",
         "dir_languages": "markdown"
       }
     },
@@ -964,7 +964,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "15",
+        "dir_files": "17",
         "dir_languages": "buzz"
       }
     },
@@ -1173,7 +1173,7 @@
       "source": "spells",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "60",
+        "dir_files": "61",
         "dir_languages": "buzz"
       }
     },
@@ -1391,6 +1391,28 @@
       "kind": "dir",
       "label": "spells/github/actions",
       "source": "spells/github/actions",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:spells/gitlab",
+      "kind": "dir",
+      "label": "spells/gitlab",
+      "source": "spells/gitlab",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:spells/gitlab/ci",
+      "kind": "dir",
+      "label": "spells/gitlab/ci",
+      "source": "spells/gitlab/ci",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "1",
@@ -1871,6 +1893,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/ci-providers.md",
+      "kind": "doc",
+      "label": "docs/concepts/ci-providers.md",
+      "source": "docs/concepts/ci-providers.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "ci,ci-provider,annotations,log-grouping,github-actions,gitlab,spells,extension,security",
+        "title": "CI providers"
+      }
+    },
+    {
       "id": "doc:docs/concepts/concurrency.md",
       "kind": "doc",
       "label": "docs/concepts/concurrency.md",
@@ -2130,7 +2164,7 @@
       "attrs": {
         "role": "doc",
         "section": "concepts",
-        "tags": "ci,ci target,affected,cache,remote cache,trusted keys,magus.needs,github actions",
+        "tags": "ci,ci target,affected,cache,remote cache,trusted keys,magus needs,github actions",
         "title": "CI"
       }
     },
@@ -4177,6 +4211,24 @@
       }
     },
     {
+      "id": "file:docs/tour/16-guardrails.buzz",
+      "kind": "file",
+      "label": "docs/tour/16-guardrails.buzz",
+      "source": "docs/tour/16-guardrails.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/17-output-refs.buzz",
+      "kind": "file",
+      "label": "docs/tour/17-output-refs.buzz",
+      "source": "docs/tour/17-output-refs.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:internal/spell/buzzlib/charm.buzz",
       "kind": "file",
       "label": "internal/spell/buzzlib/charm.buzz",
@@ -5356,6 +5408,15 @@
       }
     },
     {
+      "id": "file:spells/gitlab/ci/spell.buzz",
+      "kind": "file",
+      "label": "spells/gitlab/ci/spell.buzz",
+      "source": "spells/gitlab/ci/spell.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:spells/golang/spell.buzz",
       "kind": "file",
       "label": "spells/golang/spell.buzz",
@@ -6390,7 +6451,7 @@
       "kind": "function",
       "label": "injectDemoCallout",
       "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first \u003c/p\u003e), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
-      "source": "docs/engine/page.buzz:486"
+      "source": "docs/engine/page.buzz:489"
     },
     {
       "id": "function:docs/engine/page.buzz:render404",
@@ -6407,7 +6468,7 @@
       "kind": "function",
       "label": "renderFile",
       "doc": "Render one docs/*.md file to a sibling *.html under gen. rel is relative to the docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.",
-      "source": "docs/engine/page.buzz:500",
+      "source": "docs/engine/page.buzz:503",
       "attrs": {
         "exported": "true"
       }
@@ -6441,7 +6502,7 @@
       "kind": "function",
       "label": "renderRoot",
       "doc": "Render the repo's top-level README.md as the landing page (index.html). Links like href=\"docs/X\" (repo-root-relative) resolve from gen/index.html as href=\"X\", so strip the docs/ prefix.",
-      "source": "docs/engine/page.buzz:418",
+      "source": "docs/engine/page.buzz:421",
       "attrs": {
         "exported": "true"
       }
@@ -6451,7 +6512,7 @@
       "kind": "function",
       "label": "substituteVersionTokens",
       "doc": "substituteVersionTokens swaps __MAGUS_VERSION__ for the latest release version WITH the leading \"v\" (e.g. \"v0.1.0\"), read from releases/*.yaml via loadReleases - the single source of truth (do NOT read git tags). Run before render AND before the md is written back as index.md, so the page and its \"View source\" copy agree. No-op when no release has shipped (the token stays literal, prompting a cut).",
-      "source": "docs/engine/page.buzz:477"
+      "source": "docs/engine/page.buzz:480"
     },
     {
       "id": "function:docs/engine/page.buzz:writeOffline",
@@ -7672,7 +7733,7 @@
       "kind": "function",
       "label": "collectDemos",
       "doc": "collectDemos maps each concept docSlug to the FIRST tour step that demonstrates it (its title + card anchor), pre-walk, so renderFile can inject a \"see the demo\" callout on the matching concept page.",
-      "source": "docs/site/tour.buzz:165",
+      "source": "docs/site/tour.buzz:171",
       "attrs": {
         "exported": "true"
       }
@@ -7698,7 +7759,7 @@
       "id": "function:docs/site/tour.buzz:renderTourPage",
       "kind": "function",
       "label": "renderTourPage",
-      "source": "docs/site/tour.buzz:175",
+      "source": "docs/site/tour.buzz:181",
       "attrs": {
         "exported": "true"
       }
@@ -8286,6 +8347,51 @@
       "label": "mgs_listTargets",
       "doc": "A spell lists its ops: a map of op name to handler.",
       "source": "docs/tour/15-charms-custom.buzz:30",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/16-guardrails.buzz:build",
+      "kind": "function",
+      "label": "build",
+      "source": "docs/tour/16-guardrails.buzz:39",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/16-guardrails.buzz:bundle",
+      "kind": "function",
+      "label": "bundle",
+      "source": "docs/tour/16-guardrails.buzz:44",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/16-guardrails.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "source": "docs/tour/16-guardrails.buzz:53",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/16-guardrails.buzz:test",
+      "kind": "function",
+      "label": "test",
+      "source": "docs/tour/16-guardrails.buzz:49",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/17-output-refs.buzz:build",
+      "kind": "function",
+      "label": "build",
+      "source": "docs/tour/17-output-refs.buzz:44",
       "attrs": {
         "exported": "true"
       }
@@ -14739,34 +14845,58 @@
       }
     },
     {
+      "id": "function:spells/github/actions/spell.buzz:annotate",
+      "kind": "function",
+      "label": "annotate",
+      "doc": "annotate raises a message that surfaces on the pull request, not just the log. Actions has no dedicated code field, so a diagnostic code leads the title where it stays greppable in the annotations list.",
+      "source": "spells/github/actions/spell.buzz:198",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/github/actions/spell.buzz:base",
       "kind": "function",
       "label": "base",
-      "source": "spells/github/actions/spell.buzz:74"
+      "source": "spells/github/actions/spell.buzz:75"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
       "doc": "cache_key derives the cache key from the spec hash. The hash already folds in the project path (see cache/hash.go), so it is unique per project and needs no extra namespacing — and being hex, it is URL-safe. NOTE: cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose: GHA keeps CACHE_VERSION in a separate `version` request field, while S3 folds it into the key string. Do NOT change the emitted string here — it would invalidate every existing GHA cache entry. Track the inconsistency for",
-      "source": "spells/github/actions/spell.buzz:84"
+      "source": "spells/github/actions/spell.buzz:85"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
       "doc": "enabled gates the whole backend on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA — no remote calls, no exports.",
-      "source": "spells/github/actions/spell.buzz:52",
+      "source": "spells/github/actions/spell.buzz:53",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:escapeData",
+      "kind": "function",
+      "label": "escapeData",
+      "doc": "escapeData encodes the characters Actions treats as structural in a command's message. A raw newline would end the command early and spill the rest into the log as loose text, and a failure's cause is usually the part after line one. Percent goes first, or it would corrupt the escapes introduced after it.",
+      "source": "spells/github/actions/spell.buzz:161"
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:escapeProp",
+      "kind": "function",
+      "label": "escapeProp",
+      "doc": "escapeProp additionally encodes the separators between properties, so a title containing a comma or colon cannot be read as the start of another property.",
+      "source": "spells/github/actions/spell.buzz:169"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:get_artifact",
       "kind": "function",
       "label": "get_artifact",
       "doc": "get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns true on a hit (dest written), false on a miss or when not running under Actions.",
-      "source": "spells/github/actions/spell.buzz:100",
+      "source": "spells/github/actions/spell.buzz:101",
       "attrs": {
         "exported": "true"
       }
@@ -14776,13 +14906,33 @@
       "kind": "function",
       "label": "getenv",
       "doc": "getenv reads one environment variable, returning \"\" when unset (os.env returns null for an unset var; the callers below test against \"\"). NOTE: byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The duplication is intentional/temporary: there is no shared magus/... buzz helper module for it yet (extracting one needs the embed+register plumbing magus/charm uses). Track for follow-up; keep the two copies in sync.",
-      "source": "spells/github/actions/spell.buzz:62"
+      "source": "spells/github/actions/spell.buzz:63"
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:group_end",
+      "kind": "function",
+      "label": "group_end",
+      "doc": "group_end closes the current fold. Actions tracks a single open group, so the id is unused; it is in the contract for providers keyed by section name.",
+      "source": "spells/github/actions/spell.buzz:190",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:group_start",
+      "kind": "function",
+      "label": "group_start",
+      "doc": "group_start opens a fold. Actions has no expanded section: ::group:: always starts collapsed. A caller asking for an expanded one wants output the reader must not have to click for, so the group is skipped and the content stays inline. Folding it anyway would be worse - a hidden failure is one nobody sees.",
+      "source": "spells/github/actions/spell.buzz:179",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:spells/github/actions/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "spells/github/actions/spell.buzz:42",
+      "source": "spells/github/actions/spell.buzz:43",
       "attrs": {
         "exported": "true"
       }
@@ -14792,7 +14942,17 @@
       "kind": "function",
       "label": "put_artifact",
       "doc": "put_artifact uploads the artifact at payload.src for payload.hash. Returns true on success or when another runner already stored the same key, else false.",
-      "source": "spells/github/actions/spell.buzz:118",
+      "source": "spells/github/actions/spell.buzz:119",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/github/actions/spell.buzz:quote_prefixes",
+      "kind": "function",
+      "label": "quote_prefixes",
+      "doc": "quote_prefixes declares the line prefixes that introduce a workflow command. magus captures subprocess output and replays it, so a dependency printing \"::error::\" would otherwise have the runner execute it and forge annotations. Returned once per run; magus does the per-line matching itself.",
+      "source": "spells/github/actions/spell.buzz:239",
       "attrs": {
         "exported": "true"
       }
@@ -14802,13 +14962,92 @@
       "kind": "function",
       "label": "rpc",
       "doc": "rpc POSTs a JSON Twirp request to the named CacheService method and returns the host http response map ({status, body}).",
-      "source": "spells/github/actions/spell.buzz:88"
+      "source": "spells/github/actions/spell.buzz:89"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:token",
       "kind": "function",
       "label": "token",
-      "source": "spells/github/actions/spell.buzz:75"
+      "source": "spells/github/actions/spell.buzz:76"
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:annotate",
+      "kind": "function",
+      "label": "annotate",
+      "doc": "annotate does nothing: GitLab has no in-log annotation syntax. Declaring the op and returning true says \"this provider does not do that\" explicitly, rather than leaving magus to infer it from a missing export.",
+      "source": "spells/gitlab/ci/spell.buzz:106",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:enabled",
+      "kind": "function",
+      "label": "enabled",
+      "doc": "enabled gates the whole provider on running under GitLab CI, which sets GITLAB_CI=true for every job. magus probes this once, so wiring the spell unconditionally costs nothing anywhere else.",
+      "source": "spells/gitlab/ci/spell.buzz:56",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:getenv",
+      "kind": "function",
+      "label": "getenv",
+      "doc": "getenv reads one environment variable, returning \"\" when unset (os.env returns null for an unset var; callers test against \"\").",
+      "source": "spells/gitlab/ci/spell.buzz:47"
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:group_end",
+      "kind": "function",
+      "label": "group_end",
+      "source": "spells/gitlab/ci/spell.buzz:94",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:group_start",
+      "kind": "function",
+      "label": "group_start",
+      "doc": "group_start opens a section. Unlike Actions, GitLab can show one expanded, so a caller asking for that gets it rather than having the fold skipped.",
+      "source": "spells/gitlab/ci/spell.buzz:81",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "spells/gitlab/ci/spell.buzz:36",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:nowSeconds",
+      "kind": "function",
+      "label": "nowSeconds",
+      "doc": "nowSeconds is the wall-clock second every section marker carries. os.time() is epoch millis.",
+      "source": "spells/gitlab/ci/spell.buzz:62"
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:quote_prefixes",
+      "kind": "function",
+      "label": "quote_prefixes",
+      "doc": "quote_prefixes declares the line prefix that introduces a section marker, so replayed subprocess output cannot close a section magus opened or forge one. magus reads this once and does the per-line matching itself.",
+      "source": "spells/gitlab/ci/spell.buzz:113",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/gitlab/ci/spell.buzz:sectionID",
+      "kind": "function",
+      "label": "sectionID",
+      "doc": "sectionID reduces an id to what GitLab accepts for a section name: letters, digits, underscore, dot, and dash. magus keys sections by project path, which contains slashes, so this is not optional.  strings.kebabCase does the whole job in Go rather than a character loop here: a spell should reach for the host modules, not reimplement them. It is lossier than strictly required (it lowercases, and folds _ and . to dashes) but every output is legal, which is what matters - the id is a key GitLab matches start a",
+      "source": "spells/gitlab/ci/spell.buzz:75"
     },
     {
       "id": "function:spells/golang/spell.buzz:goBuild",
@@ -16167,7 +16406,7 @@
       "label": "archive.compress",
       "doc": "Create an archive at dest from src (a file or directory). Format is inferred from dest extension (.tar, .tar.gz, .tgz, .tar.zst, .zip). Returns a table with fields: files (archived paths relative to src), bytes_in (raw bytes read), bytes_out (compressed bytes written). opts keys: format (string, override format detection), threads (int, parallel encode workers; 0 or omitted = auto), level (int, compression level; -1 = format default), follow_symlinks (bool, default false), max_size (int, output byte cap, de",
       "attrs": {
-        "buzz": "archive.compress(src, dest, [opts]) → map[string]any"
+        "buzz": "archive\\compress(src, dest, [opts]) → map[string]any"
       }
     },
     {
@@ -16176,7 +16415,7 @@
       "label": "archive.uncompress",
       "doc": "Extract the archive at src into dest. Returns a table with fields: files (extracted paths relative to dest) and bytes (total uncompressed bytes written). opts keys: strip (int, strip N leading path components), max_size (int, uncompressed byte cap, default 10 GiB), threads (int, parallel decode workers; 0 or omitted = auto).",
       "attrs": {
-        "buzz": "archive.uncompress(src, dest, [opts]) → map[string]any"
+        "buzz": "archive\\uncompress(src, dest, [opts]) → map[string]any"
       }
     },
     {
@@ -16185,7 +16424,7 @@
       "label": "charm.after",
       "doc": "Insert vals immediately after the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm.after(argv, anchor, vals) → map[string]any"
+        "buzz": "charm\\after(argv, anchor, vals) → map[string]any"
       }
     },
     {
@@ -16194,7 +16433,7 @@
       "label": "charm.after_func",
       "doc": "Insert vals after the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm.afterFunc(argv, fn, vals) → map[string]any"
+        "buzz": "charm\\afterFunc(argv, fn, vals) → map[string]any"
       }
     },
     {
@@ -16203,7 +16442,7 @@
       "label": "charm.append",
       "doc": "Append vals to the end of the argv.",
       "attrs": {
-        "buzz": "charm.append(vals) → map[string]any"
+        "buzz": "charm\\append(vals) → map[string]any"
       }
     },
     {
@@ -16212,7 +16451,7 @@
       "label": "charm.before",
       "doc": "Insert vals immediately before the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm.before(argv, anchor, vals) → map[string]any"
+        "buzz": "charm\\before(argv, anchor, vals) → map[string]any"
       }
     },
     {
@@ -16221,7 +16460,7 @@
       "label": "charm.before_func",
       "doc": "Insert vals before the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm.beforeFunc(argv, fn, vals) → map[string]any"
+        "buzz": "charm\\beforeFunc(argv, fn, vals) → map[string]any"
       }
     },
     {
@@ -16230,7 +16469,7 @@
       "label": "charm.copy",
       "doc": "Copy the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm.copy(argv, anchor, to) → map[string]any"
+        "buzz": "charm\\copy(argv, anchor, to) → map[string]any"
       }
     },
     {
@@ -16239,7 +16478,7 @@
       "label": "charm.copy_func",
       "doc": "Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm.copyFunc(argv, fn, to) → map[string]any"
+        "buzz": "charm\\copyFunc(argv, fn, to) → map[string]any"
       }
     },
     {
@@ -16248,7 +16487,7 @@
       "label": "charm.drop",
       "doc": "Drop (remove) the first argv element equal to anchor.",
       "attrs": {
-        "buzz": "charm.drop(argv, anchor) → map[string]any"
+        "buzz": "charm\\drop(argv, anchor) → map[string]any"
       }
     },
     {
@@ -16257,7 +16496,7 @@
       "label": "charm.drop_func",
       "doc": "Drop (remove) the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm.dropFunc(argv, fn) → map[string]any"
+        "buzz": "charm\\dropFunc(argv, fn) → map[string]any"
       }
     },
     {
@@ -16266,7 +16505,7 @@
       "label": "charm.move",
       "doc": "Move the first argv element equal to anchor to the JSON Pointer to (\"/-\" end, \"/0\" front, or charm.path(...)).",
       "attrs": {
-        "buzz": "charm.move(argv, anchor, to) → map[string]any"
+        "buzz": "charm\\move(argv, anchor, to) → map[string]any"
       }
     },
     {
@@ -16275,7 +16514,7 @@
       "label": "charm.move_func",
       "doc": "Move the first argv element for which fn(s) is truthy to the JSON Pointer to.",
       "attrs": {
-        "buzz": "charm.moveFunc(argv, fn, to) → map[string]any"
+        "buzz": "charm\\moveFunc(argv, fn, to) → map[string]any"
       }
     },
     {
@@ -16284,7 +16523,7 @@
       "label": "charm.path",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.",
       "attrs": {
-        "buzz": "charm.path(argv, anchor) → string"
+        "buzz": "charm\\path(argv, anchor) → string"
       }
     },
     {
@@ -16293,7 +16532,7 @@
       "label": "charm.path_func",
       "doc": "Return the JSON Pointer (\"/N\") of the first argv element for which fn(s) is truthy.",
       "attrs": {
-        "buzz": "charm.pathFunc(argv, fn) → string"
+        "buzz": "charm\\pathFunc(argv, fn) → string"
       }
     },
     {
@@ -16302,7 +16541,7 @@
       "label": "charm.prepend",
       "doc": "Insert vals at the front of the argv, in order.",
       "attrs": {
-        "buzz": "charm.prepend(vals) → map[string]any"
+        "buzz": "charm\\prepend(vals) → map[string]any"
       }
     },
     {
@@ -16311,7 +16550,7 @@
       "label": "charm.set",
       "doc": "Replace the first argv element equal to anchor with val.",
       "attrs": {
-        "buzz": "charm.set(argv, anchor, val) → map[string]any"
+        "buzz": "charm\\set(argv, anchor, val) → map[string]any"
       }
     },
     {
@@ -16320,7 +16559,7 @@
       "label": "charm.set_func",
       "doc": "Replace the first argv element for which fn(s) is truthy with val.",
       "attrs": {
-        "buzz": "charm.setFunc(argv, fn, val) → map[string]any"
+        "buzz": "charm\\setFunc(argv, fn, val) → map[string]any"
       }
     },
     {
@@ -16329,7 +16568,7 @@
       "label": "charm.test",
       "doc": "Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the run errors).",
       "attrs": {
-        "buzz": "charm.test(argv, anchor) → map[string]any"
+        "buzz": "charm\\test(argv, anchor) → map[string]any"
       }
     },
     {
@@ -16338,7 +16577,7 @@
       "label": "charm.test_func",
       "doc": "Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.",
       "attrs": {
-        "buzz": "charm.testFunc(argv, fn) → map[string]any"
+        "buzz": "charm\\testFunc(argv, fn) → map[string]any"
       }
     },
     {
@@ -16347,7 +16586,7 @@
       "label": "crypto.md5_file",
       "doc": "Return the lowercase hex MD5 digest of the file at path. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto.md5File(path) → string"
+        "buzz": "crypto\\md5File(path) → string"
       }
     },
     {
@@ -16356,7 +16595,7 @@
       "label": "crypto.md5_hex",
       "doc": "Return the lowercase hex MD5 digest of data. For interop with legacy checksum manifests only - MD5 is broken; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto.md5Hex(data) → string"
+        "buzz": "crypto\\md5Hex(data) → string"
       }
     },
     {
@@ -16365,7 +16604,7 @@
       "label": "crypto.sha1_file",
       "doc": "Return the lowercase hex SHA-1 digest of the file at path. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto.sha1File(path) → string"
+        "buzz": "crypto\\sha1File(path) → string"
       }
     },
     {
@@ -16374,7 +16613,7 @@
       "label": "crypto.sha1_hex",
       "doc": "Return the lowercase hex SHA-1 digest of data. For interop with legacy/git checksums only - SHA-1 is not collision-resistant; use sha256 for anything security-relevant.",
       "attrs": {
-        "buzz": "crypto.sha1Hex(data) → string"
+        "buzz": "crypto\\sha1Hex(data) → string"
       }
     },
     {
@@ -16383,7 +16622,7 @@
       "label": "crypto.sha256_file",
       "doc": "Return the lowercase hex SHA-256 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto.sha256File(path) → string"
+        "buzz": "crypto\\sha256File(path) → string"
       }
     },
     {
@@ -16392,7 +16631,7 @@
       "label": "crypto.sha256_hex",
       "doc": "Return the lowercase hex SHA-256 digest of data.",
       "attrs": {
-        "buzz": "crypto.sha256Hex(data) → string"
+        "buzz": "crypto\\sha256Hex(data) → string"
       }
     },
     {
@@ -16401,7 +16640,7 @@
       "label": "crypto.sha512_file",
       "doc": "Return the lowercase hex SHA-512 digest of the file at path.",
       "attrs": {
-        "buzz": "crypto.sha512File(path) → string"
+        "buzz": "crypto\\sha512File(path) → string"
       }
     },
     {
@@ -16410,7 +16649,7 @@
       "label": "crypto.sha512_hex",
       "doc": "Return the lowercase hex SHA-512 digest of data.",
       "attrs": {
-        "buzz": "crypto.sha512Hex(data) → string"
+        "buzz": "crypto\\sha512Hex(data) → string"
       }
     },
     {
@@ -16419,7 +16658,7 @@
       "label": "encoding.base64_decode",
       "doc": "Decode a standard (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "encoding.base64Decode(s) → string"
+        "buzz": "encoding\\base64Decode(s) → string"
       }
     },
     {
@@ -16428,7 +16667,7 @@
       "label": "encoding.base64_encode",
       "doc": "Encode data as standard (padded) base64.",
       "attrs": {
-        "buzz": "encoding.base64Encode(data) → string"
+        "buzz": "encoding\\base64Encode(data) → string"
       }
     },
     {
@@ -16437,7 +16676,7 @@
       "label": "encoding.base64url_decode",
       "doc": "Decode a URL-safe (padded) base64 string; errors on malformed input.",
       "attrs": {
-        "buzz": "encoding.base64urlDecode(s) → string"
+        "buzz": "encoding\\base64urlDecode(s) → string"
       }
     },
     {
@@ -16446,7 +16685,7 @@
       "label": "encoding.base64url_encode",
       "doc": "Encode data as URL-safe (padded) base64.",
       "attrs": {
-        "buzz": "encoding.base64urlEncode(data) → string"
+        "buzz": "encoding\\base64urlEncode(data) → string"
       }
     },
     {
@@ -16455,7 +16694,7 @@
       "label": "encoding.build_url",
       "doc": "Build a URL string from a {scheme, host, port, path, query, fragment} map; missing keys are treated as empty.",
       "attrs": {
-        "buzz": "encoding.buildUrl(parts) → string"
+        "buzz": "encoding\\buildUrl(parts) → string"
       }
     },
     {
@@ -16464,7 +16703,7 @@
       "label": "encoding.hex_decode",
       "doc": "Decode a hex string; errors on malformed input.",
       "attrs": {
-        "buzz": "encoding.hexDecode(s) → string"
+        "buzz": "encoding\\hexDecode(s) → string"
       }
     },
     {
@@ -16473,7 +16712,7 @@
       "label": "encoding.hex_encode",
       "doc": "Encode data as lowercase hex.",
       "attrs": {
-        "buzz": "encoding.hexEncode(data) → string"
+        "buzz": "encoding\\hexEncode(data) → string"
       }
     },
     {
@@ -16482,7 +16721,7 @@
       "label": "encoding.parse_url",
       "doc": "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
       "attrs": {
-        "buzz": "encoding.parseUrl(raw_url) → map[string]any"
+        "buzz": "encoding\\parseUrl(raw_url) → map[string]any"
       }
     },
     {
@@ -16491,7 +16730,7 @@
       "label": "encoding.url_decode",
       "doc": "Decode a percent-encoded URL query component; errors on malformed input.",
       "attrs": {
-        "buzz": "encoding.urlDecode(s) → string"
+        "buzz": "encoding\\urlDecode(s) → string"
       }
     },
     {
@@ -16500,7 +16739,7 @@
       "label": "encoding.url_encode",
       "doc": "Percent-encode s for use in a URL query component.",
       "attrs": {
-        "buzz": "encoding.urlEncode(s) → string"
+        "buzz": "encoding\\urlEncode(s) → string"
       }
     },
     {
@@ -16509,7 +16748,7 @@
       "label": "env.expand",
       "doc": "Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to \"\").",
       "attrs": {
-        "buzz": "env.expand(s) → string"
+        "buzz": "env\\expand(s) → string"
       }
     },
     {
@@ -16518,7 +16757,7 @@
       "label": "env.get",
       "doc": "Return the value of name, or \"\" if unset. Use lookup to tell unset from set-but-empty.",
       "attrs": {
-        "buzz": "env.get(name) → string"
+        "buzz": "env\\get(name) → string"
       }
     },
     {
@@ -16527,7 +16766,7 @@
       "label": "env.get_or",
       "doc": "Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.",
       "attrs": {
-        "buzz": "env.getOr(name, def) → string"
+        "buzz": "env\\getOr(name, def) → string"
       }
     },
     {
@@ -16536,7 +16775,7 @@
       "label": "env.home",
       "doc": "Return the current user's home directory.",
       "attrs": {
-        "buzz": "env.home() → string"
+        "buzz": "env\\home() → string"
       }
     },
     {
@@ -16545,7 +16784,7 @@
       "label": "env.list",
       "doc": "Return all environment variables as a name→value map.",
       "attrs": {
-        "buzz": "env.list() → map[string]string"
+        "buzz": "env\\list() → map[string]string"
       }
     },
     {
@@ -16554,7 +16793,7 @@
       "label": "env.load_dotenv",
       "doc": "Read a .env file and set each variable in the process environment, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.",
       "attrs": {
-        "buzz": "env.loadDotenv(path)"
+        "buzz": "env\\loadDotenv(path)"
       }
     },
     {
@@ -16563,7 +16802,7 @@
       "label": "env.lookup",
       "doc": "Return (value, found); found is false when name is unset or stripped by the sandbox.",
       "attrs": {
-        "buzz": "env.lookup(name) → string, bool"
+        "buzz": "env\\lookup(name) → string, bool"
       }
     },
     {
@@ -16572,7 +16811,7 @@
       "label": "env.parse_dotenv",
       "doc": "Parse .env-format content into a name-\u003evalue map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
       "attrs": {
-        "buzz": "env.parseDotenv(content) → map[string]string"
+        "buzz": "env\\parseDotenv(content) → map[string]string"
       }
     },
     {
@@ -16581,7 +16820,7 @@
       "label": "env.read_dotenv",
       "doc": "Read a .env file and return its name-\u003evalue map (parse_dotenv over the file contents). Errors if the file cannot be read.",
       "attrs": {
-        "buzz": "env.readDotenv(path) → map[string]string"
+        "buzz": "env\\readDotenv(path) → map[string]string"
       }
     },
     {
@@ -16590,7 +16829,7 @@
       "label": "env.require",
       "doc": "Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).",
       "attrs": {
-        "buzz": "env.require(name) → string"
+        "buzz": "env\\require(name) → string"
       }
     },
     {
@@ -16599,7 +16838,7 @@
       "label": "env.set",
       "doc": "Set name to value in the current process environment.",
       "attrs": {
-        "buzz": "env.set(name, value)"
+        "buzz": "env\\set(name, value)"
       }
     },
     {
@@ -16608,7 +16847,7 @@
       "label": "env.unset",
       "doc": "Remove name from the current process environment.",
       "attrs": {
-        "buzz": "env.unset(name)"
+        "buzz": "env\\unset(name)"
       }
     },
     {
@@ -16617,7 +16856,7 @@
       "label": "fmt.sprintf",
       "doc": "Format string args into the template using Go printf verbs (e.g. %s, %q). Returns the formatted string.",
       "attrs": {
-        "buzz": "fmt.sprintf(format, args...) → string"
+        "buzz": "fmt\\sprintf(format, args...) → string"
       }
     },
     {
@@ -16626,7 +16865,7 @@
       "label": "fs.append_file",
       "doc": "Append content to path (creating if absent, mode 0644).",
       "attrs": {
-        "buzz": "fs.appendFile(path, content)"
+        "buzz": "fs\\appendFile(path, content)"
       }
     },
     {
@@ -16635,7 +16874,7 @@
       "label": "fs.basename",
       "doc": "Final element of path.",
       "attrs": {
-        "buzz": "fs.basename(path) → string"
+        "buzz": "fs\\basename(path) → string"
       }
     },
     {
@@ -16644,7 +16883,7 @@
       "label": "fs.chmod",
       "doc": "Change the permission bits of path to mode (octal integer, e.g. 0755).",
       "attrs": {
-        "buzz": "fs.chmod(path, mode)"
+        "buzz": "fs\\chmod(path, mode)"
       }
     },
     {
@@ -16653,7 +16892,7 @@
       "label": "fs.copy_dir",
       "doc": "Recursively copy the directory tree at src to dst, preserving permission bits.",
       "attrs": {
-        "buzz": "fs.copyDir(src, dst)"
+        "buzz": "fs\\copyDir(src, dst)"
       }
     },
     {
@@ -16662,7 +16901,7 @@
       "label": "fs.copy_file",
       "doc": "Copy the file at src to dst (overwriting), preserving its permission bits.",
       "attrs": {
-        "buzz": "fs.copyFile(src, dst)"
+        "buzz": "fs\\copyFile(src, dst)"
       }
     },
     {
@@ -16671,7 +16910,7 @@
       "label": "fs.dirname",
       "doc": "Directory portion of path.",
       "attrs": {
-        "buzz": "fs.dirname(path) → string"
+        "buzz": "fs\\dirname(path) → string"
       }
     },
     {
@@ -16680,7 +16919,7 @@
       "label": "fs.exists",
       "doc": "True iff path exists.",
       "attrs": {
-        "buzz": "fs.exists(path) → bool"
+        "buzz": "fs\\exists(path) → bool"
       }
     },
     {
@@ -16689,7 +16928,7 @@
       "label": "fs.ext",
       "doc": "File-name extension of path, including the leading dot (\"\" if none).",
       "attrs": {
-        "buzz": "fs.ext(path) → string"
+        "buzz": "fs\\ext(path) → string"
       }
     },
     {
@@ -16698,7 +16937,7 @@
       "label": "fs.glob",
       "doc": "Return paths matching pattern (doublestar-style).",
       "attrs": {
-        "buzz": "fs.glob(pattern) → []string"
+        "buzz": "fs\\glob(pattern) → []string"
       }
     },
     {
@@ -16707,7 +16946,7 @@
       "label": "fs.is_dir",
       "doc": "True iff path exists and is a directory (a sandbox-denied path reads as false).",
       "attrs": {
-        "buzz": "fs.isDir(path) → bool"
+        "buzz": "fs\\isDir(path) → bool"
       }
     },
     {
@@ -16716,7 +16955,7 @@
       "label": "fs.is_file",
       "doc": "True iff path exists and is a regular file (a sandbox-denied path reads as false).",
       "attrs": {
-        "buzz": "fs.isFile(path) → bool"
+        "buzz": "fs\\isFile(path) → bool"
       }
     },
     {
@@ -16725,7 +16964,7 @@
       "label": "fs.join",
       "doc": "Join path elements with the OS separator.",
       "attrs": {
-        "buzz": "fs.join(parts...) → string"
+        "buzz": "fs\\join(parts...) → string"
       }
     },
     {
@@ -16734,7 +16973,7 @@
       "label": "fs.list_dir",
       "doc": "Return directory entries; empty if path does not exist.",
       "attrs": {
-        "buzz": "fs.listDir(path) → []string"
+        "buzz": "fs\\listDir(path) → []string"
       }
     },
     {
@@ -16743,7 +16982,7 @@
       "label": "fs.mkdirall",
       "doc": "Create path and parents (default mode 0755).",
       "attrs": {
-        "buzz": "fs.mkdirall(path, [perm])"
+        "buzz": "fs\\mkdirall(path, [perm])"
       }
     },
     {
@@ -16752,7 +16991,7 @@
       "label": "fs.read_file",
       "doc": "Return the contents of path as a string.",
       "attrs": {
-        "buzz": "fs.readFile(path) → string"
+        "buzz": "fs\\readFile(path) → string"
       }
     },
     {
@@ -16761,7 +17000,7 @@
       "label": "fs.read_lines",
       "doc": "Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.",
       "attrs": {
-        "buzz": "fs.readLines(path) → []string"
+        "buzz": "fs\\readLines(path) → []string"
       }
     },
     {
@@ -16770,7 +17009,7 @@
       "label": "fs.readlink",
       "doc": "Return the target of the symbolic link at path.",
       "attrs": {
-        "buzz": "fs.readlink(path) → string"
+        "buzz": "fs\\readlink(path) → string"
       }
     },
     {
@@ -16779,7 +17018,7 @@
       "label": "fs.remove_all",
       "doc": "Recursively remove path (no error if missing).",
       "attrs": {
-        "buzz": "fs.removeAll(path)"
+        "buzz": "fs\\removeAll(path)"
       }
     },
     {
@@ -16788,7 +17027,7 @@
       "label": "fs.stat",
       "doc": "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
       "attrs": {
-        "buzz": "fs.stat(path) → map[string]any"
+        "buzz": "fs\\stat(path) → map[string]any"
       }
     },
     {
@@ -16797,7 +17036,7 @@
       "label": "fs.symlink",
       "doc": "Create a symbolic link at link pointing to target.",
       "attrs": {
-        "buzz": "fs.symlink(target, link)"
+        "buzz": "fs\\symlink(target, link)"
       }
     },
     {
@@ -16806,7 +17045,7 @@
       "label": "fs.temp_dir",
       "doc": "Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.",
       "attrs": {
-        "buzz": "fs.tempDir([prefix]) → string"
+        "buzz": "fs\\tempDir([prefix]) → string"
       }
     },
     {
@@ -16815,7 +17054,7 @@
       "label": "fs.walk",
       "doc": "Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.",
       "attrs": {
-        "buzz": "fs.walk(root, callback)"
+        "buzz": "fs\\walk(root, callback)"
       }
     },
     {
@@ -16824,7 +17063,7 @@
       "label": "fs.watch",
       "doc": "Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.",
       "attrs": {
-        "buzz": "fs.watch(paths, callback)"
+        "buzz": "fs\\watch(paths, callback)"
       }
     },
     {
@@ -16833,7 +17072,7 @@
       "label": "fs.write_file",
       "doc": "Write content to path (mode 0644).",
       "attrs": {
-        "buzz": "fs.writeFile(path, content)"
+        "buzz": "fs\\writeFile(path, content)"
       }
     },
     {
@@ -16842,7 +17081,7 @@
       "label": "fs.write_lines",
       "doc": "Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.",
       "attrs": {
-        "buzz": "fs.writeLines(path, lines)"
+        "buzz": "fs\\writeLines(path, lines)"
       }
     },
     {
@@ -16851,7 +17090,7 @@
       "label": "http.get",
       "doc": "Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
       "attrs": {
-        "buzz": "http.get(url, [headers], [opts]) → map[string]any"
+        "buzz": "http\\get(url, [headers], [opts]) → map[string]any"
       }
     },
     {
@@ -16860,7 +17099,7 @@
       "label": "http.post",
       "doc": "Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
       "attrs": {
-        "buzz": "http.post(url, body, [headers], [opts]) → map[string]any"
+        "buzz": "http\\post(url, body, [headers], [opts]) → map[string]any"
       }
     },
     {
@@ -16869,7 +17108,7 @@
       "label": "http.request",
       "doc": "Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).",
       "attrs": {
-        "buzz": "http.request(method, url, [body], [headers], [opts]) → map[string]any"
+        "buzz": "http\\request(method, url, [body], [headers], [opts]) → map[string]any"
       }
     },
     {
@@ -16878,7 +17117,7 @@
       "label": "http.server",
       "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -\u003e dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
-        "buzz": "http.server(opts) → int"
+        "buzz": "http\\server(opts) → int"
       }
     },
     {
@@ -16887,7 +17126,7 @@
       "label": "json.parse",
       "doc": "Decode a JSON string into a value (map, list, string, number, or boolean).",
       "attrs": {
-        "buzz": "json.parse(s) → any"
+        "buzz": "json\\parse(s) → any"
       }
     },
     {
@@ -16896,7 +17135,7 @@
       "label": "json.stringify",
       "doc": "Encode a value as a JSON string. With no indent (or \"\") the output is compact; pass an indent string (e.g. \"  \" or \"\\t\") for pretty, multi-line output.",
       "attrs": {
-        "buzz": "json.stringify(value, [indent]) → string"
+        "buzz": "json\\stringify(value, [indent]) → string"
       }
     },
     {
@@ -16905,7 +17144,7 @@
       "label": "magus.bust_cache",
       "doc": "Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.",
       "attrs": {
-        "buzz": "magus.bustCache([project_path])"
+        "buzz": "magus\\bustCache([project_path])"
       }
     },
     {
@@ -16914,7 +17153,7 @@
       "label": "magus.cmd",
       "doc": "Escape hatch: run `magus \u003cargs\u003e` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus.cmd(args, [opts]) → map[string]any"
+        "buzz": "magus\\cmd(args, [opts]) → map[string]any"
       }
     },
     {
@@ -16923,7 +17162,7 @@
       "label": "magus.describe",
       "doc": "Run `magus describe \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
       "attrs": {
-        "buzz": "magus.describe(args, [opts]) → map[string]any"
+        "buzz": "magus\\describe(args, [opts]) → map[string]any"
       }
     },
     {
@@ -16932,7 +17171,7 @@
       "label": "magus.doctor",
       "doc": "Run `magus doctor \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus.doctor(args, [opts]) → map[string]any"
+        "buzz": "magus\\doctor(args, [opts]) → map[string]any"
       }
     },
     {
@@ -16941,7 +17180,7 @@
       "label": "magus.has_charm",
       "doc": "True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm(\"rw\")).",
       "attrs": {
-        "buzz": "magus.has_charm(name) → bool"
+        "buzz": "magus\\has_charm(name) → bool"
       }
     },
     {
@@ -16950,7 +17189,7 @@
       "label": "magus.insight",
       "doc": "Run `magus insight \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus.insight(args, [opts]) → map[string]any"
+        "buzz": "magus\\insight(args, [opts]) → map[string]any"
       }
     },
     {
@@ -16959,7 +17198,7 @@
       "label": "magus.run",
       "doc": "Run `magus run \u003cargs\u003e` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
-        "buzz": "magus.run(args, [opts]) → map[string]any"
+        "buzz": "magus\\run(args, [opts]) → map[string]any"
       }
     },
     {
@@ -16968,7 +17207,7 @@
       "label": "markdown.frontmatter",
       "doc": "Parse the leading YAML frontmatter block (a \"---\" fenced header at the top of the document) and return it as a JSON object string; decode with serialize.jsonDecode. Returns \"{}\" when no frontmatter is present.",
       "attrs": {
-        "buzz": "markdown.frontmatter(source) → string"
+        "buzz": "markdown\\frontmatter(source) → string"
       }
     },
     {
@@ -16977,7 +17216,7 @@
       "label": "markdown.strip_frontmatter",
       "doc": "Return the Markdown body with any leading YAML frontmatter block removed (the source unchanged when none is present).",
       "attrs": {
-        "buzz": "markdown.stripFrontmatter(source) → string"
+        "buzz": "markdown\\stripFrontmatter(source) → string"
       }
     },
     {
@@ -16986,7 +17225,7 @@
       "label": "markdown.to_html",
       "doc": "Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmatter block (a \"---\" fenced header at the top of the document) before rendering. Auto-IDs every heading so #fragment links resolve, and rewrites relative .md links (incl. README.md → index.html) to their generated .html equivalents. Raw HTML in the source is passed through (intended for trusted, first-party docs).",
       "attrs": {
-        "buzz": "markdown.toHtml(source) → string"
+        "buzz": "markdown\\toHtml(source) → string"
       }
     },
     {
@@ -16995,7 +17234,7 @@
       "label": "os.exec",
       "doc": "Run cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the target's cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout.",
       "attrs": {
-        "buzz": "os.exec(cmd, [args], [dir], [opts]) → map[string]any"
+        "buzz": "os\\exec(cmd, [args], [dir], [opts]) → map[string]any"
       }
     },
     {
@@ -17004,7 +17243,7 @@
       "label": "os.exec_sh",
       "doc": "Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. \"bash\") to override, resolved via PATH. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.",
       "attrs": {
-        "buzz": "os.execSh(line, [dir], [opts]) → map[string]any"
+        "buzz": "os\\execSh(line, [dir], [opts]) → map[string]any"
       }
     },
     {
@@ -17013,7 +17252,7 @@
       "label": "os.executable",
       "doc": "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
       "attrs": {
-        "buzz": "os.executable() → string"
+        "buzz": "os\\executable() → string"
       }
     },
     {
@@ -17022,7 +17261,7 @@
       "label": "os.exit",
       "doc": "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared daemon); it raises, ending the target, and the code becomes magus's process exit status.",
       "attrs": {
-        "buzz": "os.exit(code)"
+        "buzz": "os\\exit(code)"
       }
     },
     {
@@ -17031,7 +17270,7 @@
       "label": "os.hostname",
       "doc": "Return the host machine's name.",
       "attrs": {
-        "buzz": "os.hostname() → string"
+        "buzz": "os\\hostname() → string"
       }
     },
     {
@@ -17040,7 +17279,7 @@
       "label": "os.num_cpu",
       "doc": "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
       "attrs": {
-        "buzz": "os.numCpu() → int"
+        "buzz": "os\\numCpu() → int"
       }
     },
     {
@@ -17049,7 +17288,7 @@
       "label": "os.platform",
       "doc": "Return the Docker/OCI platform triple: (os, arch, variant).",
       "attrs": {
-        "buzz": "os.platform() → string, string, string"
+        "buzz": "os\\platform() → string, string, string"
       }
     },
     {
@@ -17058,7 +17297,7 @@
       "label": "os.retry",
       "doc": "Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.",
       "attrs": {
-        "buzz": "os.retry(max, fn, [opts]) → any"
+        "buzz": "os\\retry(max, fn, [opts]) → any"
       }
     },
     {
@@ -17067,7 +17306,7 @@
       "label": "os.sleep",
       "doc": "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
       "attrs": {
-        "buzz": "os.sleep(ms)"
+        "buzz": "os\\sleep(ms)"
       }
     },
     {
@@ -17076,7 +17315,7 @@
       "label": "os.stdin_is_terminal",
       "doc": "Report whether standard input is a terminal (TTY) rather than a pipe, file, or /dev/null. Use it to fail fast with a clear message instead of blocking on a read of stdin that will never receive piped input.",
       "attrs": {
-        "buzz": "os.stdinIsTerminal() → bool"
+        "buzz": "os\\stdinIsTerminal() → bool"
       }
     },
     {
@@ -17085,7 +17324,7 @@
       "label": "os.which",
       "doc": "Resolve cmd against PATH and return its absolute path, or \"\" if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).",
       "attrs": {
-        "buzz": "os.which(cmd) → string"
+        "buzz": "os\\which(cmd) → string"
       }
     },
     {
@@ -17094,7 +17333,7 @@
       "label": "os.with_env",
       "doc": "Set env vars for the duration of callback; restore after.",
       "attrs": {
-        "buzz": "os.withEnv(env, callback)"
+        "buzz": "os\\withEnv(env, callback)"
       }
     },
     {
@@ -17103,7 +17342,7 @@
       "label": "os.with_slots",
       "doc": "Reserve n slots from magus's concurrency budget for the duration of callback. Use when callback runs a command with its own internal parallelism (make -j, a test runner) that magus can't see, so the global budget is not oversubscribed.",
       "attrs": {
-        "buzz": "os.withSlots(n, callback)"
+        "buzz": "os\\withSlots(n, callback)"
       }
     },
     {
@@ -17112,7 +17351,7 @@
       "label": "path.abs",
       "doc": "Return the absolute form of path, resolved against the current directory and lexically cleaned.",
       "attrs": {
-        "buzz": "path.abs(path) → string"
+        "buzz": "path\\abs(path) → string"
       }
     },
     {
@@ -17121,7 +17360,7 @@
       "label": "path.clean",
       "doc": "Return the shortest lexically-equivalent path (resolves . and .., collapses separators).",
       "attrs": {
-        "buzz": "path.clean(path) → string"
+        "buzz": "path\\clean(path) → string"
       }
     },
     {
@@ -17130,7 +17369,7 @@
       "label": "path.expand_user",
       "doc": "Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.",
       "attrs": {
-        "buzz": "path.expandUser(path) → string"
+        "buzz": "path\\expandUser(path) → string"
       }
     },
     {
@@ -17139,7 +17378,7 @@
       "label": "path.is_abs",
       "doc": "Report whether path is absolute.",
       "attrs": {
-        "buzz": "path.isAbs(path) → bool"
+        "buzz": "path\\isAbs(path) → bool"
       }
     },
     {
@@ -17148,7 +17387,7 @@
       "label": "path.rel",
       "doc": "Return a relative path from base to target; errors if no relative path exists.",
       "attrs": {
-        "buzz": "path.rel(base, target) → string"
+        "buzz": "path\\rel(base, target) → string"
       }
     },
     {
@@ -17157,7 +17396,7 @@
       "label": "platform.arch",
       "doc": "Normalize an architecture identifier (x86_64, aarch64, armv7l, …) to canonical Go GOARCH (amd64, arm64, arm). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform.arch(name, [style]) → string"
+        "buzz": "platform\\arch(name, [style]) → string"
       }
     },
     {
@@ -17166,7 +17405,7 @@
       "label": "platform.os",
       "doc": "Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwin, windows). With style, render that result in a convention (go|uname); raises on an unknown style. Returns \"\" when the identifier is unrecognized.",
       "attrs": {
-        "buzz": "platform.os(name, [style]) → string"
+        "buzz": "platform\\os(name, [style]) → string"
       }
     },
     {
@@ -17175,7 +17414,7 @@
       "label": "semver.compare",
       "doc": "Compare two semver strings; op is \"==\", \"!=\", \"\u003c\", \"\u003c=\", \"\u003e\", or \"\u003e=\" - true when the relation holds.",
       "attrs": {
-        "buzz": "semver.compare(a, op, b) → bool"
+        "buzz": "semver\\compare(a, op, b) → bool"
       }
     },
     {
@@ -17184,7 +17423,7 @@
       "label": "semver.parse",
       "doc": "Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.",
       "attrs": {
-        "buzz": "semver.parse(v) → map[string]any"
+        "buzz": "semver\\parse(v) → map[string]any"
       }
     },
     {
@@ -17193,7 +17432,7 @@
       "label": "strings.camel_case",
       "doc": "Convert s to camelCase.",
       "attrs": {
-        "buzz": "strings.camelCase(s) → string"
+        "buzz": "strings\\camelCase(s) → string"
       }
     },
     {
@@ -17202,7 +17441,7 @@
       "label": "strings.capitalize",
       "doc": "Uppercase the first rune of s and lowercase the rest.",
       "attrs": {
-        "buzz": "strings.capitalize(s) → string"
+        "buzz": "strings\\capitalize(s) → string"
       }
     },
     {
@@ -17211,7 +17450,7 @@
       "label": "strings.ellipsis",
       "doc": "Trim s to at most length runes, appending \"...\" when truncated.",
       "attrs": {
-        "buzz": "strings.ellipsis(s, length) → string"
+        "buzz": "strings\\ellipsis(s, length) → string"
       }
     },
     {
@@ -17220,7 +17459,7 @@
       "label": "strings.kebab_case",
       "doc": "Convert s to kebab-case.",
       "attrs": {
-        "buzz": "strings.kebabCase(s) → string"
+        "buzz": "strings\\kebabCase(s) → string"
       }
     },
     {
@@ -17229,7 +17468,7 @@
       "label": "strings.pascal_case",
       "doc": "Convert s to PascalCase.",
       "attrs": {
-        "buzz": "strings.pascalCase(s) → string"
+        "buzz": "strings\\pascalCase(s) → string"
       }
     },
     {
@@ -17238,7 +17477,7 @@
       "label": "strings.snake_case",
       "doc": "Convert s to snake_case.",
       "attrs": {
-        "buzz": "strings.snakeCase(s) → string"
+        "buzz": "strings\\snakeCase(s) → string"
       }
     },
     {
@@ -17247,7 +17486,7 @@
       "label": "strings.words",
       "doc": "Split s into its constituent words (splitting on case changes, digits, and separators).",
       "attrs": {
-        "buzz": "strings.words(s) → []string"
+        "buzz": "strings\\words(s) → []string"
       }
     },
     {
@@ -17256,7 +17495,7 @@
       "label": "template.render",
       "doc": "Render a Mustache template against a context value (usually a name-\u003evalue map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
       "attrs": {
-        "buzz": "template.render(template, data) → string"
+        "buzz": "template\\render(template, data) → string"
       }
     },
     {
@@ -17265,7 +17504,7 @@
       "label": "template.render_partials",
       "doc": "Render a Mustache template that includes partials via {{\u003ename}}, resolving each name against the partials map (name-\u003etemplate string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
       "attrs": {
-        "buzz": "template.renderPartials(template, data, partials) → string"
+        "buzz": "template\\renderPartials(template, data, partials) → string"
       }
     },
     {
@@ -17274,7 +17513,7 @@
       "label": "time.add",
       "doc": "Add a Go duration string (e.g. \"24h\", \"-1h30m\") to a Unix-millis timestamp; returns the new Unix-millis timestamp.",
       "attrs": {
-        "buzz": "time.add(unix_millis, duration) → float64"
+        "buzz": "time\\add(unix_millis, duration) → float64"
       }
     },
     {
@@ -17283,7 +17522,7 @@
       "label": "time.diff",
       "doc": "Return a minus b in milliseconds (positive when a is later than b).",
       "attrs": {
-        "buzz": "time.diff(a, b) → float64"
+        "buzz": "time\\diff(a, b) → float64"
       }
     },
     {
@@ -17292,7 +17531,7 @@
       "label": "time.format",
       "doc": "Render Unix-millis as a string using a Go reference layout (UTC).",
       "attrs": {
-        "buzz": "time.format(layout, unix_millis) → string"
+        "buzz": "time\\format(layout, unix_millis) → string"
       }
     },
     {
@@ -17301,7 +17540,7 @@
       "label": "time.now_iso",
       "doc": "Return the current UTC time as an RFC 3339 string. For the raw epoch-millis value use Buzz's os.time().",
       "attrs": {
-        "buzz": "time.nowIso() → string"
+        "buzz": "time\\nowIso() → string"
       }
     },
     {
@@ -17310,7 +17549,7 @@
       "label": "time.parse",
       "doc": "Parse a string with a Go reference layout into Unix-millis (UTC); errors on mismatch.",
       "attrs": {
-        "buzz": "time.parse(layout, value) → float64"
+        "buzz": "time\\parse(layout, value) → float64"
       }
     },
     {
@@ -17319,7 +17558,7 @@
       "label": "time.parse_duration",
       "doc": "Parse a Go duration string (e.g. \"168h\", \"1h30m\") into milliseconds; errors on mismatch.",
       "attrs": {
-        "buzz": "time.parseDuration(duration) → float64"
+        "buzz": "time\\parseDuration(duration) → float64"
       }
     },
     {
@@ -17328,7 +17567,7 @@
       "label": "toml.parse",
       "doc": "Decode a TOML document into a value (tables become maps, arrays become lists, plus strings, numbers, bools, and datetimes); errors on invalid input.",
       "attrs": {
-        "buzz": "toml.parse(source) → any"
+        "buzz": "toml\\parse(source) → any"
       }
     },
     {
@@ -17337,7 +17576,7 @@
       "label": "toml.stringify",
       "doc": "Encode a value to a TOML string; the top level must be a table/map, as TOML requires. Errors on unencodable input.",
       "attrs": {
-        "buzz": "toml.stringify(value) → string"
+        "buzz": "toml\\stringify(value) → string"
       }
     },
     {
@@ -17346,7 +17585,7 @@
       "label": "uuid.randomHex",
       "doc": "A cryptographically random lowercase hex string of n bytes (2*n characters); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid.randomHex(n) → string"
+        "buzz": "uuid\\randomHex(n) → string"
       }
     },
     {
@@ -17355,7 +17594,7 @@
       "label": "uuid.randomToken",
       "doc": "A cryptographically random URL-safe base64 token from n bytes of entropy (no padding); errors when n is not positive.",
       "attrs": {
-        "buzz": "uuid.randomToken(n) → string"
+        "buzz": "uuid\\randomToken(n) → string"
       }
     },
     {
@@ -17364,7 +17603,7 @@
       "label": "uuid.v4",
       "doc": "A random (version 4) UUID string, e.g. \"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\".",
       "attrs": {
-        "buzz": "uuid.v4() → string"
+        "buzz": "uuid\\v4() → string"
       }
     },
     {
@@ -17373,7 +17612,7 @@
       "label": "uuid.v7",
       "doc": "A time-ordered (version 7) UUID string; lexically sorts by creation time, which makes it a good ordered run/build id.",
       "attrs": {
-        "buzz": "uuid.v7() → string"
+        "buzz": "uuid\\v7() → string"
       }
     },
     {
@@ -17382,7 +17621,7 @@
       "label": "vcs.branch",
       "doc": "Current branch, or empty on error.",
       "attrs": {
-        "buzz": "vcs.branch() → string"
+        "buzz": "vcs\\branch() → string"
       }
     },
     {
@@ -17391,7 +17630,7 @@
       "label": "vcs.commit",
       "doc": "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
       "attrs": {
-        "buzz": "vcs.commit([rev]) → any"
+        "buzz": "vcs\\commit([rev]) → any"
       }
     },
     {
@@ -17400,7 +17639,7 @@
       "label": "vcs.commit_date",
       "doc": "Commit date string, or empty on error.",
       "attrs": {
-        "buzz": "vcs.commitDate() → string"
+        "buzz": "vcs\\commitDate() → string"
       }
     },
     {
@@ -17409,7 +17648,7 @@
       "label": "vcs.describe",
       "doc": "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.shortHash() as a fallback.",
       "attrs": {
-        "buzz": "vcs.describe() → string"
+        "buzz": "vcs\\describe() → string"
       }
     },
     {
@@ -17418,7 +17657,7 @@
       "label": "vcs.diagnose_drift",
       "doc": "Diagnose why a generate gate's outputs drifted and RETURN the verdict {drifted, code, message, url} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug); drifted is",
       "attrs": {
-        "buzz": "vcs.diagnoseDrift(outputs, [inputs]) → map[string]any"
+        "buzz": "vcs\\diagnoseDrift(outputs, [inputs]) → map[string]any"
       }
     },
     {
@@ -17427,7 +17666,7 @@
       "label": "vcs.diff",
       "doc": "List files changed against the given base (defaults to vcs.base).",
       "attrs": {
-        "buzz": "vcs.diff([base]) → []string"
+        "buzz": "vcs\\diff([base]) → []string"
       }
     },
     {
@@ -17436,7 +17675,7 @@
       "label": "vcs.exe",
       "doc": "Absolute path to the active VCS executable (git/hg/jj), or \"\" if unresolved. Lets a magusfile run a VCS-agnostic escape-hatch command: os.exec(vcs.exe(), [...]).",
       "attrs": {
-        "buzz": "vcs.exe() → string"
+        "buzz": "vcs\\exe() → string"
       }
     },
     {
@@ -17445,7 +17684,7 @@
       "label": "vcs.hash",
       "doc": "Full commit hash, or empty on error.",
       "attrs": {
-        "buzz": "vcs.hash() → string"
+        "buzz": "vcs\\hash() → string"
       }
     },
     {
@@ -17454,7 +17693,7 @@
       "label": "vcs.history",
       "doc": "Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
       "attrs": {
-        "buzz": "vcs.history([limit]) → any"
+        "buzz": "vcs\\history([limit]) → any"
       }
     },
     {
@@ -17463,7 +17702,7 @@
       "label": "vcs.is_dirty",
       "doc": "True if the working tree has uncommitted changes. Pass paths to scope the check to those files/dirs (relative to the project), e.g. is_dirty([\"MAGUS.md\"]) - the right way to gate generated outputs without shelling out to git or parsing porcelain.",
       "attrs": {
-        "buzz": "vcs.isDirty([paths]) → bool"
+        "buzz": "vcs\\isDirty([paths]) → bool"
       }
     },
     {
@@ -17472,7 +17711,7 @@
       "label": "vcs.metadata",
       "doc": "Full metadata table: short_hash, hash, branch, commit_date, is_dirty.",
       "attrs": {
-        "buzz": "vcs.metadata() → map[string]any"
+        "buzz": "vcs\\metadata() → map[string]any"
       }
     },
     {
@@ -17481,7 +17720,7 @@
       "label": "vcs.root",
       "doc": "Absolute path of the repository root.",
       "attrs": {
-        "buzz": "vcs.root() → string"
+        "buzz": "vcs\\root() → string"
       }
     },
     {
@@ -17490,7 +17729,7 @@
       "label": "vcs.short_hash",
       "doc": "Short commit hash, or empty on error.",
       "attrs": {
-        "buzz": "vcs.shortHash() → string"
+        "buzz": "vcs\\shortHash() → string"
       }
     },
     {
@@ -17499,7 +17738,7 @@
       "label": "xml.element",
       "doc": "Build an element node from a tag, a flat [name, value, ...] attribute list, and a list of child nodes (elements or strings). Sugar for the {\"tag\", \"attrs\", \"children\"} map that render consumes.",
       "attrs": {
-        "buzz": "xml.element(tag, attrs, children) → any"
+        "buzz": "xml\\element(tag, attrs, children) → any"
       }
     },
     {
@@ -17508,7 +17747,7 @@
       "label": "xml.parse",
       "doc": "Parse an XML string into a node tree: each element becomes {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}, character data becomes a string. The inverse shape of render.",
       "attrs": {
-        "buzz": "xml.parse(s) → any"
+        "buzz": "xml\\parse(s) → any"
       }
     },
     {
@@ -17517,7 +17756,7 @@
       "label": "xml.render",
       "doc": "Serialize an XML node to a string. A node is a string (text) or an element map {\"tag\": name, \"attrs\": [name, value, ...], \"children\": [node, ...]}. Empty-children elements self-close; no whitespace is emitted between tags.",
       "attrs": {
-        "buzz": "xml.render(node) → string"
+        "buzz": "xml\\render(node) → string"
       }
     },
     {
@@ -17526,7 +17765,7 @@
       "label": "yaml.parse",
       "doc": "Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); errors on invalid input.",
       "attrs": {
-        "buzz": "yaml.parse(source) → any"
+        "buzz": "yaml\\parse(source) → any"
       }
     },
     {
@@ -17535,7 +17774,7 @@
       "label": "yaml.stringify",
       "doc": "Encode a value to a YAML string; errors on unencodable input.",
       "attrs": {
-        "buzz": "yaml.stringify(value) → string"
+        "buzz": "yaml\\stringify(value) → string"
       }
     },
     {
@@ -18244,18 +18483,18 @@
       "source": "spells/aws/s3-cache/spell.buzz:76"
     },
     {
-      "id": "rationale:spells/github/actions/spell.buzz:62:NOTE",
+      "id": "rationale:spells/github/actions/spell.buzz:63:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "byte-identical to the getenv in spells/aws/s3-cache/spell.buzz. The",
-      "source": "spells/github/actions/spell.buzz:62"
+      "source": "spells/github/actions/spell.buzz:63"
     },
     {
-      "id": "rationale:spells/github/actions/spell.buzz:84:NOTE",
+      "id": "rationale:spells/github/actions/spell.buzz:85:NOTE",
       "kind": "rationale",
       "label": "NOTE",
       "doc": "cache-key format differs from spells/aws/s3-cache/spell.buzz on purpose:",
-      "source": "spells/github/actions/spell.buzz:84"
+      "source": "spells/github/actions/spell.buzz:85"
     },
     {
       "id": "spell:actions",
@@ -18446,7 +18685,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outc3ce7879",
+        "last_output_ref": "out83982edc",
         "last_run_ok": "true"
       }
     },
@@ -18669,7 +18908,7 @@
       "source": "cmd/magus/starter",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "oute0d53459",
+        "last_output_ref": "out608e9955",
         "last_run_ok": "true"
       }
     },
@@ -18871,7 +19110,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out090e7f20",
+        "last_output_ref": "oute2fcf929",
         "last_run_ok": "false"
       }
     },
@@ -18970,7 +19209,7 @@
       "source": "libs/diag",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out3f7a0401",
+        "last_output_ref": "outd2035472",
         "last_run_ok": "true"
       }
     },
@@ -19054,7 +19293,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outa1e712f8",
+        "last_output_ref": "out089c20a1",
         "last_run_ok": "true"
       }
     },
@@ -19129,7 +19368,7 @@
       "source": "libs/textsearch",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out8a57708b",
+        "last_output_ref": "out1da79912",
         "last_run_ok": "true"
       }
     },
@@ -19173,7 +19412,7 @@
       "source": "libs/textsearch",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out78405ede",
+        "last_output_ref": "outa9e805c1",
         "last_run_ok": "true"
       }
     },
@@ -19196,7 +19435,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out8fcbca41",
+        "last_output_ref": "out49204c0c",
         "last_run_ok": "true"
       }
     },
@@ -19940,6 +20179,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/charms.md"
+    },
+    {
+      "source": "dir:docs/concepts",
+      "target": "doc:docs/concepts/ci-providers.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci-providers.md"
     },
     {
       "source": "dir:docs/concepts",
@@ -21470,6 +21717,22 @@
       "provenance": "docs/tour/15-charms-custom.buzz"
     },
     {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/16-guardrails.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/17-output-refs.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
       "source": "dir:internal",
       "target": "dir:internal/handler",
       "relation": "contains",
@@ -22327,6 +22590,14 @@
     },
     {
       "source": "dir:spells",
+      "target": "dir:spells/gitlab",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab"
+    },
+    {
+      "source": "dir:spells",
       "target": "dir:spells/golang",
       "relation": "contains",
       "confidence": "extracted",
@@ -22900,6 +23171,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "dir:spells/gitlab",
+      "target": "dir:spells/gitlab/ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci"
+    },
+    {
+      "source": "dir:spells/gitlab/ci",
+      "target": "file:spells/gitlab/ci/spell.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
     },
     {
       "source": "dir:spells/golang",
@@ -23551,6 +23838,14 @@
     },
     {
       "source": "doc:README.md",
+      "target": "doc:docs/concepts/ci-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
       "target": "doc:docs/concepts/knowledge.md",
       "relation": "references",
       "confidence": "extracted",
@@ -23656,6 +23951,14 @@
     {
       "source": "doc:README.md",
       "target": "doc:docs/guides/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/guides/testing.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24092,6 +24395,30 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/concepts/charms.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/remote-cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/sandbox.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/reference/buzz/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci-providers.md"
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
@@ -24887,6 +25214,14 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/ci-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/engines.md",
       "relation": "references",
       "confidence": "extracted",
@@ -24904,6 +25239,14 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/remote-cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/sandbox.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25000,6 +25343,22 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/guides/testing.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/reference/buzz/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25375,7 +25734,23 @@
     },
     {
       "source": "doc:docs/concepts/targets/ci.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/targets/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/targets/ci.md",
       "target": "doc:docs/concepts/remote-cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/targets/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/targets/ci.md",
+      "target": "doc:docs/concepts/volatility.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -35926,6 +36301,62 @@
       "provenance": "docs/tour/15-charms-custom.buzz"
     },
     {
+      "source": "file:docs/tour/16-guardrails.buzz",
+      "target": "function:docs/tour/16-guardrails.buzz:build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "file:docs/tour/16-guardrails.buzz",
+      "target": "function:docs/tour/16-guardrails.buzz:bundle",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "file:docs/tour/16-guardrails.buzz",
+      "target": "function:docs/tour/16-guardrails.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "file:docs/tour/16-guardrails.buzz",
+      "target": "function:docs/tour/16-guardrails.buzz:test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "file:docs/tour/16-guardrails.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/16-guardrails.buzz"
+    },
+    {
+      "source": "file:docs/tour/17-output-refs.buzz",
+      "target": "function:docs/tour/17-output-refs.buzz:build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
+      "source": "file:docs/tour/17-output-refs.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
       "source": "file:internal/spell/buzzlib/charm.buzz",
       "target": "function:internal/spell/buzzlib/charm.buzz:_charmAddOps",
       "relation": "contains",
@@ -45343,6 +45774,14 @@
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:annotate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:base",
       "relation": "contains",
       "confidence": "extracted",
@@ -45367,6 +45806,22 @@
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:escapeData",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:escapeProp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:get_artifact",
       "relation": "contains",
       "confidence": "extracted",
@@ -45383,6 +45838,22 @@
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:group_end",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:group_start",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
@@ -45392,6 +45863,14 @@
     {
       "source": "file:spells/github/actions/spell.buzz",
       "target": "function:spells/github/actions/spell.buzz:put_artifact",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "function:spells/github/actions/spell.buzz:quote_prefixes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -45444,6 +45923,126 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/github/actions/spell.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:annotate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:enabled",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:getenv",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:group_end",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:group_start",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:nowSeconds",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:quote_prefixes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "function:spells/gitlab/ci/spell.buzz:sectionID",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "import:magus/target",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "import:std",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "file:spells/gitlab/ci/spell.buzz",
+      "target": "import:strings",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/gitlab/ci/spell.buzz"
     },
     {
       "source": "file:spells/golang/spell.buzz",
@@ -51182,6 +51781,22 @@
       "provenance": "spells/aws/s3-cache/spell.buzz"
     },
     {
+      "source": "function:spells/github/actions/spell.buzz:annotate",
+      "target": "function:spells/github/actions/spell.buzz:escapeData",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:annotate",
+      "target": "function:spells/github/actions/spell.buzz:escapeProp",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
       "source": "function:spells/github/actions/spell.buzz:base",
       "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "calls",
@@ -51192,6 +51807,14 @@
     {
       "source": "function:spells/github/actions/spell.buzz:enabled",
       "target": "function:spells/github/actions/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:escapeProp",
+      "target": "function:spells/github/actions/spell.buzz:escapeData",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -51224,6 +51847,14 @@
     {
       "source": "function:spells/github/actions/spell.buzz:get_artifact",
       "target": "function:spells/github/actions/spell.buzz:token",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/github/actions/spell.buzz:group_start",
+      "target": "function:spells/github/actions/spell.buzz:escapeData",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -51284,6 +51915,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/github/actions/spell.buzz"
+    },
+    {
+      "source": "function:spells/gitlab/ci/spell.buzz:enabled",
+      "target": "function:spells/gitlab/ci/spell.buzz:getenv",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "function:spells/gitlab/ci/spell.buzz:group_end",
+      "target": "function:spells/gitlab/ci/spell.buzz:nowSeconds",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "function:spells/gitlab/ci/spell.buzz:group_end",
+      "target": "function:spells/gitlab/ci/spell.buzz:sectionID",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "function:spells/gitlab/ci/spell.buzz:group_start",
+      "target": "function:spells/gitlab/ci/spell.buzz:nowSeconds",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
+    },
+    {
+      "source": "function:spells/gitlab/ci/spell.buzz:group_start",
+      "target": "function:spells/gitlab/ci/spell.buzz:sectionID",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/gitlab/ci/spell.buzz"
     },
     {
       "source": "module:archive",
@@ -53745,20 +54416,20 @@
       "provenance": "spells/aws/s3-cache/spell.buzz:76"
     },
     {
-      "source": "rationale:spells/github/actions/spell.buzz:62:NOTE",
+      "source": "rationale:spells/github/actions/spell.buzz:63:NOTE",
       "target": "function:spells/github/actions/spell.buzz:getenv",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:62"
+      "provenance": "spells/github/actions/spell.buzz:63"
     },
     {
-      "source": "rationale:spells/github/actions/spell.buzz:84:NOTE",
+      "source": "rationale:spells/github/actions/spell.buzz:85:NOTE",
       "target": "function:spells/github/actions/spell.buzz:cache_key",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/github/actions/spell.buzz:84"
+      "provenance": "spells/github/actions/spell.buzz:85"
     },
     {
       "source": "spell:bash",

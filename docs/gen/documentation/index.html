@@ -101,7 +101,7 @@ runs install to first <code>ci</code> pipeline as prose. The quick <a class="cod
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;spells/hello&quot;;          // ./spells/hello/spell.buzz
 
-magus.project({ &quot;spells&quot;: [hello] });
+magus\project({ &quot;spells&quot;: [hello] });
 
 // Each exported function becomes a runnable target.
 export fun build(ctx: magus\Context, args: [str]) &gt; void { hello.build(); }
@@ -121,7 +121,7 @@ magus affected ci   # run ci only for the projects your changes touched
 <ul>
 <li><a href="../concepts/workspace/">Workspace and projects</a> - how magus discovers projects, the magusfile layout, <code>depends_on</code>, and monorepo patterns.</li>
 <li><a href="../concepts/targets/">Targets</a> - the named operations you run (<code>build</code>, <code>test</code>, <code>lint</code>), declared as exported functions in a magusfile.</li>
-<li><a href="../concepts/dependencies/">Dependencies</a> - <code>magus.needs</code> versus <code>depends_on</code>, the cross-<a class="glossary-term" href="../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> fold between them, and how they interact with the cache and the <a class="code-xref" href="../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> set.</li>
+<li><a href="../concepts/dependencies/">Dependencies</a> - <code>magus\needs</code> versus <code>depends_on</code>, the cross-<a class="glossary-term" href="../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> fold between them, and how they interact with the cache and the <a class="code-xref" href="../reference/manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> set.</li>
 <li><a href="../concepts/spells/">Spells</a> - language/toolchain adapters that provide tool-native operations (<code>go-build</code>, <code>go-test</code>, ...) for your targets to compose. See <a href="../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for <a class="code-xref" href="../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the line falls.</li>
 <li><a href="../concepts/charms/">Charms</a> - execution modifiers attached with <code>:</code> (for example <code>lint:rw</code> to let a read-only <a class="glossary-term" href="../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> write).</li>
 <li><a href="../concepts/operations/">Operations and the work hierarchy</a> - how a run is scheduled and parallelized across projects.</li>
@@ -134,14 +134,14 @@ magus affected ci   # run ci only for the projects your changes touched
 <li><a href="../concepts/engines/">Engines</a> - how magus loads and evaluates a magusfile.</li>
 </ul>
 <h2 id="going-further">Going further</h2>
-<p>Once the basics click, these cover running magus at scale and in <a class="glossary-term" href="../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>.</p>
+<p>Once the basics click, these cover running magus at scale and in <a class="glossary-term" href="../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>.</p>
 <ul>
-<li><a href="../concepts/targets/ci/">CI</a> - compose a <code>ci</code> target with <code>magus.needs</code>, and the shared-cache trust model.</li>
+<li><a href="../concepts/targets/ci/">CI</a> - compose a <code>ci</code> target with <code>magus\needs</code>, and the shared-cache trust model.</li>
 <li><a href="../guides/daemon/">Daemon and concurrency</a> - one persistent process, one shared <a class="glossary-term" href="../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> across every client.</li>
 <li><a href="../concepts/concurrency/">Concurrency</a> - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate <code>magus</code> invocations (with <code>MAGUS_NO_WAIT</code>).</li>
 <li><a href="../concepts/remote-cache/">Remote caching</a> - share the build cache across machines and CI, with a signing-based trust model.</li>
 <li><a href="../guides/editor/">Editor setup</a> - wire your editor to <code>magus buzz lsp</code> for magusfile <a class="code-xref" href="../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a>, hover, and signature help.</li>
-<li><a href="../guides/debugging/">Debugging</a> - the interactive REPL, <code>magus.pry()</code> breakpoints, and stepping through a target.</li>
+<li><a href="../guides/debugging/">Debugging</a> - the interactive REPL, <code>magus\pry()</code> breakpoints, and stepping through a target.</li>
 <li><a href="../guides/tips/">Tips and tricks</a> - non-obvious ways to combine subcommands.</li>
 <li><a href="../guides/mcp/">MCP</a> - drive magus from agents over the Model Context Protocol.</li>
 <li><a href="../concepts/telemetry/">Telemetry</a> - OpenTelemetry traces and metrics.</li>
@@ -240,7 +240,7 @@ one-shot target. See <a href="../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#abs" title="abs">abs</a></li><li><a href="#rel" title="rel">rel</a></li><li><a href="#clean" title="clean">clean</a></li><li><a href="#is-abs" title="is_abs">is_abs</a></li><li><a href="#expand-user" title="expand_user">expand_user</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#abs" title="abs">abs</a></li><li><a href="#rel" title="rel">rel</a></li><li><a href="#clean" title="clean">clean</a></li><li><a href="#isabs" title="isAbs">isAbs</a></li><li><a href="#expanduser" title="expandUser">expandUser</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="path">path</h1>
 <p>Pure <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>-string math: abs, rel, clean, is_abs, expand_user.</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;path&quot;</code>) and call methods in <code>camelCase</code> (<code>path.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;path&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>path\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="abs">abs</h3>
 <p>Return the absolute form of path, resolved against the current directory and lexically cleaned.</p>
-<p><strong>Signature:</strong> <code>path.abs(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L64" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#abs" data-kind="method" data-def="">path\abs</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L64" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -139,7 +139,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="rel">rel</h3>
 <p>Return a relative path from base to <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>; errors if no relative path exists.</p>
-<p><strong>Signature:</strong> <code>path.rel(base, target) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L73" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#rel" data-kind="method" data-def="">path\rel</a>(base, target) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L73" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -167,7 +167,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="clean">clean</h3>
 <p>Return the shortest lexically-equivalent path (resolves . and .., collapses separators).</p>
-<p><strong>Signature:</strong> <code>path.clean(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L82" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#clean" data-kind="method" data-def="">path\clean</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L82" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -187,9 +187,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="is-abs">is_abs</h3>
+<h3 id="isabs">isAbs</h3>
 <p>Report whether path is absolute.</p>
-<p><strong>Signature:</strong> <code>path.isAbs(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L87" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#isabs" data-kind="method" data-def="">path\isAbs</a>(path) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L87" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -209,9 +209,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> bool</p>
-<h3 id="expand-user">expand_user</h3>
+<h3 id="expanduser">expandUser</h3>
 <p>Expand a leading ~ (or ~/...) to the current user's home directory; other paths are returned unchanged.</p>
-<p><strong>Signature:</strong> <code>path.expandUser(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L94" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#expanduser" data-kind="method" data-def="">path\expandUser</a>(path) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/path.go#L94" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -250,7 +250,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/path.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/path.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -312,7 +312,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

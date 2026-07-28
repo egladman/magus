@@ -148,7 +148,7 @@
 import &quot;magus&quot;;
 import &quot;magus/spell/docker&quot;;
 
-magus.project({ &quot;spells&quot;: [docker] });
+magus\project({ &quot;spells&quot;: [docker] });
 
 export fun image(ctx: magus\Context, args: [str]) &gt; void {
     docker[&quot;docker-build&quot;]({ &quot;args&quot;: [&quot;-t&quot;, &quot;app:latest&quot;, &quot;.&quot;] });
@@ -163,7 +163,7 @@ export fun image(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/docker&quot;;
 
-magus.project({ &quot;spells&quot;: [docker] });
+magus\project({ &quot;spells&quot;: [docker] });
 
 export fun image_check(ctx: magus\Context, args: [str]) &gt; void {
     docker[&quot;docker-build-check&quot;]({ &quot;args&quot;: [&quot;.&quot;] });
@@ -178,7 +178,7 @@ export fun image_check(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/docker&quot;;
 
-magus.project({ &quot;spells&quot;: [docker] });
+magus\project({ &quot;spells&quot;: [docker] });
 
 export fun image_buildx(ctx: magus\Context, args: [str]) &gt; void {
     docker[&quot;docker-buildx&quot;]({ &quot;args&quot;: [&quot;-t&quot;, &quot;app:latest&quot;, &quot;.&quot;] });
@@ -192,7 +192,7 @@ export fun image_buildx(ctx: magus\Context, args: [str]) &gt; void {
 import &quot;magus&quot;;
 import &quot;magus/spell/docker&quot;;
 
-magus.project({ &quot;spells&quot;: [docker] });
+magus\project({ &quot;spells&quot;: [docker] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     docker[&quot;hadolint&quot;]();
@@ -279,7 +279,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

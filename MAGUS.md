@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2103 nodes** and **4590 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2129 nodes** and **4644 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -53,10 +53,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `os` |
 | method | 153 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 40 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 196 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 107 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 225 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1072 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| doc | 197 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 109 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 228 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1092 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 114 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 

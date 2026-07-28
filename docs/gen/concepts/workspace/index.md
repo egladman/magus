@@ -13,7 +13,7 @@ The split is deliberate. The workspace is the unit of _discovery, caching, and a
 ## Design intent
 
 - **Files first.** A directory becomes a project because it _contains a magusfile_, not because you list it in a central manifest. Discovery reads the tree; there is no registry to keep in sync.
-- **Convention over ceremony.** A bare magusfile with nothing but exported target functions is a complete project on defaults. The optional `magus.project({...})` call only layers extra policy on top.
+- **Convention over ceremony.** A bare magusfile with nothing but exported target functions is a complete project on defaults. The optional `magus\project({...})` call only layers extra policy on top.
 - **One root, repo-relative paths.** Every project `Path` is stored relative to the workspace root. This keeps target identity portable across machines and lets the CLI, `depends_on`, and the cache all speak the same coordinate system.
 - **Explicit dependencies.** Cross-project edges are declared, never inferred. `depends_on` is the single source of truth for ordering, the affected set, and cache-key propagation.
 
@@ -40,7 +40,7 @@ A project owns:
 
 - **its targets** - the exported functions in its magusfile become the runnable operations (`build`, `test`, `lint`, ...); no registration call is needed (see [targets.md](targets.md)).
 - **its bound spells** - the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
-- **its policy** - dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus.project({...})` call.
+- **its policy** - dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
 
 ## Project discovery
 
@@ -61,7 +61,7 @@ A project's magusfile is `magusfile.buzz` (or the split `magusfiles/*.buzz` form
 import "magus";
 import "spells/hello";          // ./spells/hello/spell.buzz
 
-magus.project({ "spells": [hello] });
+magus\project({ "spells": [hello] });
 
 // Each exported function becomes a runnable target.
 export fun build(ctx: magus\Context, args: [str]) > void { hello.build(); }
@@ -73,9 +73,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-### `magus.project({...})`: layering policy
+### `magus\project({...})`: layering policy
 
-`magus.project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
+`magus\project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
 
 | Key            | Effect                                                                                                                                                                                                                                                |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -101,7 +101,7 @@ The `targets` sub-map keys a target name to a policy table:
 | `slots`      | the target holds N concurrency slots while it runs, throttling parallel work |
 
 ```buzz
-magus.project({
+magus\project({
     "spells": [go],
     "depends_on": ["../shared"],
     "outputs": ["dist/**"],
@@ -141,11 +141,11 @@ repo/                 # workspace root (magus.yaml, go.mod)
 
 ### The central (monorepo) form
 
-`magus.project` also accepts an explicit path as its first argument. This is the rarer **central form**: one magusfile declares options for a discovered project at another workspace path.
+`magus\project` also accepts an explicit path as its first argument. This is the rarer **central form**: one magusfile declares options for a discovered project at another workspace path.
 
 ```buzz
-magus.project({ "spells": [go] });          // configures THIS project (path from context)
-magus.project("api", { "depends_on": ["shared"] });  // configures the discovered "api" project
+magus\project({ "spells": [go] });          // configures THIS project (path from context)
+magus\project("api", { "depends_on": ["shared"] });  // configures the discovered "api" project
 ```
 
 The explicit-path form configures a project that **discovery already found** - it does not create one. The path is relative to the workspace root, not to the declaring magusfile's directory. Passing the magusfile's own directory name here is the classic footgun; to configure the calling project, omit the path. An explicit path that matches no discovered project is a hard error that lists the known projects.
@@ -181,14 +181,14 @@ Together, discovery gives magus the set of projects, `depends_on` gives it the e
 | **Root**            | The workspace root directory, found by `FindRoot` and canonicalised at discovery. Every project `Path` is relative to it.   |
 | **Discovery**       | The single `WalkDir` pass (`project.Discover`) that registers a project per directory carrying a magusfile.                 |
 | **magusfile**       | `magusfile.buzz` (or `magusfiles/*.buzz`); its presence registers a project. Exported functions become targets.             |
-| **`magus.project`** | The optional call that layers policy (spells, `depends_on`, outputs, watch-ignore, per-target flags) onto a project.        |
+| **`magus\project`** | The optional call that layers policy (spells, `depends_on`, outputs, watch-ignore, per-target flags) onto a project.        |
 | **depends_on**      | Declared upstream project paths. Drive ordering, the reverse-closure affected set, and `dep:` cache-key propagation.        |
 | **Ignore dirs**     | The fixed directory names discovery prunes at any depth (`.git`, `vendor`, `node_modules`, `target`, `gen`, ...).           |
 
 ## See also
 
 - [targets.md](targets.md): the addressable unit of work, project-path resolution, and the CLI grammar.
-- [dependencies.md](dependencies.md): `depends_on` versus `magus.needs`, the fold between them, and how they feed the cache and the affected set.
+- [dependencies.md](dependencies.md): `depends_on` versus `magus\needs`, the fold between them, and how they feed the cache and the affected set.
 - [operations.md](operations.md): the Spell to Operation to Target hierarchy and where affected computation sits.
 - [spells.md](spells.md): the tool libraries a project binds and composes into targets.
 - [cache.md](cache.md): the content-addressed cache key, including the `dep:` lines that propagate cross-project changes.

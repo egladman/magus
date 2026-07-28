@@ -102,7 +102,7 @@ This pairs with <a class="code-xref" href="../magus-watch/" data-kind="command" 
 <p>magus <a class="code-xref" href="../magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a> | <a class="code-xref" href="./" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --stdin build</p>
 <p>Forensic modes reason about the affected set instead of executing a target.
 --<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> shows why a project is in the set. --plan emits a provider-neutral
-JSON <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set (for CI fan-out; always keys off the ci
+JSON <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set (for CI fan-out; always keys off the ci
 anchor). --bisect drives VCS bisect using run history to find the commit that
 introduced a regression.</p>
 <h2 id="options">Options</h2>
@@ -265,7 +265,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

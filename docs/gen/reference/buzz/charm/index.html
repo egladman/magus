@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#append" title="append">append</a></li><li><a href="#prepend" title="prepend">prepend</a></li><li><a href="#after" title="after">after</a></li><li><a href="#before" title="before">before</a></li><li><a href="#set" title="set">set</a></li><li><a href="#drop" title="drop">drop</a></li><li><a href="#after-func" title="after_func">after_func</a></li><li><a href="#before-func" title="before_func">before_func</a></li><li><a href="#set-func" title="set_func">set_func</a></li><li><a href="#drop-func" title="drop_func">drop_func</a></li><li><a href="#path" title="path">path</a></li><li><a href="#path-func" title="path_func">path_func</a></li><li><a href="#move" title="move">move</a></li><li><a href="#move-func" title="move_func">move_func</a></li><li><a href="#copy" title="copy">copy</a></li><li><a href="#copy-func" title="copy_func">copy_func</a></li><li><a href="#test" title="test">test</a></li><li><a href="#test-func" title="test_func">test_func</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#append" title="append">append</a></li><li><a href="#prepend" title="prepend">prepend</a></li><li><a href="#after" title="after">after</a></li><li><a href="#before" title="before">before</a></li><li><a href="#set" title="set">set</a></li><li><a href="#drop" title="drop">drop</a></li><li><a href="#afterfunc" title="afterFunc">afterFunc</a></li><li><a href="#beforefunc" title="beforeFunc">beforeFunc</a></li><li><a href="#setfunc" title="setFunc">setFunc</a></li><li><a href="#dropfunc" title="dropFunc">dropFunc</a></li><li><a href="#path" title="path">path</a></li><li><a href="#pathfunc" title="pathFunc">pathFunc</a></li><li><a href="#move" title="move">move</a></li><li><a href="#movefunc" title="moveFunc">moveFunc</a></li><li><a href="#copy" title="copy">copy</a></li><li><a href="#copyfunc" title="copyFunc">copyFunc</a></li><li><a href="#test" title="test">test</a></li><li><a href="#testfunc" title="testFunc">testFunc</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,12 +112,12 @@
 <h1 id="charm">charm</h1>
 <p>Constructors for <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> values: RFC 6902 JSON Patches over a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s argv (see docs/charms.md).</p>
 <blockquote>
-<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;charm&quot;</code>) and call methods in <code>camelCase</code> (<code>charm.someMethod</code>).</p>
+<p><strong>Naming convention:</strong> import the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> under its bare name (<code>import &quot;charm&quot;</code>), reach members with a backslash, and call methods in <code>camelCase</code>: <code>charm\someMethod</code>.</p>
 </blockquote>
 <h2 id="methods">Methods</h2>
 <h3 id="append">append</h3>
 <p>Append vals to the end of the argv.</p>
-<p><strong>Signature:</strong> <code>charm.append(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L198" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#append" data-kind="method" data-def="">charm\append</a>(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L198" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -139,7 +139,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="prepend">prepend</h3>
 <p>Insert vals at the front of the argv, in order.</p>
-<p><strong>Signature:</strong> <code>charm.prepend(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L207" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#prepend" data-kind="method" data-def="">charm\prepend</a>(vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L207" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -161,7 +161,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="after">after</h3>
 <p>Insert vals immediately after the first argv element equal to anchor.</p>
-<p><strong>Signature:</strong> <code>charm.after(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L212" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#after" data-kind="method" data-def="">charm\after</a>(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L212" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -195,7 +195,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="before">before</h3>
 <p>Insert vals immediately before the first argv element equal to anchor.</p>
-<p><strong>Signature:</strong> <code>charm.before(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L221" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#before" data-kind="method" data-def="">charm\before</a>(argv, anchor, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L221" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -229,7 +229,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="set">set</h3>
 <p>Replace the first argv element equal to anchor with val.</p>
-<p><strong>Signature:</strong> <code>charm.set(argv, anchor, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L230" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#set" data-kind="method" data-def="">charm\set</a>(argv, anchor, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L230" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -263,7 +263,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="drop">drop</h3>
 <p>Drop (remove) the first argv element equal to anchor.</p>
-<p><strong>Signature:</strong> <code>charm.drop(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L239" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#drop" data-kind="method" data-def="">charm\drop</a>(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L239" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -289,9 +289,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="after-func">after_func</h3>
+<h3 id="afterfunc">afterFunc</h3>
 <p>Insert vals after the first argv element for which fn(s) is truthy.</p>
-<p><strong>Signature:</strong> <code>charm.afterFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L248" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#afterfunc" data-kind="method" data-def="">charm\afterFunc</a>(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L248" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -323,9 +323,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="before-func">before_func</h3>
+<h3 id="beforefunc">beforeFunc</h3>
 <p>Insert vals before the first argv element for which fn(s) is truthy.</p>
-<p><strong>Signature:</strong> <code>charm.beforeFunc(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L257" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#beforefunc" data-kind="method" data-def="">charm\beforeFunc</a>(argv, fn, vals) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L257" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -357,9 +357,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="set-func">set_func</h3>
+<h3 id="setfunc">setFunc</h3>
 <p>Replace the first argv element for which fn(s) is truthy with val.</p>
-<p><strong>Signature:</strong> <code>charm.setFunc(argv, fn, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L266" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#setfunc" data-kind="method" data-def="">charm\setFunc</a>(argv, fn, val) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L266" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -391,9 +391,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="drop-func">drop_func</h3>
+<h3 id="dropfunc">dropFunc</h3>
 <p>Drop (remove) the first argv element for which fn(s) is truthy.</p>
-<p><strong>Signature:</strong> <code>charm.dropFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L275" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#dropfunc" data-kind="method" data-def="">charm\dropFunc</a>(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L275" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -421,7 +421,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="path">path</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element equal to anchor - the index, auto-calculated, for hand-built move/copy/test ops.</p>
-<p><strong>Signature:</strong> <code>charm.<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#path" data-kind="method" data-def="">charm\path</a>(argv, anchor) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -447,9 +447,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> string</p>
-<h3 id="path-func">path_func</h3>
+<h3 id="pathfunc">pathFunc</h3>
 <p>Return the JSON Pointer (&quot;/N&quot;) of the first argv element for which fn(s) is truthy.</p>
-<p><strong>Signature:</strong> <code>charm.pathFunc(argv, fn) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L293" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#pathfunc" data-kind="method" data-def="">charm\pathFunc</a>(argv, fn) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L293" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -476,8 +476,8 @@
 </table></figure>
 <p><strong>Returns:</strong> string</p>
 <h3 id="move">move</h3>
-<p>Move the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
-<p><strong>Signature:</strong> <code>charm.move(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L311" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p>Move the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>(...)).</p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#move" data-kind="method" data-def="">charm\move</a>(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L311" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -509,9 +509,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="move-func">move_func</h3>
+<h3 id="movefunc">moveFunc</h3>
 <p>Move the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
-<p><strong>Signature:</strong> <code>charm.moveFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L323" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#movefunc" data-kind="method" data-def="">charm\moveFunc</a>(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L323" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -545,7 +545,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="copy">copy</h3>
 <p>Copy the first argv element equal to anchor to the JSON Pointer to (&quot;/-&quot; end, &quot;/0&quot; front, or charm.path(...)).</p>
-<p><strong>Signature:</strong> <code>charm.copy(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L335" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#copy" data-kind="method" data-def="">charm\copy</a>(argv, anchor, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L335" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -577,9 +577,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="copy-func">copy_func</h3>
+<h3 id="copyfunc">copyFunc</h3>
 <p>Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.</p>
-<p><strong>Signature:</strong> <code>charm.copyFunc(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L347" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#copyfunc" data-kind="method" data-def="">charm\copyFunc</a>(argv, fn, to) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L347" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -613,7 +613,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="test">test</h3>
 <p>Guard: assert the first argv element equal to anchor is still at its position when the patch applies (else the <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> errors).</p>
-<p><strong>Signature:</strong> <code>charm.test(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#test" data-kind="method" data-def="">charm\test</a>(argv, anchor) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -639,9 +639,9 @@
 </tbody>
 </table></figure>
 <p><strong>Returns:</strong> map[string]any</p>
-<h3 id="test-func">test_func</h3>
+<h3 id="testfunc">testFunc</h3>
 <p>Guard: assert the first argv element for which fn(s) is truthy is still at its position when the patch applies.</p>
-<p><strong>Signature:</strong> <code>charm.testFunc(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L369" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#testfunc" data-kind="method" data-def="">charm\testFunc</a>(argv, fn) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/charm.go#L369" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -686,7 +686,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22charm%22">charm</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T15:08:25Z">July 28, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8" data-tooltip="a162512638650837a07bc276d8b5d4e5bb5fd7e8" title="a162512638650837a07bc276d8b5d4e5bb5fd7e8">a1625126</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/charm.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/charm.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -748,7 +748,7 @@ one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

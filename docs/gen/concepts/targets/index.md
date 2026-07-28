@@ -97,7 +97,7 @@ A target name is typically one of the seven canonical operations (see below); cu
 | `clean`     | remove local build artefacts                     |
 | `generate`  | run code generators                              |
 
-There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus.needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
+There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
 Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - and security scanning (`govulncheck`) belong under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `security` target. A slow security scan can instead be gated in `ci`. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
 
@@ -173,8 +173,8 @@ before lookup, wherever that input enters.
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Magusfile declarations (`export fun`)                   | `export fun go_build(...)` registers as `go-build`.                                                        |
 | CLI `magus run` / `magus affected` arguments            | `magus run goBuild` reaches the target declared `go_build`.                                                |
-| `magus.needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
-| The per-target policy map (`magus.project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
+| `magus\needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
+| The per-target policy map (`magus\project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
 | Charm names (`NormalizeCharmName`)                      | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
 
 ### Where it deliberately does not apply
@@ -272,11 +272,11 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                   |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                     |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                   |
-| **`ci`**   | An ordinary target you compose with `magus.needs`; `Magus.RunCI` only strips `rw`, anchors `magus affected`, and must-not-no-op. |
+| **`ci`**   | An ordinary target you compose with `magus\needs`; `Magus.RunCI` only strips `rw`, anchors `magus affected`, and must-not-no-op. |
 
 ## See also
 
-- [dependencies.md](dependencies.md): `magus.needs` versus `depends_on`, and how a cross-project `needs` folds into the affected set and the cache key.
+- [dependencies.md](dependencies.md): `magus\needs` versus `depends_on`, and how a cross-project `needs` folds into the affected set and the cache key.
 - [operations.md](operations.md): the formal Operation definition and the work hierarchy (Spell → Operation → Target).
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [charms.md](charms.md): the execution modifiers attached after `:`.

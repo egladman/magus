@@ -104,7 +104,7 @@ long-running processes: accidental sprawl and misuse.</p>
 <ul>
 <li><strong><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> directly</strong> (<code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> dev</code>) it is forked in the <strong>foreground</strong> and magus
 <strong>blocks</strong> on it; Ctrl-C signals the process. This is the &quot;run my dev server&quot; case.</li>
-<li><strong>Reached as a dependency</strong> (some <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s <code>magus.needs</code> pulls it in) it is
+<li><strong>Reached as a dependency</strong> (some <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s <code>magus\needs</code> pulls it in) it is
 <strong>supervised in the background</strong>: magus starts it, waits for its readiness probe to
 pass, then lets the dependent run against it. It does not block. The service stops
 when the run ends (or stays warm on the <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>, below).</li>
@@ -255,7 +255,7 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than
