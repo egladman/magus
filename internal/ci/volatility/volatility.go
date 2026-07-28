@@ -22,6 +22,12 @@ type Config struct {
 	BootstrapSamples int     // outcomes below which all failures are retried unconditionally
 	MinSamples       int     // minimum outcomes before Score returns a non-zero value
 	Threshold        float64 // Wilson lower-bound volatility rate above which a target is retried
+	// Annotate turns a retry into a CI warning notice, so a volatile target
+	// surfaces on the pull request instead of only in a log nobody opens
+	// when the job comes back green. Notices reach reviewers, so this stays
+	// opt-in rather than following provider detection. Which provider's
+	// syntax is emitted is decided by internal/ci/annotate, not here.
+	Annotate bool
 }
 
 // DefaultConfig returns sensible defaults.
@@ -31,6 +37,7 @@ func DefaultConfig() Config {
 		BootstrapSamples: 20,
 		MinSamples:       20,
 		Threshold:        0.05,
+		Annotate:         true,
 	}
 }
 

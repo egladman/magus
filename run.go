@@ -16,6 +16,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/audit"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/describe"
@@ -941,24 +942,49 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 		Attempts:       attempts,
 	})
 
-	if rw := report.WriterFromContext(ctx); rw != nil && decision.Retry {
+	if decision.Retry {
 		status := "retry_failed"
 		if result == "volatile" {
 			status = "retried_volatile"
 		} else if rt.IsRegression(p.Path, volatileTarget) {
 			status = "suspected_regression"
 		}
-		_ = report.Record(rw, report.VolatilityCall{
-			Project:         p.Path,
-			Target:          volatileTarget,
-			Status:          status,
-			Attempts:        attempts,
-			RetryReason:     string(decision.Reason),
-			VolatilityScore: rt.Score(p.Path, volatileTarget),
-		})
+		annotateVolatility(p.Path, volatileTarget, status, rt)
+
+		if rw := report.WriterFromContext(ctx); rw != nil {
+			_ = report.Record(rw, report.VolatilityCall{
+				Project:         p.Path,
+				Target:          volatileTarget,
+				Status:          status,
+				Attempts:        attempts,
+				RetryReason:     string(decision.Reason),
+				VolatilityScore: rt.Score(p.Path, volatileTarget),
+			})
+		}
 	}
 
 	return err
+}
+
+// annotateVolatility surfaces a retried target as a GitHub Actions warning
+// annotation, so it appears on the pull request rather than only in a log
+// nobody opens when the job comes back green.
+//
+// A retry that succeeded is the case worth annotating: the job passes, so
+// nothing else tells the reviewer that a target needed two attempts, and
+// an unnoticed volatile target is how a suite decays into one nobody
+// trusts. Gated on the user's opt-in and on actually running under
+// Actions, so no other host ever sees a workflow command.
+func annotateVolatility(project, target, status string, rt *volatility.Runtime) {
+	if !rt.Config().Annotate {
+		return
+	}
+	_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+		Level:   annotate.LevelWarning,
+		Title:   "magus: volatile target",
+		File:    project,
+		Message: fmt.Sprintf("%s %s: %s (volatility %.2f)", project, target, status, rt.Score(project, target)),
+	})
 }
 
 // verifyReadOnly runs fn - a target expected to be read-only (preflight/generate

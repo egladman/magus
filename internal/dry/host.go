@@ -101,6 +101,14 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	cache.MapSet("remote", fn("magus.cache.remote", retNull))
 	m.MapSet("cache", cache)
 
+	// magus.ci.<...>: selects the CI provider spell in the real module.
+	// Stubbed no-op for the same reason as cache.remote - a magusfile calls
+	// it at top level, and the dry playground evaluates that without a VM
+	// able to resolve a spell.
+	ci := vm.NewMap()
+	ci.MapSet("provider", fn("magus.ci.provider", retNull))
+	m.MapSet("ci", ci)
+
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).
