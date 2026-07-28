@@ -125,7 +125,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2084 nodes</strong> and <strong>4525 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2103 nodes</strong> and <strong>4590 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -150,15 +150,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">79</td>
+<td style="text-align:right">78</td>
 <td><code>magus query kind:target</code></td>
-<td><code>content-generate</code>, <code>generate</code>, <code>generate</code></td>
+<td><code>content-generate</code>, <code>generate</code>, <code>image-build</code></td>
 </tr>
 <tr>
 <td>spell</td>
 <td style="text-align:right">12</td>
 <td><code>magus query kind:spell</code></td>
-<td><code>go</code>, <code>ts</code>, <code>docker</code></td>
+<td><code>go</code>, <code>ts</code>, <code>buf</code></td>
 </tr>
 <tr>
 <td>op</td>
@@ -176,7 +176,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>charm</td>
 <td style="text-align:right">5</td>
 <td><code>magus query kind:charm</code></td>
-<td><code>rw</code>, <code>static</code>, <code>cd</code></td>
+<td><code>rw</code>, <code>gha</code>, <code>static</code></td>
 </tr>
 <tr>
 <td>module</td>
@@ -198,13 +198,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">187</td>
+<td style="text-align:right">196</td>
 <td><code>magus query kind:doc</code></td>
-<td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/reference/manpage/magus-run.md</code>, <code>docs/concepts/spells.md</code></td>
+<td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/reference/manpage/magus-affected.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
-<td style="text-align:right">96</td>
+<td style="text-align:right">107</td>
 <td><code>magus query kind:dir</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/reference/buzz</code></td>
 </tr>
@@ -216,13 +216,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1073</td>
+<td style="text-align:right">1072</td>
 <td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">113</td>
+<td style="text-align:right">114</td>
 <td><code>magus query kind:import</code></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
@@ -246,9 +246,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">26</td>
+<td style="text-align:right">25</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>format</code>, <code>image-build</code></td>
+<td><code>generate</code>, <code>image-build</code>, <code>format</code></td>
 </tr>
 <tr>
 <td>cmd/magus/starter</td>
@@ -260,7 +260,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>console</td>
 <td style="text-align:right">5</td>
 <td><code>magus query project:console</code></td>
-<td><code>build</code>, <code>ci</code>, <code>lint</code></td>
+<td><code>build</code>, <code>ci</code>, <code>preflight</code></td>
 </tr>
 <tr>
 <td>docs</td>
@@ -272,7 +272,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>libs/diag</td>
 <td style="text-align:right">8</td>
 <td><code>magus query project:libs/diag</code></td>
-<td><code>format</code>, <code>generate</code>, <code>build</code></td>
+<td><code>format</code>, <code>build</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>libs/gopherbuzz</td>
@@ -290,7 +290,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>proto</td>
 <td style="text-align:right">3</td>
 <td><code>magus query project:proto</code></td>
-<td><code>ci</code>, <code>generate</code>, <code>lint</code></td>
+<td><code>generate</code>, <code>lint</code>, <code>ci</code></td>
 </tr>
 </tbody>
 </table></figure>

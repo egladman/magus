@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2105 nodes** and **4588 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2103 nodes** and **4590 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,26 +45,26 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 8 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 79 | `magus query kind:target` | `content-generate`, `generate`, `format` |
+| target | 78 | `magus query kind:target` | `content-generate`, `generate`, `image-build` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
-| charm | 5 | `magus query kind:charm` | `rw`, `static`, `cd` |
+| charm | 5 | `magus query kind:charm` | `rw`, `gha`, `static` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `os` |
 | method | 153 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 40 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
 | doc | 196 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 107 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 225 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1073 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1072 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 114 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 26 | `magus query project:.` | `generate`, `format`, `image-build` |
+| . | 25 | `magus query project:.` | `generate`, `image-build`, `format` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
-| console | 5 | `magus query project:console` | `build`, `ci`, `lint` |
+| console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
 | libs/diag | 8 | `magus query project:libs/diag` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 9 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
@@ -76,7 +76,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
-| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary. |
+| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
@@ -87,7 +87,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `lint` | Formats first, then golangci-lint, go vet, and markdownlint. |
-| `security` |  |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
