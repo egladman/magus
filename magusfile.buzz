@@ -47,7 +47,6 @@ magus.project({
         "serve": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
-        "postflight": {"skip_cache": true},
         "image-build": {"skip_cache": true},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
@@ -225,18 +224,30 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs.writeFile(fs.join("gen", "target-graph.json"), targets);
 }
 
-// Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
-// GitHub Actions, appends it to the job step summary. The final CI step; never gates.
+// Renders the insight report (hotspots, affinity, ownership, trend) and, with the
+// `gha` charm, appends it to a host output path supplied via env. The final CI step;
+// never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
+// the host that sets it (the workflow) is what knows it's GitHub Actions and
+// points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the
+// safe Mermaid subset so older or partial renderers handle it.
 export fun postflight(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.insight(["report", "--workspace", "--github-summary"]).stdout; // teed to stdout, like md-generate
-    final summaryPath = os.env("GITHUB_STEP_SUMMARY");
-    if (summaryPath != null and ("" + summaryPath) != "") {
-        final sp = "" + summaryPath;
-        var existing = "";
-        if (fs.exists(sp)) { existing = fs.readFile(sp); }
-        fs.writeFile(sp, existing + doc + "\n");
-        magus.info("postflight: wrote insight report to the GitHub Actions step summary");
+    final hasGha = ctx.has_charm("gha");
+    var styleArgs = ["report", "--workspace"];
+    if (hasGha) { styleArgs = ["report", "--workspace", "--mermaid-style", "safe"]; }
+    final doc = magus.insight(styleArgs).stdout;
+
+    if (hasGha) {
+        final outputPath = os.env("MAGUS_INSIGHT_OUTPUT_PATH");
+        if (outputPath != null and outputPath != "") {
+            var existing = "";
+            if (fs.exists(outputPath)) { existing = fs.readFile(outputPath); }
+            fs.writeFile(outputPath, existing + doc + "\n");
+            magus.info("postflight: appended insight report");
+            return;
+        }
     }
+    // Default: print to stdout so a local `magus run postflight` is useful too.
+    magus.info(doc);
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to
