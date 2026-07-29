@@ -48,6 +48,8 @@ operators.buzz
 optionals.buzz
 placeholder-cycle.buzz
 placeholder-nested-call.buzz
+range-expression-scope.buzz
+range.buzz
 scope.buzz
 str.buzz
 tail-call.buzz

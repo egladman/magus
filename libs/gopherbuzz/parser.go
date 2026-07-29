@@ -1402,16 +1402,19 @@ func (p *parser) parseBlock() (*ast.BlockStmt, error) {
 
 // ---- expression precedence climbing ----
 
-func (p *parser) parseExpr() (ast.Node, error) { return p.parseRange() }
+func (p *parser) parseExpr() (ast.Node, error) { return p.parseCoalesce() }
 
+// parseRange sits between comparison and additive, so `..` binds TIGHTER than
+// `==`: upstream writes `range == 0..10`, which at a looser precedence would
+// parse as `(range == 0)..10` and range a bool.
 func (p *parser) parseRange() (ast.Node, error) {
-	left, err := p.parseCoalesce()
+	left, err := p.parseAdditive()
 	if err != nil {
 		return nil, err
 	}
 	if p.check(token.DotDot) {
 		t := p.advance()
-		right, err := p.parseCoalesce()
+		right, err := p.parseAdditive()
 		if err != nil {
 			return nil, err
 		}
@@ -1489,7 +1492,7 @@ func (p *parser) parseEquality() (ast.Node, error) {
 }
 
 func (p *parser) parseComparison() (ast.Node, error) {
-	left, err := p.parseAdditive()
+	left, err := p.parseRange()
 	if err != nil {
 		return nil, err
 	}
@@ -1508,7 +1511,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 				op = ">="
 			}
 			t := p.advance()
-			right, err := p.parseAdditive()
+			right, err := p.parseRange()
 			if err != nil {
 				return nil, err
 			}

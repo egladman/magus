@@ -14,7 +14,7 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**45 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+**47 of 83** upstream behavior tests pass, measured against `UpstreamRef`
 (`0.5.0-251-ged42f47`) on 2026-07-28.
 
 The baseline when this record started was 12; `is` grammar, typed for-init, and
@@ -26,7 +26,7 @@ nullable declarations without an initializer, object-literal field punning,
 argument values, `!>`/`*>` inside a function TYPE, multiple typed catch clauses,
 labeled loops, block expressions, free identifiers, and generic object
 declarations, inline ifs, `catch void`, and contextual typing for inferred enum
-cases have banked thirty-three since. Measure against the PINNED commit,
+cases, range precedence, and the range methods have banked thirty-five since. Measure against the PINNED commit,
 not a local `main` checkout: a newer checkout has files that do not exist at the
 pin, which is how an earlier hand-count reached a wrong 13-of-84.
 
@@ -50,7 +50,7 @@ types and explicit case values), namespaces and imports, optionals with `??`,
 `as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
 initializer, default argument values, error sets on declarations plus
 `try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
-interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, and
+interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
 generic object declarations, inline ifs, and `catch void`. Two deliberate supersets: the contextual

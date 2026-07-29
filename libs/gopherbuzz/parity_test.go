@@ -699,3 +699,80 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "spades/true", v.AsString(), "the lookup is by the case's value, not its position")
 }
+
+func TestParity_RangeBindsTighterThanComparison(t *testing.T) {
+	// `range == 0..10` must parse as `range == (0..10)`. At a looser precedence
+	// it becomes `(range == 0)..10`, which ranges a bool.
+	v := evalParity(t, `
+fun probe() > bool {
+    final limit = 10;
+    final r = 0..limit;
+    return r == 0..10;
+}`)
+	assert.True(t, v.AsBool(), "..  binds tighter than ==")
+}
+
+func TestParity_RangeEqualityIsStructural(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    return 0..10 == 0..10 and !(0..10 == 10..0);
+}`)
+	assert.True(t, v.AsBool(), "two ranges are equal when both operands match")
+}
+
+func TestParity_RangeMethods(t *testing.T) {
+	cases := []struct {
+		name string
+		expr string
+		want int64
+	}{
+		// low/high report the operands as written, not the smaller and larger.
+		{"low", `(0..10).low()`, 0},
+		{"high", `(0..10).high()`, 10},
+		{"inverted low", `(10..0).low()`, 10},
+		{"inverted high", `(10..0).high()`, 0},
+		{"len", `(0..10).len()`, 10},
+		{"inverted len", `(10..0).len()`, 10},
+		{"toList length", `(0..10).toList().len()`, 10},
+		{"inverted toList length", `(10..0).toList().len()`, 10},
+		{"toList is ascending", `(0..10).toList()[0]`, 0},
+		{"inverted toList descends", `(10..0).toList()[0]`, 10},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, "fun probe() > int { return "+tc.expr+"; }")
+			assert.Equal(t, tc.want, v.AsInt(), "a range runs from low toward high and stops before it")
+		})
+	}
+}
+
+func TestParity_RangeInvertAndContains(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    return (0..10).invert() == 10..0
+        and (0..10).contains(0)
+        and (0..10).contains(9)
+        and !(0..10).contains(10)
+        and !(0..10).contains(-1)
+        and (10..0).contains(10)
+        and !(10..0).contains(0);
+}`)
+	assert.True(t, v.AsBool(), "contains matches exactly what foreach would yield")
+}
+
+func TestParity_RangeMethodsMatchForeach(t *testing.T) {
+	// len/toList/contains all have to agree with iteration, in both directions.
+	v := evalParity(t, `
+fun probe() > str {
+    var up = 0;
+    foreach (n in 0..10) {
+        up = up + n;
+    }
+    var down = 0;
+    foreach (n in 10..0) {
+        down = down + n;
+    }
+    return "{up}/{down}";
+}`)
+	assert.Equal(t, "45/55", v.AsString(), "0..10 yields 0-9 and 10..0 yields 10-1")
+}
