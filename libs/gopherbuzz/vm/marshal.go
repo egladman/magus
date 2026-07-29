@@ -72,7 +72,11 @@ import (
 //
 // v16 adds the IfExpr node tag for the inline if (`if (c) a else b`). Same
 // reasoning as v15: an unknown tag is not decodable.
-const BytecodeVersion uint16 = 16
+//
+// v17 adds MapExpr's Anon flag, which separates the anonymous-object form
+// `.{ f = v }` from a real map literal. It is read before the entry count, so
+// the two versions disagree about where the count starts.
+const BytecodeVersion uint16 = 17
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -457,6 +461,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.MapExpr:
 		e.u8(nodeMapExpr)
 		e.pos(p)
+		e.boolean(v.Anon)
 		e.u32(uint32(len(v.Keys)))
 		for i := range v.Keys {
 			if err := e.node(v.Keys[i]); err != nil {
@@ -1263,6 +1268,10 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.FunExpr{Pos: p, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: blockBody}, nil
 	case nodeMapExpr:
+		anon, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		n, err := d.u32()
 		if err != nil {
 			return nil, err
@@ -1280,7 +1289,7 @@ func (d *dec) node() (ast.Node, error) {
 				return nil, err
 			}
 		}
-		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals}, nil
+		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals, Anon: anon}, nil
 	case nodeListExpr:
 		n, err := d.u32()
 		if err != nil {

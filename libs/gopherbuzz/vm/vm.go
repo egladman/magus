@@ -991,6 +991,16 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 					}
 				}
 
+			case tagEnumDef:
+				// `Suit(0)`: an enum is callable on one of its case VALUES and
+				// answers the matching case, or null when no case carries it.
+				res, err := vm.enumFromValue(callee, vm.stack[calleeIdx+1:stackLen])
+				if err != nil {
+					return Null, err
+				}
+				vm.stack[calleeIdx] = res
+				vm.stack = vm.stack[:calleeIdx+1]
+
 			default:
 				return Null, errNotCallable(callee)
 			}
@@ -1833,6 +1843,22 @@ func errStackOverflow() error { return fmt.Errorf("buzz: call stack overflow (li
 
 //go:noinline
 func errNotCallable(v Value) error { return fmt.Errorf("buzz: %s is not callable", v.buzzKind()) }
+
+// enumFromValue implements `Suit(v)`, the reverse of `Suit.hearts.value`: it
+// returns the case whose value equals v, or null if none does. The result is
+// optional precisely because the lookup can miss.
+func (vm *VM) enumFromValue(enum Value, args []Value) (Value, error) {
+	if len(args) != 1 {
+		return Null, fmt.Errorf("buzz: enum %s takes exactly one value, got %d", vm.asEnumDef(enum).Name, len(args))
+	}
+	def := vm.asEnumDef(enum)
+	for i, cv := range def.Values {
+		if valuesEqual(cv, args[0]) {
+			return vm.allocEnumVal(&enumValObj{Enum: def.Name, Case: def.Cases[i], Val: cv}), nil
+		}
+	}
+	return Null, nil
+}
 
 //go:noinline
 func errCannotIterate(v Value) error { return fmt.Errorf("buzz: cannot iterate over %s", v.buzzKind()) }

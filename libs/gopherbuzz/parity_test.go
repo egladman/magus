@@ -600,3 +600,102 @@ fun probe() > int {
 }`)
 	assert.Equal(t, int64(7), v.AsInt(), "catch void swallows the error and yields nothing")
 }
+
+func TestParity_InferredEnumCaseFromExpectedType(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want int64
+	}{
+		{
+			name: "call argument",
+			src: `
+enum Suit { hearts, spades }
+fun pick(s: Suit) > int => s.value;
+fun probe() > int { return pick(.spades); }`,
+			want: 1,
+		},
+		{
+			name: "parameter default",
+			src: `
+enum Suit { hearts, spades }
+fun pick(s: Suit = .spades) > int => s.value;
+fun probe() > int { return pick(); }`,
+			want: 1,
+		},
+		{
+			// The enum is declared AFTER the object, so the method's signature is
+			// built before the enum exists and has to be refreshed before the
+			// default can resolve against it.
+			name: "method default with a forward-declared enum",
+			src: `
+object Defaults {
+    static fun pick(s: Suit = .spades) > int => s.value;
+}
+enum Suit { hearts, spades }
+fun probe() > int { return Defaults.pick(); }`,
+			want: 1,
+		},
+		{
+			name: "anonymous object literal field",
+			src: `
+enum Suit { hearts, spades }
+object Setting { suit: Suit }
+fun probe() > int {
+    final s: Setting = .{ suit = .spades };
+    return s.suit.value;
+}`,
+			want: 1,
+		},
+		{
+			name: "nested in an annotated map literal",
+			src: `
+enum Suit { hearts, spades }
+object Setting { suit: Suit }
+fun probe() > int {
+    final m: {str: Setting} = { "a": .{ suit = .spades } };
+    return m["a"]?.suit.value ?? -1;
+}`,
+			want: 1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, tc.src)
+			assert.Equal(t, tc.want, v.AsInt(), "the expected type says which enum a bare .case names")
+		})
+	}
+}
+
+func TestParity_AnnotatedMapLiteralIsStillAMap(t *testing.T) {
+	// The anonymous-object path must not swallow a real map literal: `.{}` and
+	// `{}` are different forms and only the first fills an object's fields.
+	v := evalParity(t, `
+fun probe() > int {
+    final m: {str: int} = { "a": 1, "b": 2 };
+    return m["a"] ?? 0;
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "a brace literal stays a map")
+}
+
+func TestParity_EnumFromValue(t *testing.T) {
+	v := evalParity(t, `
+enum Suit { hearts, spades }
+
+fun probe() > str {
+    final found = Suit(1);
+    final missing = Suit(9);
+    return "{found?.name}/{missing == null}";
+}`)
+	assert.Equal(t, "spades/true", v.AsString(), "calling an enum looks a case up by value, or yields null")
+}
+
+func TestParity_EnumFromValueUsesBackingValuesNotOrdinals(t *testing.T) {
+	v := evalParity(t, `
+enum<str> Suit { hearts, spades }
+
+fun probe() > str {
+    return "{Suit("spades")?.name}/{Suit(1) == null}";
+}`)
+	assert.Equal(t, "spades/true", v.AsString(), "the lookup is by the case's value, not its position")
+}

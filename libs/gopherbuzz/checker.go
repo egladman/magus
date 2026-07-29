@@ -504,6 +504,12 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 		if i < len(ft.Params) {
 			pt = ft.Params[i]
 		}
+		// A default is checked against its own parameter's type, which is how an
+		// inferred enum case (`case: Suit = .hearts`) learns which enum it names.
+		// It is resolved here, once at the declaration, not at every call site.
+		if i < len(fd.ParamDefaults) && fd.ParamDefaults[i] != nil {
+			c.inferExpected(fd.ParamDefaults[i], pt)
+		}
 		c.define(name, pt, false)
 	}
 	for _, s := range fd.Body.Stmts {
@@ -535,7 +541,12 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 		c.inferExpected(f.Default, c.resolveAnnot(f.TypeAnnot))
 	}
 	for _, m := range v.Methods {
+		// Rebuilt, then written back: buildObjectType runs while the top level is
+		// still being registered, so a method whose annotation names a type
+		// declared LATER in the file resolved to nothing there. Every named type
+		// exists by now, and call sites read ot.Methods, not this local.
 		ft := c.funDeclType(m)
+		ot.Methods[m.Name] = ft
 		savedRet := c.retTyp
 		c.retTyp = ft.Ret
 		c.pushScope()
@@ -544,6 +555,11 @@ func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
 			pt := types.Unknown
 			if i < len(ft.Params) {
 				pt = ft.Params[i]
+			}
+			// Same as a free function's: a method parameter's default is resolved
+			// against that parameter's type, which is what tells `.two` its enum.
+			if i < len(m.ParamDefaults) && m.ParamDefaults[i] != nil {
+				c.inferExpected(m.ParamDefaults[i], pt)
 			}
 			c.define(name, pt, false)
 		}
@@ -576,6 +592,23 @@ func (c *checker) wantType() types.Type {
 		return nil
 	}
 	return c.expected[len(c.expected)-1]
+}
+
+// objectOf unwraps want to the object type it ultimately expects, so an
+// anonymous object literal resolves the same whether the annotation is Foo,
+// Foo?, or [Foo]. A namespace object is not one: its fields are module
+// exports, not a shape a literal can fill.
+func objectOf(want types.Type) *types.ObjectType {
+	switch t := want.(type) {
+	case *types.ObjectType:
+		if t.IsNamespace {
+			return nil
+		}
+		return t
+	case *types.ListType:
+		return objectOf(t.Elem)
+	}
+	return nil
 }
 
 // enumOf unwraps want to the enum it ultimately expects, so `.one` resolves the
@@ -868,7 +901,14 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// sites write them in declaration order, which makes this correct.
 		v.ArgNames = nil
 	}
-	for _, a := range v.Args {
+	for i, a := range v.Args {
+		// Each argument is inferred against its parameter's type, so a construct
+		// that cannot name its own type (`.one`, and anything else that reads the
+		// expected type) resolves from the signature.
+		if ok && i < len(ft.Params) {
+			c.inferExpected(a, ft.Params[i])
+			continue
+		}
 		c.infer(a)
 	}
 	// An explicit generic type argument (`buf.readZAt::<double>(...)`) names the
@@ -1100,6 +1140,38 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
+	// An anonymous object literal `.{ field = expr }` parses to a map keyed by
+	// the field names, so when the expected type is an object, each value is
+	// inferred against that field's type. Without this a `.{ kind = .two }`
+	// assigned to an annotated field has nothing to tell `.two` its enum.
+	if ot := objectOf(c.wantType()); v.Anon && ot != nil {
+		for i, k := range v.Keys {
+			name, isField := k.(*ast.StringLit)
+			ft, known := types.Unknown, false
+			if isField {
+				ft, known = ot.Fields[name.Val]
+			}
+			if known {
+				// resolveType, not ft as-is: buildObjectType fills Fields with
+				// types.ParseAnnot, which knows the primitives but not this
+				// checker's named types, so an enum field arrives as a NamedType
+				// and the case could never resolve against it.
+				c.inferExpected(v.Values[i], c.resolveType(ft))
+				continue
+			}
+			c.infer(v.Values[i])
+		}
+		return ot
+	}
+	// An annotated map literal passes its declared element types down, so a
+	// nested `.{ ... }` value knows which object it is filling in.
+	if want, ok := c.wantType().(*types.MapType); ok {
+		for i := range v.Keys {
+			c.inferExpected(v.Keys[i], c.resolveType(want.Key))
+			c.inferExpected(v.Values[i], c.resolveType(want.Val))
+		}
+		return want
+	}
 	if len(v.Keys) == 0 {
 		return &types.MapType{Key: types.Str, Val: types.Any}
 	}

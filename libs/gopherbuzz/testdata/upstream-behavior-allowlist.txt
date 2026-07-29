@@ -20,6 +20,7 @@ dead-branches.buzz
 debug.buzz
 default-arguments.buzz
 discarded-value.buzz
+enums.buzz
 for.buzz
 foreach.buzz
 free-identifiers.buzz
