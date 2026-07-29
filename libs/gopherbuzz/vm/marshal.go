@@ -60,7 +60,13 @@ import (
 //     `enum<str>` and `case = 1` reach the VM at all.
 //   - MemberExpr and IndexExpr gain their optional-chaining flags (`a?.b`,
 //     `a?[i]`, and the previously unserialized checked subscript `a[?i]`).
-const BytecodeVersion uint16 = 13
+//
+// v14 widens two more, with the same desynchronizing effect:
+//   - TryStmt carries a counted list of catch CLAUSES (each with its binding
+//     name, declared error type, and body) instead of one name plus one block.
+//   - WhileStmt, ForStmt, ForEachStmt, BreakStmt and ContinueStmt each carry a
+//     loop label string, so `break outer` reaches the loop it names.
+const BytecodeVersion uint16 = 14
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -546,6 +552,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.WhileStmt:
 		e.u8(nodeWhileStmt)
 		e.pos(p)
+		e.str(v.Label)
 		if err := e.node(v.Cond); err != nil {
 			return err
 		}
@@ -553,6 +560,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForStmt:
 		e.u8(nodeForStmt)
 		e.pos(p)
+		e.str(v.Label)
 		e.u32(uint32(len(v.Init)))
 		for _, n := range v.Init {
 			if err := e.node(n); err != nil {
@@ -572,6 +580,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForEachStmt:
 		e.u8(nodeForEachStmt)
 		e.pos(p)
+		e.str(v.Label)
 		e.str(v.KeyName)
 		e.str(v.ValName)
 		if err := e.node(v.Iter); err != nil {
@@ -581,9 +590,11 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.BreakStmt:
 		e.u8(nodeBreakStmt)
 		e.pos(p)
+		e.str(v.Label)
 	case *ast.ContinueStmt:
 		e.u8(nodeContinueStmt)
 		e.pos(p)
+		e.str(v.Label)
 	case *ast.FunDecl:
 		e.u8(nodeFunDecl)
 		e.pos(p)
@@ -645,8 +656,15 @@ func (e *enc) node(n ast.Node) error {
 		if err := e.node(v.Body); err != nil {
 			return err
 		}
-		e.str(v.ErrName)
-		return e.node(v.Catch)
+		e.u32(uint32(len(v.Catches)))
+		for _, cl := range v.Catches {
+			e.pos(cl.Pos)
+			e.str(cl.ErrName)
+			e.str(cl.TypeName)
+			if err := e.node(cl.Body); err != nil {
+				return err
+			}
+		}
 	case *ast.ThrowStmt:
 		e.u8(nodeThrowStmt)
 		e.pos(p)
@@ -1402,6 +1420,10 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.IfStmt{Pos: p, Cond: cond, Then: blockThen, Else: els}, nil
 	case nodeWhileStmt:
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		cond, err := d.node()
 		if err != nil {
 			return nil, err
@@ -1414,8 +1436,12 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("WhileStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody}, nil
+		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody, Label: label}, nil
 	case nodeForStmt:
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		init, err := d.nodeList()
 		if err != nil {
 			return nil, err
@@ -1436,8 +1462,12 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("ForStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.ForStmt{Pos: p, Init: init, Cond: cond, Post: post, Body: blockBody}, nil
+		return &ast.ForStmt{Pos: p, Init: init, Cond: cond, Post: post, Body: blockBody, Label: label}, nil
 	case nodeForEachStmt:
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		keyName, err := d.str()
 		if err != nil {
 			return nil, err
@@ -1458,11 +1488,19 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("ForEachStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.ForEachStmt{Pos: p, KeyName: keyName, ValName: valName, Iter: iter, Body: blockBody}, nil
+		return &ast.ForEachStmt{Pos: p, KeyName: keyName, ValName: valName, Iter: iter, Body: blockBody, Label: label}, nil
 	case nodeBreakStmt:
-		return &ast.BreakStmt{Pos: p}, nil
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.BreakStmt{Pos: p, Label: label}, nil
 	case nodeContinueStmt:
-		return &ast.ContinueStmt{Pos: p}, nil
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.ContinueStmt{Pos: p, Label: label}, nil
 	case nodeFunDecl:
 		name, err := d.str()
 		if err != nil {
@@ -1571,19 +1609,38 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("TryStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		errName, err := d.str()
+		n, err := d.u32()
 		if err != nil {
 			return nil, err
 		}
-		catch, err := d.node()
-		if err != nil {
+		if err := d.checkCount(n); err != nil {
 			return nil, err
 		}
-		blockCatch, ok := catch.(*ast.BlockStmt)
-		if !ok {
-			return nil, fmt.Errorf("TryStmt catch: expected *ast.BlockStmt, got %T", catch)
+		catches := make([]ast.CatchClause, int(n))
+		for i := range catches {
+			cp, err := d.pos()
+			if err != nil {
+				return nil, err
+			}
+			errName, err := d.str()
+			if err != nil {
+				return nil, err
+			}
+			typeName, err := d.str()
+			if err != nil {
+				return nil, err
+			}
+			catch, err := d.node()
+			if err != nil {
+				return nil, err
+			}
+			blockCatch, ok := catch.(*ast.BlockStmt)
+			if !ok {
+				return nil, fmt.Errorf("TryStmt catch: expected *ast.BlockStmt, got %T", catch)
+			}
+			catches[i] = ast.CatchClause{Pos: cp, ErrName: errName, TypeName: typeName, Body: blockCatch}
 		}
-		return &ast.TryStmt{Pos: p, Body: blockBody, ErrName: errName, Catch: blockCatch}, nil
+		return &ast.TryStmt{Pos: p, Body: blockBody, Catches: catches}, nil
 	case nodeThrowStmt:
 		val, err := d.node()
 		if err != nil {

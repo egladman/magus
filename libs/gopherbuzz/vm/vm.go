@@ -2169,6 +2169,10 @@ func (vm *VM) purgeCatchFrame(frameIdx int) {
 // buzzIsType returns whether v's runtime type matches typeName.
 func (vm *VM) buzzIsType(v Value, typeName string) bool {
 	switch typeName {
+	case "any":
+		// Every value inhabits `any`, so `x is any` and `catch (e: any)` hold
+		// unconditionally - null included, since `any` is not an optional type.
+		return true
 	case "null":
 		return v.tag() == tagNull
 	case "bool":

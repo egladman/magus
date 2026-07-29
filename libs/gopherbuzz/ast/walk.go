@@ -129,11 +129,19 @@ func Inspect(n Node, fn func(Node) bool) {
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}
-		if s.Catch != nil {
-			Inspect(s.Catch, fn)
+		for _, cl := range s.Catches {
+			if cl.Body != nil {
+				Inspect(cl.Body, fn)
+			}
 		}
 	case *ThrowStmt:
 		Inspect(s.Value, fn)
+	case *OutStmt:
+		Inspect(s.Value, fn)
+	case *BlockExpr:
+		if s.Body != nil {
+			Inspect(s.Body, fn)
+		}
 	case *YieldExpr:
 		Inspect(s.Value, fn)
 	case *FiberExpr:

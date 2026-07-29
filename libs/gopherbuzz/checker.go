@@ -335,12 +335,20 @@ func (c *checker) checkStmt(n ast.Node) {
 		// nothing
 	case *ast.TryStmt:
 		c.checkBlock(v.Body)
-		c.pushScope()
-		c.define(v.ErrName, types.Any, false)
-		for _, s := range v.Catch.Stmts {
-			c.checkStmt(s)
+		for _, cl := range v.Catches {
+			c.pushScope()
+			// The binding takes the clause's declared error type when it has one;
+			// an untyped clause catches anything, so its binding is Any.
+			errTyp := types.Any
+			if cl.TypeName != "" {
+				errTyp = c.resolveAnnot(cl.TypeName)
+			}
+			c.define(cl.ErrName, errTyp, false)
+			for _, s := range cl.Body.Stmts {
+				c.checkStmt(s)
+			}
+			c.popScope()
 		}
-		c.popScope()
 	case *ast.ThrowStmt:
 		c.infer(v.Value)
 	}
