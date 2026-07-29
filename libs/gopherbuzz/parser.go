@@ -2173,20 +2173,28 @@ func (p *parser) parseFunRest() (funRest, error) {
 	// after the optional return/error/yield annotations and before the block form.
 	if p.check(token.FatArrow) {
 		arrow := p.advance()
-		expr, err := p.parseExpr()
-		if err != nil {
-			return funRest{}, err
+		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
+		// A `> void` arrow body is a statement position: its value is discarded,
+		// and upstream writes an assignment there (`=> sum = sum + value`). An
+		// assignment is not an expression in Buzz, so parseExpr would stop at the
+		// target and choke on the `=`; parseAssignTail accepts both shapes and
+		// already returns a statement node.
+		var stmt ast.Node
+		if out.retAnnot == "void" {
+			s, err := p.parseAssignTail()
+			if err != nil {
+				return funRest{}, err
+			}
+			stmt = s
+		} else {
+			expr, err := p.parseExpr()
+			if err != nil {
+				return funRest{}, err
+			}
+			stmt = &ast.ReturnStmt{Pos: pos, Value: expr}
 		}
 		if p.check(token.Semicolon) {
 			p.advance()
-		}
-		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
-		// A `> void` arrow body evaluates its expression for effect and returns
-		// nothing: `fun () > void => std\print("hi")` is legal upstream, and
-		// desugaring it to a return would make the checker reject its own sugar.
-		var stmt ast.Node = &ast.ReturnStmt{Pos: pos, Value: expr}
-		if out.retAnnot == "void" {
-			stmt = &ast.ExprStmt{Pos: pos, Expr: expr}
 		}
 		out.body = &ast.BlockStmt{Pos: pos, Stmts: []ast.Node{stmt}}
 		return out, nil

@@ -776,3 +776,34 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "45/55", v.AsString(), "0..10 yields 0-9 and 10..0 yields 10-1")
 }
+
+func TestParity_VoidArrowBodyAcceptsAnAssignment(t *testing.T) {
+	// A `> void` arrow body is a statement position. An assignment is not an
+	// expression in Buzz, so this only parses because the void path reads a
+	// statement rather than an expression.
+	v := evalParity(t, `
+fun probe() > int {
+    var sum = 0;
+    final add = fun (n: int) > void => sum = sum + n;
+    add(5);
+    return sum;
+}`)
+	// NOTE: 0, not 5. Closures capture upvalues by VALUE, so the assignment
+	// updates the closure's copy and never reaches sum. This pins the current
+	// (divergent) behaviour so that fixing capture is a deliberate, visible
+	// change rather than a silent one; see the README's divergence note.
+	assert.Equal(t, int64(0), v.AsInt(), "the body parses and runs; the write does not escape the closure")
+}
+
+func TestParity_ClosureUpvaluesAreCapturedByValue(t *testing.T) {
+	// Documented divergence from upstream, pinned so a fix has to update this
+	// test on purpose. Upstream captures by reference and would answer 5.
+	v := evalParity(t, `
+fun probe() > int {
+    var sum = 0;
+    final add = fun (n: int) > void { sum = sum + n; };
+    add(5);
+    return sum;
+}`)
+	assert.Equal(t, int64(0), v.AsInt(), "a closure mutating an enclosing local does not affect it")
+}
