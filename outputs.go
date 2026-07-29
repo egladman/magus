@@ -39,18 +39,22 @@ type TargetArtifact struct {
 // and where the artifact landed is left to be inferred from the target's name.
 func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Project, target string) ([]TargetArtifact, error) {
 	var found []TargetArtifact
+	// buildStep's Outputs are WORKSPACE-relative ("api/dist/*.txt"), unlike
+	// Project.AllOutputs which is project-relative. Globbing them against the project
+	// dir looked for api/api/dist/*.txt and silently found nothing - and the root
+	// project hid it, because there the two spellings are identical.
+	fsys := os.DirFS(m.Root())
 	for _, p := range projects {
 		if ctx.Err() != nil {
 			return found, ctx.Err()
 		}
-		fsys := os.DirFS(p.Dir)
 		for _, glob := range m.buildStep(p, target).Outputs {
 			matches, err := doublestar.Glob(fsys, glob)
 			if err != nil {
 				return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob, err)
 			}
 			for _, rel := range matches {
-				abs := filepath.Join(p.Dir, rel)
+				abs := filepath.Join(m.Root(), rel)
 				// A glob can match a directory (dist/** matches dist itself); an
 				// artifact list is about files, and a directory entry would make
 				// the count disagree with what a consumer can open.

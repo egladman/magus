@@ -25,6 +25,11 @@ import (
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
+	// Same grammar as `magus run`: the chain is split off the RAW args, before
+	// anything partitions or reorders them. affected is the CI-facing twin, and CI
+	// is exactly where "what did this produce" needs answering.
+	args, chainArgs, chained := splitOnThen(args)
+
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
@@ -307,6 +312,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
+	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	if target == "ci" {
 		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
@@ -318,7 +324,18 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	if chained {
+		return runChain(ctx, m, opts, target, targets, chainArgs, readReturns())
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputTemplate:
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns())
+	}
+	return nil
 }
 
 func affectedUsage() {

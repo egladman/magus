@@ -1,0 +1,74 @@
+# The structured result across a FAN-OUT, which is the case a single-project fixture
+# cannot catch.
+#
+# Two bugs lived here, and both were invisible with one project:
+#
+# 1. buildStep's Outputs are WORKSPACE-relative ("api/dist/*.txt"), unlike
+#    Project.AllOutputs which is project-relative. Globbing them against the project
+#    dir looked for api/api/dist/*.txt and found nothing. The ROOT project hid it,
+#    because at the root the two spellings are identical - so every single-project
+#    test passed while every sub-project silently reported no artifacts.
+#
+# 2. `--then value` printed every project's value unlabeled. The text form exists to
+#    be substituted - VER=$(magus run describe --then value) - so a fan-out
+#    concatenated two projects' values into one string with nothing to signal it.
+
+# Each project carries its OWN value and its OWN artifacts. A flat list could not say
+# which project produced which file.
+exec magus run bundle:rw -o json
+stdout '"path": "\."'
+stdout '"value": "root-v1"'
+stdout '"path": "dist/root\.txt"'
+stdout '"path": "api"'
+stdout '"value": "api-v1"'
+stdout '"path": "api/dist/api\.txt"'
+stdout '"count": 2'
+
+# The chain sees both projects' artifacts, workspace-relative so they stay unique.
+exec magus run bundle:rw --then outputs
+stdout 'dist/root\.txt'
+stdout 'api/dist/api\.txt'
+
+# The bare value form REFUSES a fan-out rather than concatenating. It names the
+# projects that returned, and points at the format that can express more than one.
+! exec magus run bundle:rw --then value
+stderr '2 projects returned a value'
+stderr 'use -o json'
+
+# Narrowing the scope to one project makes the bare form meaningful again.
+exec magus run bundle:rw api --then value
+stdout '^api-v1$'
+
+# -o json is the multi-project answer, and carries the project beside each value.
+exec magus run bundle:rw -o json --then value
+stdout '"path": "api"'
+stdout '"value": "api-v1"'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "os";
+import "spells/acme" as acme;
+import "project/api" as api;
+magus.project({ "spells": [acme] });
+export fun bundle(ctx: magus\Context, args: [str]) > str {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo root > dist/root.txt"]);
+    return "root-v1";
+}
+-- api/magusfile.buzz --
+import "magus";
+import "os";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun bundle(ctx: magus\Context, args: [str]) > str {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo api > dist/api.txt"]);
+    return "api-v1";
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

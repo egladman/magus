@@ -261,27 +261,35 @@ func chainValue(m *magus.Magus, opts OutputOptions, targets []types.Target, retu
 		return emitFormatted(opts, out)
 	}
 
-	// A target that returned nothing is not an error - `> void` is the default and
-	// almost every target is one - but printing an empty line would look like a
-	// value. Say which target was silent instead.
-	printed := false
+	// The text form exists to be substituted - VER=$(... --then value) - so it must
+	// yield ONE project's value. A fan-out that printed every project's value
+	// unlabeled would concatenate them into a single string with nothing to say it
+	// happened, which is worse than refusing. -o json carries the project alongside
+	// each value and is the right answer for more than one.
+	var withValue []string
 	for _, p := range projects {
-		v, ok := returns[p.Path]
-		if !ok {
-			continue
+		if _, ok := returns[p.Path]; ok {
+			withValue = append(withValue, p.Path)
 		}
-		printed = true
-		switch tv := v.(type) {
-		case []string:
-			for _, item := range tv {
+	}
+	switch len(withValue) {
+	case 0:
+		// Not an error to RUN - `> void` is the default and nearly every target is
+		// one - but asking for a value it never produced is. An empty line would read
+		// as "the value was the empty string".
+		return usagef("magus run: this target returned nothing (it is `> void`), so there is no value to print")
+	case 1:
+		v := returns[withValue[0]]
+		if items, ok := v.([]string); ok {
+			for _, item := range items {
 				fmt.Println(item)
 			}
-		default:
-			fmt.Println(tv)
+			return nil
 		}
+		fmt.Println(v)
+		return nil
+	default:
+		return usagef("magus run: %d projects returned a value (%s); the text form is for substituting ONE, so narrow the scope or use -o json",
+			len(withValue), strings.Join(withValue, ", "))
 	}
-	if !printed {
-		return usagef("magus run: this target returned nothing (it is `> void`), so there is no value to print")
-	}
-	return nil
 }
