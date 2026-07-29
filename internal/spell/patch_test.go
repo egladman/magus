@@ -242,7 +242,7 @@ var goldenBuiltins = map[string]Descriptor{
 	},
 	"go": {
 		Name:       "go",
-		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
+		Needs:      []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.

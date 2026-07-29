@@ -3,8 +3,14 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "go"; }
 
+// **/*.txtar is here because a testscript archive IS a Go test input: it is the
+// standard behavior-test format in this ecosystem (cmd/go's own tests, and anything
+// using rogpeppe/go-internal/testscript), and `go test` reads it at run time.
+// Without it a .txtar was unclaimed - editing one invalidated no cache key and pulled
+// no project into the affected set, so a CI run keyed on `magus affected` could not
+// see a behavior test change at all, and a stale pass would replay from cache.
 export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"];
+    return ["**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
