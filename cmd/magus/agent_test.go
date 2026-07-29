@@ -306,9 +306,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// graph unused, and an advisory is scrolled past. The reason must ROUTE -
 		// refs for code symbols, query for domain entities - because an agent that
 		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
-		{command: `grep -rn "funcName" .`, deny: true},
-		{command: "rg symbolName", deny: true},
-		{command: `find . -name "*.go"`, deny: true},
+		{command: `grep -rn "funcName" .`, context: "magus refs"},
+		{command: "rg symbolName", context: "magus refs"},
+		{command: `find . -name "*.go"`, context: "magus refs"},
 		// magus is CWD-relative, so cd-then-magus is how the right command lands
 		// on the wrong project. The project is an argument; only a different
 		// WORKSPACE needs --root.

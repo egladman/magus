@@ -277,10 +277,17 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 		return types.WrapDiagnostic(types.UnknownTarget, ErrUnknownTarget,
 			"magusfile: unknown target %q (registered: %s)", target, strings.Join(names, ", "))
 	}
-	buzzArgs := make([]vm.Value, len(extraArgs))
+	// A target's signature is (ctx: magus\Context, args: [str]): ONE context and
+	// ONE list. Spreading the strings as separate positional arguments bound
+	// `args` to the first string and silently dropped the rest, so
+	// `-- alpha beta` arrived as the str "alpha" rather than ["alpha", "beta"].
+	// Always pass the list, empty included, so `args` is a [str] in every target
+	// rather than null when no extra args were given.
+	items := make([]vm.Value, len(extraArgs))
 	for i, s := range extraArgs {
-		buzzArgs[i] = vm.StrValue(s)
+		items[i] = vm.StrValue(s)
 	}
+	buzzArgs := []vm.Value{vm.ListValue(items)}
 	ctx, exitCode := types.WithExitCapture(ctx)
 	ctx = WithSource(ctx, src)
 	_, err = fn(ctx, buzzArgs)

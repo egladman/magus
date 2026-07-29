@@ -103,6 +103,11 @@ type Step struct {
 	WorkspaceRoot   string
 	Target          string   // mixed into key to distinguish targets on the same sources
 	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
+	// ExtraArgs are the args after `--`, forwarded to the target. They change what
+	// the target does, so like Charms they MUST key the cache: without them a run
+	// with different args replays the previous run's result. Order is significant
+	// (`-run X` is not `X -run`), so unlike Charms they are never sorted.
+	ExtraArgs       []string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)

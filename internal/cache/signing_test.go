@@ -284,3 +284,35 @@ func TestHashKeyByteLayout(t *testing.T) {
 
 	assert.Equal(t, expected, got, "cache key byte layout changed (layout:\n%s)", want.String())
 }
+
+// TestHashStepKeysExtraArgs locks in that args after `--` participate in the
+// cache key. Before this, a run with different args replayed the previous run's
+// result: the args changed what the target did but not what it hashed.
+//
+// The empty case is the back-compat guarantee - no extra args must hash exactly
+// as before, so adding this invalidated no existing entry (same property the
+// Charms lines rely on).
+func TestHashStepKeysExtraArgs(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	hashOf := func(s *Step) string {
+		h, err := c.hashStep(context.Background(), s)
+		require.NoError(t, err, "hashStep")
+		return h
+	}
+	step := func(args ...string) *Step {
+		return &Step{ProjectPath: ".", WorkspaceRoot: root, Target: "probe", ExtraArgs: args}
+	}
+
+	none := hashOf(&Step{ProjectPath: ".", WorkspaceRoot: root, Target: "probe"})
+	assert.Equal(t, none, hashOf(step()), "no extra args must hash identically (back-compat)")
+
+	alpha, beta := hashOf(step("alpha")), hashOf(step("beta"))
+	assert.NotEqual(t, none, alpha, "an arg must change the key")
+	assert.NotEqual(t, alpha, beta, "different args must not share a key")
+	assert.Equal(t, alpha, hashOf(step("alpha")), "the same args must replay")
+
+	// Order is significant: `-run X` is not `X -run`, so args are never sorted.
+	assert.NotEqual(t, hashOf(step("-run", "X")), hashOf(step("X", "-run")), "arg ORDER must key")
+	assert.NotEqual(t, hashOf(step("a", "b")), hashOf(step("ab")), "args must not be concatenated")
+}
