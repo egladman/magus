@@ -209,9 +209,23 @@ func artifactRoles(m *magus.Magus, artifacts []magus.TargetArtifact) map[string]
 	return out
 }
 
-// copyArtifact copies src to dst, creating parent directories. It refuses to
-// overwrite nothing silently: a missing source is a real error, since the artifact
-// list came from the working tree moments earlier.
+// copyArtifact copies src to dst, creating parent directories.
+//
+// It writes a temporary file beside dst and renames it into place, which is not
+// ceremony - it is what makes three separate ways of destroying data impossible:
+//
+//   - dst == src. Opening dst with O_TRUNC truncated the source before the read,
+//     so `--then outputs export --path .` from the workspace root emptied every
+//     artifact it claimed to copy AND exited 0.
+//   - A failed read. Truncating first meant an io.Copy error left a half-written
+//     file where a valid artifact had been, with the original already gone.
+//   - A symlink planted at dst (by an earlier run, or a shared CI export dir).
+//     O_CREATE follows it and writes through to wherever it points; rename
+//     replaces the link itself.
+//
+// The mode is set on the temp file rather than left to O_CREATE, because O_CREATE
+// only applies its mode when it actually creates: exporting over an existing file
+// kept the OLD permissions, so an exported binary quietly lost +x.
 func copyArtifact(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -225,15 +239,28 @@ func copyArtifact(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode().Perm())
+
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".magus-export-*")
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
+	tmpName := tmp.Name()
+	// Any failure past this point must not leave the temp file behind; the rename
+	// on the success path clears it, so this only fires when something went wrong.
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
 		return err
 	}
-	return out.Close()
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, dst)
 }
 
 // chainValue implements `--then value`: print what the target returned.
