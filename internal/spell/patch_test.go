@@ -3,11 +3,11 @@ package spell
 import (
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	json "github.com/egladman/magus/internal/codec"
-	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
 func TestExplainCharms(t *testing.T) {
