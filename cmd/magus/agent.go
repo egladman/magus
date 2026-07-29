@@ -508,7 +508,13 @@ var (
 	//   go build -o <path>  builds a binary to an explicit path - the documented
 	//                       dev-loop build, not a target's build artifact.
 	//   gofmt -l / -d       lists or diffs; only -w rewrites the tree.
-	guardRawToolExemptRe = regexp.MustCompile(`\bgo\s+build\b[^&|;]*\s-o\s|\bgofmt\s+-[ld]\b`)
+	//   <tool> --version    asks what is installed. It reads no sources, writes no
+	//                       outputs, and has no magus equivalent - `magus describe
+	//                       spells` reports THAT a spell probes, not the answer. The
+	//                       deny fired on `golangci-lint --version` while pinning
+	//                       that very tool, which is the shape of a rule getting in
+	//                       the way of the work it exists to support.
+	guardRawToolExemptRe = regexp.MustCompile(`\bgo\s+build\b[^&|;]*\s-o\s|\bgofmt\s+-[ld]\b|\s--?version\b`)
 	// Anchored at cmdPos, so a tool NAME appearing as text is not a match. This
 	// only became load-bearing when the verdict turned into a deny: these names
 	// occur constantly in test data, docs, and commit messages, and an unanchored

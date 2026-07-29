@@ -244,8 +244,11 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:       "go",
 		Needs:      []string{"**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
-		Language:   "go",
-		IgnoreDirs: []string{"vendor"},
+		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
+		// the module graph and `go version` no longer implies it.
+		VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
+		Language:    "go",
+		IgnoreDirs:  []string{"vendor"},
 		Ops: map[string]types.SpellOp{
 			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -254,9 +257,12 @@ var goldenBuiltins = map[string]Descriptor{
 			"go-fmt": {Command: types.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]types.Charm{
 				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
-			"golangci-lint": {Command: types.Command{Bin: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
+			// Runs from PATH, not `go tool`: the module tool block never carried it, so
+			// `go tool golangci-lint` reported "no such tool" and the op could not run.
+			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
+			"golangci-lint": {Command: types.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
 			"go-test": {Command: types.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]types.Charm{
 				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},

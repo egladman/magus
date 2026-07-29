@@ -82,7 +82,9 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		// go
 		{"go", "go-fmt", "rw", []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 		{"go", "golangci-lint", "debug", []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		{"go", "golangci-lint", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+		// /1, not /3: golangci-lint runs from PATH now, so the argv lost the leading
+		// "tool", "golangci-lint" prefix and --fix inserts right after "run".
+		{"go", "golangci-lint", "rw", []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 		{"go", "go-test", "cd", []types.PatchOp{
 			{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 			{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},

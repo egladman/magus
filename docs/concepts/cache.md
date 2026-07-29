@@ -204,6 +204,61 @@ question to ask first is _which tool_ went stale, and whether it can be probed
 instead. A probe invalidates the projects that use the tool. A manifest
 invalidates everyone who happens to live near it.
 
+### The opposite failure: tools outside the key entirely
+
+Over-invalidating is loud and annoying. Under-invalidating is quiet and much
+worse, and it is the more common default: most build caches key on file contents
+and nothing else, so **the tools themselves are invisible**.
+
+The failure does not look like a cache bug. A linter upgrades, and suddenly code
+that passed yesterday fails - or worse, code that should fail passes, because the
+verdict was replayed from an entry the old linter wrote. A formatter upgrades and
+a "clean" tree starts failing a drift gate on a file nobody touched. A codegen
+plugin upgrades and the committed output no longer matches what the generator
+would emit, but the generate step is a cache hit, so it never runs to notice.
+
+What makes it expensive is that every one of those looks like a bug in _your_
+change. You bisect, you re-run, you blame the flaky test, you diff the branch -
+and the answer was never in the repository at all. Someone's toolchain moved.
+
+magus keys on the tool versions for this reason. Each spell declares how to ask:
+
+```buzz
+export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+
+// A spell driving more than one binary declares each, so all of them move the key.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {"golangci-lint": ["golangci-lint", "--version"]};
+}
+```
+
+Their output lands in the key as `spell:version` and `spell:tool:version`, so a
+tool that upgrades invalidates exactly the projects that bind that spell - the
+precise middle between the two failures. `magus describe spells` reports which
+spells probe.
+
+A tool pinned by a manifest the project already reads needs no probe: `go.mod` is
+a source of the go spell, so bumping a `go tool` pin invalidates on its own. Probes
+are for binaries that live outside the project's declared inputs - a linter from
+PATH, a formatter from a version manager - which is precisely the set nothing else
+would catch.
+
+**Where the declaration lives is the whole point.** Most build systems can express
+this - you can usually hash a tool version into a key if you set it up. But that
+puts the burden on every developer wiring up every project, and correctness then
+depends on each of them remembering, in every repository, forever. One person
+skips it and their project silently caches across toolchains. That is a strange
+place to draw the line: the build tool knows which binary it is about to run, and
+is better positioned to notice than the person configuring it.
+
+In magus the declaration lives on the **spell** - written once by whoever adapts
+the tool, inherited by every project that binds it. A project gets correct tool
+invalidation by saying `spells: [go]`, not by remembering to wire up a probe.
+Discipline is spent once, in the adapter, instead of repeatedly in every consumer.
+
+Set `MAGUS_CACHE_TOOL_VERSION=off` to drop probes from keys, or `=workspace` to
+probe once per workspace instead of per project.
+
 ### Opting out and busting
 
 Four controls, at four different scopes:
