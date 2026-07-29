@@ -248,7 +248,10 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 	"discovered by the presence of a magusfile (magusfile.buzz, or a magusfiles/ subdirectory) " +
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
-// ProjectEntry is the structured view of a single project.
+// ProjectEntry is the structured view of a single project. Its Buzz mirror is
+// generated alongside Projects; DependsOn is tagged because ToMap emits the
+// camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
+// JSON name.
 type ProjectEntry struct {
 	Path      string   `json:"path"                yaml:"path"`
 	Dir       string   `json:"dir"                 yaml:"dir"`
@@ -256,7 +259,7 @@ type ProjectEntry struct {
 	Spells    []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
-	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 }
 
@@ -275,8 +278,14 @@ func (p ProjectEntry) ToMap() map[string]any {
 }
 
 // ProjectsOutput is the top-level result for "describe projects".
+//
+// The Buzz `object Projects` mirror is generated from this struct by
+// cmd/magus-utils types, so magus.ls's result can be annotated `> Projects` for
+// compile-checked field access. Definition carries `buzz:"-"` to keep the mirror
+// honest: ToMap drops it, so a mirrored field would be one the Buzz value never
+// has.
 type ProjectsOutput struct {
-	Definition string         `json:"definition" yaml:"definition"`
+	Definition string         `json:"definition" yaml:"definition" buzz:"-"`
 	Workspace  string         `json:"workspace"  yaml:"workspace"`
 	Count      int            `json:"count"      yaml:"count"`
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`

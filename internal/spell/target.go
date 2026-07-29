@@ -99,6 +99,21 @@ var SemverVersionSource string
 //go:embed buzzlib/url.gen.buzz
 var URLSource string
 
+// ProjectEntrySource / ProjectsSource are the generated Buzz mirrors of
+// types.ProjectEntry and types.ProjectsOutput: what magus.ls returns. They close
+// a documented gap - magus.ls's own doc told readers to annotate `> Projects`
+// while no such type existed, so the annotation it recommended did not compile.
+// ProjectEntry must precede Projects in the module source (Projects.projects is
+// [ProjectEntry]).
+//
+//go:generate go run ../../cmd/magus-utils types -type ProjectEntry -out buzzlib/projectentry.gen.buzz
+//go:embed buzzlib/projectentry.gen.buzz
+var ProjectEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type Projects -out buzzlib/projects.gen.buzz
+//go:embed buzzlib/projects.gen.buzz
+var ProjectsSource string
+
 // CharmModulePath is the import path of the pure-Buzz charm module.
 const CharmModulePath = "magus/charm"
 
