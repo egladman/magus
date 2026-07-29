@@ -110,10 +110,13 @@ func NormalizeCharmName(name string) string {
 //     (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only the policy
 //     fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
-	Path   string   `buzz:"projectPath"` // workspace-relative project path; empty = all projects
-	Name   string   // e.g. "build", "test"
-	Charms []string // execution charms parsed from the "target:charm,..." suffix
-	Files  []string // changed files within project; populated by affected expansion
+	// The identity fields carry omitempty because Target is also serialized as a
+	// per-target POLICY (describe's target_policies map, keyed by target name),
+	// where path/name/charms/files are all empty and would be pure noise.
+	Path   string   `json:"path,omitempty"   buzz:"projectPath"` // workspace-relative project path; empty = all projects
+	Name   string   `json:"name,omitempty"`                      // e.g. "build", "test"
+	Charms []string `json:"charms,omitempty"`                    // execution charms parsed from the "target:charm,..." suffix
+	Files  []string `json:"files,omitempty"`                     // changed files within project; populated by affected expansion
 
 	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
 	// serialized into the Buzz object Target. FailOnDrift and RetryOnVolatile are CI-only
