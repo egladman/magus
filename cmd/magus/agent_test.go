@@ -18,7 +18,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	skills, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	require.Len(t, skills, 7)
+	require.Len(t, skills, 8)
 	for _, skill := range skills {
 		assert.NotEmpty(t, skill.Name)
 		assert.NotEmpty(t, skill.Description)
