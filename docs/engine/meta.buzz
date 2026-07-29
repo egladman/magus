@@ -140,3 +140,55 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
     assert\equal(insertSinceBadge("<h1>X</h1>", ""), "<h1>X</h1>", "empty since leaves html untouched");
     assert\equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
 }
+
+// insertSizeRatio places a size comparison under the H1 of an agent-skill page: how
+// much smaller the `--simple` permutation is, as a number and as a bar.
+//
+// The bar is a bare `<progress>`. Pico styles that element classlessly
+// (`progress{accent-color:var(--pico-primary)}` plus a themed track in both colour
+// schemes), so the ratio gets a graphic with no custom CSS and no new markup
+// vocabulary - which is the site's whole rule. It is also the semantically correct
+// element: a proportion of a known whole, readable by a screen reader from its own
+// value/max rather than from a label we would have to invent.
+//
+// The arithmetic lives HERE rather than in the generator that writes the page. The
+// generator's job is to state the two byte counts as facts; turning them into a
+// percentage and a bar is presentation, and presentation is the SSG's. That split is
+// also why the counts arrive as frontmatter: a generated page hands the renderer
+// data, not markup.
+export fun insertSizeRatio(html: str, fullOpt: int?, simpleOpt: int?) > str {
+    // The counts are OPTIONAL because most pages have no such frontmatter, and an
+    // absent key decodes to null rather than 0 - comparing that to an int is a
+    // runtime error that took down the whole render, not a quiet no-op. Coalesce
+    // first, then reject anything nonsensical, so a non-skill page passes through.
+    final full = fullOpt ?? 0;
+    final simple = simpleOpt ?? 0;
+    if (full <= 0 or simple <= 0 or simple > full) { return html; }
+    final marker = html.indexOf("</h1>");
+    if (marker == null) { return html; }
+
+    // Integer arithmetic throughout: a percentage is what the reader wants, and a
+    // float would render as "13.470319634703196%".
+    final saved = ((full - simple) * 100) / full;
+    final label = "The --simple permutation is {saved}% smaller: {simple} of {full} bytes.";
+    final bar = "\n<p><progress value=\"{simple}\" max=\"{full}\" aria-label=\""
+        + escapeAttr(label) + "\"></progress><small>" + escapeAttr(label) + "</small></p>";
+    return html.sub(0, marker + 5) + bar + html.sub(marker + 5);
+}
+
+test "insertSizeRatio renders a progress bar and the saved percentage" {
+    final got = insertSizeRatio("<h1 id=\"s\">magus-vcs</h1>\n<p>body</p>", 1000, 720);
+    assert\equal(got.indexOf("<progress value=\"720\" max=\"1000\"") != null, true, "bar carries the real byte counts");
+    assert\equal(got.indexOf("28% smaller") != null, true, "the percentage is computed, not passed in");
+    assert\equal(got.indexOf("progress") < got.indexOf("<p>body"), true, "the bar sits between the h1 and the body");
+}
+
+test "insertSizeRatio is a no-op on missing, zero, or nonsensical counts" {
+    assert\equal(insertSizeRatio("<h1>X</h1>", null, null), "<h1>X</h1>", "an absent key decodes to null, not 0 - every non-skill page takes this path");
+    assert\equal(insertSizeRatio("<h1>X</h1>", 4723, null), "<h1>X</h1>", "one count without the other is refused");
+    assert\equal(insertSizeRatio("<h1>X</h1>", 0, 0), "<h1>X</h1>", "zero counts render nothing");
+    // simple > full would mean the elision GREW the body, which is a generator bug,
+    // not something to draw a backwards bar for.
+    assert\equal(insertSizeRatio("<h1>X</h1>", 100, 200), "<h1>X</h1>", "an inverted ratio is refused");
+    assert\equal(insertSizeRatio("<p>no heading</p>", 1000, 500), "<p>no heading</p>", "no h1 leaves html untouched");
+}

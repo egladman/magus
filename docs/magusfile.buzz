@@ -73,7 +73,13 @@ magus\project({
                 "../internal/manpage/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/knowledge/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
-                "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go"],
+                "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
+                // The skill reference is generated from the embedded bodies and the
+                // elision that splits them, so both are inputs: edit a SKILL.md and
+                // its page must regenerate, or the site documents a version nobody
+                // installs - the exact drift this generator exists to prevent.
+                "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
+                "../cmd/magus/skills/**/*.md"],
     // The committed Markdown that content-generate derives from the Go tree
     // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
     // magus.outputs, not here, so that generator's cache entry snapshots exactly its
@@ -137,12 +143,13 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "concepts/spells.md", "reference/manpage/*.md", "concepts/knowledge.md");
+    ctx.outputs("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "concepts/spells.md", "reference/manpage/*.md", "concepts/knowledge.md", "reference/skills/*.md");
     go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"]({"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
     go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
+    go["go-run"]({"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm

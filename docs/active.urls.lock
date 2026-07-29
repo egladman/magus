@@ -328,6 +328,15 @@ reference/manpage/magus-watch/
 reference/manpage/magus-where/
 reference/manpage/magus-x/
 reference/manpage/magus/
+reference/skills/
+reference/skills/magus-architecture/
+reference/skills/magus-buzz/
+reference/skills/magus-changes/
+reference/skills/magus-docs/
+reference/skills/magus-memory/
+reference/skills/magus-query/
+reference/skills/magus-run/
+reference/skills/magus-vcs/
 remote-cache/
 sandbox/
 services/
