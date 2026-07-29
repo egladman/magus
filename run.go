@@ -474,6 +474,14 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 
 // executeStages schedules every (project,target) pair via dependency-ordered RunAll.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) error {
+	// Ahead of the dry-run branch, not after it: a dry run evaluates the same
+	// target bodies under a tracing context, so without the forwarded args here
+	// it printed the op's own command and silently omitted them - under-reporting
+	// the very command it exists to show.
+	if len(opts.ExtraArgs) > 0 {
+		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
+	}
+
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so
 		// effectful host ops (exec, fs writes, network, env) record their intent and
@@ -680,10 +688,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		} else {
 			ctx = race.WithRuntime(ctx, raceRT)
 		}
-	}
-
-	if len(opts.ExtraArgs) > 0 {
-		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
 	ctx = buzz.WithPoolRegistry(ctx, m.buzzPoolRegistry())
