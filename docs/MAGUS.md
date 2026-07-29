@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2154 nodes** and **4693 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2188 nodes** and **4812 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -44,30 +44,31 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 8 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 78 | `magus query kind:target` | `content-generate`, `generate`, `image-build` |
+| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 83 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
-| tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| tool | 14 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 5 | `magus query kind:charm` | `rw`, `gha`, `static` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
-| method | 154 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 45 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 205 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 114 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 229 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1096 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 115 | `magus query kind:import` | `std`, `magus`, `fs` |
+| method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
+| doc | 216 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 125 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 218 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1105 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 117 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 25 | `magus query project:.` | `generate`, `image-build`, `format` |
+| . | 26 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
+| docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | libs/diag | 8 | `magus query project:libs/diag` | `format`, `build`, `generate` |
-| libs/gopherbuzz | 9 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 

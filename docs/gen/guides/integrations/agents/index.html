@@ -83,12 +83,12 @@
           <li><a href="../../../guides/integrations/mcp/" title="MCP">MCP</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#claude-code" title="Claude Code">Claude Code</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
+        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#parity-across-hosts" title="Parity across hosts">Parity across hosts</a></li><li><a href="#claude-code" title="Claude Code">Claude Code</a></li></ul></li><li><a href="#hook-templates" title="Hook templates">Hook templates</a><ul><li><a href="#how-they-fit-together" title="How they fit together">How they fit together</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">18 min read</small>
+    <small class="reading-time" title="Estimated reading time">35 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
@@ -351,16 +351,73 @@ passing the value through unmodified is always correct.</p>
 supplies the rule evaluation; the host supplies the hook that calls it.
 <code>magus agent hook</code> reads one command, applies the guard rules, and returns a
 neutral verdict.</p>
+<p>magus denies only what cannot be undone, and explains everything else. That is
+the whole rule, and it is worth stating plainly because the temptation runs the
+other way: a guard that CAN prove something is wrong is tempted to block it.</p>
+<p>A whole-tree <code>git reset --hard</code> destroys uncommitted and untracked work, including
+a concurrent agent's, and nothing recovers it - so it is denied. A hand-edited
+generated file is wasteful, not destructive: regenerating erases it. magus knows
+definitively that the file is generated, and still only explains, because
+blocking would treat the agent as unable to learn when the classification it
+needs is one <code>magus <a class="code-xref" href="../../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> file</code> away. An agent told why an edit was futile
+does not repeat it; an agent whose call was rejected has only lost a turn.</p>
+<p>The practical effect is that magus stays out of the way. It is the same standard
+the tool holds itself to everywhere else - never get between someone and the
+work - extended to the agent doing it.</p>
+<p>A command is denied on either of two independent triggers. It cannot be UNDONE,
+or it has an EXACT WORKING EQUIVALENT. The second is not about danger: a raw
+<code>go test</code> is harmless and reversible, and it is denied because magus does the
+same thing plus caching, sandboxing, and <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> tracking, so the deny costs the
+caller nothing. Where no equivalent exists the rule must only advise - magus has
+no raw-text search, which is why a repo-wide <code>grep</code> is explained rather than
+blocked, and why an earlier attempt to deny it had to be reverted.</p>
 <ul>
-<li><code>deny</code>, with a <code>reason</code> written for the model: destructive whole-tree VCS
-operations (<code>git stash</code>, <code>git reset --hard</code>, <code>git checkout .</code>,
-<code>git restore .</code>, <code>git clean -f</code>) that permanently destroy uncommitted and
-untracked work, including a concurrent agent's.</li>
-<li><code>advise</code>, with <code>context</code> to inject while the call proceeds: <code>git commit</code> and
-<code>git add</code> (classify the dirty tree first) and raw language tools like
-<code>go test</code> or <code>pytest</code> (a magus target covers the work).</li>
+<li><code>deny</code>, with a <code>reason</code> written for the model:
+<ul>
+<li>destructive whole-tree VCS operations (<code>git stash</code>, <code>git reset --hard</code>,
+<code>git checkout .</code>, <code>git restore .</code>, <code>git clean -f</code>) that permanently destroy
+uncommitted and untracked work, including a concurrent agent's. <strong>These rules
+are git-shaped.</strong> magus also drives Mercurial and Jujutsu, where
+recoverability differs - jj snapshots the working copy and keeps an operation
+log, so its nearest equivalents are undoable and would not meet this bar.
+Their commands are not matched today.</li>
+<li>raw language tools (<code>go test</code>, <code>pytest</code>, <code>cargo build</code>, <code>eslint</code>, <code>ruff</code>,
+<code>gofmt -w</code>, ...). The reason names the escalation ladder: a top-level target,
+then a single spell op (<code>magus run go::go-test &lt;project&gt;</code>), which still runs
+through magus. Exempt: <code>go build -o &lt;path&gt;</code> and <code>gofmt -l|-d</code>, which bypass
+nothing.</li>
+<li>staging everything (<code>git add -A</code>, <code>git add .</code>, <code>git add -u</code>). A magus target
+writes its declared outputs as it runs, so a tree is routinely dirty with
+generated files you did not edit; sweeping them into a commit about something
+else is how a focused change becomes unreviewable.</li>
+</ul>
+</li>
+<li><code>advise</code>, with <code>context</code> to inject while the call proceeds:
+<ul>
+<li><code>git commit</code> / <code>git add &lt;paths&gt;</code> - classify the dirty tree first. Deliberate
+staging is the replacement the rule above points at, so it is never denied.</li>
+<li>a path-scoped <code>git checkout -- &lt;paths&gt;</code> / <code>git restore</code> - regenerated output
+is a declared target output; reverting it because you did not hand-edit it is
+what makes <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> fail on drift.</li>
+<li>trimming magus's own output with the shell (<code>| <a class="code-xref" href="../../../reference/manpage/magus-tail/" data-kind="command" data-def="magus tail: Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.">tail</a></code>, <code>2&gt;&amp;1</code>) - magus has
+<code>-s/--silent</code> and <code>-o json|name|template</code>, and <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output &lt;ref&gt;</code>
+for a failing target's full log.</li>
+<li>a repo-wide text search (<code>grep -r</code>, <code>rg</code>, <code>find -name</code>) - the graph answers
+structural questions from declared sources (<code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Find a symbol's definition and references.">magus refs</a></code> for a code symbol,
+<code>magus query</code> for a domain entity).</li>
+<li><code>cd &lt;dir&gt; &amp;&amp; magus ...</code> - magus is CWD-relative, and the project is always an
+explicit argument, so the <code>cd</code> is how the right command lands on the wrong
+project.</li>
+</ul>
+</li>
 <li><code>pass</code>: everything else.</li>
 </ul>
+<p><code>magus agent hook --path &lt;file&gt;</code> is the one rule that is not a heuristic. It
+classifies the path against every target's DECLARED outputs, so it knows
+definitively which files a target regenerates. It ADVISES rather than blocks -
+see the rule above - and says nothing on any uncertainty, since an advisory
+fired on a guess trains the reader to ignore it. Wire it to your host's
+file-editing tool, not its shell tool.</p>
 <p>That verdict is the whole contract. The command arrives however your host can
 produce it: as arguments, as raw stdin, or extracted from a JSON event on
 stdin with <code>--from-json &lt;dot.path&gt;</code>. The verdict leaves through the standard
@@ -370,6 +427,80 @@ response dialect directly. Bare <code>-o template</code> lists the fields. A hos
 integration is therefore a few lines of configuration you own, with no
 host-specific code in magus. An unreadable event fails open as a <code>pass</code>, since
 a guard that errors on every tool call is worse than no guard.</p>
+<h3 id="parity-across-hosts">Parity across hosts</h3>
+<p>Every host gets the same RULES - they come from one binary, and none of them is
+per-host. What differs is how much of a verdict a host's hook surface can carry.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>command rules</th>
+<th>declared-output rule</th>
+<th><code>deny</code> reaches the model</th>
+<th><code>advise</code> reaches the model</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Claude Code</td>
+<td>yes (verified)</td>
+<td>yes (verified)</td>
+<td>yes</td>
+<td>yes (<code>additionalContext</code>)</td>
+</tr>
+<tr>
+<td>Codex</td>
+<td>yes (verified)</td>
+<td>yes, per OpenAI's docs (unverified here)</td>
+<td>yes</td>
+<td>yes (<code>additionalContext</code>)</td>
+</tr>
+<tr>
+<td>Cursor</td>
+<td>yes (verified)</td>
+<td>yes, reported after the write (verified)</td>
+<td>yes (<code>user_message</code> + <code>agent_message</code>)</td>
+<td>no - collapses to allow</td>
+</tr>
+<tr>
+<td>OpenCode</td>
+<td>yes (verified)</td>
+<td>yes (verified)</td>
+<td>yes (thrown)</td>
+<td>no - logged for the human</td>
+</tr>
+</tbody>
+</table></figure>
+<p>&quot;Verified&quot; means executed against this binary with a real event on stdin.</p>
+<p>Codex needs no new script. Its PreToolUse event carries the command at
+<code>tool_input.command</code> and it replies with the same
+<code>hookSpecificOutput.permissionDecision</code> envelope Claude Code uses, so the two
+generic templates run unmodified - only the wiring file differs. Two Codex
+caveats: hooks are experimental and OFF by default (opt in with
+<code>[features].codex_hooks = true</code> in <code>~/.codex/config.toml</code>), and they are not
+available on Windows. Reporting also disagrees on whether <code>apply_patch</code> /
+<code>Edit</code> / <code>Write</code> fire PreToolUse - OpenAI's hooks page says they do, at least one
+third-party reference says Bash only - so treat the second matcher as
+provisional and confirm it against the current docs. Note that <code>apply_patch</code>
+delivers a PATCH in <code>tool_input.command</code>, not a path, so the declared-output
+guard wants the <code>Edit</code>/<code>Write</code> matcher rather than <code>apply_patch</code>.</p>
+<p>OpenCode's tool identifiers were confirmed against an installed OpenCode
+1.18.5: <code>bash</code>, <code>edit</code>, <code>write</code>, <code>read</code>, <code>patch</code> and <code>glob</code> all appear in its
+binary, and <code>filePath</code> is the field its edit tools carry. <code>opencode debug config</code>
+confirms a plugin in <code>~/.config/opencode/plugins/</code> is loaded.</p>
+<p>Cursor has no pre-write file hook - its documented events are <code>beforeReadFile</code>
+(blocks) and <code>afterFileEdit</code> (fires after the write) - and under this rule that
+no longer matters. The declared-output rule only ever explains, so reporting
+after the write is the intended behavior on every host, not a Cursor concession.
+What differs between hosts is the CHANNEL the explanation travels on: injected
+context where the host has one, stderr prose where it does not.</p>
+<p>Cursor did shape one thing genuinely: its <code>advise</code> on a shell command collapses
+to a plain allow, because it delivers <code>agent_message</code> only on a denial. Those
+nudges live in the installed skills instead, which is why the skills and the
+guard say the same things.</p>
+<p>Everything else is additive: a host missing a file-write hook still gets every
+command rule, and adding one later changes no magus code, because the rules and
+the verdict already exist and only the wrapper is host-shaped.</p>
 <p>This split is deliberate. magus owns the guard rules and the verdict, not
 integration code for each host. Maintaining a codec per host as the tools keep
 changing would be a lot to manage for little gain. So the host-specific part
@@ -382,9 +513,14 @@ echo &quot;go test ./...&quot; | magus agent hook -     # advise: a magus target
 magus agent hook -o template                  # list the fields -o json / -o template see
 </code></pre>
 <h3 id="claude-code">Claude Code</h3>
-<p>A <code>PreToolUse</code> hook on the <code>Bash</code> tool in <code>.claude/settings.json</code>. The
-<code>command -v</code> prefix fails open when magus is not on PATH; the template renders
-Claude Code's response dialect, emitting nothing on a <code>pass</code>:</p>
+<p>Two <code>PreToolUse</code> hooks in <code>.claude/settings.json</code>: one on <code>Bash</code> for the command
+rules, one on the file-editing tools for the declared-output rule. This is the
+configuration this repository dogfoods, kept in sync with it.</p>
+<p>Resolve the binary rather than testing PATH alone. A bare
+<code>command -v magus || exit 0</code> looks safe but fails SILENTLY when magus is not on
+PATH - the guard simply never runs, and nothing says so. Emitting a visible
+notice instead is the difference between an unguarded session you know about and
+one you do not.</p>
 <pre><code class="language-json">{
   &quot;hooks&quot;: {
     &quot;PreToolUse&quot;: [
@@ -393,7 +529,17 @@ Claude Code's response dialect, emitting nothing on a <code>pass</code>:</p>
         &quot;hooks&quot;: [
           {
             &quot;type&quot;: &quot;command&quot;,
-            &quot;command&quot;: &quot;command -v magus &gt;/dev/null 2&gt;&amp;1 || exit 0; exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision \&quot;deny\&quot;}}{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;permissionDecision\&quot;:\&quot;deny\&quot;,\&quot;permissionDecisionReason\&quot;:{{toJson .reason}}}}{{else if eq .decision \&quot;advise\&quot;}}{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;additionalContext\&quot;:{{toJson .context}}}}{{end}}'&quot;,
+            &quot;command&quot;: &quot;MAGUS_BIN=\&quot;$(command -v magus 2&gt;/dev/null || echo /tmp/magus)\&quot;; if [ ! -x \&quot;$MAGUS_BIN\&quot; ]; then printf '%s' '{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;additionalContext\&quot;:\&quot;magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: go build -o /tmp/magus ./cmd/magus\&quot;}}'; exit 0; fi; exec \&quot;$MAGUS_BIN\&quot; agent hook --from-json tool_input.command -o 'template={{if eq .decision \&quot;deny\&quot;}}{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;permissionDecision\&quot;:\&quot;deny\&quot;,\&quot;permissionDecisionReason\&quot;:{{toJson .reason}}}}{{else if eq .decision \&quot;advise\&quot;}}{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;additionalContext\&quot;:{{toJson .context}}}}{{end}}'&quot;,
+            &quot;timeout&quot;: 10
+          }
+        ]
+      },
+      {
+        &quot;matcher&quot;: &quot;Edit|Write|NotebookEdit&quot;,
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;MAGUS_BIN=\&quot;$(command -v magus 2&gt;/dev/null || echo /tmp/magus)\&quot;; [ -x \&quot;$MAGUS_BIN\&quot; ] || exit 0; exec \&quot;$MAGUS_BIN\&quot; agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \&quot;deny\&quot;}}{\&quot;hookSpecificOutput\&quot;:{\&quot;hookEventName\&quot;:\&quot;PreToolUse\&quot;,\&quot;permissionDecision\&quot;:\&quot;deny\&quot;,\&quot;permissionDecisionReason\&quot;:{{toJson .reason}}}}{{end}}'&quot;,
             &quot;timeout&quot;: 10
           }
         ]
@@ -401,6 +547,383 @@ Claude Code's response dialect, emitting nothing on a <code>pass</code>:</p>
     ]
   }
 }
+</code></pre>
+<p>The template renders the host's response dialect and emits nothing on a <code>pass</code>.
+The <code>--path</code> hook only ever denies, so it needs no <code>advise</code> arm.</p>
+<h2 id="hook-templates">Hook templates</h2>
+<p>These are files, not snippets. They sit beside this page in <a href="https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents" rel="noopener noreferrer" target="_blank" data-external><code>docs/guides/integrations/agents/</code></a>:
+download them from there, or copy any block below. magus's own repository invokes these same files
+rather than keeping a private copy, so what it dogfoods is what you get - and two tests fail if the
+config stops referencing them or a block here drifts from the file.</p>
+<p>They are a magus project of their own, so the TypeScript is held to the same gates as the rest of
+the workspace (<code>magus run lint docs/guides/integrations/agents</code> runs <code>tsc --noEmit</code> and Biome).</p>
+<h3 id="how-they-fit-together">How they fit together</h3>
+<p>One implementation per guard; a host file sets overrides and delegates:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>variable</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HOST_EVENT_PATH</code></td>
+<td>dot-path to the command or file path inside your host's event JSON</td>
+</tr>
+<tr>
+<td><code>HOST_RESPONSE</code></td>
+<td>Go template rendering your host's reply from the verdict</td>
+</tr>
+<tr>
+<td><code>GUARD_UNAVAILABLE_RESPONSE</code></td>
+<td>what to print when magus is missing, so each host picks its own fail-open or fail-closed stance</td>
+</tr>
+<tr>
+<td><code>GUARD_MAGUS_BIN</code></td>
+<td>absolute path to magus when it is not on PATH</td>
+</tr>
+</tbody>
+</table></figure>
+<p><code>GUARD_MAGUS_BIN</code> deliberately avoids the <code>MAGUS_*</code> prefix: that space is magus's own configuration
+surface, and a variable these templates invent must not look like a setting magus reads.</p>
+<h4 id="magus-guard-commandsh"><code>magus-guard-command.sh</code></h4>
+<p>The command guard. Claude Code, Codex and OpenCode all run this one file; a host file sets its
+overrides and execs it, so there is one implementation to reason about.</p>
+<pre><code class="language-sh">#!/usr/bin/env sh
+# magus guard hook: judges ONE shell command an agent is about to run.
+#
+# This file is the source of truth. The docs site embeds it, magus's own
+# repository invokes it, and you can download it and do the same. POSIX sh, no
+# bashisms; nothing in it is magus-internal.
+#
+# Contract: reads the host's event as JSON on stdin, writes the host's response
+# on stdout, exits 0 either way. Override any of the three variables below:
+#
+#   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_RESPONSE    Go template rendering your host's reply
+#   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
+#                    host can choose its own fail-open or fail-closed stance
+#
+# The defaults are Claude Code's event and response shape.
+#
+# GUARD_MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
+# magus's own configuration surface, so a variable this template invents must stay
+# out of it rather than look like a setting magus reads.
+#
+# On a missing magus this prints a visible notice rather than exiting quietly. A
+# bare `command -v magus || exit 0` fails SILENTLY - the guard never runs and
+# nothing says so - and an unguarded session you know about beats one you do not.
+
+# Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
+# the first one would terminate a ${...} expansion, silently truncating it.
+[ -n &quot;$HOST_EVENT_PATH&quot; ] || HOST_EVENT_PATH='tool_input.command'
+[ -n &quot;$HOST_RESPONSE&quot; ] || HOST_RESPONSE='{{if eq .decision &quot;deny&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;permissionDecision&quot;:&quot;deny&quot;,&quot;permissionDecisionReason&quot;:{{toJson .reason}}}}{{else if eq .decision &quot;advise&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:{{toJson .context}}}}{{end}}'
+[ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
+[ -n &quot;$GUARD_UNAVAILABLE_RESPONSE&quot; ] || GUARD_UNAVAILABLE_RESPONSE='{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:&quot;magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard.&quot;}}'
+
+if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
+  printf '%s' &quot;$GUARD_UNAVAILABLE_RESPONSE&quot;
+  exit 0
+fi
+
+exec &quot;$GUARD_MAGUS_BIN&quot; agent hook --from-json &quot;$HOST_EVENT_PATH&quot; -o &quot;template=$HOST_RESPONSE&quot;
+</code></pre>
+<h4 id="magus-guard-pathsh"><code>magus-guard-path.sh</code></h4>
+<p>The declared-output guard. Wire to your host's file-editing tool. It explains rather than blocks -
+editing a generated file is wasteful, not destructive.</p>
+<pre><code class="language-sh">#!/usr/bin/env sh
+# magus guard hook: judges ONE file path an agent is about to write.
+#
+# Companion to magus-guard-command.sh, wired to your host's file-editing tool
+# rather than its shell tool. POSIX sh, no bashisms.
+#
+# This is the only guard rule that is not a heuristic: magus reads every target's
+# DECLARED outputs, so a generated file is generated by definition and an edit to
+# it would be overwritten by the next run.
+#
+# It ADVISES rather than blocks. magus denies only what cannot be undone; a
+# hand-edited generated file is wasteful, not destructive, since regenerating
+# erases it. So this explains that the edit will be overwritten and lets the
+# agent correct itself, rather than treating it as unable to learn. It says
+# nothing on any uncertainty - no magus, no workspace, an unclaimed path -
+# because an advisory fired on a guess trains the reader to ignore it.
+#
+# A host with no file-write hook still gets the command rules; it just misses
+# this one. That is a coverage difference to record, not a reason to skip it.
+
+# Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
+# and the first one would terminate a ${...} expansion.
+[ -n &quot;$HOST_EVENT_PATH&quot; ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n &quot;$HOST_RESPONSE&quot; ] || HOST_RESPONSE='{{if eq .decision &quot;advise&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:{{toJson .context}}}}{{end}}'
+[ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
+
+if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
+  # Prints nothing by default: for most hosts an empty response means &quot;allow&quot;.
+  # Set GUARD_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
+  [ -n &quot;$GUARD_UNAVAILABLE_RESPONSE&quot; ] &amp;&amp; printf '%s' &quot;$GUARD_UNAVAILABLE_RESPONSE&quot;
+  exit 0
+fi
+
+exec &quot;$GUARD_MAGUS_BIN&quot; agent hook --path --from-json &quot;$HOST_EVENT_PATH&quot; -o &quot;template=$HOST_RESPONSE&quot;
+</code></pre>
+<h4 id="codex-hooksjson"><code>codex-hooks.json</code></h4>
+<p>Codex wiring. Codex's event and reply match Claude Code's, so both scripts above run unmodified.
+Save as <code>~/.codex/hooks.json</code> (or <code>.codex/hooks.json</code>) and enable hooks with
+<code>[features].codex_hooks = true</code> in <code>~/.codex/config.toml</code>.</p>
+<pre><code class="language-json">{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;sh docs/guides/integrations/agents/magus-guard-command.sh&quot;,
+            &quot;statusMessage&quot;: &quot;magus guard: checking command&quot;
+          }
+        ]
+      },
+      {
+        &quot;matcher&quot;: &quot;Edit|Write&quot;,
+        &quot;hooks&quot;: [
+          {
+            &quot;type&quot;: &quot;command&quot;,
+            &quot;command&quot;: &quot;sh docs/guides/integrations/agents/magus-guard-path.sh&quot;,
+            &quot;statusMessage&quot;: &quot;magus guard: checking file&quot;
+          }
+        ]
+      }
+    ]
+  }
+}
+</code></pre>
+<h4 id="cursor-guardsh"><code>cursor-guard.sh</code></h4>
+<p>Cursor: ONE file covering both of its events. Download only this - it is <a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained, because
+needing three files to install a guard is how a guard ends up not installed.</p>
+<pre><code class="language-sh">#!/usr/bin/env sh
+# magus guard for Cursor. ONE file, both hooks - download only this.
+#
+# Cursor runs a hook as a PROGRAM rather than an inline shell string, and its two
+# relevant events carry different payloads, so this reads the event once and
+# branches on what it finds instead of needing a wrapper per event:
+#
+#   beforeShellExecution  {&quot;command&quot;: &quot;...&quot;, &quot;cwd&quot;: &quot;...&quot;, &quot;sandbox&quot;: false}
+#   afterFileEdit         {&quot;file_path&quot;: &quot;&lt;absolute&gt;&quot;, &quot;edits&quot;: [...]}
+#
+# Save to .cursor/hooks/cursor-guard.sh, chmod +x, and point both events at it:
+#
+#   {&quot;version&quot;: 1, &quot;hooks&quot;: {
+#     &quot;beforeShellExecution&quot;: [{&quot;command&quot;: &quot;./.cursor/hooks/cursor-guard.sh&quot;}],
+#     &quot;afterFileEdit&quot;:        [{&quot;command&quot;: &quot;./.cursor/hooks/cursor-guard.sh&quot;}]}}
+#
+# Self-contained on purpose. The other hosts' templates delegate to
+# magus-guard-command.sh, but Cursor would then need three files downloaded to
+# work, and a guard nobody finishes installing guards nothing.
+#
+# Two Cursor facts shape the behaviour:
+#
+#   - A denial carries BOTH user_message (shown to you) and agent_message (sent
+#     to the model); neither is delivered on an allow, so `advise` collapses to a
+#     plain allow here. Those nudges live in the installed skills instead.
+#   - There is NO pre-write file hook, and it does not matter: magus advises on
+#     generated files rather than blocking them, so reporting after the write is
+#     the intended behavior everywhere, not a Cursor concession. What Cursor
+#     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
+
+[ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
+
+event=$(cat)
+
+case &quot;$event&quot; in
+*'&quot;file_path&quot;'*)
+	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+	if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
+		exit 0
+	fi
+	# -o name prints the bare decision word, which is all this needs. magus
+	# re-roots the absolute path Cursor sends onto the workspace itself.
+	verdict=$(printf '%s' &quot;$event&quot; | &quot;$GUARD_MAGUS_BIN&quot; agent hook --path --from-json file_path -o name 2&gt;/dev/null)
+	[ &quot;$verdict&quot; = &quot;advise&quot; ] || exit 0
+	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+	# prose rather than as a verdict it would not read.
+	printf '%s\n' \
+		&quot;magus: that file is a DECLARED OUTPUT of a magus target - it is generated.&quot; \
+		&quot;The edit you just made will be overwritten by the next run of its producing target.&quot; \
+		&quot;Change the SOURCE instead, then regenerate and commit both together.&quot; \
+		&quot;Cursor has no pre-write hook, so this could only be reported after the fact.&quot; &gt;&amp;2
+	exit 0
+	;;
+esac
+
+# beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
+# hook crash or malformed JSON unless the hook sets failClosed, so pretending
+# otherwise would give false assurance. For strict behaviour, set failClosed on
+# the hook and change this to a deny.
+if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
+	printf '%s' '{&quot;permission&quot;:&quot;allow&quot;}'
+	exit 0
+fi
+
+printf '%s' &quot;$event&quot; | &quot;$GUARD_MAGUS_BIN&quot; agent hook --from-json command \
+	-o 'template={{if eq .decision &quot;deny&quot;}}{&quot;permission&quot;:&quot;deny&quot;,&quot;user_message&quot;:{{toJson .reason}},&quot;agent_message&quot;:{{toJson .reason}}}{{else}}{&quot;permission&quot;:&quot;allow&quot;}{{end}}'
+</code></pre>
+<h4 id="opencode-plugints"><code>opencode-plugin.ts</code></h4>
+<p>OpenCode plugin. OpenCode has no shell-hook config, so this is a plugin covering both surfaces.
+Save to <code>~/.config/opencode/plugins/</code> or <code>.opencode/plugins/</code>; confirm with <code>opencode debug config</code>.</p>
+<pre><code class="language-ts">// magus guard hook for OpenCode. OpenCode has no shell-command hook config: a
+// plugin intercepts tool calls instead, and throwing from tool.execute.before
+// blocks the call.
+//
+// This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
+// .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
+//
+// It encodes no magus rule. Every decision comes from `magus agent hook`, so
+// this stays host-only glue rather than a second rule set that drifts out of
+// step with the other hosts' templates.
+//
+// Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
+//   bash          the command rules (deny; advise surfaced to the human)
+//   edit | write  the declared-output rule (deny only)
+//
+// PATH contract: this shells out to `magus` by name, inheriting PATH from the
+// opencode process. If magus lives in a prefix PATH does not include (mise,
+// brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
+// deliberately avoids the MAGUS_* space, which is magus's own config surface.
+
+import type { Plugin } from &quot;@opencode-ai/plugin&quot;;
+
+/** The verdict schema this plugin understands; a bump means re-read the docs. */
+const SUPPORTED_SCHEMA = 1;
+
+/**
+ * magus's guard verdict. A discriminated union on `decision`, so the compiler
+ * enforces that `reason` is only read on a deny and `context` on an advise.
+ */
+type Verdict =
+  | { schema_version: number; decision: &quot;pass&quot; }
+  | { schema_version: number; decision: &quot;advise&quot;; context: string }
+  | { schema_version: number; decision: &quot;deny&quot;; reason: string };
+
+/**
+ * Narrows untrusted JSON to a Verdict. A type guard rather than a cast because
+ * this is another process's stdout: a cast would let a malformed payload reach
+ * the branches below as though it had been checked.
+ */
+function isVerdict(value: unknown): value is Verdict {
+  if (typeof value !== &quot;object&quot; || value === null) return false;
+  const fields = value as Record&lt;string, unknown&gt;;
+  if (typeof fields.schema_version !== &quot;number&quot;) return false;
+  switch (fields.decision) {
+    case &quot;pass&quot;:
+      return true;
+    case &quot;advise&quot;:
+      return typeof fields.context === &quot;string&quot;;
+    case &quot;deny&quot;:
+      return typeof fields.reason === &quot;string&quot;;
+    default:
+      return false;
+  }
+}
+
+/** First non-empty string among `keys` in a tool's untyped args, else &quot;&quot;. */
+function argString(args: unknown, keys: readonly string[]): string {
+  if (typeof args !== &quot;object&quot; || args === null) return &quot;&quot;;
+  const fields = args as Record&lt;string, unknown&gt;;
+  for (const key of keys) {
+    const value = fields[key];
+    if (typeof value === &quot;string&quot; &amp;&amp; value.length &gt; 0) return value;
+  }
+  return &quot;&quot;;
+}
+
+export const MagusGuard: Plugin = async () =&gt; {
+  const magus = process.env.GUARD_MAGUS_BIN ?? &quot;magus&quot;;
+
+  /**
+   * Runs one guard query. Returns null when no verdict could be obtained, which
+   * every caller treats as allow.
+   *
+   * Failing OPEN is deliberate. Throwing is OpenCode's only way to stop a call,
+   * so a guard that threw whenever magus was missing would block every tool
+   * call and make the session unusable - worse than no guard. The failure is
+   * logged rather than swallowed, so an unguarded session stays visible.
+   */
+  const judge = async (args: readonly string[]): Promise&lt;Verdict | null&gt; =&gt; {
+    let stdout: string;
+    try {
+      const proc = Bun.spawn([magus, ...args], { stdout: &quot;pipe&quot;, stderr: &quot;ignore&quot; });
+      stdout = await new Response(proc.stdout).text();
+      await proc.exited;
+    } catch {
+      console.warn(
+        `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
+          &quot;Install magus, or set GUARD_MAGUS_BIN to its path.&quot;,
+      );
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      console.warn(&quot;[magus guard] verdict was not JSON; allowing&quot;);
+      return null;
+    }
+    if (!isVerdict(parsed)) {
+      console.warn(&quot;[magus guard] unrecognized verdict shape; allowing&quot;);
+      return null;
+    }
+    if (parsed.schema_version !== SUPPORTED_SCHEMA) {
+      console.warn(
+        `[magus guard] verdict schema ${parsed.schema_version} differs from the expected ` +
+          `${SUPPORTED_SCHEMA}; allowing. Update this plugin from the magus docs.`,
+      );
+      return null;
+    }
+    return parsed;
+  };
+
+  /** Throws on a deny; logs an advise, which OpenCode cannot inject as context. */
+  const apply = (verdict: Verdict | null): void =&gt; {
+    if (verdict === null) return;
+    switch (verdict.decision) {
+      case &quot;deny&quot;:
+        throw new Error(`[magus guard] ${verdict.reason}`);
+      case &quot;advise&quot;:
+        // OpenCode has no context-injection arm, so this cannot reach the
+        // model. Logging keeps it in front of the human instead of dropping it;
+        // the same guidance ships in the installed skills, which is why the
+        // skills and the guard say the same things.
+        console.warn(`[magus guard] ${verdict.context}`);
+        return;
+      case &quot;pass&quot;:
+        return;
+    }
+  };
+
+  return {
+    &quot;tool.execute.before&quot;: async (input, output) =&gt; {
+      if (input.tool === &quot;bash&quot;) {
+        const command = argString(output.args, [&quot;command&quot;]);
+        if (command === &quot;&quot;) return;
+        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, command]));
+        return;
+      }
+
+      if (input.tool === &quot;edit&quot; || input.tool === &quot;write&quot;) {
+        // OpenCode names this filePath; the fallbacks cost nothing and keep the
+        // plugin working if a future tool spells it differently.
+        const path = argString(output.args, [&quot;filePath&quot;, &quot;file_path&quot;, &quot;path&quot;]);
+        if (path === &quot;&quot;) return;
+        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--path&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, path]));
+      }
+    },
+  };
+};
+
+export default MagusGuard;
 </code></pre>
 <h3 id="other-agents">Other agents</h3>
 <div class="admonition admonition-note"><p class="admonition-title">Note<a class="convention-hint" href="../../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
@@ -524,7 +1047,7 @@ denial:</p>
 <h2 id="the-mcp-daemon">The MCP daemon</h2>
 <p><code>magus server start</code> brings up the daemon, and the MCP server with it. Agents
 connected over MCP get the same verbs as the CLI plus run/log/scratchpad tools;
-<code>magus <a class="code-xref" href="../../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> mcp-tools</code> lists all of them with parameters. See
+<code>magus describe mcp-tools</code> lists all of them with parameters. See
 <a href="../mcp/">MCP</a> for transport and token setup, and
 <a href="../../../concepts/knowledge/">Knowledge graph</a> for the graph the query tools read.</p>
 <p>Skills prefer the MCP tools and fall back to the CLI, so they work in both
@@ -538,13 +1061,13 @@ injected into an agent's context. The journal is also available through <code>ma
 or broken linked entries. Captured build output is addressed by
 <a href="../../../concepts/cache/output-refs/">output references</a>.</p>
 <h2 id="why-a-daemon-not-a-wrapper">Why a daemon, not a wrapper</h2>
-<p>The skeptical read is reasonable. If an agent can already run <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a></code> in a
+<p>The skeptical read is reasonable. If an agent can already run <code>magus query</code> in a
 shell, what does an MCP server add? If the server only ran the CLI and handed back
 its stdout, the answer would be nothing, plus a round trip. That is not what this
 server does, and the difference is the context the agent has to work with.</p>
 <p>An agent working through a shell falls back on the habits it learned everywhere
 else: grep and cat over the files. Those return text matches. They do not return
-the project DAG, the declared outputs, the <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set, or the blast radius of a
+the project DAG, the declared outputs, the affected set, or the blast radius of a
 symbol, because none of that is written in the files. It lives in the graph the
 daemon keeps warm. So the agent reasons one layer below the structure it is trying
 to understand, and it fills the gap by guessing: this file looks generated, these
@@ -590,7 +1113,7 @@ model; the value is in the graph and the curation.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22agent+install%22">agent install</a><a class="tag" href="../../../search/?q=tag%3A%22MCP%22">MCP</a><a class="tag" href="../../../search/?q=tag%3A%22MAGUS.md%22">MAGUS.md</a><a class="tag" href="../../../search/?q=tag%3A%22AGENTS.md%22">AGENTS.md</a><a class="tag" href="../../../search/?q=tag%3A%22hooks%22">hooks</a><a class="tag" href="../../../search/?q=tag%3A%22guard%22">guard</a><a class="tag" href="../../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../../search/?q=tag%3A%22memory%22">memory</a><a class="tag" href="../../../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../../../search/?q=tag%3A%22codex%22">codex</a><a class="tag" href="../../../search/?q=tag%3A%22opencode%22">opencode</a><a class="tag" href="../../../search/?q=tag%3A%22drift%22">drift</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+    <small>Last updated <time datetime="2026-07-29T15:08:17Z">July 29, 2026, 3:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d7d8ef545fe836234ab3bbc54abb94fe81400d95" data-tooltip="d7d8ef545fe836234ab3bbc54abb94fe81400d95" title="d7d8ef545fe836234ab3bbc54abb94fe81400d95">d7d8ef54</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/27444cd95a40f9e9fc43bfdd8c7ce5100e53c542"><code>27444cd9</code></a> <small><time datetime="2026-07-29T03:09:24Z">Jul 29, 2026</time></small> - teach instead of prevent, and let a project declare its own name</li><li><a href="https://github.com/egladman/magus/commit/df4db0b737ec062eb65ad9f50b4c3f3c5d1039eb"><code>df4db0b7</code></a> <small><time datetime="2026-07-29T02:55:23Z">Jul 29, 2026</time></small> - make the templates a linted project, and give Cursor the rule in the form it allows</li><li><a href="https://github.com/egladman/magus/commit/ca311a275556905c3525979ea347a9a7e9163f16"><code>ca311a27</code></a> <small><time datetime="2026-07-29T02:37:39Z">Jul 29, 2026</time></small> - rewrite the OpenCode plugin against a real OpenCode, not the spec</li><li><a href="https://github.com/egladman/magus/commit/85777167664df7a567b3af6d53fb297b500420a8"><code>85777167</code></a> <small><time datetime="2026-07-29T02:31:55Z">Jul 29, 2026</time></small> - give Codex the guard, using the generic templates unchanged</li><li><a href="https://github.com/egladman/magus/commit/15a6ec51acae5778851a5f56118c23202e119a12"><code>15a6ec51</code></a> <small><time datetime="2026-07-29T02:28:09Z">Jul 29, 2026</time></small> - record what host parity actually is, verified and not</li><li><a href="https://github.com/egladman/magus/commit/094176b55891998d81aa046007969821c848411c"><code>094176b5</code></a> <small><time datetime="2026-07-29T02:26:10Z">Jul 29, 2026</time></small> - colocate the hook templates with the guide, and collapse them to one implementation</li><li><a href="https://github.com/egladman/magus/commit/0646b337c516ce019b7cf3c7eb95e5854730e498"><code>0646b337</code></a> <small><time datetime="2026-07-29T02:22:03Z">Jul 29, 2026</time></small> - make the hook templates real files, and reach host parity where the host allows</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/integrations/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/integrations/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -637,6 +1160,9 @@ captured output; it appears on each target's line, and
 <code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
 it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
 whole <code>magus</code> invocation). See <a href="../../../concepts/output-refs/">output-refs</a>.</p>
+<h3 id="snapshot">Snapshot</h3>
+<p>A point-in-time view of live state - the pool's occupancy or a tick of exported
+metrics - as opposed to accumulated history. See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="health">Health</h3>
 <p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
 reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.

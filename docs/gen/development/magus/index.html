@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-docsguidesintegrationsagents" title="Project: docs/guides/integrations/agents">Project: docs/guides/integrations/agents</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -125,7 +125,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2137 nodes</strong> and <strong>4665 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2482 nodes</strong> and <strong>4775 edges</strong> (schema v6). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -144,15 +144,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>project</td>
-<td style="text-align:right">8</td>
+<td style="text-align:right">9</td>
 <td><code>magus query kind:project</code></td>
 <td><code>magus</code>, <code>docs</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">78</td>
+<td style="text-align:right">82</td>
 <td><code>magus query kind:target</code></td>
-<td><code>content-generate</code>, <code>generate</code>, <code>image-build</code></td>
+<td><code>content-generate</code>, <code>bindings-generate</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>spell</td>
@@ -186,43 +186,43 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>method</td>
-<td style="text-align:right">154</td>
+<td style="text-align:right">158</td>
 <td><code>magus query kind:method</code></td>
 <td><code>archive.compress</code>, <code>archive.uncompress</code>, <code>charm.after</code></td>
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">40</td>
+<td style="text-align:right">45</td>
 <td><code>magus query kind:diagnostic</code></td>
 <td><code>MGS2001</code>, <code>MGS4001</code>, <code>MGS5002</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">198</td>
+<td style="text-align:right">215</td>
 <td><code>magus query kind:doc</code></td>
 <td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/reference/manpage/magus-affected.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
-<td style="text-align:right">109</td>
+<td style="text-align:right">414</td>
 <td><code>magus query kind:dir</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/reference/buzz</code></td>
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">229</td>
+<td style="text-align:right">230</td>
 <td><code>magus query kind:file</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1096</td>
+<td style="text-align:right">1102</td>
 <td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">115</td>
+<td style="text-align:right">117</td>
 <td><code>magus query kind:import</code></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
@@ -248,7 +248,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td>.</td>
 <td style="text-align:right">25</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>image-build</code>, <code>format</code></td>
+<td><code>bindings-generate</code>, <code>generate</code>, <code>image-build</code></td>
 </tr>
 <tr>
 <td>cmd/magus/starter</td>
@@ -269,6 +269,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 <tr>
+<td>docs/guides/integrations/agents</td>
+<td style="text-align:right">3</td>
+<td><code>magus query project:docs/guides/integrations/agents</code></td>
+<td><code>lint</code>, <code>ci</code>, <code>preflight</code></td>
+</tr>
+<tr>
 <td>libs/diag</td>
 <td style="text-align:right">8</td>
 <td><code>magus query project:libs/diag</code></td>
@@ -276,7 +282,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>libs/gopherbuzz</td>
-<td style="text-align:right">9</td>
+<td style="text-align:right">10</td>
 <td><code>magus query project:libs/gopherbuzz</code></td>
 <td><code>build</code>, <code>format</code>, <code>generate</code></td>
 </tr>
@@ -546,6 +552,29 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
+<h2 id="project-docsguidesintegrationsagents">Project: docs/guides/integrations/agents</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lint</code></td>
+<td>lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no <code>any</code>, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).</td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="project-libsdiag">Project: libs/diag</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -625,6 +654,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>pgo-generate</code></td>
 <td>Regenerates default.pgo, the Buzz VM's PGO profile.</td>
+</tr>
+<tr>
+<td><code>conformance</code></td>
+<td>Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).</td>
 </tr>
 <tr>
 <td><code>preflight</code></td>

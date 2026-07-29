@@ -268,7 +268,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## golangci-lint
 
-**Command:** `go tool golangci-lint run ./...`
+Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got "no such tool" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.
+
+**Command:** `golangci-lint run ./...`
 
 ### debug
 
@@ -300,7 +302,7 @@ Inserts `--fix`.
 [
   {
     "op": "add",
-    "path": "/3",
+    "path": "/1",
     "value": "--fix"
   }
 ]
