@@ -2,7 +2,7 @@
 // artifacts so the two can never drift. It is a thin dispatcher over one
 // subcommand per source→artifact mapping, invoked by `go generate`:
 //
-//	//go:generate go run ../../cmd/magus-utils types -type Target -out buzzlib/gen/target.buzz
+//	//go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
 //	//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../host/gen/fs.go
 //	//go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go
 //	//go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen

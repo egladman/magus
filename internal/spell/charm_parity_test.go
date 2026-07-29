@@ -15,7 +15,7 @@ import (
 )
 
 // TestCharmBuzzParityWithHost keeps the pure-Buzz magus/charm module
-// (internal/spell/buzzlib/charm.buzz) in lockstep with the Go charm host module
+// (internal/spell/charm.buzz) in lockstep with the Go charm host module
 // (std/charm.go): every constructor magus/charm exports must produce a
 // byte-identical RFC 6902 patch record. The Buzz module is hand-written (charm is
 // logic, not a struct, so it can't be codegen'd), so this guard is what licenses
