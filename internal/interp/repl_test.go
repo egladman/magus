@@ -726,3 +726,112 @@ func TestReplFooterIsInertOffATTY(t *testing.T) {
 	f.release()
 	assert.Empty(t, buf.String(), "a non-TTY REPL emits nothing extra")
 }
+
+// fakeDriver is a ReplDriver that only answers UserGlobals, which is all the
+// completer asks of it.
+type fakeDriver struct {
+	engine.ReplDriver
+	globals map[string]engine.Value
+}
+
+func (d fakeDriver) UserGlobals() map[string]engine.Value { return d.globals }
+
+func testCompleter(globals []string, candidates []string) (*replCompleter, *bytes.Buffer) {
+	g := map[string]engine.Value{}
+	for _, n := range globals {
+		g[n] = engine.NilValue
+	}
+	var out bytes.Buffer
+	return &replCompleter{
+		meta:       []string{".exit", ".quit", ".help", ".load", ".buzz"},
+		driver:     func() engine.ReplDriver { return fakeDriver{globals: g} },
+		candidates: func() []string { return candidates },
+		out:        &out,
+	}, &out
+}
+
+// TestCompleteOnlyActsOnTab keeps ordinary typing untouched: the callback fires on
+// EVERY keypress, so declining anything but Tab is what stops it rewriting the line
+// as the user types.
+func TestCompleteOnlyActsOnTab(t *testing.T) {
+	c, _ := testCompleter([]string{"total"}, nil)
+	_, _, ok := c.complete("tot", 3, 'a')
+	assert.False(t, ok, "a normal keypress must be processed normally")
+	_, _, ok = c.complete("tot", 3, '\t')
+	assert.True(t, ok, "Tab completes")
+}
+
+// TestCompleteInsertsASingleMatch covers the common case, including that the
+// completion is spliced at the word rather than appended to the line.
+func TestCompleteInsertsASingleMatch(t *testing.T) {
+	c, _ := testCompleter(nil, []string{"buf-generate"})
+	line, pos, ok := c.complete("run buf-g", 9, '\t')
+	require.True(t, ok)
+	assert.Equal(t, "run buf-generate", line)
+	assert.Equal(t, len("run buf-generate"), pos)
+}
+
+// TestCompleteInsertsTheCommonPrefixThenLists is the ambiguous case, and the two
+// presses are deliberately different: the first makes what progress it can, and only
+// when there is none left does it spend the reader's screen on a list.
+func TestCompleteInsertsTheCommonPrefixThenLists(t *testing.T) {
+	c, out := testCompleter(nil, []string{"buf-build", "buf-lint", "buf-format"})
+
+	line, pos, ok := c.complete("bu", 2, '\t')
+	require.True(t, ok, "the shared prefix is progress")
+	assert.Equal(t, "buf-", line)
+	assert.Equal(t, 4, pos)
+	assert.Empty(t, out.String(), "no list while there is still prefix to insert")
+
+	_, _, ok = c.complete(line, pos, '\t')
+	assert.False(t, ok, "nothing more to insert, so the line is unchanged")
+	listed := out.String()
+	for _, want := range []string{"buf-build", "buf-lint", "buf-format"} {
+		assert.Contains(t, listed, want, "the second Tab shows the alternatives")
+	}
+}
+
+// TestCompleteScopesMetaCommandsToTheDotPrefix keeps the two namespaces apart: a
+// leading dot can only be a meta command, and mixing every global and target into
+// that list would bury the five things that are actually valid there.
+func TestCompleteScopesMetaCommandsToTheDotPrefix(t *testing.T) {
+	c, _ := testCompleter([]string{"exitCode"}, []string{"export-thing"})
+
+	line, _, ok := c.complete(".e", 2, '\t')
+	require.True(t, ok)
+	assert.Equal(t, ".exit", line, "only the meta command matches, not exitCode or export-thing")
+
+	c2, _ := testCompleter([]string{"exitCode"}, nil)
+	line, _, ok = c2.complete("exi", 3, '\t')
+	require.True(t, ok)
+	assert.Equal(t, "exitCode", line, "and without the dot, the session global is what completes")
+}
+
+// TestCompleteFindsNothingQuietly: an unmatched prefix must leave the line alone
+// rather than blanking it, which is what returning ok=true with an empty insert
+// would do.
+func TestCompleteFindsNothingQuietly(t *testing.T) {
+	c, out := testCompleter([]string{"total"}, []string{"build"})
+	line, pos, ok := c.complete("zzz", 3, '\t')
+	assert.False(t, ok)
+	assert.Empty(t, line)
+	assert.Zero(t, pos)
+	assert.Empty(t, out.String())
+}
+
+// TestWordStartTreatsBuzzMemberAccessAsOneWord pins the tokenizer against Buzz's
+// own syntax: a member access is a dot and a namespace is a backslash, so neither
+// may end a word - completing "fs.wri" has to see "fs." to know what it is.
+func TestWordStartTreatsBuzzMemberAccessAsOneWord(t *testing.T) {
+	assert.Equal(t, 0, wordStart("fs.wri", 6), "a dotted member is one word")
+	assert.Equal(t, 0, wordStart(`magus\Con`, 9), "a namespace is one word")
+	assert.Equal(t, 4, wordStart("run buf-", 8), "a space starts a new word")
+	assert.Equal(t, 6, wordStart(`join("a`, 7), "the quote starts the word, so only `a` completes")
+}
+
+// TestCompleteDedupesAcrossSources: a name can be both a session global and a
+// workspace target, and offering it twice makes the list look wrong.
+func TestCompleteDedupesAcrossSources(t *testing.T) {
+	c, _ := testCompleter([]string{"build"}, []string{"build", "build"})
+	assert.Equal(t, []string{"build"}, c.matching("bui"))
+}
