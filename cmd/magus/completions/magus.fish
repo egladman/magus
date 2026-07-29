@@ -38,7 +38,20 @@ function __magus_subcommands
 # magus-utils:subcommands:end
 end
 
+# __magus_verbs lists the targets this workspace declares, tab-separated from the
+# target's kind (canonical, or the spell providing it) which fish shows as the
+# description - the useful thing to know while choosing one.
+#
+# Falls back to the built-in set when the workspace cannot be read: `describe` fails
+# by design outside a workspace, and completion that disappears there is worse than
+# completion that is merely generic.
 function __magus_verbs
+    set -l t (magus describe targets -o template='{{range .targets}}{{.name}}	{{.kind}}
+{{end}}' 2>/dev/null)
+    if test (count $t) -gt 0
+        printf '%s\n' $t
+        return
+    end
     printf '%s\t%s\n' \
         ls       'print selected projects' \
         build    'build selected projects' \
