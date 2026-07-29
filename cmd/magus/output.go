@@ -136,7 +136,12 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 // Excluded: env/expandenv, now/date/uuidv4, crypto, getHostByName, fail.
 // No trailing newline is appended (templates control whitespace, matching kubectl -o go-template).
 func writeTemplate(w io.Writer, v any, body string) error {
-	t, err := template.New("output").Funcs(templateFuncs()).Parse(body)
+	// missingkey=error, because the data is a map keyed by JSON TAG and the default
+	// is to render a misspelled key as "<no value>" and exit 0. A caller who writes
+	// {{.Name}} instead of {{.name}} - the Go field name rather than the wire name -
+	// otherwise gets empty output and a success status, which is the worst outcome for
+	// the machine-readable format an agent scripts against.
+	t, err := template.New("output").Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
@@ -145,7 +150,7 @@ func writeTemplate(w io.Writer, v any, body string) error {
 		return fmt.Errorf("shape template data: %w", err)
 	}
 	if err := t.Execute(w, shaped); err != nil {
-		return fmt.Errorf("execute template: %w", err)
+		return fmt.Errorf("execute template: %w (template fields are the -o json names, e.g. .name not .Name; run the same command with a bare -o template to list them)", err)
 	}
 	return nil
 }
