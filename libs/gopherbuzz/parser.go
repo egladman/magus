@@ -1125,6 +1125,29 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	return out, nil
 }
 
+// parseIfExpr parses the inline-if `if (cond) a else b`. Unlike the statement
+// form the else branch is mandatory: an expression has to produce a value on
+// every path. `else if` chains by recursing into the same production.
+func (p *parser) parseIfExpr() (*ast.IfExpr, error) {
+	t, _ := p.eat(token.If)
+	cond, err := p.parseParenCond()
+	if err != nil {
+		return nil, err
+	}
+	then, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Else); err != nil {
+		return nil, err
+	}
+	els, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.IfExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then, Else: els}, nil
+}
+
 // parseBlockExpr parses `from { stmts }`, a block used as an expression whose
 // value comes from an `out` statement inside it.
 func (p *parser) parseBlockExpr() (*ast.BlockExpr, error) {
@@ -1790,9 +1813,19 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			// expression and the error is not bound, matching upstream's call suffix.
 			if p.check(token.Catch) {
 				ct := p.advance()
-				def, err := p.parseExpr()
-				if err != nil {
-					return nil, err
+				// `call() catch void` swallows the error and yields nothing. `void`
+				// is a type keyword, not an expression, so it is matched here rather
+				// than left to parseExpr; null is what "nothing" is at runtime.
+				var def ast.Node
+				if p.check(token.Void) {
+					vt := p.advance()
+					def = &ast.NullLit{Pos: ast.Pos{Line: vt.Line, Col: vt.Col}}
+				} else {
+					d, err := p.parseExpr()
+					if err != nil {
+						return nil, err
+					}
+					def = d
 				}
 				return &ast.CatchExpr{Pos: ast.Pos{Line: ct.Line, Col: ct.Col}, Expr: node, Default: def}, nil
 			}
@@ -1894,6 +1927,8 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		return p.parseBlockExpr()
 	}
 	switch t.Kind {
+	case token.If:
+		return p.parseIfExpr()
 	case token.Dot:
 		// Inferred enum case: `.one` with no receiver. Unambiguous in primary
 		// position, since member access always has an expression to its left and so

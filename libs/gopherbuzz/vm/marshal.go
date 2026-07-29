@@ -69,7 +69,10 @@ import (
 //
 // v15 adds the OutStmt and BlockExpr node tags for `from { ... out v; }`. An
 // older decoder has no case for either tag and rejects the node outright.
-const BytecodeVersion uint16 = 15
+//
+// v16 adds the IfExpr node tag for the inline if (`if (c) a else b`). Same
+// reasoning as v15: an unknown tag is not decodable.
+const BytecodeVersion uint16 = 16
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -370,6 +373,7 @@ const (
 	nodeCatchExpr    = 42
 	nodeOutStmt      = 43
 	nodeBlockExpr    = 44
+	nodeIfExpr       = 45
 )
 
 func (e *enc) node(n ast.Node) error {
@@ -678,6 +682,16 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeBlockExpr)
 		e.pos(p)
 		return e.node(v.Body)
+	case *ast.IfExpr:
+		e.u8(nodeIfExpr)
+		e.pos(p)
+		if err := e.node(v.Cond); err != nil {
+			return err
+		}
+		if err := e.node(v.Then); err != nil {
+			return err
+		}
+		return e.node(v.Else)
 	case *ast.ThrowStmt:
 		e.u8(nodeThrowStmt)
 		e.pos(p)
@@ -1670,6 +1684,20 @@ func (d *dec) node() (ast.Node, error) {
 			return nil, fmt.Errorf("BlockExpr body: expected *ast.BlockStmt, got %T", body)
 		}
 		return &ast.BlockExpr{Pos: p, Body: blockBody}, nil
+	case nodeIfExpr:
+		cond, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		then, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		els, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.IfExpr{Pos: p, Cond: cond, Then: then, Else: els}, nil
 	case nodeThrowStmt:
 		val, err := d.node()
 		if err != nil {

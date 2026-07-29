@@ -232,6 +232,10 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Expr, inFunc, keep)
 	case *ast.AsExpr:
 		collectFuncRefs(v.Expr, inFunc, keep)
+	case *ast.IfExpr:
+		collectFuncRefs(v.Cond, inFunc, keep)
+		collectFuncRefs(v.Then, inFunc, keep)
+		collectFuncRefs(v.Else, inFunc, keep)
 	case *ast.CatchExpr:
 		collectFuncRefs(v.Expr, inFunc, keep)
 		collectFuncRefs(v.Default, inFunc, keep)
@@ -1591,6 +1595,20 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		return emitIndex()
 	case *ast.BlockExpr:
 		return c.compileBlockExpr(v)
+	case *ast.IfExpr:
+		if err := c.compileExpr(v.Cond); err != nil {
+			return err
+		}
+		jElse := c.chunk.EmitJump(vmpackage.OpJumpFalse)
+		if err := c.compileExpr(v.Then); err != nil {
+			return err
+		}
+		jEnd := c.chunk.EmitJump(vmpackage.OpJump)
+		c.chunk.PatchJump(jElse)
+		if err := c.compileExpr(v.Else); err != nil {
+			return err
+		}
+		c.chunk.PatchJump(jEnd)
 	case *ast.ForceExpr:
 		if err := c.compileExpr(v.Operand); err != nil {
 			return err

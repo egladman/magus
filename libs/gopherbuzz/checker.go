@@ -624,6 +624,24 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return c.inferMember(v)
 	case *ast.IndexExpr:
 		return c.inferIndex(v)
+	case *ast.IfExpr:
+		cond := c.infer(v.Cond)
+		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
+			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "inline if condition must be bool, got %s", cond.TypeName())
+		}
+		then := c.infer(v.Then)
+		els := c.infer(v.Else)
+		// The branches decide the type only when they agree; a null branch makes
+		// the result optional, which this checker erases, so it reports the other
+		// branch. Anything else is genuinely two types and stays Unknown.
+		switch {
+		case types.Compat(els, then):
+			return then
+		case types.Compat(then, els):
+			return els
+		default:
+			return types.Unknown
+		}
 	case *ast.BlockExpr:
 		// The body is checked so names inside it are still resolved, but the
 		// block's own type is Unknown: it comes from whichever `out` runs, and

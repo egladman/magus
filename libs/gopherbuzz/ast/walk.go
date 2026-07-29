@@ -142,6 +142,10 @@ func Inspect(n Node, fn func(Node) bool) {
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}
+	case *IfExpr:
+		Inspect(s.Cond, fn)
+		Inspect(s.Then, fn)
+		Inspect(s.Else, fn)
 	case *YieldExpr:
 		Inspect(s.Value, fn)
 	case *FiberExpr:
