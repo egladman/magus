@@ -167,10 +167,17 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
 // same internal/manpage registry by cmd/magus-manpage (see its -format flag).
+//
+// It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
+// because that is serialized from the SAME registry - the two can only disagree if
+// one is regenerated without the other. It had no producing target at all before,
+// so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
+// never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("manpage/*.1");
+    ctx.outputs("manpage/*.1", "internal/manpage/testdata/api.lock");
     fs\makeDirectory("manpage");
     os\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
+    os\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
@@ -199,8 +206,13 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["tool", "mockery"]);
 }
 
-// Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
+// Regenerates the CLI config-flag plumbing from internal/config/config.go. One
+// generator invocation, four trees: the flag/bind plumbing beside the CLI, the
+// schema field list, and the env applier next to config itself. All four are
+// declared - undeclared they classified as ordinary source, so magus told a
+// reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go");
     os\exec("go", ["generate", "./cmd/magus/..."]);
 }
 
