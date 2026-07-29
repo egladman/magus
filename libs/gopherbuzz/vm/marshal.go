@@ -76,7 +76,10 @@ import (
 // v17 adds MapExpr's Anon flag, which separates the anonymous-object form
 // `.{ f = v }` from a real map literal. It is read before the entry count, so
 // the two versions disagree about where the count starts.
-const BytecodeVersion uint16 = 17
+//
+// v18 adds MapExpr's ObjectName, the object a resolved anonymous literal builds.
+// It sits beside Anon, ahead of the entry count, so the same desync applies.
+const BytecodeVersion uint16 = 18
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -462,6 +465,7 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeMapExpr)
 		e.pos(p)
 		e.boolean(v.Anon)
+		e.str(v.ObjectName)
 		e.u32(uint32(len(v.Keys)))
 		for i := range v.Keys {
 			if err := e.node(v.Keys[i]); err != nil {
@@ -1272,6 +1276,10 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		objectName, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		n, err := d.u32()
 		if err != nil {
 			return nil, err
@@ -1289,7 +1297,7 @@ func (d *dec) node() (ast.Node, error) {
 				return nil, err
 			}
 		}
-		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals, Anon: anon}, nil
+		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals, Anon: anon, ObjectName: objectName}, nil
 	case nodeListExpr:
 		n, err := d.u32()
 		if err != nil {

@@ -305,6 +305,11 @@ type MapExpr struct {
 	// a map keyed by the field names. It is not a map literal: the checker types
 	// it against an expected object's fields, not as {K: V}.
 	Anon bool
+	// ObjectName is set by the checker on an Anon literal whose expected type is
+	// a named object, and names that object. The compiler then builds a real
+	// instance - with the object's methods and field defaults - instead of a map.
+	// Empty when the literal has no object to fill, which stays a map.
+	ObjectName string
 }
 
 // ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a
