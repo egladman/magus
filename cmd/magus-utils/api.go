@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/manpage"
+	"github.com/egladman/magus/internal/emit"
 )
 
 // runAPI writes magus's public CLI API as a sorted .lock snapshot (the same plain
@@ -24,5 +25,5 @@ func runAPI(args []string) error {
 		_, err := os.Stdout.Write(data)
 		return err
 	}
-	return os.WriteFile(*out, data, 0o644)
+	return emit.File(*out, data)
 }

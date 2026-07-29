@@ -4,11 +4,9 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/token"
 	"os"
@@ -16,6 +14,7 @@ import (
 	"text/template"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/emit"
 )
 
 func runConfig(args []string) error {
@@ -36,7 +35,7 @@ func runConfig(args []string) error {
 
 	if *outPath != "" {
 		flagData := flagTmplData{Defs: defs}
-		if err := writeTemplate(*outPath, outputTmpl, flagData); err != nil {
+		if err := emit.GoTemplate(*outPath, outputTmpl, flagData); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "config: wrote %d defs to %s\n", len(defs), *outPath)
@@ -55,25 +54,10 @@ func runConfig(args []string) error {
 		if o.path == "" {
 			continue
 		}
-		if err := writeTemplate(o.path, o.tmpl, o.data); err != nil {
+		if err := emit.GoTemplate(o.path, o.tmpl, o.data); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "config: wrote %s\n", o.path)
-	}
-	return nil
-}
-
-func writeTemplate(path string, tmpl *template.Template, data any) error {
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("template %s: %w", path, err)
-	}
-	formatted, err := format.Source(buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("gofmt %s: %w", path, err)
-	}
-	if err := writeFileIfChanged(path, formatted, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/internal/emit"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz"
 )
@@ -86,7 +87,7 @@ func runSpells(args []string) error {
 			return fmt.Errorf("marshal %s: %w", srcPath, err)
 		}
 		outPath := filepath.Join(*outDir, spec.Name+".bo")
-		if err := writeFileIfChanged(outPath, blob, 0o644); err != nil {
+		if err := emit.File(outPath, blob); err != nil {
 			return fmt.Errorf("write %s: %w", outPath, err)
 		}
 		built = append(built, spec.Name)

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/internal/emit"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -12,7 +13,7 @@ import (
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
-// them is stable - what drifted was the data. So this scribe owns only the marked
+// them is stable - what drifted was the data. So this generator owns only the marked
 // list regions and leaves the surrounding shell alone:
 //
 //	# magus-utils:subcommands:begin
@@ -23,16 +24,15 @@ import (
 // to fix a problem that is entirely about one list. Three subcommands (refs, memory,
 // agent) had shipped without reaching any script, and run's --no-volatility-retry was
 // still spelled --no-flake-retry from before that rename.
-const (
-	markerBegin = "magus-utils:subcommands:begin"
-	markerEnd   = "magus-utils:subcommands:end"
-)
 
 // subcommandDoc mirrors cmd/magus's subcommand struct.
 type subcommandDoc struct {
 	Name  string
 	Short string
 }
+
+// shellMarker names the generated list region; all four dialects comment with #.
+var shellMarker = emit.CommentMarker("#", "subcommands")
 
 func runCompletions(args []string) error {
 	fs := flag.NewFlagSet("completions", flag.ExitOnError)
@@ -62,14 +62,14 @@ func runCompletions(args []string) error {
 		if err != nil {
 			return err
 		}
-		updated, err := replaceMarked(string(src), render(subs))
+		updated, err := emit.Region(string(src), shellMarker, render(subs))
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		if updated == string(src) {
 			continue // already current; do not touch the mtime
 		}
-		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		if err := emit.File(path, []byte(updated)); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "completions: wrote %d subcommands to %s\n", len(subs), path)
@@ -79,7 +79,7 @@ func runCompletions(args []string) error {
 
 // parseSurface reads the `subcommands = []subcommand{...}` literal. It parses the Go
 // AST rather than matching text so a reformatted or reordered declaration still reads
-// correctly - the same approach the config scribe takes with config.go.
+// correctly - the same approach the config generator takes with config.go.
 func parseSurface(path string) ([]subcommandDoc, error) {
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 	if err != nil {
@@ -125,30 +125,6 @@ func parseSurface(path string) ([]subcommandDoc, error) {
 		return false
 	})
 	return out, nil
-}
-
-// replaceMarked swaps the region between the markers, preserving both marker lines.
-func replaceMarked(src, body string) (string, error) {
-	lines := strings.Split(src, "\n")
-	begin, end := -1, -1
-	for i, l := range lines {
-		switch {
-		case strings.Contains(l, markerBegin):
-			begin = i
-		case strings.Contains(l, markerEnd):
-			end = i
-		}
-	}
-	if begin < 0 || end < 0 {
-		return "", fmt.Errorf("missing %s / %s markers", markerBegin, markerEnd)
-	}
-	if end < begin {
-		return "", fmt.Errorf("%s appears before %s", markerEnd, markerBegin)
-	}
-	out := append([]string{}, lines[:begin+1]...)
-	out = append(out, strings.Split(body, "\n")...)
-	out = append(out, lines[end:]...)
-	return strings.Join(out, "\n"), nil
 }
 
 func renderBashList(subs []subcommandDoc) string {
