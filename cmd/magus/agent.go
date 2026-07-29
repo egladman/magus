@@ -469,7 +469,21 @@ var (
 
 const (
 	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Load the magus-vcs skill for the commit checklist if not already loaded."
-	runGuardContext = "magus workspace: a magus target likely covers this (magus run build / test / lint / format / generate; MAGUS.md lists every target). Raw language tools bypass the cache, the sandbox, and affected tracking. Load the magus-run skill if not already loaded; if no target covers this work, proceed."
+	// An explicit ladder, because the old text ended with "if no target covers
+	// this work, proceed" - which reads as permission to go straight to the raw
+	// binary. There is a rung between the two, and naming it is the whole point:
+	// a spell op still runs through magus, so the cache, the sandbox, and
+	// affected tracking all survive.
+	//
+	// Rung 2 deliberately does NOT promise argument passthrough: `magus run
+	// go::go-test <p> -- -run TestX` silently DROPS the extra args (verified -
+	// it even serves a cached result, so they are not in the cache key either).
+	// Teaching a passthrough that does not exist would send agents in a circle.
+	runGuardContext = "magus workspace: run this through magus, not the raw tool - a raw tool bypasses the cache, the sandbox, and affected tracking. Escalate only as far as you actually need:\n" +
+		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - MAGUS.md lists every target\n" +
+		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
+		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
+		"Narrow by PROJECT rather than by tool flag - `magus run test libs/foo` is the supported way to run less. A spell op does not forward ad-hoc flags: extra args after -- are dropped, so reaching for the raw binary to pass one is the only case left, and it is a last resort you should say you are taking. Load the magus-run skill if not already loaded."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it -
 	// but a generate target rewriting its declared outputs is the system working,
