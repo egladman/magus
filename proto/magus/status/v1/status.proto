@@ -57,13 +57,19 @@ message Run {
 // carries its output reference and wall-clock duration.
 message TargetRun {
   // State is where a target sits in its lifecycle.
+  // Values carry the STATE_ prefix because protobuf enum values share their
+  // PARENT's scope, so an unprefixed CACHED would collide with any other enum
+  // declaring the same name in this package. STATE_UNSPECIFIED always followed the
+  // convention; the rest did not, which buf's ENUM_VALUE_PREFIX rule caught once
+  // proto's lint target started running. Renaming a value leaves the wire
+  // untouched - encoding is by number, and these are unchanged.
   enum State {
     STATE_UNSPECIFIED = 0;
-    QUEUED = 1;   // scheduled, not yet started
-    RUNNING = 2;  // a subprocess is executing
-    PASSED = 3;   // finished successfully
-    FAILED = 4;   // finished with an error
-    CACHED = 5;   // satisfied from cache (no work run)
+    STATE_QUEUED = 1;   // scheduled, not yet started
+    STATE_RUNNING = 2;  // a subprocess is executing
+    STATE_PASSED = 3;   // finished successfully
+    STATE_FAILED = 4;   // finished with an error
+    STATE_CACHED = 5;   // satisfied from cache (no work run)
   }
   string project = 1;                         // repo-relative project path
   string target = 2;                          // target name (as the CLI spells it)

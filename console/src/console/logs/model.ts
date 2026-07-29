@@ -67,10 +67,8 @@ export function buildModelFromEvents(
   const preamble: string[] = [];
   const rawLines: string[] = [];
   const cmd = invocation && invocation.command;
-  if (cmd && cmd.verb) {
-    preamble.push(
-      "$ magus " + cmd.verb + (cmd.args && cmd.args.length ? " " + cmd.args.join(" ") : ""),
-    );
+  if (cmd && cmd.arguments && cmd.arguments.length) {
+    preamble.push("$ magus " + cmd.arguments.join(" "));
   }
   for (const ev of events) {
     if (ev.kind === Kind.OUTPUT || ev.kind === Kind.EXEC || ev.kind === Kind.RESULT) {
@@ -142,8 +140,8 @@ function durText(d: Duration): string {
 // cmdLabel renders an invocation's command for a group header, e.g. "magus run vmlinux".
 export function cmdLabel(command: Command | null | undefined): string {
   if (!command) return "invocation";
-  const args = (command.args || []).join(" ");
-  return "magus " + (command.verb || "run") + (args ? " " + args : "");
+  // arguments is the whole argv, subcommand included, so there is no verb to splice in.
+  return "magus " + ((command.arguments || []).join(" ") || "run");
 }
 
 // buildModelMulti builds the pretty-view model across all invocation sources: a single

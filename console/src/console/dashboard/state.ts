@@ -188,7 +188,7 @@ export interface StatusView {
 }
 
 const TARGET_STATE: Record<number, TargetState> = {
-  [TargetRun_State.STATE_UNSPECIFIED]: "unspecified",
+  [TargetRun_State.UNSPECIFIED]: "unspecified",
   [TargetRun_State.QUEUED]: "queued",
   [TargetRun_State.RUNNING]: "running",
   [TargetRun_State.PASSED]: "passed",

@@ -84,34 +84,40 @@ func (Health) EnumDescriptor() ([]byte, []int) {
 }
 
 // State is where a target sits in its lifecycle.
+// Values carry the STATE_ prefix because protobuf enum values share their
+// PARENT's scope, so an unprefixed CACHED would collide with any other enum
+// declaring the same name in this package. STATE_UNSPECIFIED always followed the
+// convention; the rest did not, which buf's ENUM_VALUE_PREFIX rule caught once
+// proto's lint target started running. Renaming a value leaves the wire
+// untouched - encoding is by number, and these are unchanged.
 type TargetRun_State int32
 
 const (
 	TargetRun_STATE_UNSPECIFIED TargetRun_State = 0
-	TargetRun_QUEUED            TargetRun_State = 1 // scheduled, not yet started
-	TargetRun_RUNNING           TargetRun_State = 2 // a subprocess is executing
-	TargetRun_PASSED            TargetRun_State = 3 // finished successfully
-	TargetRun_FAILED            TargetRun_State = 4 // finished with an error
-	TargetRun_CACHED            TargetRun_State = 5 // satisfied from cache (no work run)
+	TargetRun_STATE_QUEUED      TargetRun_State = 1 // scheduled, not yet started
+	TargetRun_STATE_RUNNING     TargetRun_State = 2 // a subprocess is executing
+	TargetRun_STATE_PASSED      TargetRun_State = 3 // finished successfully
+	TargetRun_STATE_FAILED      TargetRun_State = 4 // finished with an error
+	TargetRun_STATE_CACHED      TargetRun_State = 5 // satisfied from cache (no work run)
 )
 
 // Enum value maps for TargetRun_State.
 var (
 	TargetRun_State_name = map[int32]string{
 		0: "STATE_UNSPECIFIED",
-		1: "QUEUED",
-		2: "RUNNING",
-		3: "PASSED",
-		4: "FAILED",
-		5: "CACHED",
+		1: "STATE_QUEUED",
+		2: "STATE_RUNNING",
+		3: "STATE_PASSED",
+		4: "STATE_FAILED",
+		5: "STATE_CACHED",
 	}
 	TargetRun_State_value = map[string]int32{
 		"STATE_UNSPECIFIED": 0,
-		"QUEUED":            1,
-		"RUNNING":           2,
-		"PASSED":            3,
-		"FAILED":            4,
-		"CACHED":            5,
+		"STATE_QUEUED":      1,
+		"STATE_RUNNING":     2,
+		"STATE_PASSED":      3,
+		"STATE_FAILED":      4,
+		"STATE_CACHED":      5,
 	}
 )
 
@@ -1159,7 +1165,7 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x129\n" +
 	"\n" +
 	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x124\n" +
-	"\atargets\x18\x04 \x03(\v2\x1a.magus.status.v1.TargetRunR\atargets\"\x84\x03\n" +
+	"\atargets\x18\x04 \x03(\v2\x1a.magus.status.v1.TargetRunR\atargets\"\xa2\x03\n" +
 	"\tTargetRun\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x126\n" +
@@ -1170,18 +1176,14 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\n" +
 	"output_ref\x18\x06 \x01(\tR\toutputRef\x12\x1f\n" +
 	"\vduration_ms\x18\a \x01(\x03R\n" +
-	"durationMs\"[\n" +
+	"durationMs\"y\n" +
 	"\x05State\x12\x15\n" +
-	"\x11STATE_UNSPECIFIED\x10\x00\x12\n" +
-	"\n" +
-	"\x06QUEUED\x10\x01\x12\v\n" +
-	"\aRUNNING\x10\x02\x12\n" +
-	"\n" +
-	"\x06PASSED\x10\x03\x12\n" +
-	"\n" +
-	"\x06FAILED\x10\x04\x12\n" +
-	"\n" +
-	"\x06CACHED\x10\x05\"\xce\x01\n" +
+	"\x11STATE_UNSPECIFIED\x10\x00\x12\x10\n" +
+	"\fSTATE_QUEUED\x10\x01\x12\x11\n" +
+	"\rSTATE_RUNNING\x10\x02\x12\x10\n" +
+	"\fSTATE_PASSED\x10\x03\x12\x10\n" +
+	"\fSTATE_FAILED\x10\x04\x12\x10\n" +
+	"\fSTATE_CACHED\x10\x05\"\xce\x01\n" +
 	"\aService\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +

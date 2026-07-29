@@ -87,15 +87,15 @@ func runToProto(r types.StatusRun) *statusv1.Run {
 func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 	switch s {
 	case types.TargetRunQueued:
-		return statusv1.TargetRun_QUEUED
+		return statusv1.TargetRun_STATE_QUEUED
 	case types.TargetRunRunning:
-		return statusv1.TargetRun_RUNNING
+		return statusv1.TargetRun_STATE_RUNNING
 	case types.TargetRunPassed:
-		return statusv1.TargetRun_PASSED
+		return statusv1.TargetRun_STATE_PASSED
 	case types.TargetRunFailed:
-		return statusv1.TargetRun_FAILED
+		return statusv1.TargetRun_STATE_FAILED
 	case types.TargetRunCached:
-		return statusv1.TargetRun_CACHED
+		return statusv1.TargetRun_STATE_CACHED
 	default:
 		return statusv1.TargetRun_STATE_UNSPECIFIED
 	}

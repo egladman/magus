@@ -34,7 +34,11 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
-    "outputs": ["gen/**"],
+    // src/gen/** is written by proto's buf-generate (see proto/buf.gen.yaml), but is
+    // declared HERE because outputs are confined to the declaring project's subtree.
+    // docs declares its own copy the same way. Without this the tree reads as ordinary
+    // source, so magus cannot tell it has gone stale.
+    "outputs": ["gen/**", "src/gen/**"],
     "targets": {
         // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
         // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
