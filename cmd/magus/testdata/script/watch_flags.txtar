@@ -1,0 +1,59 @@
+# `magus watch` streams changed file paths to stdout, meant to be piped into
+# `magus affected --stdin` (magus watch | magus affected --stdin build). It is
+# an endless fsnotify loop by design, so this script never runs it bare -
+# only flag help and validation, all of which must fail fast, before the
+# watch loop starts, so a typo in a flag surfaces immediately instead of
+# leaving an agent staring at a process that looks alive but is silently
+# broken. Every assertion below was confirmed outside the test harness with
+# a hard `timeout` wrapper to rule out a hang before it went in this script.
+
+# -h / --help documents the affected --stdin pairing, which is the entire
+# point of the command - a help text without it would be help for the wrong
+# question.
+exec magus watch -h
+stderr 'Usage: magus watch \[flags\]'
+stderr 'magus watch \| magus affected --stdin build'
+stderr '\-backend string'
+stderr '\-debounce duration'
+stderr '\-ignore value'
+
+exec magus watch --help
+stderr 'Usage: magus watch \[flags\]'
+
+# An unknown backend is rejected by name, naming the valid choices.
+! exec magus watch -backend bogus
+stderr 'unknown backend "bogus" \(choose: fsnotify, poll\)'
+
+# --ignore takes a labeled type=<t>,pattern=<p> form; each way of breaking
+# that form is rejected before the loop ever starts, with a message that
+# names what was wrong.
+! exec magus watch --ignore pattern=foo
+stderr 'ignore: type is required \(use type=glob, type=regex, or type=literal\)'
+
+! exec magus watch --ignore type=bogus,pattern=foo
+stderr 'ignore: unknown type "bogus" \(use glob, regex, or literal\)'
+
+! exec magus watch --ignore type=glob
+stderr 'ignore: pattern is empty'
+
+! exec magus watch --ignore justastring
+stderr 'ignore: "justastring" is not in key=value form'
+
+# An unparseable duration is rejected at flag-parsing time too.
+! exec magus watch -debounce notaduration
+stderr 'invalid value "notaduration" for flag -debounce'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

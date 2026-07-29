@@ -6,11 +6,29 @@
 exec magus where .
 stdout '/'
 
+# The bare form is bare: no braces, no label, nothing to strip before substituting.
+! stdout '\{'
+! stdout 'workspace'
+
 # Structured forms carry the same answer with its label, for a caller resolving several.
+#
+# These assertions used to read `stdout '\{|/'` - an alternation matching a plain path
+# just as happily as an opening brace. where in fact ignored -o entirely and printed
+# text for every format, and the test passed throughout, because there was no input on
+# which it could fail. Assert the json SHAPE, which text cannot satisfy.
 exec magus where . -o json
-stdout '\{|/'
+stdout '"workspace"'
+stdout '"matches"'
+stdout '"kind": "project"'
+
+# rel is carried next to the absolute path: a caller that just resolved a name usually
+# needs it back in workspace-relative form to hand to another magus command.
+stdout '"rel"'
 
 exec magus where . -o yaml
+stdout 'workspace:'
+stdout 'matches:'
+stdout 'kind: project'
 
 # A name that matches nothing fails rather than printing an empty line. An empty
 # result substituted into a shell command becomes a silently wrong path.

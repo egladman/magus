@@ -1,0 +1,62 @@
+# `magus buzz` runs Buzz source outside a magusfile: from a file, from stdin, or
+# inline with -e, plus a -t mode that runs a file's test "..." {} blocks. A runner
+# that cannot report a failing test is worse than none, so this exercises both a
+# passing and a failing test file. It also pins the diagnostic shape (a BZZ code
+# plus a see: URL) and the one deliberate gap the help text calls out: the
+# magus.* namespace exists in `magus repl` but not here.
+
+# a script file that produces output
+exec magus buzz hello.buzz
+stdout 'hello from file'
+
+# -e runs an inline snippet the same way
+exec magus buzz -e 'import "std"; std\print("hello inline");'
+stdout 'hello inline'
+
+# a script piped on stdin via `magus buzz -`
+stdin hello.buzz
+exec magus buzz -
+stdout 'hello from file'
+
+# -t runs the file's test blocks and reports a pass
+exec magus buzz -t --embedded pass_tests.buzz
+stdout 'ok\s+test "add adds"'
+stdout '1 passed, 0 failed, 0 skipped'
+
+# -t on a failing assertion names the failing test, exits nonzero, and says so
+! exec magus buzz -t --embedded fail_tests.buzz
+stdout 'FAIL\s+test "add is wrong on purpose"'
+stdout 'assert\\equal failed'
+stdout '0 passed, 1 failed, 0 skipped'
+stderr '1 of 1 tests failed'
+
+# an undefined variable is a diagnostic, not a bare panic: a BZZ code, a source
+# position, and a see: URL to look it up
+! exec magus buzz -e 'std\print("hi");'
+stderr '\[BZZ1001\] buzz: line 1:1: undefined: std'
+stderr 'see: https://.*BZZ1001'
+
+# the magus.* namespace is deliberately unavailable here (use `magus repl` for
+# that); importing it fails the same way any missing module would
+! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
+stderr '\[BZZ2001\] buzz: import "magus": module not found'
+
+-- hello.buzz --
+import "std";
+std\print("hello from file");
+-- pass_tests.buzz --
+import "assert";
+
+fun add(a: int, b: int) > int { return a + b; }
+
+test "add adds" {
+    assert\equal(add(2, 3), 5, "sum is correct");
+}
+-- fail_tests.buzz --
+import "assert";
+
+fun add(a: int, b: int) > int { return a + b; }
+
+test "add is wrong on purpose" {
+    assert\equal(add(2, 3), 6, "sum is correct");
+}

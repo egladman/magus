@@ -1,0 +1,89 @@
+# `magus config view -o json` used to emit Go field names ("MaxShards",
+# "HistoryPath", "SizeMB") instead of config keys, because config.Config only
+# carried yaml tags and the JSON encoder fell back to field names when a json
+# tag was missing. That silently broke every agent reading the config back:
+# the keys `-o json` prints, the keys `-o name` lists, and the keys `config
+# set key=<key>,...` accepts all have to be the SAME strings, or a round trip
+# through any two of those three surfaces fails.
+
+# Plain text: human-readable, defaults annotated inline.
+exec magus config view
+stdout 'concurrency: 2'
+stdout 'history_path: '
+stdout 'cache:'
+stdout 'ci:'
+stdout 'graph:'
+
+# yaml: same snake_case keys, yaml form.
+exec magus config view -o yaml
+stdout 'max_shards: 8'
+stdout 'history_path:'
+stdout 'size_mb: 0'
+
+# json is the regression: real config keys, never the Go field names.
+exec magus config view -o json
+stdout '"max_shards": 8'
+stdout '"history_path":'
+stdout '"size_mb": 0'
+! stdout 'MaxShards'
+! stdout 'HistoryPath'
+! stdout 'SizeMB'
+
+# -o name: the dotted key list that `config set` keys must match.
+exec magus config view -o name
+stdout 'assume_interactive'
+stdout 'cache\.dir'
+stdout 'cache\.immutable'
+stdout 'cache\.remote\.insecure'
+stdout 'cache\.remote\.trusted_keys'
+stdout 'cache\.size_mb'
+stdout 'ci\.max_shards'
+stdout 'ci\.runner_pool_budget'
+
+# Round trip: a key listed by -o name, set via `config set`, read back by
+# -o json under that same key - proving view/set/name agree on one vocabulary.
+exec magus config set key=ci.max_shards,value=3
+stderr 'wrote magus\.yaml: ci\.max_shards = 3'
+exec magus config view -o json
+stdout '"max_shards": 3'
+
+# `config set` takes one labeled argument, not two bare ones.
+! exec magus config set concurrency 4
+stderr 'requires one argument in key=<key>,value=<value> form'
+
+# An unknown key is rejected with a remedy, not a silent write.
+! exec magus config set key=nope,value=1
+stderr 'unknown config key "nope"'
+stderr 'magus config view -o name'
+
+# `magus config` with no subcommand is a USAGE ERROR: it exits 2, the same as every
+# other command missing its subcommand. It used to exit 0, which made a bare `magus
+# config` in a script indistinguishable from one that did something.
+! exec magus config
+stderr 'Usage: magus config <subcommand> \[flags\]'
+stderr 'subcommand required'
+
+# An explicit -h is a request that was satisfied, so it still exits 0. That is the
+# distinction the old code lost by treating "no args" and "-h" as the same branch.
+exec magus config -h
+stderr 'Usage: magus config <subcommand> \[flags\]'
+
+# An unknown subcommand is the same class of error, and names what is valid.
+! exec magus config bogus
+stderr 'unknown subcommand "bogus"'
+stderr 'want view, set, history, cache, or mcp'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

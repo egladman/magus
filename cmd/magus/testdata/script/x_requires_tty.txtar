@@ -1,0 +1,54 @@
+# magus x refuses to run without an interactive terminal (isInteractiveTTY,
+# cmd/magus/x.go - the same gate `magus tail` uses). Its refusal names a
+# different remedy than tail's (`magus run <target> <project>`, since x is a
+# picker with no non-interactive equivalent), but advertises the same two
+# overrides: MAGUS_ASSUME_INTERACTIVE=1, or assume_interactive: true in
+# magus.yaml. Both are exercised here, not just the refusal.
+
+# No TTY, no override: refused with the documented remedy, exit 2.
+! exec magus x
+stderr 'magus: x requires an interactive terminal; use `magus run <target> <project>` instead'
+stderr '\(set assume_interactive: true in magus\.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override\)'
+
+exec magus x -h
+stderr 'Usage: magus x \[filter\.\.\.\]'
+stderr 'Requires an interactive terminal'
+stderr 'for scripts use `magus run`'
+
+# --- override path 1: MAGUS_ASSUME_INTERACTIVE=1 ---
+# The env var only lifts the TTY gate; x still needs a real terminal to drive
+# its picker. Past the gate it hits the picker's OWN, independent TTY check
+# and fails there instead - proof the gate, and only the gate, was bypassed.
+env MAGUS_ASSUME_INTERACTIVE=1
+! exec magus x
+stderr 'picker: stdin is not a TTY'
+env MAGUS_ASSUME_INTERACTIVE=
+
+# Without the override restored, the gate is back.
+! exec magus x
+stderr 'magus: x requires an interactive terminal; use `magus run <target> <project>` instead'
+
+# --- override path 2: assume_interactive: true in magus.yaml ---
+# Same picker failure with no env var at all - the yaml key alone lifts the
+# gate just as MAGUS_ASSUME_INTERACTIVE=1 did above.
+cp magus.yaml.assume magus.yaml
+! exec magus x
+stderr 'picker: stdin is not a TTY'
+
+-- magus.yaml --
+concurrency: 2
+-- magus.yaml.assume --
+concurrency: 2
+assume_interactive: true
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

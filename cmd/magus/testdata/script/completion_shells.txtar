@@ -1,0 +1,39 @@
+# magus completion generates the shell script by walking the SAME subcommand table
+# the CLI dispatches on, so a subcommand added to magus but never wired into
+# completion is exactly the drift these assertions catch: a name present in `magus
+# help` but missing from `magus completion bash` silently breaks tab-complete.
+#
+# Each of the four shells needs no workspace fixture at all - completion is pure
+# output from the command table, not the current directory - which is itself part
+# of the contract worth pinning.
+
+exec magus completion bash
+stdout '^# bash completion for magus'
+stdout 'subcommands="[^"]*\bls\b[^"]*\bdescribe\b[^"]*\brun\b[^"]*\baffected\b[^"]*"'
+
+exec magus completion zsh
+stdout '^#compdef magus mgs'
+stdout '''ls:list all discovered projects'''
+stdout '''describe:define a magus concept and list its entities'''
+stdout '''affected:run a target for VCS-diff affected projects'''
+
+exec magus completion fish
+stdout '^# fish completion for magus'
+stdout 'ls\s+.list all discovered projects.'
+stdout 'describe\s+.define a magus concept and list its entities.'
+stdout 'affected\s+.run a target for VCS-diff affected projects.'
+
+exec magus completion powershell
+stdout '^# PowerShell completion for magus'
+stdout '\$subcommands = .ls., .describe., .run.'
+stdout '.affected.'
+
+# An unknown shell name exits 1 with the usage line naming the four valid shells.
+! exec magus completion nonsense
+stderr 'Usage: magus completion <bash\|zsh\|fish\|powershell>'
+stderr '\[error\] magus completion: unsupported shell "nonsense" \(choose: bash, zsh, fish, powershell\)'
+
+# Bare `magus completion` with no shell argument also exits 1, with a distinct
+# message naming what is missing rather than reusing the unsupported-shell text.
+! exec magus completion
+stderr '\[error\] magus completion: shell name required \(bash, zsh, fish, or powershell\)'

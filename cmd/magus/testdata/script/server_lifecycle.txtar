@@ -1,0 +1,97 @@
+# `magus server` manages the persistent daemon. These paths must all work
+# with no daemon actually running - server management itself has to detect
+# and report that absence correctly, since it is the thing users reach for
+# when something seems stuck.
+#
+# MAGUS_DAEMON_ENABLED=false (set by the test harness) governs whether a
+# per-invocation magus command USES a daemon; it does not change what
+# `magus server` itself does, since managing the daemon is orthogonal to
+# whether other commands would talk to one. Every assertion below holds
+# with the flag either way.
+#
+# We deliberately never run `magus server start` (no --foreground either):
+# it would spawn a real background daemon on a real socket shared machine-
+# wide, which would step on the actual developer environment and any other
+# agent running concurrently. Only argument validation and no-daemon-running
+# paths are covered here.
+
+# All of magus server's usage/error text goes to stderr, not stdout.
+
+# Bare `magus server` is a usage error (exit 2): a target is required. An explicit
+# -h, asserted further down, is the way to ask "what can I do here" and exits 0.
+! exec magus server
+stderr 'target required'
+stderr 'usage: magus server <start\|stop\|job> \[flags\]'
+stderr 'start   start a persistent daemon'
+stderr 'stop    send a graceful shutdown request'
+stderr 'job     submit a background maintenance job'
+stderr 'Use `magus status` to inspect daemon pool state'
+
+exec magus server -h
+stderr 'usage: magus server <start\|stop\|job> \[flags\]'
+
+# `status` looks like a plausible target - it is not one, it is a top-level
+# command. The error is unusually good: it names the three real targets AND
+# redirects to the command the user probably meant. Both halves are the
+# contract worth pinning; a plain "unknown target" would still be correct
+# but would send the user hunting for `magus status` on their own.
+! exec magus server status
+stderr 'unknown target "status" \(want start, stop, or job\); use `magus status` to inspect daemon state'
+
+# `server stop` with no daemon running must fail loudly rather than
+# silently succeed - a silent success would hide that the developer's
+# mental model of "a daemon is up" is wrong.
+! exec magus server stop
+stderr 'no running daemon found'
+
+# --services (stop just the hosted services, not the daemon) shares the
+# same no-daemon-found path.
+! exec magus server stop --services
+stderr 'no running daemon found'
+
+exec magus server stop -h
+stderr 'usage: magus server stop \[flags\]'
+stderr 'Send a graceful shutdown request to a running daemon'
+stderr '\-services'
+
+exec magus server start -h
+stderr 'usage: magus server start \[--foreground\] \[flags\]'
+stderr 'auto-backgrounds'
+stderr '\-foreground'
+
+# `server job` lists the known jobs when called bare - this doubles as its
+# own help text, and as the listing the "unknown job" error below points
+# back to.
+exec magus server job
+stderr 'usage: magus server job <name>'
+stderr 'sync-graph'
+stderr 'rotate-logs'
+stderr 'clear-cache'
+
+! exec magus server job badname
+stderr 'unknown job "badname"; run `magus server job` to list jobs'
+
+# A real job name against no daemon is a documented no-op (so a VCS hook
+# can call it unconditionally) rather than an error - it exits 0 with no
+# output at all.
+exec magus server job sync-graph
+! stdout .
+! stderr .
+exec magus server job clear-cache
+! stdout .
+! stderr .
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

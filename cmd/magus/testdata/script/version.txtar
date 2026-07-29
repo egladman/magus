@@ -1,3 +1,57 @@
-# magus version prints the binary name
+# version is dispatched straight from main rather than through the normal subcommand
+# path, and for that reason it did not call cmdParse - so the global display flags
+# were never bound and -o was silently INERT in both positions (`magus version -o json`
+# and `magus -o json version` each printed the plain text line and exited 0). A format
+# flag that is accepted and ignored is worse than one that is rejected: a script asking
+# for json got text and no error to notice.
+#
+# The version/commit/buildDate values are linker-injected and are the "unknown" dev
+# sentinel in a test binary, so every assertion here is on the KEYS and the shape,
+# never on the values.
+
+# Text is the default and is unchanged.
 exec magus version
 stdout 'magus'
+
+# The engine line stays gated behind -v in the text form: that gate is a reading
+# convenience for a human and removing it would be a visible change to bare output.
+exec magus version
+! stdout 'engine'
+exec magus version -v
+stdout 'engine: buzz'
+
+# json carries engine UNCONDITIONALLY. A caller parsing the structured form should not
+# have to discover that a field only exists at a higher verbosity.
+exec magus version -o json
+stdout '"version"'
+stdout '"commit"'
+stdout '"build_date"'
+stdout '"engine": "buzz"'
+
+# Snake-case keys, matching every other structured surface: build_date, not BuildDate.
+! stdout 'BuildDate'
+
+exec magus version -o yaml
+stdout 'build_date:'
+stdout 'engine: buzz'
+
+# -o name is the scriptable scalar: a CI step comparing against a pinned version needs
+# the bare value with no prefix or parentheses to strip.
+exec magus version -o name
+! stdout 'magus '
+! stdout '\('
+
+# Templates bind to the json TAG names, which is what -o json advertises.
+exec magus version -o 'template={{.version}} {{.engine}}'
+stdout 'buzz'
+
+# Both flag positions work, which is the actual regression: global flags are accepted
+# before or after the subcommand everywhere else in the CLI.
+exec magus -o json version
+stdout '"engine": "buzz"'
+
+# An unknown format is now REJECTED rather than silently ignored, and the error lists
+# what is valid.
+! exec magus version -o nope
+stderr 'unknown output format "nope"'
+stderr 'json'

@@ -1,0 +1,48 @@
+# magus merge-driver is the VCS merge driver git/hg invoke for declared output
+# files: on a merge conflict in a path matching a declared Output glob, it
+# regenerates the file instead of leaving conflict markers. Users never type this
+# command themselves - `magus init` wires it into .git/config (or .hgrc) once per
+# clone - so what is worth pinning here is the usage/argument contract, not a full
+# regeneration (that needs a real declared-output target mid conflict, which does
+# not belong in a hermetic fixture).
+
+# Bare `magus merge-driver` is a usage error (exit 2). It used to exit 0, which for a
+# MERGE DRIVER is the wrong signal to hand back: 0 is how the driver tells git the
+# conflict was resolved. git always passes all five placeholders so this path is only
+# reachable by a human, but 0 also disagreed with the 1-argument case, which errored.
+! exec magus merge-driver
+stderr 'expected 5 arguments'
+stderr 'Usage: magus merge-driver %O %A %B %L %P'
+stderr 'git and hg invoke this'
+stderr 'Wire it once per clone with .magus init.'
+
+# The wrong number of arguments (git/hg always pass exactly 5) is a distinct,
+# nonzero-exit error path.
+! exec magus merge-driver onlyonearg
+stderr '\[error\] magus merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
+
+# Five arguments naming a path no project declares as an Output: cannot
+# regenerate, so this also fails rather than silently doing nothing.
+! exec magus merge-driver base.txt local.txt other.txt 0 local.txt
+stderr '\[error\] merge-driver: no project declares "local.txt" as an output; cannot regenerate'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+-- base.txt --
+base
+-- local.txt --
+local
+-- other.txt --
+other

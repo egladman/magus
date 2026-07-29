@@ -1,0 +1,60 @@
+# `magus path <a> <b>` walks the shortest chain of edges between two graph
+# nodes, in either direction, and reports each hop's relation. It is the
+# "how are these connected" complement to `explain` (one node's neighborhood)
+# and `query` (search terms to nodes).
+
+# Neither argument resolves to a node: the error names BOTH inputs, even
+# though only one of them may actually be bogus - path only checks resolution
+# jointly, it does not report per-argument. Surprising but that is the actual
+# contract, so pin it rather than assume it is smarter than it is.
+! exec magus path nope other
+stderr 'magus path: could not resolve "nope" or "other" to a node'
+
+# A path with ONE resolvable argument still fails the same way and still
+# names both terms in the message.
+! exec magus path project:. nope
+stderr 'magus path: could not resolve "project:." or "nope" to a node'
+
+# A direct edge: the root project contains its one target, one hop.
+exec magus path project:. target:.:lint
+stdout 'project:\. -> target:\.:lint  \(1 step\)'
+stdout 'contains  target:\.:lint'
+
+# A longer chain: project -> target (contains) -> op (uses), two hops, and
+# both relation names show up in order.
+exec magus path project:. op:acme:lint
+stdout 'project:\. -> op:acme:lint  \(2 steps\)'
+stdout 'contains  target:\.:lint'
+stdout 'uses      op:acme:lint'
+
+# Both arguments resolve but nothing connects them: this is NOT an error
+# (exit 0), it is a negative finding - distinct from the unresolvable case
+# above, which exits 2.
+exec magus path project:. diagnostic:MGS1001
+stdout 'project:\. -> diagnostic:MGS1001  \(no path\)'
+stdout 'no path connects these nodes'
+
+# -o json carries the same two outcomes as typed fields: found true with the
+# hop list, found false with none.
+exec magus path project:. target:.:lint -o json
+stdout '"found": true'
+stdout '"relation": "contains"'
+stdout '"forward": true'
+
+exec magus path project:. diagnostic:MGS1001 -o json
+stdout '"found": false'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
