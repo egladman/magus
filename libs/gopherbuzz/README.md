@@ -67,6 +67,17 @@ generic object declarations, inline ifs, and `catch void`. Two deliberate supers
 | Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
 | `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
 
+`typeof` is STATIC, which is the trap in that first row. Upstream compares type
+DEFS, not runtime values: `final list = []` gives `<[any]>` while `final slist:
+[str] = []` gives `<[str]>` - the same empty list at runtime, two different
+answers - and `immutableList.cloneMutable()` gives `<mut [int]>`, where
+mutability is a property no runtime value carries. So `typeof x` cannot be a
+runtime probe of the value; the compiler has to emit a constant built from the
+CHECKER's inferred type for the operand, which makes this a checker feature with
+a parser and VM surface rather than a VM one. Upstream parses `<T>` as a prefix
+handler on `Less` (Parser.zig `typeExpression`) and `typeof` as a prefix at
+Unary precedence (`typeOfExpression`).
+
 Plus a long tail of single-test gaps (selective imports, anonymous object
 TYPES, tuples, nested backtick interpolation, assignment as an arrow-lambda
 body, `as`-binding in an if condition). Two remaining
