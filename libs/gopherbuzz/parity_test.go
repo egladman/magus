@@ -486,3 +486,55 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "in/out", v.AsString(), "out targets the innermost enclosing from block")
 }
+
+func TestParity_FreeIdentifiers(t *testing.T) {
+	v := evalParity(t, `
+object A {
+    @"type": str,
+}
+
+fun probe() > str {
+    final @"non-standard-identifier" = "hello";
+    final a = A{
+        @"type" = "world",
+    };
+    return "{@"non-standard-identifier"} {a.@"type"}";
+}`)
+	assert.Equal(t, "hello world", v.AsString(), "@\"...\" names a binding, a field, and a member")
+}
+
+func TestParity_FreeIdentifierMayBeAReservedWord(t *testing.T) {
+	// The quotes are the whole point: `type` is reserved, `@"type"` is not.
+	v := evalParity(t, `
+fun probe() > int {
+    final @"type" = 7;
+    return @"type";
+}`)
+	assert.Equal(t, int64(7), v.AsInt(), "the reserved-word rule does not reach a raw identifier")
+}
+
+func TestParity_BareReservedWordIsStillRejected(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `fun probe() > int { final type = 7; return type; }`)
+	require.Error(t, err, "only the quoted form escapes the reserved-word rule")
+	assert.Contains(t, err.Error(), "reserved word")
+}
+
+func TestParity_GenericObjectDeclaration(t *testing.T) {
+	// Type parameters are erased, so the object's identity stays its bare name:
+	// `payload is Payload::<str, int>` has to test against `Payload`.
+	v := evalParity(t, `
+object Payload::<K, V> {
+    data: mut {K: V},
+}
+
+fun probe() > bool {
+    final payload = Payload::<str, int>{
+        data = mut { "one": 1 },
+    };
+    payload.data["two"] = 2;
+    return payload is Payload::<str, int> and payload.data["two"] == 2;
+}`)
+	assert.True(t, v.AsBool(), "a generic object declares, instantiates, and type-tests")
+}
