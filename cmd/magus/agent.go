@@ -438,6 +438,13 @@ var (
 	//   gofmt -l / -d       lists or diffs; only -w rewrites the tree.
 	guardRawToolExemptRe = regexp.MustCompile(`\bgo\s+build\b[^&|;]*\s-o\s|\bgofmt\s+-[ld]\b`)
 	guardRawToolRe       = regexp.MustCompile(`\bgo\s+(test|build|vet|generate)\b|\bgofmt\b|\bgoimports\b|\bgolangci-lint\b|\bmockery\b|\bbuf\s+(generate|lint|breaking)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bbiome\b|\bvitest\b|\bjest\b|\bpytest\b|\bruff\b|\bblack\b|\bmypy\b|\btsc\b|\bcargo\s+(test|build|check|clippy|fmt)\b|\brustfmt\b`)
+	// `cd <dir> && magus ...`: magus is CWD-relative, so this is the shape of
+	// running the right command against the wrong project. Every magus command
+	// that acts on a project takes it as an explicit argument, so the cd is
+	// almost always avoidable - and when it is not (a DIFFERENT workspace), the
+	// answer is --root, not a cd.
+	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
+
 	// A repo-wide code search. This does NOT claim the agent asked the wrong
 	// question - a hook cannot know that - only that a whole-tree text search has
 	// a better tool here, because the graph answers from DECLARED sources while a
@@ -470,10 +477,27 @@ const (
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
 	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs skill if not already loaded."
-	// Points at the graph without asserting the search was wrong: some searches
-	// genuinely have no graph answer, and an advisory that overclaims gets
-	// ignored wholesale.
-	searchGuardContext = "magus workspace: if this is a structural question - what exists, what depends on what, where a symbol is defined or used, what a change affects - ask the knowledge graph instead: `magus query \"<terms>\"` (kind:/project:/relation: filters), `magus explain <node>` for one node's edges and blast radius, `magus path <a> <b>`, `magus refs <symbol>` for definitions and references. The graph answers from declared sources; a text match is a guess that misses generated and indirect references. Load the magus-query skill if not already loaded. If you are searching text for its own sake (a log, a message, one file), proceed."
+	// Blocked, not advised: a repo-wide text search is the single habit that keeps
+	// the graph unused, and an advisory it can scroll past does not change it.
+	//
+	// The reason must ROUTE, not scold. The two surfaces answer different
+	// questions and confusing them is why the graph gets abandoned: `magus query`
+	// indexes DOMAIN entities (projects, targets, spells, ops, docs) and returns 0
+	// for a code symbol, while `magus refs` indexes CODE symbols. An agent that
+	// tries `magus query someFunc`, gets 0, and concludes the graph is useless is
+	// the failure this text exists to prevent - so it names the prerequisite index
+	// too, since refs is empty until one is built.
+	// Names the mechanism, because the fix is not "remember where you are" - it is
+	// that the project is an argument and never needs to be implied by the CWD.
+	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
+
+	searchGuardReason = "repo-wide text search is blocked here: this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
+		"  CODE SYMBOL (where is it defined / used):  magus refs <symbol>   -> definition file, every referencing file, exact lines\n" +
+		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
+		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
+		"  HOW two things connect:  magus path <a> <b>\n" +
+		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
+		"Searching text for its own sake still works: grep a SPECIFIC file (`grep pattern path/to/file`), which is not blocked. Load the magus-query skill for the full grammar."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// flags are the actionable part, and a weaker model needs the exact spelling.
@@ -509,8 +533,10 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: runGuardContext}
 	case guardMagusPipeRe.MatchString(command), guardMagusRedirRe.MatchString(command):
 		return bashGuardVerdict{Context: outputGuardContext}
+	case guardCdMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Context: searchGuardContext}
+		return bashGuardVerdict{Deny: searchGuardReason}
 	}
 	return bashGuardVerdict{}
 }
