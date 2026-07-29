@@ -384,6 +384,11 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 			return m, nil
 		}
 		return Null, nil
+	case tagRange:
+		if m := rngMethod(vm, obj, name); m != Null {
+			return m, nil
+		}
+		return Null, nil
 	case tagObject:
 		instance := vm.asObject(obj)
 		if i := instance.Def.fieldIndex(name); i >= 0 {
@@ -1053,6 +1058,70 @@ func strMethod(vm *VM, s Value, name string) Value {
 
 // fibMethod returns a bound DirectValue for the named built-in Fiber method,
 // or Null if name is not a known fiber method.
+// rngMethod returns a bound DirectValue for the named range method, or Null if
+// name is not one. Mirrors listMethod/mapMethod.
+//
+// A range runs from Lo TOWARD Hi and stops before it, in either direction, which
+// is what foreach does - so `10..0` yields 10 down to 1 and has length 10. low()
+// and high() report the operands as written, not the smaller and larger of them.
+func rngMethod(vm *VM, r Value, name string) Value {
+	ro := vm.asRange(r)
+	switch name {
+	case "low":
+		return DirectValue("rng.low", func(context.Context, []Value) (Value, error) {
+			return IntValue(ro.Lo), nil
+		})
+	case "high":
+		return DirectValue("rng.high", func(context.Context, []Value) (Value, error) {
+			return IntValue(ro.Hi), nil
+		})
+	case "len":
+		return DirectValue("rng.len", func(context.Context, []Value) (Value, error) {
+			return IntValue(rngLen(ro)), nil
+		})
+	case "invert":
+		return DirectValue("rng.invert", func(context.Context, []Value) (Value, error) {
+			return rangeValue(ro.Hi, ro.Lo), nil
+		})
+	case "toList":
+		return DirectValue("rng.toList", func(context.Context, []Value) (Value, error) {
+			items := make([]Value, 0, rngLen(ro))
+			step := int64(1)
+			if ro.Hi < ro.Lo {
+				step = -1
+			}
+			for i := ro.Lo; i != ro.Hi; i += step {
+				items = append(items, IntValue(i))
+			}
+			return ListValue(items), nil
+		})
+	case "contains":
+		return DirectValue("rng.contains", func(_ context.Context, args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Null, fmt.Errorf("rng.contains: requires a value")
+			}
+			if !args[0].IsInt() {
+				return BoolValue(false), nil
+			}
+			n := args[0].AsInt()
+			if ro.Hi < ro.Lo {
+				return BoolValue(n <= ro.Lo && n > ro.Hi), nil
+			}
+			return BoolValue(n >= ro.Lo && n < ro.Hi), nil
+		})
+	}
+	return Null
+}
+
+// rngLen is the number of values a range yields: the distance between its
+// operands, in either direction.
+func rngLen(ro *rangeObj) int64 {
+	if ro.Hi < ro.Lo {
+		return ro.Lo - ro.Hi
+	}
+	return ro.Hi - ro.Lo
+}
+
 func fibMethod(vm *VM, fib Value, name string) Value {
 	fo := vm.asFib(fib)
 	switch name {

@@ -675,6 +675,11 @@ func valuesEqual(a, b Value) bool {
 	case tagEnumVal:
 		ae, be := a.asEnumVal(), b.asEnumVal()
 		return ae.Enum == be.Enum && ae.Case == be.Case
+	case tagRange:
+		// Structural, not by reference: `0..10 == 0..10` has to hold, and a range
+		// is fully described by its two operands.
+		ar, br := a.asRange(), b.asRange()
+		return ar.Lo == br.Lo && ar.Hi == br.Hi
 	case tagUD:
 		return a.AsUD() == b.AsUD() // foreign pointers compare by address
 	default:
