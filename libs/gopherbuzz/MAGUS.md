@@ -30,7 +30,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **1009 nodes** and **1674 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **1021 nodes** and **1684 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -43,23 +43,23 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 1 | `magus query kind:project` | `libs/gopherbuzz` |
-| target | 9 | `magus query kind:target` | `format`, `build`, `generate` |
+| target | 10 | `magus query kind:target` | `format`, `build`, `generate` |
 | spell | 11 | `magus query kind:spell` | `go`, `ts`, `py` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 1 | `magus query kind:charm` | `rw` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
-| method | 154 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 41 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
+| method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 45 | `magus query kind:diagnostic` | `MGS1001`, `MGS1002`, `MGS1003` |
 | doc | 15 | `magus query kind:doc` | `README.md`, `docs/ffi.md`, `examples/bubblegum/README.md` |
 | dir | 13 | `magus query kind:dir` | `examples/bubblegum`, `examples/bubblegum/core`, `examples/bubblegum/platform/macos/objc` |
 | file | 59 | `magus query kind:file` | `examples/bubblegum/config.buzz`, `examples/bubblegum/platform/macos/cocoa.buzz`, `examples/bubblegum/core/command.buzz` |
-| function | 557 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 59 | `magus query kind:import` | `std`, `state`, `os` |
+| function | 559 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 60 | `magus query kind:import` | `std`, `state`, `os` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 9 | `magus query project:.` | `format`, `build`, `generate` |
+| . | 10 | `magus query project:.` | `format`, `build`, `generate` |
 
 ## Project: libs/gopherbuzz
 
@@ -72,5 +72,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `pgo-generate` | Regenerates default.pgo, the Buzz VM's PGO profile. |
+| `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |

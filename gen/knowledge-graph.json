@@ -3,8 +3,8 @@
   "schema_version": 6,
   "directed": true,
   "multigraph": false,
-  "node_count": 2137,
-  "edge_count": 4665,
+  "node_count": 2160,
+  "edge_count": 4694,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -37,7 +37,7 @@
       "kind": "diagnostic",
       "label": "MGS1001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1001/"
       }
     },
     {
@@ -45,7 +45,7 @@
       "kind": "diagnostic",
       "label": "MGS1002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1002/"
       }
     },
     {
@@ -53,7 +53,7 @@
       "kind": "diagnostic",
       "label": "MGS1003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1003/"
       }
     },
     {
@@ -61,7 +61,7 @@
       "kind": "diagnostic",
       "label": "MGS1004",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1004.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1004/"
       }
     },
     {
@@ -69,7 +69,7 @@
       "kind": "diagnostic",
       "label": "MGS1005",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1005.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1005/"
       }
     },
     {
@@ -77,7 +77,7 @@
       "kind": "diagnostic",
       "label": "MGS1006",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1006.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1006/"
       }
     },
     {
@@ -85,7 +85,7 @@
       "kind": "diagnostic",
       "label": "MGS1007",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1007.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1007/"
       }
     },
     {
@@ -93,7 +93,55 @@
       "kind": "diagnostic",
       "label": "MGS1008",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1008.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1008/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1009",
+      "kind": "diagnostic",
+      "label": "MGS1009",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1009/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1010",
+      "kind": "diagnostic",
+      "label": "MGS1010",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1010/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1011",
+      "kind": "diagnostic",
+      "label": "MGS1011",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1011/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1012",
+      "kind": "diagnostic",
+      "label": "MGS1012",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1012/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1013",
+      "kind": "diagnostic",
+      "label": "MGS1013",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1013/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1014",
+      "kind": "diagnostic",
+      "label": "MGS1014",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1014/"
       }
     },
     {
@@ -101,7 +149,7 @@
       "kind": "diagnostic",
       "label": "MGS2001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2001/"
       }
     },
     {
@@ -109,7 +157,7 @@
       "kind": "diagnostic",
       "label": "MGS2002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2002/"
       }
     },
     {
@@ -117,7 +165,7 @@
       "kind": "diagnostic",
       "label": "MGS2003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2003/"
       }
     },
     {
@@ -125,7 +173,7 @@
       "kind": "diagnostic",
       "label": "MGS2004",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2004.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2004/"
       }
     },
     {
@@ -133,7 +181,7 @@
       "kind": "diagnostic",
       "label": "MGS2005",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2005.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2005/"
       }
     },
     {
@@ -141,7 +189,7 @@
       "kind": "diagnostic",
       "label": "MGS2006",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2006.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2006/"
       }
     },
     {
@@ -149,7 +197,7 @@
       "kind": "diagnostic",
       "label": "MGS2007",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2007.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2007/"
       }
     },
     {
@@ -157,15 +205,7 @@
       "kind": "diagnostic",
       "label": "MGS2008",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2008.md"
-      }
-    },
-    {
-      "id": "diagnostic:MGS2009",
-      "kind": "diagnostic",
-      "label": "MGS2009",
-      "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2009.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2008/"
       }
     },
     {
@@ -173,7 +213,7 @@
       "kind": "diagnostic",
       "label": "MGS2010",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS2010.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2010/"
       }
     },
     {
@@ -181,7 +221,7 @@
       "kind": "diagnostic",
       "label": "MGS3001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/sandbox/MGS3001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3001/"
       }
     },
     {
@@ -189,7 +229,7 @@
       "kind": "diagnostic",
       "label": "MGS4001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4001/"
       }
     },
     {
@@ -197,7 +237,7 @@
       "kind": "diagnostic",
       "label": "MGS4002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4002/"
       }
     },
     {
@@ -205,7 +245,7 @@
       "kind": "diagnostic",
       "label": "MGS4003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4003/"
       }
     },
     {
@@ -213,7 +253,7 @@
       "kind": "diagnostic",
       "label": "MGS4004",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4004.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4004/"
       }
     },
     {
@@ -221,7 +261,7 @@
       "kind": "diagnostic",
       "label": "MGS4005",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4005.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4005/"
       }
     },
     {
@@ -229,7 +269,7 @@
       "kind": "diagnostic",
       "label": "MGS4006",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/race/MGS4006.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4006/"
       }
     },
     {
@@ -237,7 +277,7 @@
       "kind": "diagnostic",
       "label": "MGS5001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/services/MGS5001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5001/"
       }
     },
     {
@@ -245,7 +285,7 @@
       "kind": "diagnostic",
       "label": "MGS5002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/services/MGS5002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5002/"
       }
     },
     {
@@ -253,7 +293,7 @@
       "kind": "diagnostic",
       "label": "MGS5003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/services/MGS5003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/services/MGS5003/"
       }
     },
     {
@@ -261,7 +301,7 @@
       "kind": "diagnostic",
       "label": "MGS6001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/charms/MGS6001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/charms/MGS6001/"
       }
     },
     {
@@ -269,7 +309,7 @@
       "kind": "diagnostic",
       "label": "MGS7001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/knowledge/MGS7001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/knowledge/MGS7001/"
       }
     },
     {
@@ -277,7 +317,7 @@
       "kind": "diagnostic",
       "label": "MGS7002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/knowledge/MGS7002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/knowledge/MGS7002/"
       }
     },
     {
@@ -285,7 +325,7 @@
       "kind": "diagnostic",
       "label": "MGS8001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/outputref/MGS8001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8001/"
       }
     },
     {
@@ -293,7 +333,7 @@
       "kind": "diagnostic",
       "label": "MGS8002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/outputref/MGS8002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8002/"
       }
     },
     {
@@ -301,7 +341,7 @@
       "kind": "diagnostic",
       "label": "MGS8003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/outputref/MGS8003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8003/"
       }
     },
     {
@@ -309,7 +349,7 @@
       "kind": "diagnostic",
       "label": "MGS9001",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9001.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9001/"
       }
     },
     {
@@ -317,7 +357,7 @@
       "kind": "diagnostic",
       "label": "MGS9002",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9002.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9002/"
       }
     },
     {
@@ -325,7 +365,7 @@
       "kind": "diagnostic",
       "label": "MGS9003",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9003.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9003/"
       }
     },
     {
@@ -333,7 +373,7 @@
       "kind": "diagnostic",
       "label": "MGS9004",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9004.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9004/"
       }
     },
     {
@@ -341,7 +381,7 @@
       "kind": "diagnostic",
       "label": "MGS9005",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9005.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9005/"
       }
     },
     {
@@ -349,7 +389,7 @@
       "kind": "diagnostic",
       "label": "MGS9006",
       "attrs": {
-        "url": "https://github.com/egladman/magus/blob/main/docs/reference/codes/auth/MGS9006.md"
+        "url": "https://eli.gladman.cc/magus/reference/codes/auth/MGS9006/"
       }
     },
     {
@@ -733,7 +773,29 @@
       "source": "docs/concepts",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "31",
+        "dir_files": "36",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/concepts/cache",
+      "kind": "dir",
+      "label": "docs/concepts/cache",
+      "source": "docs/concepts/cache",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/concepts/knowledge",
+      "kind": "dir",
+      "label": "docs/concepts/knowledge",
+      "source": "docs/concepts/knowledge",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
         "dir_languages": "markdown"
       }
     },
@@ -760,6 +822,17 @@
       }
     },
     {
+      "id": "dir:docs/concepts/workspace",
+      "kind": "dir",
+      "label": "docs/concepts/workspace",
+      "source": "docs/concepts/workspace",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:docs/engine",
       "kind": "dir",
       "label": "docs/engine",
@@ -777,7 +850,7 @@
       "source": "docs/guides",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "16",
+        "dir_files": "15",
         "dir_languages": "markdown"
       }
     },
@@ -786,6 +859,17 @@
       "kind": "dir",
       "label": "docs/guides/download",
       "source": "docs/guides/download",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/guides/integrations",
+      "kind": "dir",
+      "label": "docs/guides/integrations",
+      "source": "docs/guides/integrations",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "4",
@@ -821,7 +905,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "107",
+        "dir_files": "113",
         "dir_languages": "markdown"
       }
     },
@@ -843,7 +927,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "55",
+        "dir_files": "60",
         "dir_languages": "markdown"
       }
     },
@@ -887,7 +971,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "9",
+        "dir_files": "15",
         "dir_languages": "markdown"
       }
     },
@@ -920,7 +1004,7 @@
       "source": "docs/reference/codes/sandbox",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "12",
+        "dir_files": "11",
         "dir_languages": "markdown"
       }
     },
@@ -1881,6 +1965,30 @@
       }
     },
     {
+      "id": "doc:docs/concepts/cache/output-refs.md",
+      "kind": "doc",
+      "label": "docs/concepts/cache/output-refs.md",
+      "source": "docs/concepts/cache/output-refs.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "output,ref,logs,query,failure,debugging,clipboard,mcp,agent",
+        "title": "Target output references"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/cache/remote.md",
+      "kind": "doc",
+      "label": "docs/concepts/cache/remote.md",
+      "source": "docs/concepts/cache/remote.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "remote-cache,cache,ci,s3,github-actions,artifacts,signing,supply-chain",
+        "title": "Remote caching"
+      }
+    },
+    {
       "id": "doc:docs/concepts/charms.md",
       "kind": "doc",
       "label": "docs/concepts/charms.md",
@@ -1953,6 +2061,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/knowledge/insight.md",
+      "kind": "doc",
+      "label": "docs/concepts/knowledge/insight.md",
+      "source": "docs/concepts/knowledge/insight.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "insight,vcs,history,hotspots,coupling,ownership,churn,analysis",
+        "title": "Insight"
+      }
+    },
+    {
       "id": "doc:docs/concepts/operations.md",
       "kind": "doc",
       "label": "docs/concepts/operations.md",
@@ -1962,30 +2082,6 @@
         "section": "concepts",
         "tags": "operations,ops,hierarchy,spells,targets,ci,work-model,execution",
         "title": "Operations"
-      }
-    },
-    {
-      "id": "doc:docs/concepts/output-refs.md",
-      "kind": "doc",
-      "label": "docs/concepts/output-refs.md",
-      "source": "docs/concepts/output-refs.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "output,ref,logs,query,failure,debugging,clipboard,mcp,agent",
-        "title": "Target output references"
-      }
-    },
-    {
-      "id": "doc:docs/concepts/remote-cache.md",
-      "kind": "doc",
-      "label": "docs/concepts/remote-cache.md",
-      "source": "docs/concepts/remote-cache.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "remote-cache,cache,ci,s3,github-actions,artifacts,signing,supply-chain",
-        "title": "Remote caching"
       }
     },
     {
@@ -2217,6 +2313,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/workspace/affected.md",
+      "kind": "doc",
+      "label": "docs/concepts/workspace/affected.md",
+      "source": "docs/concepts/workspace/affected.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "affected,vcs,git,changed-files,dependency-graph,ci,bisect,watch",
+        "title": "Affected"
+      }
+    },
+    {
       "id": "doc:docs/conventions.md",
       "kind": "doc",
       "label": "docs/conventions.md",
@@ -2247,42 +2355,6 @@
         "role": "doc",
         "tags": "glossary,reference,terminology,concepts,console",
         "title": "Glossary"
-      }
-    },
-    {
-      "id": "doc:docs/guides/affected.md",
-      "kind": "doc",
-      "label": "docs/guides/affected.md",
-      "source": "docs/guides/affected.md",
-      "attrs": {
-        "role": "doc",
-        "section": "guides",
-        "tags": "affected,vcs,git,changed-files,dependency-graph,ci,bisect,watch",
-        "title": "Affected"
-      }
-    },
-    {
-      "id": "doc:docs/guides/agents.md",
-      "kind": "doc",
-      "label": "docs/guides/agents.md",
-      "source": "docs/guides/agents.md",
-      "attrs": {
-        "role": "agent",
-        "section": "guides",
-        "tags": "agents,skills,agent install,MCP,MAGUS.md,AGENTS.md,hooks,guard,knowledge graph,memory,claude,codex,opencode,drift",
-        "title": "Agents"
-      }
-    },
-    {
-      "id": "doc:docs/guides/daemon.md",
-      "kind": "doc",
-      "label": "docs/guides/daemon.md",
-      "source": "docs/guides/daemon.md",
-      "attrs": {
-        "role": "doc",
-        "section": "guides",
-        "tags": "daemon,concurrency,magus server,magus status,socket,pool,magus.yaml,shared services,keep-warm,health,liveness,readiness,probes,kubernetes",
-        "title": "Daemon and concurrency"
       }
     },
     {
@@ -2358,18 +2430,6 @@
       }
     },
     {
-      "id": "doc:docs/guides/editor.md",
-      "kind": "doc",
-      "label": "docs/guides/editor.md",
-      "source": "docs/guides/editor.md",
-      "attrs": {
-        "role": "doc",
-        "section": "guides",
-        "tags": "editor,lsp,language-server,completion,hover,neovim,vscode,helix",
-        "title": "Editor setup"
-      }
-    },
-    {
       "id": "doc:docs/guides/getting-started.md",
       "kind": "doc",
       "label": "docs/guides/getting-started.md",
@@ -2382,22 +2442,46 @@
       }
     },
     {
-      "id": "doc:docs/guides/insight.md",
+      "id": "doc:docs/guides/integrations/agents.md",
       "kind": "doc",
-      "label": "docs/guides/insight.md",
-      "source": "docs/guides/insight.md",
+      "label": "docs/guides/integrations/agents.md",
+      "source": "docs/guides/integrations/agents.md",
       "attrs": {
-        "role": "doc",
+        "role": "agent",
         "section": "guides",
-        "tags": "insight,vcs,history,hotspots,coupling,ownership,churn,analysis",
-        "title": "Insight"
+        "tags": "agents,skills,agent install,MCP,MAGUS.md,AGENTS.md,hooks,guard,knowledge graph,memory,claude,codex,opencode,drift",
+        "title": "Agents"
       }
     },
     {
-      "id": "doc:docs/guides/mcp.md",
+      "id": "doc:docs/guides/integrations/daemon.md",
       "kind": "doc",
-      "label": "docs/guides/mcp.md",
-      "source": "docs/guides/mcp.md",
+      "label": "docs/guides/integrations/daemon.md",
+      "source": "docs/guides/integrations/daemon.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "daemon,concurrency,magus server,magus status,socket,pool,magus.yaml,shared services,keep-warm,health,liveness,readiness,probes,kubernetes",
+        "title": "Daemon and concurrency"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/editor.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/editor.md",
+      "source": "docs/guides/integrations/editor.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "editor,lsp,language-server,completion,hover,neovim,vscode,helix",
+        "title": "Editor setup"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/mcp.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/mcp.md",
+      "source": "docs/guides/integrations/mcp.md",
       "attrs": {
         "role": "doc",
         "section": "guides",
@@ -2742,6 +2826,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/cli.md",
+      "kind": "doc",
+      "label": "docs/reference/cli.md",
+      "source": "docs/reference/cli.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "cli,subcommands,ls,describe,run,affected,query,graph,doctor,json output",
+        "title": "The CLI in practice"
+      }
+    },
+    {
       "id": "doc:docs/reference/codes/auth/MGS9001.md",
       "kind": "doc",
       "label": "docs/reference/codes/auth/MGS9001.md",
@@ -2967,6 +3063,78 @@
         "section": "reference",
         "tags": "MGS1008,magusfile,targets,context,signature",
         "title": "MGS1008: target missing its context parameter"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1009.md",
+      "source": "docs/reference/codes/magusfile/MGS1009.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1009,magusfile,cache,inputs,outputs,footprint,doctor",
+        "title": "MGS1009: target never replays from cache"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1010.md",
+      "source": "docs/reference/codes/magusfile/MGS1010.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1010,magusfile,affected,vcs,base ref,ci,shallow clone",
+        "title": "MGS1010: affected set could not be computed"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1011.md",
+      "source": "docs/reference/codes/magusfile/MGS1011.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1011,magusfile,outputs,cross-project,load,discovery",
+        "title": "MGS1011: cross-project output names an unusable owner"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1012.md",
+      "source": "docs/reference/codes/magusfile/MGS1012.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1012,magusfile,outputs,inputs,cross-project,cycle,ordering",
+        "title": "MGS1012: cross-project output forms a dependency cycle"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1013.md",
+      "source": "docs/reference/codes/magusfile/MGS1013.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1013,magusfile,outputs,cross-project,globs,containment",
+        "title": "MGS1013: cross-project output glob escapes its owner"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1014.md",
+      "source": "docs/reference/codes/magusfile/MGS1014.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1014,magusfile,outputs,cross-project,cache,snapshot",
+        "title": "MGS1014: cross-project output was never produced"
       }
     },
     {
@@ -3207,18 +3375,6 @@
         "section": "reference",
         "tags": "MGS2008,sandbox,daemon,socket,env,recursive,security",
         "title": "MGS2008: daemon socket withheld"
-      }
-    },
-    {
-      "id": "doc:docs/reference/codes/sandbox/MGS2009.md",
-      "kind": "doc",
-      "label": "docs/reference/codes/sandbox/MGS2009.md",
-      "source": "docs/reference/codes/sandbox/MGS2009.md",
-      "attrs": {
-        "role": "doc",
-        "section": "reference",
-        "tags": "MGS2009,sandbox,network,egress,http,audit,ssrf",
-        "title": "MGS2009: outbound network request"
       }
     },
     {
@@ -6380,6 +6536,13 @@
       }
     },
     {
+      "id": "function:docs/engine/nav.buzz:keepGlossarySections",
+      "kind": "function",
+      "label": "keepGlossarySections",
+      "doc": "keepGlossarySections keeps only the \u003ch3 id=\"...\"\u003e term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own \u003ch3 id=\"\u003e to the next \u003ch3 id=\"\u003e or \u003ch2\u003e.",
+      "source": "docs/engine/nav.buzz:220"
+    },
+    {
       "id": "function:docs/engine/nav.buzz:loadReferenceContent",
       "kind": "function",
       "label": "loadReferenceContent",
@@ -6403,7 +6566,7 @@
       "kind": "function",
       "label": "renderAnnouncementBar",
       "doc": "renderAnnouncementBar renders a dismissible strip announcing the newest shipped release, or \"\" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it is drift-stable; announcement.js hides it once the reader dismisses that version and re-shows it on the next release.",
-      "source": "docs/engine/nav.buzz:268",
+      "source": "docs/engine/nav.buzz:313",
       "attrs": {
         "exported": "true"
       }
@@ -6422,7 +6585,8 @@
       "id": "function:docs/engine/nav.buzz:renderReferenceDrawer",
       "kind": "function",
       "label": "renderReferenceDrawer",
-      "source": "docs/engine/nav.buzz:217",
+      "doc": "renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.  The drawer used to inline all 47 terms on every page, identically. A reference panel that is the same everywhere answers no question you had on the page you are reading - it is a second copy of /glossary/ that happens to slide out. Scoping it to the terms this page actually uses is what makes opening it worth doing.  pageTerms is the forward-built map (see Site): it is complete before the walk starts, so the first page rendered ge",
+      "source": "docs/engine/nav.buzz:255",
       "attrs": {
         "exported": "true"
       }
@@ -6442,7 +6606,7 @@
       "kind": "function",
       "label": "renderSiteFooter",
       "doc": "renderSiteFooter renders the shared one-line attribution footer: root-relative site links (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root, so the site links resolve at any depth.",
-      "source": "docs/engine/nav.buzz:249",
+      "source": "docs/engine/nav.buzz:294",
       "attrs": {
         "exported": "true"
       }
@@ -7465,7 +7629,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:216",
+      "source": "docs/magusfile.buzz:210",
       "attrs": {
         "exported": "true"
       }
@@ -7475,7 +7639,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:276",
+      "source": "docs/magusfile.buzz:270",
       "attrs": {
         "exported": "true"
       }
@@ -7485,7 +7649,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:263",
+      "source": "docs/magusfile.buzz:257",
       "attrs": {
         "exported": "true"
       }
@@ -7495,7 +7659,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo \u003e= 0.40; the glue must come from the same TinyGo tha",
-      "source": "docs/magusfile.buzz:243",
+      "source": "docs/magusfile.buzz:237",
       "attrs": {
         "exported": "true"
       }
@@ -7505,7 +7669,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:221",
+      "source": "docs/magusfile.buzz:215",
       "attrs": {
         "exported": "true"
       }
@@ -7515,7 +7679,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and must not be edited by hand. generate calls this; the drift gate catches any manual edit to a released section on the next render.",
-      "source": "docs/magusfile.buzz:117",
+      "source": "docs/magusfile.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -7525,7 +7689,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the site render, the JS bundles it builds, and the drift gate are first-class ci steps (not just reached transitively through the mutating lint/build chain).",
-      "source": "docs/magusfile.buzz:232",
+      "source": "docs/magusfile.buzz:226",
       "attrs": {
         "exported": "true"
       }
@@ -7535,7 +7699,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:133",
+      "source": "docs/magusfile.buzz:134",
       "attrs": {
         "exported": "true"
       }
@@ -7544,7 +7708,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:202",
+      "source": "docs/magusfile.buzz:196",
       "attrs": {
         "exported": "true"
       }
@@ -7554,7 +7718,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the full publication and drift gate. Use render while iterating on docs.",
-      "source": "docs/magusfile.buzz:172",
+      "source": "docs/magusfile.buzz:168",
       "attrs": {
         "exported": "true"
       }
@@ -7563,12 +7727,6 @@
       "id": "function:docs/magusfile.buzz:generateJsBundles",
       "kind": "function",
       "label": "generateJsBundles",
-      "source": "docs/magusfile.buzz:164"
-    },
-    {
-      "id": "function:docs/magusfile.buzz:generateProtoClient",
-      "kind": "function",
-      "label": "generateProtoClient",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages - the d3-force graph explorer, the CodeMirror playground editor, and the vendored mermaid/highlight.js libraries. These are pnpm-managed packages (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age gate), `pnpm run build` runs the esbuild invocations, which live in package.json \"scripts\" as their single source of truth",
       "source": "docs/magusfile.buzz:160"
     },
@@ -7577,7 +7735,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:207",
+      "source": "docs/magusfile.buzz:201",
       "attrs": {
         "exported": "true"
       }
@@ -7587,7 +7745,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:108",
+      "source": "docs/magusfile.buzz:109",
       "attrs": {
         "exported": "true"
       }
@@ -7596,7 +7754,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:103",
+      "source": "docs/magusfile.buzz:104",
       "attrs": {
         "exported": "true"
       }
@@ -7606,7 +7764,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:286",
+      "source": "docs/magusfile.buzz:280",
       "attrs": {
         "exported": "true"
       }
@@ -7615,7 +7773,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:225",
+      "source": "docs/magusfile.buzz:219",
       "attrs": {
         "exported": "true"
       }
@@ -8446,7 +8604,7 @@
       "id": "function:docs/tour/17-output-refs.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/tour/17-output-refs.buzz:44",
+      "source": "docs/tour/17-output-refs.buzz:48",
       "attrs": {
         "exported": "true"
       }
@@ -13336,7 +13494,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/gopherbuzz/magusfile.buzz:64",
+      "source": "libs/gopherbuzz/magusfile.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -13346,7 +13504,17 @@
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/gopherbuzz/magusfile.buzz:68",
+      "source": "libs/gopherbuzz/magusfile.buzz:72",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/gopherbuzz/magusfile.buzz:conformance",
+      "kind": "function",
+      "label": "conformance",
+      "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). Opt-in (not part of `ci`): it needs network access and a foreign clone, which `magus affected ci` should never require. Never vendors upstream's test files into this repo - it fetches a pinned commit into a cache directory outside the tree instead, so a later re-run reuses (fetches, not re-clones) rather than re-downloading whole history.",
+      "source": "libs/gopherbuzz/magusfile.buzz:127",
       "attrs": {
         "exported": "true"
       }
@@ -13355,7 +13523,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/gopherbuzz/magusfile.buzz:62",
+      "source": "libs/gopherbuzz/magusfile.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -13365,7 +13533,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/gopherbuzz/magusfile.buzz:46",
+      "source": "libs/gopherbuzz/magusfile.buzz:50",
       "attrs": {
         "exported": "true"
       }
@@ -13374,7 +13542,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/gopherbuzz/magusfile.buzz:63",
+      "source": "libs/gopherbuzz/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -13384,7 +13552,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz/magusfile.buzz:58",
+      "source": "libs/gopherbuzz/magusfile.buzz:62",
       "attrs": {
         "exported": "true"
       }
@@ -13394,7 +13562,7 @@
       "kind": "function",
       "label": "pgo_generate",
       "doc": "Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to the interpreter hot path. The canonical profile lives here; cmd/magus/default.pgo symlinks to it so `go build ./cmd/magus` (-pgo=auto) applies it.",
-      "source": "libs/gopherbuzz/magusfile.buzz:75",
+      "source": "libs/gopherbuzz/magusfile.buzz:79",
       "attrs": {
         "exported": "true"
       }
@@ -13403,7 +13571,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/gopherbuzz/magusfile.buzz:40",
+      "source": "libs/gopherbuzz/magusfile.buzz:44",
       "attrs": {
         "exported": "true"
       }
@@ -13412,10 +13580,17 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/gopherbuzz/magusfile.buzz:65",
+      "source": "libs/gopherbuzz/magusfile.buzz:69",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
+      "kind": "function",
+      "label": "upstream_pinned_sha",
+      "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -\u003e \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
+      "source": "libs/gopherbuzz/magusfile.buzz:111"
     },
     {
       "id": "function:libs/gopherbuzz/std/ext_assert.buzz:contains",
@@ -15932,6 +16107,14 @@
       }
     },
     {
+      "id": "import:env",
+      "kind": "import",
+      "label": "env",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:ffi",
       "kind": "import",
       "label": "ffi"
@@ -17202,6 +17385,15 @@
       }
     },
     {
+      "id": "method:magus.affected",
+      "kind": "method",
+      "label": "magus.affected",
+      "doc": "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
+      "attrs": {
+        "buzz": "magus\\affected([base]) → map[string]any"
+      }
+    },
+    {
       "id": "method:magus.bust_cache",
       "kind": "method",
       "label": "magus.bust_cache",
@@ -17238,6 +17430,15 @@
       }
     },
     {
+      "id": "method:magus.graph",
+      "kind": "method",
+      "label": "magus.graph",
+      "doc": "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
+      "attrs": {
+        "buzz": "magus\\graph() → map[string]any"
+      }
+    },
+    {
       "id": "method:magus.has_charm",
       "kind": "method",
       "label": "magus.has_charm",
@@ -17256,12 +17457,30 @@
       }
     },
     {
+      "id": "method:magus.ls",
+      "kind": "method",
+      "label": "magus.ls",
+      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `\u003e Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
+      "attrs": {
+        "buzz": "magus\\ls() → map[string]any"
+      }
+    },
+    {
       "id": "method:magus.run",
       "kind": "method",
       "label": "magus.run",
       "doc": "Run `magus run \u003cargs\u003e` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\run(args, [opts]) → map[string]any"
+      }
+    },
+    {
+      "id": "method:magus.where",
+      "kind": "method",
+      "label": "magus.where",
+      "doc": "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
+      "attrs": {
+        "buzz": "magus\\where(dir) → string"
       }
     },
     {
@@ -18463,7 +18682,7 @@
     {
       "id": "project:.",
       "kind": "project",
-      "label": "magus",
+      "label": "plans-buzz-parity-handoff-9b8119",
       "source": ".",
       "attrs": {
         "engine": "buzz",
@@ -18517,7 +18736,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "target_count": "9"
+        "target_count": "10"
       }
     },
     {
@@ -18662,9 +18881,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
-        "engine": "buzz",
-        "last_output_ref": "outdacffc7d",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18707,7 +18924,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out11f4ebc7",
+        "last_output_ref": "outa011767f",
         "last_run_ok": "false"
       }
     },
@@ -18719,9 +18936,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "ci_shard",
-        "engine": "buzz",
-        "last_output_ref": "out8a3ee835",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18732,9 +18947,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "config_generate",
-        "engine": "buzz",
-        "last_output_ref": "outdc0442b1",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18744,9 +18957,7 @@
       "doc": "Regenerates, then formats Go and tidies `go.mod`.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out4ab8a95a",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18756,9 +18967,7 @@
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out9b5120bf",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18812,9 +19021,7 @@
       "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outfbc0c728",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18825,9 +19032,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "man_generate",
-        "engine": "buzz",
-        "last_output_ref": "outb2977f76",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18838,9 +19043,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "md_generate",
-        "engine": "buzz",
-        "last_output_ref": "ref16b5fa8d",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18861,9 +19064,7 @@
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out98581780",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18926,9 +19127,7 @@
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out6c4db5f7",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -18958,7 +19157,7 @@
       "source": "cmd/magus/starter",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outf2c6c384",
+        "last_output_ref": "out10cb34be",
         "last_run_ok": "true"
       }
     },
@@ -18968,9 +19167,7 @@
       "label": "format",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out2041e2cc",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18979,9 +19176,7 @@
       "label": "generate",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out608e9955",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -18990,9 +19185,7 @@
       "label": "lint",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "oute06c6349",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19010,9 +19203,7 @@
       "label": "test",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out05313ff6",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19022,9 +19213,7 @@
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outf2a8e022",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19034,9 +19223,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outf3434e5c",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19046,9 +19233,7 @@
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outb90387ad",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19067,9 +19252,7 @@
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outb463dadb",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19122,9 +19305,7 @@
       "source": "docs",
       "attrs": {
         "declared_as": "buzz_test",
-        "engine": "buzz",
-        "last_output_ref": "outb99daf6d",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19145,9 +19326,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out7e8bc7c0",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19158,9 +19337,7 @@
       "source": "docs",
       "attrs": {
         "declared_as": "content_generate",
-        "engine": "buzz",
-        "last_output_ref": "outd7895b21",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19169,9 +19346,7 @@
       "label": "format",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out48b85fa9",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19181,9 +19356,7 @@
       "doc": "generate is the full publication and drift gate.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "oute052efcf",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19193,9 +19366,7 @@
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outa9946cd3",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19225,9 +19396,7 @@
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outbca07ce2",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19236,9 +19405,7 @@
       "label": "test",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out77ac72bb",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19258,7 +19425,7 @@
       "source": "libs/diag",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out5f9eb420",
+        "last_output_ref": "outcb960ad8",
         "last_run_ok": "true"
       }
     },
@@ -19268,9 +19435,7 @@
       "label": "format",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out822f5622",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19281,7 +19446,7 @@
       "source": "libs/diag",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out2b6aa9cd",
+        "last_output_ref": "outa4c44f3c",
         "last_run_ok": "true"
       }
     },
@@ -19291,9 +19456,7 @@
       "label": "lint",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outbfe8878d",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19342,8 +19505,18 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outdb4fdf0c",
+        "last_output_ref": "out1bb7553d",
         "last_run_ok": "true"
+      }
+    },
+    {
+      "id": "target:libs/gopherbuzz:conformance",
+      "kind": "target",
+      "label": "conformance",
+      "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
+      "source": "libs/gopherbuzz",
+      "attrs": {
+        "engine": "buzz"
       }
     },
     {
@@ -19353,7 +19526,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outa2c7b17b",
+        "last_output_ref": "outd2981fab",
         "last_run_ok": "true"
       }
     },
@@ -19364,9 +19537,7 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outc24ec5f0",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19375,9 +19546,7 @@
       "label": "lint",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out877988a2",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19428,8 +19597,8 @@
       "source": "libs/textsearch",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out164d1bf1",
-        "last_run_ok": "false"
+        "last_output_ref": "out58a2493a",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19439,9 +19608,7 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out8a0ad7d2",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19451,9 +19618,7 @@
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json).",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outebeacd42",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19483,9 +19648,7 @@
       "doc": "test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outa9e805c1",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19495,7 +19658,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outcecb24ff",
+        "last_output_ref": "out950d3ce9",
         "last_run_ok": "true"
       }
     },
@@ -19506,9 +19669,7 @@
       "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
       "source": "proto",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out49204c0c",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19517,9 +19678,7 @@
       "label": "lint",
       "source": "proto",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out2794d8ae",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20222,6 +20381,22 @@
     },
     {
       "source": "dir:docs/concepts",
+      "target": "dir:docs/concepts/cache",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache"
+    },
+    {
+      "source": "dir:docs/concepts",
+      "target": "dir:docs/concepts/knowledge",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge"
+    },
+    {
+      "source": "dir:docs/concepts",
       "target": "dir:docs/concepts/spells",
       "relation": "contains",
       "confidence": "extracted",
@@ -20235,6 +20410,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/targets"
+    },
+    {
+      "source": "dir:docs/concepts",
+      "target": "dir:docs/concepts/workspace",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace"
     },
     {
       "source": "dir:docs/concepts",
@@ -20302,22 +20485,6 @@
     },
     {
       "source": "dir:docs/concepts",
-      "target": "doc:docs/concepts/output-refs.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "dir:docs/concepts",
-      "target": "doc:docs/concepts/remote-cache.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/remote-cache.md"
-    },
-    {
-      "source": "dir:docs/concepts",
       "target": "doc:docs/concepts/sandbox.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -20379,6 +20546,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "dir:docs/concepts/cache",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "dir:docs/concepts/cache",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/remote.md"
+    },
+    {
+      "source": "dir:docs/concepts/knowledge",
+      "target": "doc:docs/concepts/knowledge/insight.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
     },
     {
       "source": "dir:docs/concepts/spells",
@@ -20467,6 +20658,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/targets/ci.md"
+    },
+    {
+      "source": "dir:docs/concepts/workspace",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
     },
     {
       "source": "dir:docs/engine",
@@ -20574,27 +20773,11 @@
     },
     {
       "source": "dir:docs/guides",
-      "target": "doc:docs/guides/affected.md",
+      "target": "dir:docs/guides/integrations",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "dir:docs/guides",
-      "target": "doc:docs/guides/agents.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "dir:docs/guides",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
+      "provenance": "docs/guides/integrations"
     },
     {
       "source": "dir:docs/guides",
@@ -20614,35 +20797,11 @@
     },
     {
       "source": "dir:docs/guides",
-      "target": "doc:docs/guides/editor.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "dir:docs/guides",
       "target": "doc:docs/guides/getting-started.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/getting-started.md"
-    },
-    {
-      "source": "dir:docs/guides",
-      "target": "doc:docs/guides/insight.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/insight.md"
-    },
-    {
-      "source": "dir:docs/guides",
-      "target": "doc:docs/guides/mcp.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/mcp.md"
     },
     {
       "source": "dir:docs/guides",
@@ -20691,6 +20850,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/download/windows.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/editor.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/mcp.md"
     },
     {
       "source": "dir:docs/lib",
@@ -20803,6 +20994,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage"
+    },
+    {
+      "source": "dir:docs/reference",
+      "target": "doc:docs/reference/cli.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/cli.md"
     },
     {
       "source": "dir:docs/reference",
@@ -21254,6 +21453,54 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1013.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -21411,14 +21658,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS2008.md"
-    },
-    {
-      "source": "dir:docs/reference/codes/sandbox",
-      "target": "doc:docs/reference/codes/sandbox/MGS2009.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS2009.md"
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
@@ -23950,22 +24189,6 @@
     },
     {
       "source": "doc:README.md",
-      "target": "doc:docs/concepts/output-refs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
-      "target": "doc:docs/concepts/remote-cache.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
       "target": "doc:docs/concepts/services.md",
       "relation": "references",
       "confidence": "extracted",
@@ -24006,22 +24229,6 @@
     },
     {
       "source": "doc:README.md",
-      "target": "doc:docs/guides/agents.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
       "target": "doc:docs/guides/debugging.md",
       "relation": "references",
       "confidence": "extracted",
@@ -24031,14 +24238,6 @@
     {
       "source": "doc:README.md",
       "target": "doc:docs/guides/download.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
-      "target": "doc:docs/guides/mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24310,6 +24509,14 @@
     },
     {
       "source": "doc:docs/concepts/cache.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -24327,14 +24534,6 @@
     {
       "source": "doc:docs/concepts/cache.md",
       "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/cache.md"
-    },
-    {
-      "source": "doc:docs/concepts/cache.md",
-      "target": "doc:docs/concepts/remote-cache.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24395,6 +24594,142 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/concepts/cache.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "diagnostic:MGS8001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "diagnostic:MGS8002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "diagnostic:MGS8003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/guides/debugging.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/codes/outputref/MGS8001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/codes/outputref/MGS8002.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/codes/outputref/MGS8003.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/codes/outputref/README.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/manpage/magus-tail.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/remote.md",
+      "target": "doc:README.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/remote.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/remote.md",
+      "target": "doc:docs/concepts/engines.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/remote.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/remote.md",
+      "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/remote.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/remote.md",
+      "target": "doc:docs/concepts/telemetry.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/remote.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/remote.md",
+      "target": "spell:actions",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/cache/remote.md"
     },
     {
       "source": "doc:docs/concepts/charms.md",
@@ -24486,7 +24821,7 @@
     },
     {
       "source": "doc:docs/concepts/ci-providers.md",
-      "target": "doc:docs/concepts/remote-cache.md",
+      "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24527,14 +24862,6 @@
     {
       "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/concepts/targets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/concurrency.md"
-    },
-    {
-      "source": "doc:docs/concepts/concurrency.md",
-      "target": "doc:docs/guides/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24606,14 +24933,6 @@
     },
     {
       "source": "doc:docs/concepts/dependencies.md",
-      "target": "doc:docs/guides/affected.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/dependencies.md"
-    },
-    {
-      "source": "doc:docs/concepts/dependencies.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
@@ -24638,7 +24957,7 @@
     },
     {
       "source": "doc:docs/concepts/engines.md",
-      "target": "doc:docs/concepts/charms.md",
+      "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24646,7 +24965,7 @@
     },
     {
       "source": "doc:docs/concepts/engines.md",
-      "target": "doc:docs/concepts/remote-cache.md",
+      "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -24734,22 +25053,6 @@
     },
     {
       "source": "doc:docs/concepts/knowledge.md",
-      "target": "doc:docs/guides/agents.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/knowledge.md"
-    },
-    {
-      "source": "doc:docs/concepts/knowledge.md",
-      "target": "doc:docs/guides/mcp.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/knowledge.md"
-    },
-    {
-      "source": "doc:docs/concepts/knowledge.md",
       "target": "doc:docs/reference/codes/knowledge/MGS7001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -24789,6 +25092,30 @@
       "provenance": "docs/concepts/knowledge.md"
     },
     {
+      "source": "doc:docs/concepts/knowledge/insight.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge/insight.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge/insight.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/knowledge/insight.md"
+    },
+    {
       "source": "doc:docs/concepts/operations.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
@@ -24819,150 +25146,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/operations.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "diagnostic:MGS8001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "diagnostic:MGS8002",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "diagnostic:MGS8003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/concepts/cache.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/guides/debugging.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/guides/mcp.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/codes/outputref/MGS8001.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/codes/outputref/MGS8002.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/codes/outputref/MGS8003.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/codes/outputref/README.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/output-refs.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/remote-cache.md",
-      "target": "doc:README.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/remote-cache.md"
-    },
-    {
-      "source": "doc:docs/concepts/remote-cache.md",
-      "target": "doc:docs/concepts/engines.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/remote-cache.md"
-    },
-    {
-      "source": "doc:docs/concepts/remote-cache.md",
-      "target": "doc:docs/concepts/spells.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/remote-cache.md"
-    },
-    {
-      "source": "doc:docs/concepts/remote-cache.md",
-      "target": "doc:docs/concepts/telemetry.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/remote-cache.md"
-    },
-    {
-      "source": "doc:docs/concepts/remote-cache.md",
-      "target": "spell:actions",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/concepts/remote-cache.md"
     },
     {
       "source": "doc:docs/concepts/sandbox.md",
@@ -25030,14 +25213,6 @@
     },
     {
       "source": "doc:docs/concepts/sandbox.md",
-      "target": "diagnostic:MGS2009",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/sandbox.md"
-    },
-    {
-      "source": "doc:docs/concepts/sandbox.md",
       "target": "diagnostic:MGS2010",
       "relation": "documents",
       "confidence": "inferred",
@@ -25071,14 +25246,6 @@
     {
       "source": "doc:docs/concepts/sandbox.md",
       "target": "doc:docs/concepts/targets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/sandbox.md"
-    },
-    {
-      "source": "doc:docs/concepts/sandbox.md",
-      "target": "doc:docs/guides/daemon.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25143,14 +25310,6 @@
     {
       "source": "doc:docs/concepts/sandbox.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2008.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/sandbox.md"
-    },
-    {
-      "source": "doc:docs/concepts/sandbox.md",
-      "target": "doc:docs/reference/codes/sandbox/MGS2009.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25238,14 +25397,6 @@
     },
     {
       "source": "doc:docs/concepts/services.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/services.md"
-    },
-    {
-      "source": "doc:docs/concepts/services.md",
       "target": "doc:docs/reference/codes/services/MGS5001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -25294,6 +25445,14 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -25319,14 +25478,6 @@
     {
       "source": "doc:docs/concepts/spells.md",
       "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells.md"
-    },
-    {
-      "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/remote-cache.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25822,7 +25973,7 @@
     },
     {
       "source": "doc:docs/concepts/targets/ci.md",
-      "target": "doc:docs/concepts/charms.md",
+      "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25830,7 +25981,7 @@
     },
     {
       "source": "doc:docs/concepts/targets/ci.md",
-      "target": "doc:docs/concepts/remote-cache.md",
+      "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25846,7 +25997,7 @@
     },
     {
       "source": "doc:docs/concepts/telemetry.md",
-      "target": "doc:docs/concepts/remote-cache.md",
+      "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -25863,14 +26014,6 @@
     {
       "source": "doc:docs/concepts/volatility.md",
       "target": "doc:docs/concepts/cache.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/volatility.md"
-    },
-    {
-      "source": "doc:docs/concepts/volatility.md",
-      "target": "doc:docs/guides/affected.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26037,6 +26180,62 @@
       "provenance": "docs/concepts/workspace.md"
     },
     {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/concepts/dependencies.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/guides/tips.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
       "source": "doc:docs/conventions.md",
       "target": "doc:docs/concepts/spells.md",
       "relation": "references",
@@ -26086,6 +26285,14 @@
     },
     {
       "source": "doc:docs/documentation.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -26127,14 +26334,6 @@
     {
       "source": "doc:docs/documentation.md",
       "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/documentation.md"
-    },
-    {
-      "source": "doc:docs/documentation.md",
-      "target": "doc:docs/concepts/remote-cache.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26222,14 +26421,6 @@
     },
     {
       "source": "doc:docs/documentation.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/documentation.md"
-    },
-    {
-      "source": "doc:docs/documentation.md",
       "target": "doc:docs/guides/debugging.md",
       "relation": "references",
       "confidence": "extracted",
@@ -26246,23 +26437,7 @@
     },
     {
       "source": "doc:docs/documentation.md",
-      "target": "doc:docs/guides/editor.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/documentation.md"
-    },
-    {
-      "source": "doc:docs/documentation.md",
       "target": "doc:docs/guides/getting-started.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/documentation.md"
-    },
-    {
-      "source": "doc:docs/documentation.md",
-      "target": "doc:docs/guides/mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26502,22 +26677,6 @@
     },
     {
       "source": "doc:docs/glossary.md",
-      "target": "doc:docs/concepts/output-refs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
-      "target": "doc:docs/concepts/remote-cache.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
       "target": "doc:docs/concepts/sandbox.md",
       "relation": "references",
       "confidence": "extracted",
@@ -26590,30 +26749,6 @@
     },
     {
       "source": "doc:docs/glossary.md",
-      "target": "doc:docs/guides/affected.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
-      "target": "doc:docs/guides/insight.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
       "target": "doc:docs/reference/buzz/index.md",
       "relation": "references",
       "confidence": "extracted",
@@ -26651,174 +26786,6 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/concepts/cache.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/concepts/charms.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/concepts/dependencies.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/concepts/targets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/guides/tips.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/affected.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/affected.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/concepts/output-refs.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/guides/mcp.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/agents.md",
-      "target": "doc:docs/reference/manpage/magus-where.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/agents.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/concepts/services.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/guides/mcp.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/reference/console.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/reference/manpage/magus-server.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/daemon.md"
-    },
-    {
-      "source": "doc:docs/guides/daemon.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/daemon.md"
     },
     {
       "source": "doc:docs/guides/debugging.md",
@@ -26973,54 +26940,6 @@
       "provenance": "docs/guides/download/windows.md"
     },
     {
-      "source": "doc:docs/guides/editor.md",
-      "target": "doc:docs/concepts/spells.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "doc:docs/guides/editor.md",
-      "target": "doc:docs/concepts/targets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "doc:docs/guides/editor.md",
-      "target": "doc:docs/guides/download.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "doc:docs/guides/editor.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "doc:docs/guides/editor.md",
-      "target": "doc:docs/reference/manpage/magus-version.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
-      "source": "doc:docs/guides/editor.md",
-      "target": "spell:buzz",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/guides/editor.md"
-    },
-    {
       "source": "doc:docs/guides/getting-started.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
@@ -27133,76 +27052,196 @@
       "provenance": "docs/guides/getting-started.md"
     },
     {
-      "source": "doc:docs/guides/insight.md",
-      "target": "doc:docs/concepts/targets.md",
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/guides/insight.md"
+      "provenance": "docs/guides/integrations/agents.md"
     },
     {
-      "source": "doc:docs/guides/insight.md",
-      "target": "doc:docs/guides/affected.md",
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/concepts/knowledge.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/guides/insight.md"
+      "provenance": "docs/guides/integrations/agents.md"
     },
     {
-      "source": "doc:docs/guides/insight.md",
-      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/guides/insight.md"
+      "provenance": "docs/guides/integrations/agents.md"
     },
     {
-      "source": "doc:docs/guides/insight.md",
-      "target": "doc:docs/reference/manpage/magus-insight.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/insight.md"
-    },
-    {
-      "source": "doc:docs/guides/mcp.md",
-      "target": "doc:docs/guides/agents.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/mcp.md"
-    },
-    {
-      "source": "doc:docs/guides/mcp.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/mcp.md"
-    },
-    {
-      "source": "doc:docs/guides/mcp.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/guides/mcp.md"
+      "provenance": "docs/guides/integrations/agents.md"
     },
     {
-      "source": "doc:docs/guides/mcp.md",
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/concepts/services.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/reference/console.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
+      "target": "doc:docs/reference/manpage/magus-server.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/daemon.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/daemon.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/guides/mcp.md"
+      "provenance": "docs/guides/integrations/daemon.md"
     },
     {
-      "source": "doc:docs/guides/tips.md",
-      "target": "doc:docs/guides/daemon.md",
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "doc:docs/concepts/spells.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/guides/tips.md"
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "doc:docs/concepts/targets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "doc:docs/guides/download.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "doc:docs/reference/manpage/magus-version.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/editor.md",
+      "target": "spell:buzz",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/guides/integrations/editor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/mcp.md",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/mcp.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/mcp.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/mcp.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/mcp.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/mcp.md"
     },
     {
       "source": "doc:docs/guides/tips.md",
@@ -27238,6 +27277,14 @@
     },
     {
       "source": "doc:docs/migrating/from-nx.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/migrating/from-nx.md"
+    },
+    {
+      "source": "doc:docs/migrating/from-nx.md",
       "target": "doc:docs/concepts/dependencies.md",
       "relation": "references",
       "confidence": "extracted",
@@ -27255,14 +27302,6 @@
     {
       "source": "doc:docs/migrating/from-nx.md",
       "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/migrating/from-nx.md"
-    },
-    {
-      "source": "doc:docs/migrating/from-nx.md",
-      "target": "doc:docs/concepts/remote-cache.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -27781,6 +27820,94 @@
       "provenance": "docs/reference/buzz/yaml.md"
     },
     {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/logging.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-tail.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
+      "source": "doc:docs/reference/cli.md",
+      "target": "doc:docs/reference/manpage/magus-x.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/cli.md"
+    },
+    {
       "source": "doc:docs/reference/codes/auth/MGS9001.md",
       "target": "diagnostic:MGS9001",
       "relation": "documents",
@@ -28229,6 +28356,246 @@
       "provenance": "docs/reference/codes/magusfile/MGS1008.md"
     },
     {
+      "source": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "target": "diagnostic:MGS1005",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "target": "diagnostic:MGS1009",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1005.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1009.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1009.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "target": "diagnostic:MGS1010",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "diagnostic:MGS1011",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "diagnostic:MGS1012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "diagnostic:MGS1013",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "target": "doc:docs/reference/manpage/magus-watch.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "target": "diagnostic:MGS1011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "target": "diagnostic:MGS1012",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "target": "doc:docs/concepts/dependencies.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1012.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1012.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "target": "diagnostic:MGS1011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1013.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "target": "diagnostic:MGS1013",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1013.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1013.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1013.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "diagnostic:MGS1011",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "diagnostic:MGS1013",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "diagnostic:MGS1014",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1011.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1013.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1014.md"
+    },
+    {
       "source": "doc:docs/reference/codes/magusfile/README.md",
       "target": "diagnostic:MGS1001",
       "relation": "documents",
@@ -28629,14 +28996,6 @@
       "provenance": "docs/reference/codes/sandbox/MGS2008.md"
     },
     {
-      "source": "doc:docs/reference/codes/sandbox/MGS2009.md",
-      "target": "diagnostic:MGS2009",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/MGS2009.md"
-    },
-    {
       "source": "doc:docs/reference/codes/sandbox/MGS2010.md",
       "target": "diagnostic:MGS2010",
       "relation": "documents",
@@ -28718,14 +29077,6 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
-      "target": "diagnostic:MGS2009",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/codes/sandbox/README.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2010",
       "relation": "documents",
       "confidence": "inferred",
@@ -28791,14 +29142,6 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2008.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/sandbox/README.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/sandbox/README.md",
-      "target": "doc:docs/reference/codes/sandbox/MGS2009.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29038,6 +29381,14 @@
     },
     {
       "source": "doc:docs/reference/faq.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/faq.md"
+    },
+    {
+      "source": "doc:docs/reference/faq.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29047,14 +29398,6 @@
     {
       "source": "doc:docs/reference/faq.md",
       "target": "doc:docs/concepts/operations.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/faq.md"
-    },
-    {
-      "source": "doc:docs/reference/faq.md",
-      "target": "doc:docs/concepts/remote-cache.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29094,30 +29437,6 @@
     },
     {
       "source": "doc:docs/reference/faq.md",
-      "target": "doc:docs/guides/affected.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/faq.md"
-    },
-    {
-      "source": "doc:docs/reference/faq.md",
-      "target": "doc:docs/guides/daemon.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/faq.md"
-    },
-    {
-      "source": "doc:docs/reference/faq.md",
-      "target": "doc:docs/guides/editor.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/faq.md"
-    },
-    {
-      "source": "doc:docs/reference/faq.md",
       "target": "doc:docs/guides/getting-started.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29142,7 +29461,7 @@
     },
     {
       "source": "doc:docs/reference/logging.md",
-      "target": "doc:docs/concepts/output-refs.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -33142,6 +33461,14 @@
     },
     {
       "source": "file:docs/engine/nav.buzz",
+      "target": "function:docs/engine/nav.buzz:keepGlossarySections",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/nav.buzz"
+    },
+    {
+      "source": "file:docs/engine/nav.buzz",
       "target": "function:docs/engine/nav.buzz:loadReferenceContent",
       "relation": "contains",
       "confidence": "extracted",
@@ -34791,14 +35118,6 @@
     {
       "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:generateJsBundles",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/magusfile.buzz",
-      "target": "function:docs/magusfile.buzz:generateProtoClient",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -36559,6 +36878,14 @@
     {
       "source": "file:docs/tour/17-output-refs.buzz",
       "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
+      "source": "file:docs/tour/17-output-refs.buzz",
+      "target": "import:os",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -43350,6 +43677,14 @@
     },
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:conformance",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/gopherbuzz/magusfile.buzz",
       "target": "function:libs/gopherbuzz/magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -43402,6 +43737,22 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "libs/gopherbuzz/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/gopherbuzz/magusfile.buzz",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/gopherbuzz/magusfile.buzz",
+      "target": "import:env",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "libs/gopherbuzz/magusfile.buzz"
     },
     {
@@ -47638,6 +47989,14 @@
     },
     {
       "source": "function:docs/engine/nav.buzz:renderReferenceDrawer",
+      "target": "function:docs/engine/nav.buzz:keepGlossarySections",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/nav.buzz"
+    },
+    {
+      "source": "function:docs/engine/nav.buzz:renderReferenceDrawer",
       "target": "function:docs/engine/nav.buzz:loadReferenceContent",
       "relation": "calls",
       "confidence": "extracted",
@@ -48111,14 +48470,6 @@
     {
       "source": "function:docs/magusfile.buzz:generate",
       "target": "function:docs/magusfile.buzz:generateJsBundles",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "function:docs/magusfile.buzz:generate",
-      "target": "function:docs/magusfile.buzz:generateProtoClient",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -51373,6 +51724,14 @@
       "provenance": "libs/gopherbuzz/examples/bubblegum/wm.buzz"
     },
     {
+      "source": "function:libs/gopherbuzz/magusfile.buzz:conformance",
+      "target": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/magusfile.buzz"
+    },
+    {
       "source": "function:libs/gopherbuzz/std/ext_assert.buzz:contains",
       "target": "function:libs/gopherbuzz/std/ext_assert.buzz:tail",
       "relation": "calls",
@@ -52764,6 +53123,13 @@
     },
     {
       "source": "module:magus",
+      "target": "method:magus.affected",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
       "target": "method:magus.bust_cache",
       "relation": "contains",
       "confidence": "extracted",
@@ -52792,6 +53158,13 @@
     },
     {
       "source": "module:magus",
+      "target": "method:magus.graph",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
       "target": "method:magus.has_charm",
       "relation": "contains",
       "confidence": "extracted",
@@ -52806,7 +53179,21 @@
     },
     {
       "source": "module:magus",
+      "target": "method:magus.ls",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
       "target": "method:magus.run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.where",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -54496,6 +54883,14 @@
     },
     {
       "source": "project:libs/gopherbuzz",
+      "target": "target:libs/gopherbuzz:conformance",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
       "target": "target:libs/gopherbuzz:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -55248,14 +55643,6 @@
       "provenance": "."
     },
     {
-      "source": "target:.:config-generate",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
-    },
-    {
       "source": "target:.:format",
       "target": "op:go:go-fmt",
       "relation": "uses",
@@ -55462,14 +55849,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
-    },
-    {
-      "source": "target:.:test",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
     },
     {
       "source": "target:.:test",
@@ -56474,6 +56853,14 @@
     {
       "source": "target:libs/gopherbuzz:ci",
       "target": "target:libs/gopherbuzz:test",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:conformance",
+      "target": "target:libs/gopherbuzz:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
