@@ -41,7 +41,9 @@ json.buzz
 labels.buzz
 lambda.buzz
 list-map-properties.buzz
+lists.buzz
 long-namespace.buzz
+maps.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz

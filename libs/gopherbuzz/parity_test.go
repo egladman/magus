@@ -1051,3 +1051,52 @@ fun probe() > int {
 }`)
 	assert.Equal(t, int64(0), v.AsInt(), "typeof reads a type, it does not call anything")
 }
+
+// TestParity_CollectionCloneAliases covers upstream's copyMutable/copyImmutable,
+// which obj.zig declares as ALIASES of cloneMutable/cloneImmutable rather than
+// as separate operations. Missing them made `list.copyImmutable()` a null call.
+func TestParity_CollectionCloneAliases(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final l = [1, 2, 3];
+    final m = {"a": 1};
+    return "{l.copyImmutable().len()}/{m.copyImmutable().size()}/{l.cloneMutable().len()}";
+}`)
+	assert.Equal(t, "3/1/3", v.AsString(), "the copy* names are the clone* operations under upstream's spelling")
+}
+
+// TestParity_MapHasKey covers map.hasKey, which upstream declares on the map
+// object and gopherbuzz did not implement at all.
+func TestParity_MapHasKey(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final m = {"hello": "world"};
+    return m.hasKey("hello") and !m.hasKey("absent");
+}`)
+	assert.True(t, v.AsBool(), "hasKey reports presence, not the value")
+}
+
+// TestParity_ListFillRange covers fill's start/len window. Filling the whole list
+// regardless passes the simple case and silently corrupts the windowed one, which
+// is why this asserts the UNTOUCHED neighbours rather than only the filled span.
+func TestParity_ListFillRange(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final all = (mut [1, 2, 3]).fill(42);
+    final some = (mut [0, 1, 2, 3, 4, 5]).fill(42, start: 2, len: 3);
+    return "{all[0]}{all[2]}/{some[1]}{some[2]}{some[4]}{some[5]}";
+}`)
+	assert.Equal(t, "4242/142425", v.AsString(), "fill without a window covers everything; with one it covers exactly [start, start+len)")
+}
+
+// TestParity_ListRemoveOutOfRangeIsNull pins remove's miss behaviour. Upstream
+// documents "or null when out of bounds" and asserts `list.remove(12) == null`;
+// raising instead made a miss unrecoverable.
+func TestParity_ListRemoveOutOfRangeIsNull(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final l = mut ["a", "b", "c"];
+    return l.remove(12) == null and l.len() == 3 and l.remove(1) == "b";
+}`)
+	assert.True(t, v.AsBool(), "an out-of-range remove yields null and changes nothing")
+}
