@@ -301,6 +301,10 @@ type MapExpr struct {
 	Keys   []Node // key expressions (string literals or arbitrary exprs)
 	Values []Node
 	Mut    bool
+	// Anon marks the anonymous-object form `.{ field = expr }`, which parses to
+	// a map keyed by the field names. It is not a map literal: the checker types
+	// it against an expected object's fields, not as {K: V}.
+	Anon bool
 }
 
 // ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a

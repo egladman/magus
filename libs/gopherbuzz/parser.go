@@ -2204,7 +2204,7 @@ func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
+	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Anon: true}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		nameTok, err := p.eatIdent()
 		if err != nil {
