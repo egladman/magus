@@ -48,6 +48,48 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the
   live tools. A skill that mentions this repo's specifics is a bug.
 
+## 3b. Mark the why, so `--simple` can withhold it
+
+Every skill ships in two permutations from ONE body. Bracket the prose that
+only the full one keeps:
+
+```markdown
+Do not read `MAGUS.md` for this<!-- why --> - it is a generated index for
+human readers, and a brief describing stale structure is worse than none<!-- /why -->.
+
+<!-- why -->WRONG: guess the URL.
+CORRECT: read `llms.txt`, then fetch the entry's Markdown.<!-- /why -->
+```
+
+Unmarked text is in both. The markers are HTML comments, so a marked file
+renders identically either way and neither installed copy carries scaffolding.
+One pair covers a trailing clause and a whole block - the span between them is
+taken verbatim, newlines included.
+
+The test to apply per sentence: **would a capable reader still do the right
+thing without this?** Yes -> mark it. No -> it is a step, not a rationale;
+leave it unmarked and rewrite it as an imperative. That judgement IS the
+curation; nothing is summarized, and there is no second file to keep in sync.
+
+Rules:
+
+- Never mark a step, a command, a flag, a path, or a WRONG/CORRECT pair whose
+  CORRECT half carries the instruction. Mark failure modes, war stories,
+  "otherwise X" clauses, and worked examples that only illustrate.
+- Keep the imperative grammatical after the cut. `foo<!-- why --> - because
+  bar<!-- /why -->.` reads as `foo.`; a mid-clause cut reads as damage.
+- Unbalanced or nested markers are a hard error at install, not a warning.
+- `TestEveryEmbeddedSkillHasBothPermutations` fails for any skill whose
+  permutations are byte-identical, so a skill with no marked rationale is
+  caught rather than silently making `--simple` a lie for that one.
+
+Verify by installing both and reading the short one end to end:
+
+```sh
+magus agent install /tmp/full --force && magus agent install /tmp/short --simple --force
+diff /tmp/full/magus-vcs/SKILL.md /tmp/short/magus-vcs/SKILL.md
+```
+
 ## 4. Breadcrumbs are load-bearing
 
 magus's cross-link discipline: every surface mints a stable, resolvable ID -

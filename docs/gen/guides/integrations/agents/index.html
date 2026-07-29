@@ -83,12 +83,12 @@
           <li><a href="../../../guides/integrations/mcp/" title="MCP">MCP</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#parity-across-hosts" title="Parity across hosts">Parity across hosts</a></li><li><a href="#claude-code" title="Claude Code">Claude Code</a></li></ul></li><li><a href="#hook-templates" title="Hook templates">Hook templates</a><ul><li><a href="#how-they-fit-together" title="How they fit together">How they fit together</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
+        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#two-permutations---simple" title="Two permutations: --simple">Two permutations: --simple</a></li><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#parity-across-hosts" title="Parity across hosts">Parity across hosts</a></li><li><a href="#claude-code" title="Claude Code">Claude Code</a></li></ul></li><li><a href="#hook-templates" title="Hook templates">Hook templates</a><ul><li><a href="#how-they-fit-together" title="How they fit together">How they fit together</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">35 min read</small>
+    <small class="reading-time" title="Estimated reading time">37 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
@@ -213,6 +213,7 @@ unless you pass a destination directory. Two subcommands and two output modes
 cover every install case.</p>
 <pre><code class="language-sh">magus agent install .claude/skills          # write to repo-relative dir; refuses to overwrite
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
+magus agent install .claude/skills --simple # the shorter permutation (see below)
 magus agent install-agents-md               # write/refresh the AGENTS.md managed section
 magus agent install --tar                   # stream a tar of every skill to stdout
 magus agent install-agents-md --tar         # stream a tar containing AGENTS.md to stdout
@@ -239,8 +240,66 @@ magus agent install --tar | tar -xf - -C /tmp/skills   # preferred
 fresh install (or a <code>--force</code> refresh) before it can invoke the new skills - an
 already-open session keeps the skill set it launched with. The same launch-time
 rule applies to MCP tools; see <a href="../mcp/">MCP</a> for connecting the daemon.</p>
+<h3 id="two-permutations---simple">Two permutations: <code>--simple</code></h3>
+<p>Every skill ships in two forms, and <code>--simple</code> picks the shorter one:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th></th>
+<th>what it carries</th>
+<th>who it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>default</td>
+<td>the imperative steps, plus the rationale for each - why it is the right move, and what goes wrong otherwise</td>
+<td>a reader that benefits from the why, or any model you have not measured</td>
+</tr>
+<tr>
+<td><code>--simple</code></td>
+<td>the imperative steps alone</td>
+<td>a capable model that infers the why, when the context is better spent on the task</td>
+</tr>
+</tbody>
+</table></figure>
+<p><strong>Both are curated.</strong> This is the part worth being precise about, because the
+obvious guess is wrong: the simple form is not a summary, not a truncation, and
+not generated by a model. There is exactly one hand-written body per skill, and
+its author marks the spans that only the full form keeps. So the two can never
+come to <a class="code-xref" href="../../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> different behaviour - there is one source of truth to edit, and
+one to review.</p>
+<p>They also <a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> together. The installed file's stamp names which form you have:</p>
+<pre><code class="language-yaml">metadata:
+  agent-skill-version: 19
+  knowledge-schema-version: 6
+  skill-content: 45653b90928c
+  skill-variant: simple
+</code></pre>
+<p><code>skill-content</code> is the digest of the <strong>source</strong> body, so it is identical for both
+forms. That is deliberate: a per-form digest would let a <code>--simple</code> install look
+current against a source its full sibling had already outgrown. <code>magus graph verify</code> compares the version and the digest, so it reports staleness the same way
+whichever form is installed, and switching between them is an ordinary
+<code>--force</code> reinstall:</p>
+<pre><code class="language-sh">magus agent install .claude/skills --simple --force   # switch to the short form
+magus agent install .claude/skills --force            # switch back
+</code></pre>
+<h4 id="why-the-choice-exists-at-all">Why the choice exists at all</h4>
+<p>A skill is a bet about what the reader cannot infer, and that bet ages. Models
+keep getting better at inferring the why, so the rationale that earns its context
+today is the same text that is dead weight later - and a skill nobody revisits
+quietly becomes a brick: bytes in every session that buy nothing.</p>
+<p>The flag makes that reviewable instead of invisible. Re-asking &quot;does this still
+earn its context?&quot; against the models you actually run is the audit; the two forms
+are what let you answer it by installing one and comparing, rather than by
+rewriting anything. If the simple form works for your host, the rationale in the
+full one is documentation for humans rather than instruction for the model - which
+is a useful thing to learn about your own skill set.</p>
+<p>Start with the default. Reach for <code>--simple</code> when you have a specific reason: a
+measured context budget, or a model you have watched succeed without the
+rationale. It is a bet on the reader, so make it on evidence.</p>
 <p>Every installed file (and the AGENTS.md section marker) carries a generated
-stamp with the agent-skill <a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> and the knowledge schema version.
+stamp with the agent-skill version and the knowledge schema version.
 <code>magus graph verify</code> compares those stamps against the running binary for
 every well-known location it finds installed (<code>.agents/skills</code>,
 <code>.claude/skills</code>, <code>.opencode/skills</code>, and the AGENTS.md section), so a magus
@@ -359,7 +418,7 @@ a concurrent agent's, and nothing recovers it - so it is denied. A hand-edited
 generated file is wasteful, not destructive: regenerating erases it. magus knows
 definitively that the file is generated, and still only explains, because
 blocking would treat the agent as unable to learn when the classification it
-needs is one <code>magus <a class="code-xref" href="../../../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> file</code> away. An agent told why an edit was futile
+needs is one <code>magus describe file</code> away. An agent told why an edit was futile
 does not repeat it; an agent whose call was rejected has only lost a turn.</p>
 <p>The practical effect is that magus stays out of the way. It is the same standard
 the tool holds itself to everywhere else - never get between someone and the
@@ -1106,8 +1165,8 @@ model; the value is in the graph and the curation.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../guides/integrations/"><span class="related-card-title">Integrations</span><span class="related-card-desc">Pages in this section.</span></a>
-        <a class="related-card" href="../../../guides/integrations/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
         <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../guides/integrations/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
         <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
     </div>
   </section>
@@ -1160,6 +1219,10 @@ captured output; it appears on each target's line, and
 <code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
 it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
 whole <code>magus</code> invocation). See <a href="../../../concepts/output-refs/">output-refs</a>.</p>
+<h3 id="span">Span</h3>
+<p>OpenTelemetry's name for one unit of work under a trace - a target execution,
+whose sub-operations are child spans. An output reference points at a span's
+captured output. See <a href="../../../concepts/telemetry/">telemetry</a>.</p>
 <h3 id="snapshot">Snapshot</h3>
 <p>A point-in-time view of live state - the pool's occupancy or a tick of exported
 metrics - as opposed to accumulated history. See <a href="../../../guides/daemon/">daemon</a>.</p>

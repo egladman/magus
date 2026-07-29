@@ -89,6 +89,20 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "case, where it preserves the previous one-line ergonomics. Absolute")
 	fmt.Fprintln(w, "destinations are refused unless --global is set, to keep magus from")
 	fmt.Fprintln(w, "silently writing outside the working tree.")
+	fmt.Fprintln(w, "")
+	// Listed here because this Usage replaces the FlagSet's own: without it the
+	// flags are reachable but undiscoverable, and an agent told to "defer to -h"
+	// would conclude they do not exist.
+	fmt.Fprintln(w, "install flags:")
+	fmt.Fprintln(w, "  --dir <path>   repo directory to install into (default .)")
+	fmt.Fprintln(w, "  --force        overwrite existing installed skill files")
+	fmt.Fprintln(w, "  --simple       install the shorter curated permutation of each skill:")
+	fmt.Fprintln(w, "                 the imperative steps without the rationale, for a reader")
+	fmt.Fprintln(w, "                 that infers the why. Both permutations are hand-authored")
+	fmt.Fprintln(w, "                 from one source and share one content digest, so they go")
+	fmt.Fprintln(w, "                 stale together and `graph verify` treats them alike.")
+	fmt.Fprintln(w, "  --tar          stream a tar archive to stdout instead of writing files")
+	fmt.Fprintln(w, "  --global       allow absolute destination paths in write mode")
 }
 
 func agentUsageErr() error {
@@ -107,6 +121,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
+	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the imperative steps without the rationale, for a reader that infers the why")
 	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
 	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
@@ -123,7 +138,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		if len(dests) == 1 {
 			prefix = dests[0]
 		}
-		body, err := agentSkills.SkillTar(prefix)
+		body, err := agentSkills.SkillTar(prefix, agent.VariantOf(*simple))
 		if err != nil {
 			return err
 		}
@@ -147,7 +162,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 
 	var written []string
 	for _, dest := range dests {
-		w, err := agentSkills.WriteSkillTree(*dir, dest, *force)
+		w, err := agentSkills.WriteSkillTree(*dir, dest, *force, agent.VariantOf(*simple))
 		if err != nil {
 			return err
 		}
