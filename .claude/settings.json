@@ -10,6 +10,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; exec \"$MAGUS_BIN\" agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }

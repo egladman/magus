@@ -3,7 +3,7 @@
   "projects": [
     {
       "path": ".",
-      "name": "magus",
+      "name": "plans-buzz-parity-handoff-9b8119",
       "engine": "buzz",
       "nodes": [
         {
@@ -64,7 +64,9 @@
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
           "outputs": [
-            "manpage/*.1"
+            {
+              "glob": "manpage/*.1"
+            }
           ]
         },
         {
@@ -72,7 +74,9 @@
           "declared": "bindings_generate",
           "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
           "outputs": [
-            "host/gen/*.go"
+            {
+              "glob": "host/gen/*.go"
+            }
           ]
         },
         {
@@ -85,7 +89,9 @@
           "declared": "mocks_generate",
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
           "outputs": [
-            "**/gen/mocks/*.go"
+            {
+              "glob": "**/gen/mocks/*.go"
+            }
           ]
         },
         {
@@ -98,7 +104,9 @@
           "declared": "md_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "outputs": [
-            "MAGUS.md"
+            {
+              "glob": "MAGUS.md"
+            }
           ]
         },
         {
@@ -106,7 +114,9 @@
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
           "outputs": [
-            "gen/*.json"
+            {
+              "glob": "gen/*.json"
+            }
           ]
         },
         {
@@ -148,7 +158,9 @@
             }
           ],
           "outputs": [
-            "dist/*"
+            {
+              "glob": "dist/*"
+            }
           ]
         },
         {
@@ -445,12 +457,24 @@
             }
           ],
           "outputs": [
-            "reference/buzz/*.md",
-            "reference/config.md",
-            "concepts/spells/*.md",
-            "concepts/spells.md",
-            "reference/manpage/*.md",
-            "concepts/knowledge.md"
+            {
+              "glob": "reference/buzz/*.md"
+            },
+            {
+              "glob": "reference/config.md"
+            },
+            {
+              "glob": "concepts/spells/*.md"
+            },
+            {
+              "glob": "concepts/spells.md"
+            },
+            {
+              "glob": "reference/manpage/*.md"
+            },
+            {
+              "glob": "concepts/knowledge.md"
+            }
           ]
         },
         {
@@ -740,6 +764,13 @@
           "name": "pgo-generate",
           "declared": "pgo_generate",
           "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
+        },
+        {
+          "name": "conformance",
+          "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
+          "dependencies": [
+            "preflight"
+          ]
         }
       ]
     },
