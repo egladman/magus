@@ -75,7 +75,9 @@ stdout 'acme'
 # missingkey=error is on and the message names the contract.
 ! exec magus describe spells -o 'template={{.Name}}'
 stderr 'map has no entry for key "Name"'
-stderr 'e\.g\. \.name not \.Name'
+stderr '\.name, not \.Name'
+# The error must not only diagnose - it must say HOW to find the right names.
+stderr 'rerun it with a bare -o template'
 
 -- magus.yaml --
 concurrency: 2

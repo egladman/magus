@@ -125,7 +125,19 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 
 // writeTemplate executes a Go text/template body against v. The template sees the
 // SAME shape as -o json: field names are the json-tag keys ({{.path}}), NOT the
-// PascalCase Go struct fields. We guarantee that by first normalizing v through the
+// PascalCase Go struct fields.
+//
+// That choice is deliberate and is the kubectl -o go-template model rather than
+// docker --format's. -o json is the reference a template is authored against: a
+// reader runs the command with -o json, sees "cache_key", and writes {{.cache_key}}.
+// Binding to Go identifiers instead would name fields that appear in NO other output
+// format, leaving nothing to read them off, and would couple user templates to
+// internal field names so a rename breaks them silently. The json tags are already a
+// versioned wire contract; Go identifiers are not.
+//
+// The cost, accepted: the round-trip coerces numbers to float64 (see below), and a
+// caller who types the Go casing gets an error rather than a guess. Bare -o template
+// lists the available fields, and the execute error points at it. We guarantee that by first normalizing v through the
 // codec (marshal to JSON, then unmarshal into a plain any), so the template ranges
 // over map[string]any / []any exactly as -o json renders it. This makes -o json a
 // faithful reference for authoring templates (the kubectl -o go-template model), and
@@ -150,7 +162,12 @@ func writeTemplate(w io.Writer, v any, body string) error {
 		return fmt.Errorf("shape template data: %w", err)
 	}
 	if err := t.Execute(w, shaped); err != nil {
-		return fmt.Errorf("execute template: %w (template fields are the -o json names, e.g. .name not .Name; run the same command with a bare -o template to list them)", err)
+		// Names the contract AND the exact way to see it. A template error that only
+		// says "no entry for key" leaves the reader guessing at casing, which is the
+		// state this whole path was in when it rendered nothing and exited 0.
+		return fmt.Errorf("execute template: %w\n"+
+			"  template fields are the -o json names, not the Go field names: .name, not .Name\n"+
+			"  to list every field this command exposes, rerun it with a bare -o template (no '=' and no body)", err)
 	}
 	return nil
 }

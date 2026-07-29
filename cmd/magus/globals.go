@@ -39,7 +39,12 @@ var global globalFlags
 
 // template[=<body>]: a body renders a Go template; bare "-o template" lists the
 // output's fields (the json keys usable in -o json and -o template).
-var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") + "|template[=<go-template>]); default: text"
+// outputFormatHelp names the bare -o template form explicitly, because that is how a
+// caller discovers which field names a template may use - they are the -o json keys
+// (.name), not the Go field names (.Name), and nothing else advertises that.
+var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") +
+	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
+	"template fields (they are the -o json names)"
 
 func bindDisplayFlags(fs *flag.FlagSet) {
 	fs.StringVar(&global.output, "output", global.output, outputFormatHelp)
