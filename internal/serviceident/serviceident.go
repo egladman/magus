@@ -52,11 +52,35 @@ type Identity struct {
 // raw argv and the service does not participate in near-duplicate clustering.
 func (i Identity) IsContainer() bool { return i.Image != "" }
 
+// InstanceKey returns the key a RUNNING service may be shared under, namespacing
+// [Fingerprint] to one workspace.
+//
+// The two answer different questions and must not be collapsed. Fingerprint asks
+// "is this the same service config", which is workspace-independent and is what
+// near-duplicate clustering compares. This asks "may these two acquisitions share
+// one running process", which never spans workspaces: the daemon is a single
+// long-lived host that serves every workspace on the machine, so a bare
+// fingerprint would hand two checkouts declaring the same postgres:16 the SAME
+// container, and one workspace's test data would land in the other's database.
+//
+// root is the workspace root path, which is what a workspace IS. Two worktrees of
+// one repo are therefore separate workspaces and correctly get separate services:
+// their file state differs, so sharing a process between them would be wrong even
+// though the declared config is identical. An empty root (a bare `magus buzz`
+// script with no workspace) forms its own namespace rather than joining any real
+// workspace's.
+func InstanceKey(root string, s types.Service) string {
+	return root + "\x00" + Fingerprint(s)
+}
+
 // Fingerprint returns the exact-match sharing key: a hex hash of the service's
 // canonical identity. Identical config yields an identical fingerprint. For a
 // recognized container run the hash covers image+tag, container ports, declared
 // env, and mount targets; otherwise it covers the raw process argv verbatim
 // (conservative: any argv difference is a different fingerprint).
+//
+// This is config identity ONLY. To share a running instance, key on
+// [InstanceKey], which scopes it to a workspace.
 func Fingerprint(s types.Service) string {
 	id := Parse(s.Command)
 	h := sha256.New()

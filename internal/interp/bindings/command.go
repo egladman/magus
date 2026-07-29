@@ -78,7 +78,13 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 			Idle:      tgt.Service.Idle,
 			Distinct:  tgt.Service.Distinct,
 		}
-		if handled, serr := service.TrySupervise(ctx, serviceident.Fingerprint(svc), svc); handled {
+		// Scoped to the workspace: the daemon hosts services for every workspace on
+		// the machine, so a bare fingerprint would share one instance across them.
+		var root string
+		if ws := types.WorkspaceFromContext(ctx); ws != nil {
+			root = ws.Root()
+		}
+		if handled, serr := service.TrySupervise(ctx, serviceident.InstanceKey(root, svc), svc); handled {
 			return run.ExecResult{}, serr
 		}
 	}

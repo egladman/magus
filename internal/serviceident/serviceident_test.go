@@ -135,3 +135,43 @@ func TestClusterKey(t *testing.T) {
 	_, ok := ClusterKey(types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "."}}})
 	assert.False(t, ok)
 }
+
+// TestInstanceKeyScopesToWorkspace pins the boundary that keeps one workspace's
+// services out of another's. The daemon hosts services for every workspace on the
+// machine, so keying a running instance on the bare fingerprint would hand two
+// checkouts declaring the same postgres the SAME container.
+func TestInstanceKeyScopesToWorkspace(t *testing.T) {
+	svc := dockerRun("-e", "POSTGRES_DB=api", "-p", "5432:5432", "postgres:16")
+
+	t.Run("same config in different workspaces does not share", func(t *testing.T) {
+		a := InstanceKey("/repos/alpha", svc)
+		b := InstanceKey("/repos/beta", svc)
+		assert.NotEqual(t, a, b, "identical services in separate workspaces must not share an instance")
+	})
+
+	t.Run("two worktrees of one repo do not share", func(t *testing.T) {
+		a := InstanceKey("/repos/alpha", svc)
+		b := InstanceKey("/repos/alpha/.claude/worktrees/feature", svc)
+		assert.NotEqual(t, a, b, "a worktree is its own workspace; its file state differs")
+	})
+
+	t.Run("same config in one workspace still shares", func(t *testing.T) {
+		assert.Equal(t, InstanceKey("/repos/alpha", svc), InstanceKey("/repos/alpha", svc),
+			"in-workspace dedup is the point and must survive scoping")
+	})
+
+	t.Run("different config in one workspace does not share", func(t *testing.T) {
+		other := dockerRun("-e", "POSTGRES_DB=web", "-p", "5432:5432", "postgres:16")
+		assert.NotEqual(t, InstanceKey("/repos/alpha", svc), InstanceKey("/repos/alpha", other))
+	})
+
+	t.Run("no workspace forms its own namespace", func(t *testing.T) {
+		assert.NotEqual(t, InstanceKey("", svc), InstanceKey("/repos/alpha", svc),
+			"a bare script must not join a real workspace's services")
+	})
+
+	t.Run("fingerprint stays workspace-independent", func(t *testing.T) {
+		assert.Equal(t, Fingerprint(svc), Fingerprint(svc),
+			"Fingerprint answers config identity only; clustering depends on that")
+	})
+}
