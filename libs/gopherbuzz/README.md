@@ -79,7 +79,18 @@ differences are deliberate, not pending:
   program does not control. Upstream's test asserts a collector ran after dropping a
   reference; Go's GC gives no such guarantee.
 
-One known divergence is ours rather than a missing feature: a compound assign
+Two known divergences are ours rather than missing features. The first is the
+more dangerous, because it answers rather than errors: **closures capture
+upvalues by VALUE**, a snapshot taken when the closure is created, so a closure
+that assigns to an enclosing local updates only its own copy. `var sum = 0;
+final add = fun (n: int) > void { sum = sum + n; }; add(5);` leaves `sum` at 0
+where upstream leaves it at 5. This is what blocks `functional.buzz`, whose
+`forEach` tests accumulate into an enclosing variable. Fixing it means boxing
+upvalues into cells rather than copying Values, which is a VM change, not a
+parser one. `parity_test.go` pins the current behaviour so a fix has to be
+deliberate.
+
+The second: a compound assign
 (`x op= v`) desugars to `x = x op v` sharing the target node, so the target is
 evaluated twice. `f().n += 1` calls `f()` twice where upstream calls it once.
 Harmless for the plain-variable and field cases that make up ordinary use, wrong
