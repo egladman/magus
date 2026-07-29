@@ -301,19 +301,18 @@ func newReplFooter(out io.Writer) *replFooter {
 	return &replFooter{region: tty.NewRegion(out, stickyFooterRows, tty.SystemProbe)}
 }
 
-// paint redraws the footer and returns the cursor to the transcript, so the prompt
-// printed next - and the characters the terminal echoes as the user types - land
-// above the region rather than inside it.
+// paint redraws the footer. It needs no cursor bookkeeping: Region painting is
+// cursor-transparent, so the prompt printed next - and the characters the terminal
+// echoes as the user types - land wherever the transcript had reached.
 func (f *replFooter) paint(state string) {
 	if f == nil || !f.region.Enabled() {
 		return
 	}
-	// Both errors are deliberately dropped rather than surfaced. A footer is
+	// The error is deliberately dropped rather than surfaced. A footer is
 	// decoration on an interactive session: a terminal that refuses the escape
 	// sequence should cost the reader a status line, never an aborted REPL or a
 	// diagnostic interleaved with their own typing.
 	_ = f.region.SetStatus(state)
-	_ = f.region.ReturnCursor()
 }
 
 func (f *replFooter) release() {

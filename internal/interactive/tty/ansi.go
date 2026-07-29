@@ -16,6 +16,7 @@ const (
 	el2           = "\x1b[2K"     // EL - erase the whole line, cursor unmoved.
 	ed            = "\x1b[J"      // ED - erase from cursor to end of screen.
 	cuu1          = "\x1b[1A"     // CUU - cursor up one row.
+	cuuFmt        = "\x1b[%dA"    // CUU - cursor up n rows.
 	home          = "\x1b[H"      // CUP with no args - cursor to row 1, col 1.
 	ed2           = "\x1b[2J"     // ED - erase the entire screen.
 	decstbmFmt    = "\x1b[%d;%dr" // DECSTBM - set scroll margins (top, bottom).

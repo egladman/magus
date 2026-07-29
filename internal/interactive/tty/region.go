@@ -3,6 +3,7 @@ package tty
 import (
 	"fmt"
 	"io"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -28,10 +29,29 @@ const (
 //     mode the user cannot escape.
 //   - On any non-TTY (pipe, file, CI log, `script`), every method
 //     degrades to plain line output so the caller does not branch.
+//   - THE CALLER'S CURSOR NEVER MOVES. Reserve makes room without
+//     shifting it relative to the caller's own text, every paint saves
+//     and restores it inside one write, and Release does not reposition
+//     it at all.
 //
-// That last property is the difference between a useful status area and
-// the full-screen takeovers some build tools use: the alternate screen
-// buffer (`\e[?1049h`) is never touched here.
+// That last property is what lets one type serve two very different
+// consumers. A logging caller interleaves its own scrolling output with
+// region repaints; an interactive caller holds a prompt and has the
+// terminal echoing keystrokes at the cursor. Neither can tolerate a
+// repaint that leaves the cursor parked in the region - the log lands in
+// the footer, or the user types over their own status line - and neither
+// should have to know the region's geometry to put it back. So the region
+// owns the rows it reserved and nothing else, and painting is invisible.
+//
+// The corollary is a rule about the terminal's cursor-save register: it is
+// a single global slot, so it is taken and released within one write and
+// never held across calls. An earlier version held it for the whole life
+// of the region so Release could restore it, which meant any repaint
+// clobbered the saved position and teardown reinstated the wrong one.
+//
+// The alternate screen buffer (`\e[?1049h`) is never touched, which is the
+// difference between a useful status area and the full-screen takeovers
+// some build tools use.
 //
 // A Region is not safe for concurrent use; callers serialise their own
 // writes (the cache's pretty handler holds its mutex across a record).
@@ -117,6 +137,16 @@ func (r *Region) Enabled() bool { return r.enabled }
 // applying stale margins would put the cursor outside the scroll region.
 // If the terminal has since become too small, the Region disables itself
 // and the caller falls back to plain output.
+//
+// It leaves the caller's cursor exactly where it found it, relative to the
+// caller's own output. That is the whole contract this type keeps (see
+// [Region]), and it is what the opening newlines are for: printing height
+// blank lines and stepping back up over them guarantees height rows exist
+// below the cursor without moving the cursor relative to the text. When the
+// cursor was already at the bottom, the screen scrolls and the transcript
+// slides up out of the way; when it was mid-screen, nothing scrolls and the
+// step back is exact. One sequence, correct either way, and it never
+// destroys a row the caller had written.
 func (r *Region) Reserve() error {
 	if !r.enabled || r.open {
 		return nil
@@ -134,22 +164,46 @@ func (r *Region) Reserve() error {
 	r.width, r.termHeight = width, termHeight
 
 	r.buf = r.buf[:0]
-	// Save the cursor BEFORE setting margins: DECSTBM homes the cursor,
-	// so a save afterwards would record row 1 rather than where the
-	// user's output had reached.
+	// Make room first, before any margin is set, so the scroll is an ordinary
+	// one the terminal performs over the whole screen.
+	r.buf = append(r.buf, strings.Repeat("\n", r.height)...)
+	r.buf = append(r.buf, fmt.Sprintf(cuuFmt, r.height)...)
+	// Save AFTER making room and BEFORE the margins: DECSTBM homes the cursor
+	// in some terminals, so a save afterwards would record row 1.
 	r.buf = append(r.buf, cursorSave...)
 	// Scrolling is confined to the rows above the region.
 	r.buf = append(r.buf, fmt.Sprintf(decstbmFmt, 1, r.firstRow()-1)...)
-	// Park at the top of the region and clear it so a previous run's
-	// text cannot show through.
+	// Clear the zone so a previous run's text cannot show through, then put
+	// the caller's cursor back.
 	r.buf = append(r.buf, fmt.Sprintf(cupFmt, r.firstRow(), 1)...)
 	r.buf = append(r.buf, ed...)
+	r.buf = append(r.buf, cursorRestore...)
 	if _, err := r.w.Write(r.buf); err != nil {
 		return err
 	}
 	r.open = true
 	r.cursorRow = r.failureFirstRow()
 	return nil
+}
+
+// paint wraps one region write so the caller's cursor is saved, the region
+// row is addressed, and the cursor is put back - all in a single write to
+// the terminal.
+//
+// Every write into the zone goes through this, which is what makes painting
+// invisible: a caller mid-line, or holding a prompt, sees nothing move. The
+// save register is taken and released inside this one sequence and is never
+// held across calls, because it is a single global slot - the terminal has
+// exactly one - and treating it as ownable for the life of the region is
+// what previously made a repaint and a teardown fight over it.
+func (r *Region) paint(row int, body func()) error {
+	r.buf = r.buf[:0]
+	r.buf = append(r.buf, cursorSave...)
+	r.buf = append(r.buf, fmt.Sprintf(cupFmt, row, 1)...)
+	body()
+	r.buf = append(r.buf, cursorRestore...)
+	_, err := r.w.Write(r.buf)
+	return err
 }
 
 // WriteLine renders msg as one line inside the region, in bold red so a
@@ -192,18 +246,17 @@ func (r *Region) WriteLine(msg string) error {
 		return err
 	}
 
-	r.buf = r.buf[:0]
-	// Address this line's row explicitly. Without it each write would
-	// resume wherever the last one left the cursor and every line in the
-	// region would run together on a single row.
-	r.buf = append(r.buf, fmt.Sprintf(cupFmt, r.cursorRow, 1)...)
-	r.buf = append(r.buf, sgrBoldRed...)
-	// EL from column 1 clears the whole row, so a short message cannot
-	// leave a longer predecessor's tail behind it.
-	r.buf = append(r.buf, el...)
-	r.buf = append(r.buf, Clip(msg, r.width-1)...)
-	r.buf = append(r.buf, sgrReset...)
-	if _, err := r.w.Write(r.buf); err != nil {
+	// paint addresses the row and restores the cursor; without an explicit row
+	// each write would resume wherever the last left off and every line in the
+	// region would run together.
+	if err := r.paint(r.cursorRow, func() {
+		r.buf = append(r.buf, sgrBoldRed...)
+		// EL from column 1 clears the whole row, so a short message cannot
+		// leave a longer predecessor's tail behind it.
+		r.buf = append(r.buf, el...)
+		r.buf = append(r.buf, Clip(msg, r.width-1)...)
+		r.buf = append(r.buf, sgrReset...)
+	}); err != nil {
 		return err
 	}
 
@@ -217,19 +270,31 @@ func (r *Region) WriteLine(msg string) error {
 	return nil
 }
 
-// Release restores the terminal: scroll margins cleared, cursor put back
-// where it was when the region opened. Idempotent and safe to defer.
+// Release hands the terminal back: the zone is cleared and the scroll margins
+// reset. Idempotent and safe to defer.
+//
+// It does NOT reposition the cursor, and that is the point rather than an
+// omission. Because nothing here ever moved the caller's cursor, it is already
+// sitting exactly after the caller's last line of output - which is where the
+// shell prompt belongs. The previous version restored a position saved when the
+// region opened, thousands of scrolled lines earlier in a long run, which put
+// the prompt back into the middle of the transcript and let it overwrite the
+// output the run had just produced.
 func (r *Region) Release() error {
 	if !r.enabled || !r.open {
 		return nil
 	}
-	r.buf = r.buf[:0]
-	r.buf = append(r.buf, decstbmReset...)
-	r.buf = append(r.buf, cursorRestore...)
-	if _, err := r.w.Write(r.buf); err != nil {
+	// Clear the zone through paint (cursor-transparent), then give the rows back.
+	if err := r.paint(r.firstRow(), func() {
+		r.buf = append(r.buf, ed...)
+	}); err != nil {
+		return err
+	}
+	if _, err := r.w.Write([]byte(decstbmReset)); err != nil {
 		return err
 	}
 	r.open = false
+	r.statusActive = false
 	return nil
 }
 
@@ -327,40 +392,12 @@ func (r *Region) SetStatus(msg string) error {
 		}
 	}
 
-	r.buf = r.buf[:0]
-	r.buf = append(r.buf, fmt.Sprintf(cupFmt, r.firstRow(), 1)...)
-	r.buf = append(r.buf, sgrDim...)
-	r.buf = append(r.buf, el...)
-	r.buf = append(r.buf, Clip(msg, r.width-1)...)
-	r.buf = append(r.buf, sgrReset...)
-	_, err := r.w.Write(r.buf)
-	return err
-}
-
-// ReturnCursor parks the cursor at column 1 of the last row ABOVE the region,
-// which is where a caller that owns its own cursor should resume writing.
-//
-// It exists for the interactive case. [SetStatus] leaves the cursor inside the
-// region, which is harmless for a caller whose next write addresses a row anyway
-// (that is every logging consumer), and fatal for one holding a prompt: the cursor
-// sits outside the scroll region, so the next thing printed - and every character
-// the terminal echoes as the user types - lands in the footer instead of the
-// transcript.
-//
-// The obvious alternative is for SetStatus to save and restore the cursor itself.
-// It cannot: [Reserve] already holds the terminal's single cursor-save slot
-// (\e[s) for the whole life of the region so [Release] can restore it, and a
-// per-repaint save would clobber that, leaving Release to restore wherever the last
-// repaint happened. So the caller that owns the cursor is the one told where to put
-// it back, and Region's save slot stays untouched.
-//
-// A disabled Region does nothing, so a piped or non-TTY caller needs no branch.
-func (r *Region) ReturnCursor() error {
-	if !r.enabled || !r.open {
-		return nil
-	}
-	_, err := fmt.Fprintf(r.w, cupFmt, r.firstRow()-1, 1)
-	return err
+	return r.paint(r.firstRow(), func() {
+		r.buf = append(r.buf, sgrDim...)
+		r.buf = append(r.buf, el...)
+		r.buf = append(r.buf, Clip(msg, r.width-1)...)
+		r.buf = append(r.buf, sgrReset...)
+	})
 }
 
 // ellipsis marks a clipped line. Three ASCII dots rather than U+2026

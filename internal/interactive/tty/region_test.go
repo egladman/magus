@@ -237,7 +237,11 @@ func TestRegionReleaseRestoresTheTerminal(t *testing.T) {
 	require.NoError(t, r.Release())
 	got := buf.String()
 	assert.Contains(t, got, decstbmReset, "Release must clear the scroll margins")
-	assert.Contains(t, got, cursorRestore, "Release must restore the saved cursor")
+	// The restore here pairs the clearing paint's OWN save, within one write. It is
+	// not a session-old position being reinstated: Release deliberately leaves the
+	// caller's cursor alone, since nothing ever moved it. See
+	// TestReleaseGivesTheRowsBackWithoutRepositioning.
+	assert.Contains(t, got, cursorRestore, "the clearing paint restores the cursor it saved")
 }
 
 func TestRegionReleaseIsIdempotent(t *testing.T) {
@@ -459,48 +463,143 @@ func TestRegionReleasesRowsWhenAResizeMakesItUnviable(t *testing.T) {
 	assert.Contains(t, out, "after", "the failure still reaches the user, plainly")
 }
 
-// TestReturnCursorParksAboveTheRegion pins the interactive contract. SetStatus
-// leaves the cursor inside the region; a caller holding a prompt needs it back on
-// the transcript's last row, or the prompt and every echoed keystroke land in the
-// footer. Row is termHeight-height, i.e. the row just above firstRow.
-func TestReturnCursorParksAboveTheRegion(t *testing.T) {
-	var buf ttyBuf
-	r := NewRegion(&buf, 1, terminal(80, 24))
-	require.True(t, r.Enabled())
-	require.NoError(t, r.Reserve())
-
-	buf.Reset()
-	require.NoError(t, r.ReturnCursor())
-	assert.Equal(t, "\x1b[23;1H", buf.String(),
-		"parks at column 1 of the last scrolling row, one above the 1-row region")
+// balancedSaves reports how the save/restore register is used across out: how many
+// times it is taken, and whether it was ever taken twice without an intervening
+// release. Nesting is the specific failure this type had - a repaint taking the
+// slot a reservation was still holding - so it is asserted directly rather than
+// inferred from a byte comparison.
+func balancedSaves(t *testing.T, out string) (saves int, nested bool) {
+	t.Helper()
+	depth := 0
+	for i := 0; i < len(out); i++ {
+		switch {
+		case strings.HasPrefix(out[i:], cursorSave):
+			depth++
+			saves++
+			if depth > 1 {
+				nested = true
+			}
+		case strings.HasPrefix(out[i:], cursorRestore):
+			depth--
+		}
+	}
+	if depth != 0 {
+		t.Fatalf("save/restore left unbalanced (depth %d) in %q", depth, out)
+	}
+	return saves, nested
 }
 
-// TestReturnCursorDoesNotTouchTheSaveSlot is the reason ReturnCursor exists at all
-// rather than SetStatus saving and restoring around its repaint: Reserve holds the
-// terminal's single cursor-save slot for the region's whole life so Release can use
-// it, and a per-repaint save would clobber it.
-func TestReturnCursorDoesNotTouchTheSaveSlot(t *testing.T) {
+// TestReserveMakesRoomWithoutMovingTheCallersCursor pins the reservation half of
+// the transparency contract. The newlines guarantee the zone exists; the matching
+// cursor-up means the caller's cursor ends where its own text left it, so nothing
+// jumps and no written row is clobbered.
+func TestReserveMakesRoomWithoutMovingTheCallersCursor(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 2, terminal(80, 24))
+	require.NoError(t, r.Reserve())
+
+	got := buf.String()
+	assert.Contains(t, got, "\n\n", "two blank lines make room for a 2-row region")
+	assert.Contains(t, got, "\x1b[2A", "and the cursor steps back up over exactly those rows")
+	assert.Less(t, strings.Index(got, "\x1b[2A"), strings.Index(got, cursorSave),
+		"room is made before the cursor is saved, so the save records the real position")
+	assert.Less(t, strings.Index(got, cursorSave), strings.Index(got, "\x1b[1;22r"),
+		"and the save precedes DECSTBM, which homes the cursor in some terminals")
+	assert.True(t, strings.HasSuffix(got, cursorRestore),
+		"the reservation ends by putting the caller's cursor back")
+
+	saves, nested := balancedSaves(t, got)
+	assert.Equal(t, 1, saves)
+	assert.False(t, nested)
+}
+
+// TestPaintingIsCursorTransparent is the invariant every consumer depends on and
+// none of them could rely on before: a status repaint or a failure line must not
+// move where the caller was writing.
+//
+// The cache handler interleaves paintStatus with its own scrolling output, and the
+// REPL paints between printing a prompt and reading a line. Both were previously
+// left with the cursor parked inside the region, so the next thing either printed
+// landed in the footer.
+func TestPaintingIsCursorTransparent(t *testing.T) {
+	for name, paint := range map[string]func(r *Region) error{
+		"SetStatus": func(r *Region) error { return r.SetStatus("3 running") },
+		"WriteLine": func(r *Region) error { return r.WriteLine("boom") },
+		"Release":   func(r *Region) error { return r.Release() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var buf ttyBuf
+			r := NewRegion(&buf, 2, terminal(80, 24))
+			require.NoError(t, r.Reserve())
+
+			buf.Reset()
+			require.NoError(t, paint(r))
+			got := buf.String()
+
+			require.NotEmpty(t, got)
+			assert.True(t, strings.HasPrefix(got, cursorSave), "the write opens by saving the cursor")
+			saves, nested := balancedSaves(t, got)
+			assert.Equal(t, 1, saves, "exactly one save per write, never held across calls")
+			assert.False(t, nested, "the register is a single global slot; nesting loses a position")
+		})
+	}
+}
+
+// TestReleaseGivesTheRowsBackWithoutRepositioning pins the teardown. Nothing moved
+// the caller's cursor, so it already sits after the caller's last line - which is
+// where the shell prompt belongs. Restoring a position saved when the region opened
+// (the old behaviour) put the prompt back into the middle of the transcript.
+func TestReleaseGivesTheRowsBackWithoutRepositioning(t *testing.T) {
 	var buf ttyBuf
 	r := NewRegion(&buf, 2, terminal(80, 24))
 	require.NoError(t, r.Reserve())
 
 	buf.Reset()
+	require.NoError(t, r.Release())
+	got := buf.String()
+
+	assert.Contains(t, got, ed, "the zone is cleared so the footer does not linger")
+	assert.Contains(t, got, decstbmReset, "and the rows are given back")
+	assert.True(t, strings.HasSuffix(got, decstbmReset),
+		"margins are reset last, after the cursor has been put back")
+	assert.Equal(t, 1, strings.Count(got, cursorRestore),
+		"one restore, pairing the clear's own save - not a session-old position")
+}
+
+// TestReserveThenPaintThenReleaseNeverNestsSaves is the sequence test: the whole
+// lifecycle in order, asserting the register is taken and released cleanly at every
+// step. This is what a byte-level assertion on any single method cannot show.
+func TestReserveThenPaintThenReleaseNeverNestsSaves(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 3, terminal(80, 24))
+
+	require.NoError(t, r.Reserve())
 	require.NoError(t, r.SetStatus("running"))
-	require.NoError(t, r.ReturnCursor())
-	assert.NotContains(t, buf.String(), cursorSave,
-		"a repaint must not re-save; Release would then restore the repaint position")
+	require.NoError(t, r.WriteLine("first failure"))
+	require.NoError(t, r.SetStatus("running, 1 failed"))
+	require.NoError(t, r.WriteLine("second failure"))
+	require.NoError(t, r.Release())
+
+	saves, nested := balancedSaves(t, buf.String())
+	assert.False(t, nested, "no paint may take the register while another holds it")
+	assert.Equal(t, 6, saves, "one per write: reserve, 2 status, 2 lines, release")
+}
+
+// TestReleaseIsIdempotentAndResetsTheStatusRow keeps a second Release from emitting
+// a stray reset, and makes a re-Reserve start with the full failure zone rather than
+// silently keeping a status row the caller has not re-claimed.
+func TestReleaseIsIdempotentAndResetsTheStatusRow(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 3, terminal(80, 24))
+	require.NoError(t, r.Reserve())
+	require.NoError(t, r.SetStatus("running"))
+	require.NoError(t, r.Release())
 
 	buf.Reset()
 	require.NoError(t, r.Release())
-	assert.Contains(t, buf.String(), cursorRestore, "Release still restores Reserve's save")
-}
+	assert.Empty(t, buf.String(), "a second Release writes nothing")
 
-// TestReturnCursorIsSafeWhenDisabled keeps the caller branch-free: off a TTY every
-// region method is a no-op, so a piped REPL session emits no escape sequences.
-func TestReturnCursorIsSafeWhenDisabled(t *testing.T) {
-	var buf ttyBuf
-	r := NewRegion(&buf, 1, notATerminal())
-	require.False(t, r.Enabled())
-	require.NoError(t, r.ReturnCursor())
-	assert.Empty(t, buf.String(), "a disabled region writes nothing")
+	require.NoError(t, r.Reserve())
+	assert.Equal(t, r.firstRow(), r.cursorRow,
+		"a re-reserved region starts with its whole zone, no phantom status row")
 }
