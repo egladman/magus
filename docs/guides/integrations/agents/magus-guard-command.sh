@@ -11,6 +11,8 @@
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
+#                    host can choose its own fail-open or fail-closed stance
 #
 # The defaults are Claude Code's event and response shape.
 #
@@ -27,9 +29,10 @@
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-  printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
+  printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
   exit 0
 fi
 

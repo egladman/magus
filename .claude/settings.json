@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/templates/agent-hooks/magus-guard-command.sh",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/guides/integrations/agents/magus-guard-command.sh",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/templates/agent-hooks/magus-guard-path.sh",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/guides/integrations/agents/magus-guard-path.sh",
             "timeout": 10
           }
         ]
