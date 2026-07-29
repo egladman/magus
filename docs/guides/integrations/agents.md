@@ -310,22 +310,38 @@ a guard that errors on every tool call is worse than no guard.
 ### Parity across hosts
 
 Every host gets the same RULES - they come from one binary, and none of them is
-per-host. What differs is how much of the verdict a host's hook surface can
-carry, so the gaps belong in a table rather than in a reader's assumptions. The
-templates under `docs/guides/integrations/agents/` are written to close every gap the
-host allows.
+per-host. What differs is how much of a verdict a host's hook surface can carry.
+The templates close every gap the host allows; the rest is recorded here rather
+than left to be discovered.
 
 | | command rules | declared-output rule | `deny` reaches the model | `advise` reaches the model |
 | --- | --- | --- | --- | --- |
-| Claude Code | yes | yes (`Edit\|Write\|NotebookEdit`) | yes | yes (`additionalContext`) |
-| OpenCode | yes | yes (`edit`/`write` tools) | yes (thrown) | no - logged for the human instead |
-| Codex | yes, if you wire a shell hook | not wired | depends on the host | depends on the host |
-| Cursor | yes (`beforeShellExecution`) | not wired | yes (`agent_message`) | no - collapses to allow |
+| Claude Code | yes (verified) | yes (verified) | yes | yes (`additionalContext`) |
+| Cursor | yes (verified) | **no template** | yes (`agent_message`) | no - collapses to allow |
+| OpenCode | written, unverified | written, unverified | yes (thrown) | no - logged for the human |
+| Codex | **no template** | **no template** | - | - |
 
-Two limits are the hosts', not magus's: OpenCode has no context-injection arm,
-and Cursor delivers `agent_message` only on a denial. Where `advise` cannot
-reach the model, the same guidance still ships in the installed skills, which is
-why the skills and the guard say the same things.
+"Verified" means executed against this binary with a real event on stdin.
+Claude Code is the setup this repository dogfoods, so both of its rules are
+exercised continuously; Cursor's command wrapper was run the same way. OpenCode's
+plugin cannot be executed here - it needs a Bun runtime and OpenCode's own tool
+names - so its tool identifiers (`edit`/`write`) and argument fields are written
+against the published spec and NOT confirmed. Treat it as a starting point and
+check it against OpenCode's current docs.
+
+Two known gaps, both waiting on ground truth about the host rather than on magus:
+
+- **Cursor has no declared-output guard.** Cursor's documented blocking hook is
+  `beforeShellExecution`; whether it exposes a *pre*-write file hook (as opposed
+  to an after-edit notification, which cannot block) is not established here. If
+  it does, the wrapper is four lines: set `HOST_EVENT_PATH`, `HOST_RESPONSE` and
+  `GUARD_UNAVAILABLE_RESPONSE`, then exec `magus-guard-path.sh`.
+- **Codex has no guard template.** Its skills and `AGENTS.md` guidance are
+  installed and current; only the hook half is missing.
+
+Both are additive: a host with no file-write hook still gets every command rule,
+and adding one later changes no magus code, because the rules and the verdict
+already exist and only the wrapper is host-shaped.
 
 This split is deliberate. magus owns the guard rules and the verdict, not
 integration code for each host. Maintaining a codec per host as the tools keep
