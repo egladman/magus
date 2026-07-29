@@ -11,11 +11,16 @@ import (
 )
 
 // WithDependsOn adds upstream project paths as dependencies. Paths may be repo-relative or dot-relative to the project.
+//
+// This is the one caller that wants ResolveDependsOn.s two-mode reading, because a human
+// hand-writes these entries and both spellings are a deliberate affordance. Paths that
+// come from an `import "project/<path>"` are always dot-relative and use
+// file.ResolveImport instead; do not collapse the two.
 func WithDependsOn(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
 		resolved := make([]string, 0, len(paths))
 		for _, raw := range paths {
-			r, err := file.Resolve(raw, p.Path)
+			r, err := file.ResolveDependsOn(raw, p.Path)
 			if err != nil {
 				return err
 			}

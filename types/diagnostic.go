@@ -96,6 +96,7 @@ const (
 	CrossOutputCycle          DiagnosticCode = "MGS1012"
 	CrossOutputGlobEscapes    DiagnosticCode = "MGS1013"
 	CrossOutputNotProduced    DiagnosticCode = "MGS1014"
+	CrossDepOwnerUnknown      DiagnosticCode = "MGS1015"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -138,6 +139,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnreachedFootprintDecl, RedundantFootprintGlob, UnknownTarget, TargetDependencyCycle,
 	TargetMissingContext, TargetNeverReplays, AffectedSetUncomputable,
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
+	CrossDepOwnerUnknown,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch,

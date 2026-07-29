@@ -287,10 +287,22 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			nodes := collectTargetNodes(src)
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
+					r, rerr := file.ResolveImport(ref.Project, p.Path)
+					if rerr != nil {
+						// A LOAD ERROR, matching the output side below rather than the
+						// input side's best-effort drop. A dropped dependency edge takes
+						// this project out of the changed project's affected set, so an
+						// edit upstream stops marking this project dirty and the next run
+						// replays a stale cache hit. That is the output-side consequence,
+						// not the input-side one, so it gets the output-side treatment.
+						return types.DiagnosticErrorf(types.CrossDepOwnerUnknown,
+							"%s: target %q: ctx.needs names a target in %q, which does not resolve to a path in this workspace",
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Project)
+					}
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
 					// unnecessary and rejected by the depgraph as a self-loop - same guard
 					// the input loop below applies.
-					if r, err := file.Resolve(ref.Project, p.Path); err == nil && r != p.Path {
+					if r != p.Path {
 						extra = append(extra, r)
 					}
 				}
@@ -299,8 +311,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
-				// owner is this project; a <alias>.file cross ref's owner is file.Resolve of
-				// the raw import path), then store the resolved InputRef. buildStep folds it
+				// owner is this project; a <alias>.file cross ref's owner is file.ResolveImport
+				// of the raw import path), then store the resolved InputRef. buildStep folds it
 				// to the cache key via joinGlob(Project, Glob). A cross
 				// input's owner is also unioned into DependsOn so a change to it marks this
 				// project affected (project.Affected is a DependsOn-reverse-closure); a
@@ -311,7 +323,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					owner := ref.Project
 					if owner == "" {
 						owner = p.Path // same-project input: owned by this project
-					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+					} else if r, rerr := file.ResolveImport(ref.Project, p.Path); rerr == nil {
 						owner = r
 					} else {
 						continue // unresolvable cross ref: drop (best-effort)
@@ -331,7 +343,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					owner := ref.Project
 					if owner == "" {
 						owner = p.Path // same-project output: owned by this project
-					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+					} else if r, rerr := file.ResolveImport(ref.Project, p.Path); rerr == nil {
 						owner = r
 					} else {
 						// A LOAD ERROR, not a best-effort drop as on the input side. The
@@ -384,8 +396,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		op := m.ws.Get(co.owner)
 		if op == nil {
 			// Also a load error, and for the same reason the unresolvable case above is:
-			// file.Resolve is path hygiene, not a registration check, so an import naming
-			// a directory with no project marker resolves cleanly and lands here. The ref
+			// file.ResolveImport is path hygiene, not a registration check, so an import
+			// naming a directory with no project marker resolves cleanly and lands here. The ref
 			// still reaches step.Outputs and is still snapshotted, but it gains no
 			// ordering edge and no owner records it, so nothing cleans it and the merge
 			// driver cannot regenerate it. The cross-INPUT side already fails loudly on
@@ -532,9 +544,13 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 
 // resolveNodeRefs rewrites each node's cross-project dependency paths and its
 // input owning-project paths from the form written in the magusfile to the
-// workspace-relative path the rest of the graph keys projects by — the same resolution
-// WithDependsOn does for project-level deps. For inputs: a same-project entry (empty
-// Project) takes this project's path; a cross-project entry resolves its raw import path.
+// workspace-relative path the rest of the graph keys projects by. NOT the same resolution
+// WithDependsOn does: a hand-written depends_on entry may be repo-relative OR dot-relative
+// (file.Resolve), while an import path is ALWAYS dot-relative to the importing magusfile
+// (file.ResolveImport). Reading a bare import as repo-relative is what silently mis-anchored
+// every descendant import and broke graph builds, so the two must stay split.
+// For inputs: a same-project entry (empty Project) takes this project's path; a
+// cross-project entry resolves its raw import path.
 // Resolving here lets assembleIO link every consumes edge by path.Join(Project, Rel)
 // against the file node in the owning project directly, without re-anchoring. An
 // unresolvable path is dropped (best-effort, matching the static extractor's never-error
@@ -544,7 +560,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 		if len(nodes[i].CrossDependencies) > 0 {
 			resolved := make([]types.CrossTargetRef, 0, len(nodes[i].CrossDependencies))
 			for _, ref := range nodes[i].CrossDependencies {
-				r, err := file.Resolve(ref.Project, projectPath)
+				r, err := file.ResolveImport(ref.Project, projectPath)
 				if err != nil {
 					continue
 				}
@@ -559,7 +575,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 					resolved = append(resolved, types.InputRef{Project: projectPath, Glob: ref.Glob})
 					continue
 				}
-				r, err := file.Resolve(ref.Project, projectPath)
+				r, err := file.ResolveImport(ref.Project, projectPath)
 				if err != nil {
 					continue
 				}

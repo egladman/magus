@@ -112,9 +112,9 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
-// detection). The project path is resolved with file.Resolve against the caller's
-// workspace-relative path — the same rule the static extractor uses, so the graph
-// edge and the runtime dispatch agree, and a ..-escape or absolute path is rejected
+// detection). The project path is resolved with file.ResolveImport against the caller's
+// workspace-relative path, the same rule describe.go applies to the extracted ref, so
+// the graph edge and the runtime dispatch agree, and a ..-escape or absolute path is rejected
 // rather than running a magusfile outside the workspace. The dep's canonical dir
 // comes from the workspace, keeping the coordinator's run-once/cycle key canonical.
 // It yields the caller's concurrency slot for the duration (the remote run needs
@@ -131,7 +131,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	if err != nil {
 		return fmt.Errorf("magus: cross-project dependency: %w", err)
 	}
-	depPath, err := file.Resolve(ref.Project, filepath.ToSlash(callerRel))
+	depPath, err := file.ResolveImport(ref.Project, filepath.ToSlash(callerRel))
 	if err != nil {
 		return err
 	}
