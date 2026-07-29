@@ -3,6 +3,7 @@ package magus
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -378,4 +379,50 @@ func orphanHint(elapsed time.Duration, owner string) string {
 // lock to a process that has finished. Best-effort, like the write.
 func (l *projectLocker) removeOwner(projectPath string) {
 	_ = os.Remove(l.ownerPath(projectPath))
+}
+
+// HeldLocks reports every per-project workspace lock currently held under cacheDir,
+// read from the owner sidecars.
+//
+// Reported as state, not as a fault. A held lock is what a normal mutating run looks
+// like; the reason to surface it is that a lock is held for exactly as long as its
+// holder lives, so one held by a process nobody remembers starting is invisible and
+// every other run just waits. Naming the holder makes that a fact instead of a hang.
+//
+// Best-effort throughout: an unreadable or malformed sidecar is skipped rather than
+// failing the caller, because status must never be the thing that breaks. A sidecar
+// with no live flock behind it can linger if a holder was killed between unlocking
+// and cleanup, so treat an entry as a strong hint, never as proof.
+func HeldLocks(cacheDir string) []types.StatusLock {
+	dir := filepath.Join(cacheDir, "locks")
+	var out []types.StatusLock
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, "lock.owner") {
+			return nil //nolint:nilerr // a walk error on one entry must not abort the report
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return nil
+		}
+		var o lockOwner
+		if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
+			return nil
+		}
+		rel, rerr := filepath.Rel(dir, filepath.Dir(path))
+		if rerr != nil {
+			return nil
+		}
+		project := filepath.ToSlash(rel)
+		if project == "." || project == "" {
+			project = "."
+		}
+		lock := types.StatusLock{Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir}
+		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
+			lock.Since = started
+		}
+		out = append(out, lock)
+		return nil
+	})
+	slices.SortFunc(out, func(a, b types.StatusLock) int { return strings.Compare(a.Project, b.Project) })
+	return out
 }

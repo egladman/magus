@@ -14,12 +14,15 @@ const worktreesDirRel = ".claude/worktrees"
 // checkStaleWorktrees reports checkout directories under .claude/worktrees that git
 // no longer tracks.
 //
-// This is a documented footgun that had no enforcement. A leftover directory is a
-// second copy of the workspace's spell sources, so magus discovers them twice at the
-// repo root: it trips MGS1002 (spell shadowed) and fails tests that walk the tree,
-// with a failure that points at the duplicate rather than at the cause. CLAUDE.md
-// has said "remove dead worktrees first" for a while, which made it a rule a human
-// had to remember rather than something the tool told you.
+// A leftover directory is a second copy of the workspace's spell sources, so magus
+// discovers them twice at the repo root: it trips MGS1002 (spell shadowed) and fails
+// tests that walk the tree, with a failure that points at the duplicate rather than
+// at the cause.
+//
+// Workspaces that hit this have tended to write "remove dead worktrees first" into
+// their contributor notes, which makes it a rule a human has to remember. A check
+// costs nothing to run and reports the cause directly, which is the whole argument
+// for it being here rather than in prose.
 //
 // Detection is by absence of the .git link file that git writes into a live
 // worktree and removes on `git worktree remove`/`prune`. A pruned-but-not-deleted

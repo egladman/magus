@@ -373,3 +373,52 @@ func TestOrphanHintEscalates(t *testing.T) {
 		t.Errorf("orphanHint with unreadable sidecar = %q, want it to escalate without a name", got)
 	}
 }
+
+// TestHeldLocksReportsHolders pins the status-surface half: a held lock is normal, so
+// this reports it as state, and the value is naming who holds what.
+func TestHeldLocksReportsHolders(t *testing.T) {
+	cache := t.TempDir()
+	l := newProjectLocker(cache, false)
+
+	if got := HeldLocks(cache); len(got) != 0 {
+		t.Fatalf("HeldLocks on a fresh cache = %v, want none", got)
+	}
+
+	relRoot, err := l.acquire(context.Background(), ".")
+	if err != nil {
+		t.Fatalf("acquire root: %v", err)
+	}
+	relWeb, err := l.acquire(context.Background(), "web/api")
+	if err != nil {
+		t.Fatalf("acquire web/api: %v", err)
+	}
+
+	held := HeldLocks(cache)
+	if len(held) != 2 {
+		t.Fatalf("HeldLocks = %d entries, want 2: %+v", len(held), held)
+	}
+	// Sorted by project, so the root sorts first.
+	if held[0].Project != "." || held[1].Project != "web/api" {
+		t.Errorf("projects = %q, %q; want \".\", \"web/api\" in sorted order", held[0].Project, held[1].Project)
+	}
+	for _, h := range held {
+		if h.PID != os.Getpid() {
+			t.Errorf("project %s: pid = %d, want %d", h.Project, h.PID, os.Getpid())
+		}
+		if h.Since.IsZero() {
+			t.Errorf("project %s: Since is zero; age is the signal that separates a peer from an abandoned holder", h.Project)
+		}
+		if h.Dir == "" {
+			t.Errorf("project %s: Dir is empty; it is what identifies a holder in a deleted worktree", h.Project)
+		}
+	}
+
+	relWeb()
+	if held := HeldLocks(cache); len(held) != 1 || held[0].Project != "." {
+		t.Errorf("after releasing web/api, HeldLocks = %+v; want only the root", held)
+	}
+	relRoot()
+	if held := HeldLocks(cache); len(held) != 0 {
+		t.Errorf("after releasing everything, HeldLocks = %+v; want none", held)
+	}
+}
