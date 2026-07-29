@@ -15,6 +15,7 @@ basic-types.buzz
 bitwise.buzz
 block-expression.buzz
 break-continue.buzz
+call-without-parentheses.buzz
 checked-subscript.buzz
 dead-branches.buzz
 debug.buzz

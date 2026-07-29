@@ -1161,6 +1161,10 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 			}
 			c.infer(v.Values[i])
 		}
+		// Record the resolution for the compiler, the same way an inferred enum
+		// case records its enum: this is the only point at which the object a
+		// bare `.{ ... }` fills is known.
+		v.ObjectName = ot.Name
 		return ot
 	}
 	// An annotated map literal passes its declared element types down, so a

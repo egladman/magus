@@ -807,3 +807,70 @@ fun probe() > int {
 }`)
 	assert.Equal(t, int64(0), v.AsInt(), "a closure mutating an enclosing local does not affect it")
 }
+
+func TestParity_AnonymousObjectLiteralBecomesTheExpectedObject(t *testing.T) {
+	// Resolved to a named object, `.{ ... }` gains that type's methods and the
+	// defaults of the fields it does not mention. As a plain map it would answer
+	// field reads but have neither.
+	v := evalParity(t, `
+object Payload {
+    data: str,
+    tag: str = "default",
+
+    fun describe() > str => "{this.data}/{this.tag}";
+}
+
+fun take(p: Payload) > str => p.describe();
+
+fun probe() > str {
+    return take(.{ data = "hello" });
+}`)
+	assert.Equal(t, "hello/default", v.AsString(), "the literal is built as the object, not as a map")
+}
+
+func TestParity_AnonymousObjectLiteralStaysAMapWithoutAnExpectedObject(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final info = .{ name = "joe" };
+    return info.name;
+}`)
+	assert.Equal(t, "joe", v.AsString(), "with no object to fill it remains a map")
+}
+
+func TestParity_CallWithoutParenthesesAroundAnObjectLiteral(t *testing.T) {
+	v := evalParity(t, `
+object Payload {
+    data: str,
+
+    fun len() => this.data.len();
+
+    fun join(other: Payload) => "{this.data}:{other.data}";
+}
+
+fun callMe(payload: Payload) => payload.len();
+
+fun probe() > str {
+    final len = callMe .{
+        data = "hello",
+    };
+    final payload = Payload{ data = "hello" };
+    final joined = payload.join .{
+        data = "world",
+    };
+    return "{len}/{joined}";
+}`)
+	assert.Equal(t, "5/hello:world", v.AsString(), "a lone object-literal argument may drop its parentheses")
+}
+
+func TestParity_DotStillMeansMemberAccess(t *testing.T) {
+	// The paren-free call only triggers on `.` followed by `{`; ordinary member
+	// access must be untouched.
+	v := evalParity(t, `
+object P { data: str }
+
+fun probe() > str {
+    final p = P{ data = "ok" };
+    return p.data;
+}`)
+	assert.Equal(t, "ok", v.AsString(), "a dot before an identifier is still member access")
+}

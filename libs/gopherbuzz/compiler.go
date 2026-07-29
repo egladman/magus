@@ -1629,6 +1629,22 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		}
 		c.chunk.Emit(vmpackage.OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
 	case *ast.MapExpr:
+		// An anonymous object literal the checker resolved to a named object is
+		// built as that object, so it carries the type's methods and its
+		// unmentioned fields' defaults. Without this it stays a map, which
+		// answers member reads but has none of the type's methods.
+		if v.ObjectName != "" {
+			lit := &ast.ObjectLit{Pos: v.Pos, TypeName: v.ObjectName, Mut: v.Mut}
+			for i, k := range v.Keys {
+				name, ok := k.(*ast.StringLit)
+				if !ok {
+					return fmt.Errorf("buzz: line %d:%d: anonymous object field name must be an identifier", v.Line, v.Col)
+				}
+				lit.Keys = append(lit.Keys, name.Val)
+				lit.Values = append(lit.Values, v.Values[i])
+			}
+			return c.compileObjectLit(lit)
+		}
 		for i, k := range v.Keys {
 			if err := c.compileExpr(k); err != nil {
 				return err

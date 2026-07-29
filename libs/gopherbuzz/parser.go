@@ -1763,6 +1763,18 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			p.advance()
 			optionalRecv = true
 		case token.Dot:
+			// `callMe .{ ... }`: the parentheses around a lone anonymous-object
+			// argument may be omitted. A `.` followed by `{` is never member
+			// access, so the shape is unambiguous.
+			if p.peekAt(1).Kind == token.LBrace {
+				t := p.advance()
+				arg, err := p.parseAnonObjectLit()
+				if err != nil {
+					return nil, err
+				}
+				node = &ast.CallExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Callee: node, Args: []ast.Node{arg}}
+				continue
+			}
 			t := p.advance()
 			nameTok, err := p.eatIdent()
 			if err != nil {
