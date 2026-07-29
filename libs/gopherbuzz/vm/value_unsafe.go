@@ -125,7 +125,7 @@ func BoolValue(b bool) Value {
 type heapVal interface {
 	*strObj | *listObj | *mapObj | *funObj | *directObj | *udObj | *objectInst |
 		*objectDefObj | *enumDefObj | *enumValObj | *iterStateObj | *rangeObj |
-		*fibObj | *patObj | *objDeclPayload
+		*fibObj | *patObj | *typeObj | *objDeclPayload
 }
 
 // heapValue builds a heap Value: it pairs tag with ptr, converting the typed
@@ -174,6 +174,7 @@ func (v Value) asIterState() *iterStateObj { return ptrAs[iterStateObj](v) }
 func (v Value) asRange() *rangeObj         { return ptrAs[rangeObj](v) }
 func (v Value) asFib() *fibObj             { return ptrAs[fibObj](v) }
 func (v Value) asPat() *patObj             { return ptrAs[patObj](v) }
+func (v Value) asType() *typeObj           { return ptrAs[typeObj](v) }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return ptrAs[objDeclPayload](v).ObjectDecl }

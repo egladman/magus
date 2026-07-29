@@ -234,6 +234,30 @@ type UnaryExpr struct {
 	Operand Node
 }
 
+// TypeExpr: `<[str]>` - a TYPE written where a value goes. Annot is the type as
+// spelled in source; the compiler canonicalizes it before emitting the constant.
+type TypeExpr struct {
+	Pos
+	Annot string
+	// Resolved is the canonical spelling, filled in by the checker by resolving
+	// Annot and rendering it the same way a typeof result is rendered. Both sides
+	// of `typeof x == <T>` are produced by one function so they cannot disagree
+	// over spacing (`{str:int}` vs `{str: int}`) or an alias.
+	Resolved string
+}
+
+// TypeOfExpr: `typeof x`. Buzz's typeof is STATIC - it yields the type the
+// checker inferred for Operand, not a probe of the runtime value, which is why
+// `final list = []` gives `[any]` while `final slist: [str] = []` gives `[str]`
+// for the same empty list. Resolved is filled in by the checker with the
+// canonical spelling; the compiler emits it as a constant and never evaluates
+// Operand.
+type TypeOfExpr struct {
+	Pos
+	Operand  Node
+	Resolved string
+}
+
 // CallExpr: callee(args...). ArgNames is parallel to Args when any argument
 // was labeled (upstream Buzz's `f(a: 1, b: 2)` named-argument syntax); "" in
 // a slot means that argument was positional. nil when every argument was

@@ -75,6 +75,10 @@ func Inspect(n Node, fn func(Node) bool) {
 		Inspect(s.Right, fn)
 	case *UnaryExpr:
 		Inspect(s.Operand, fn)
+	case *TypeOfExpr:
+		Inspect(s.Operand, fn)
+	case *TypeExpr:
+		// No children: the type is carried as text.
 	case *CallExpr:
 		Inspect(s.Callee, fn)
 		for _, a := range s.Args {

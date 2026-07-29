@@ -1001,3 +1001,53 @@ fun probe() > int {
 }`)
 	assert.Equal(t, int64(3), v.AsInt(), "`n ?? 1 | 2` is `n ?? (1 | 2)`")
 }
+
+// TestParity_TypeValues covers `<T>` and `typeof`, upstream's type-as-value pair.
+//
+// The load-bearing property is that typeof is STATIC. `[]` and `[]` annotated
+// `[str]` are the same empty list at runtime, so an implementation that probed
+// the value could not tell them apart; upstream compares the type DEFS the
+// compiler resolved, and so does this.
+func TestParity_TypeValues(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final list = [];
+    final slist: [str] = [];
+    final map = {};
+    final smap: {str: int} = {};
+    return "{typeof list}/{typeof slist}/{typeof map}/{typeof smap}/{typeof 1}";
+}`)
+	assert.Equal(t, "<[any]>/<[str]>/<{any: any}>/<{str: int}>/<int>", v.AsString(),
+		"an unannotated empty collection is [any]/{any: any}; an annotated one keeps its declared types")
+}
+
+// TestParity_TypeValueEquality pins the comparison. Two type values are built
+// independently (one from a literal, one from typeof), so equality has to be
+// structural on the canonical spelling - reference equality would make every
+// `typeof x == <T>` false.
+func TestParity_TypeValueEquality(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final slist: [str] = [];
+    return typeof slist == <[str]> and <int> != <str> and <{str: int}> == <{str: int}>;
+}`)
+	assert.True(t, v.AsBool(), "type values compare by what they denote, not by identity")
+}
+
+// TestParity_TypeOfDoesNotEvaluateItsOperand guards the static-ness directly: a
+// typeof whose operand has a side effect must not run it.
+func TestParity_TypeOfDoesNotEvaluateItsOperand(t *testing.T) {
+	v := evalParity(t, `
+var calls = 0;
+
+fun bump() > int {
+    calls = calls + 1;
+    return 1;
+}
+
+fun probe() > int {
+    _ = typeof bump();
+    return calls;
+}`)
+	assert.Equal(t, int64(0), v.AsInt(), "typeof reads a type, it does not call anything")
+}

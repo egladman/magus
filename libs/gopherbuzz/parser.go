@@ -1701,6 +1701,31 @@ func (p *parser) parseMultiplicative() (ast.Node, error) {
 }
 
 func (p *parser) parseUnary() (ast.Node, error) {
+	// `<T>` in PREFIX position is a type used as a value. Upstream gives Less both
+	// a prefix handler (typeExpression) and an infix one (comparison); reaching
+	// this function at all means nothing preceded the `<`, so it cannot be the
+	// comparison operator and the two uses never compete.
+	if p.check(token.Lt) {
+		t := p.advance()
+		annot, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Gt); err != nil {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected '>' after the type in a type expression", t.Line, t.Col)
+		}
+		return &ast.TypeExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Annot: annot}, nil
+	}
+	// `typeof x`. A reserved word rather than a token kind, so match it the same
+	// contextual way `extern fun` is matched.
+	if p.peek().Kind == token.Ident && p.peek().Val == "typeof" && !p.peek().Raw {
+		t := p.advance()
+		operand, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.TypeOfExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Operand: operand}, nil
+	}
 	// `mut` marks a list, map, or object literal as mutable. Collections are
 	// immutable by default in Buzz; only a mut value may be mutated in place.
 	if p.check(token.Mut) {

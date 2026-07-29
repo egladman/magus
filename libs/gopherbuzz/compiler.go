@@ -1517,6 +1517,12 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.FloatValue(v.Val)), 0)
 	case *ast.StringLit:
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Val)), 0)
+	case *ast.TypeExpr:
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.TypeValue(typeConstName(v.Resolved, v.Annot))), 0)
+	case *ast.TypeOfExpr:
+		// The operand is deliberately NOT compiled: typeof is static, so its value
+		// is irrelevant and evaluating it would run side effects upstream does not.
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.TypeValue(typeConstName(v.Resolved, "any"))), 0)
 	case *ast.PatLit:
 		// Compile the regex once, at compile time, so a malformed pattern is a
 		// compile error and the value lives in the const pool (no per-eval recompile,
@@ -2002,4 +2008,14 @@ func isTypeShape(annot string) (base string, nullable bool) {
 		return s, nullable
 	}
 	return s, nullable
+}
+
+// typeConstName picks the spelling a type constant carries. The checker fills in
+// resolved; fallback is only reached when a caller compiled without checking
+// first, where the source text is still better than an empty type.
+func typeConstName(resolved, fallback string) string {
+	if resolved != "" {
+		return resolved
+	}
+	return fallback
 }

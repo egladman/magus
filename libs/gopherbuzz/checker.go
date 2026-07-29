@@ -635,6 +635,17 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return types.Any
 	}
 	switch v := n.(type) {
+	case *ast.TypeExpr:
+		v.Resolved = canonicalTypeName(c.resolveAnnot(v.Annot))
+		return types.TypeVal
+	case *ast.TypeOfExpr:
+		// typeof is STATIC: resolve the operand's inferred type here, once, and
+		// record its canonical spelling for the compiler to emit as a constant. The
+		// operand is never evaluated at runtime, which is what lets `typeof` tell
+		// `final list = []` ([any]) from `final slist: [str] = []` ([str]) - the same
+		// empty list, distinguishable only before it runs.
+		v.Resolved = canonicalTypeName(c.infer(v.Operand))
+		return types.TypeVal
 	case *ast.IntLit:
 		return types.Int
 	case *ast.FloatLit:
@@ -1194,7 +1205,11 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		return want
 	}
 	if len(v.Keys) == 0 {
-		return &types.MapType{Key: types.Str, Val: types.Any}
+		// `{any: any}`, matching upstream and the empty-list case below: an
+		// unannotated `{}` constrains neither half. Defaulting the key to str was
+		// invisible until `typeof {}` had to render it, and it would have rejected
+		// an int-keyed map assigned from an empty literal.
+		return &types.MapType{Key: types.Any, Val: types.Any}
 	}
 	keyTyp := c.infer(v.Keys[0])
 	valTyp := c.infer(v.Values[0])
@@ -1239,4 +1254,27 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		}
 	}
 	return ot
+}
+
+// canonicalTypeName is the SINGLE source of the spelling a type value carries.
+// Both sides of `typeof x == <T>` route through it - the checker for the typeof
+// operand, the compiler for the literal's annotation - so the two can never
+// disagree over spacing or an alias. It follows upstream's rendering: a map is
+// `{key: val}` with the space, which types.MapType.TypeName omits.
+func canonicalTypeName(t types.Type) string {
+	switch v := t.(type) {
+	case *types.ListType:
+		return "[" + canonicalTypeName(v.Elem) + "]"
+	case *types.MapType:
+		return "{" + canonicalTypeName(v.Key) + ": " + canonicalTypeName(v.Val) + "}"
+	case nil:
+		return "any"
+	}
+	// Unknown is the checker's tracking-failure sentinel, not a type a user can
+	// write. Reporting it as `any` keeps a type value printable and comparable
+	// instead of leaking `<unknown>` into a program's output.
+	if t == types.Unknown || t == nil {
+		return "any"
+	}
+	return t.TypeName()
 }
