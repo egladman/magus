@@ -138,6 +138,19 @@ export interface ServiceView {
   dependents: number;
   startedAt?: Timestamp;
 }
+// LockView is one held per-project workspace lock and the process holding it.
+//
+// Held is the normal state of a mutating run, so this is never rendered as a fault.
+// The value is the holder: an OS file lock carries no identity, and a lock lives
+// exactly as long as its holder, so one held by a process nobody remembers starting
+// blocks every other run silently. Age is what separates the two cases.
+export interface LockView {
+  project: string;
+  pid: number;
+  command: string;
+  dir: string;
+  acquireTime?: Timestamp;
+}
 export interface ConfigView {
   defaultCharms: string[];
   concurrency: number;
@@ -183,6 +196,8 @@ export interface StatusView {
   // Shared services the daemon is hosting right now (deduped across the whole daemon, kept warm
   // between runs). Empty when none are held.
   services: ServiceView[];
+  // Workspace locks held right now. Empty when nothing is mutating a project.
+  locks: LockView[];
   magusVersion: string; // the daemon binary's version (status BuildInfo.version)
   daemonVersion: string;
 }
@@ -266,6 +281,13 @@ export function mapStatus(st: Status): StatusView {
       state: sv.state || "",
       dependents: sv.dependents || 0,
       startedAt: sv.startedAt,
+    })),
+    locks: (st.locks || []).map((l) => ({
+      project: l.project || "",
+      pid: l.pid || 0,
+      command: l.command || "",
+      dir: l.dir || "",
+      acquireTime: l.acquireTime,
     })),
     magusVersion: st.build?.version || "",
     daemonVersion: (pool && pool.daemonVersion) || "",

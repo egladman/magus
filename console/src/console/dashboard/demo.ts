@@ -452,6 +452,24 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           lastAccessTime: timestampFromMs(now - 38_000),
         },
       ],
+      // One busy holder and one abandoned one, because the whole point of the tile is that
+      // those two look identical until you read the age and the directory.
+      locks: [
+        {
+          project: "web/api",
+          pid: 48210,
+          command: "magus run test web/api",
+          dir: "/repos/acme",
+          acquireTime: timestampFromMs(now - 41_000),
+        },
+        {
+          project: ".",
+          pid: 71557,
+          command: "magus run serve",
+          dir: "/repos/acme/.worktrees/deleted-branch",
+          acquireTime: timestampFromMs(now - 6 * 24 * 60 * 60 * 1000),
+        },
+      ],
       services: [
         {
           id: "svc9f21",

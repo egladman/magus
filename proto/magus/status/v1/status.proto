@@ -28,6 +28,24 @@ message Status {
   repeated Run runs = 4;         // runs the daemon is executing right now (adopted dispatches)
   repeated Service services = 5; // long-running shared services the daemon is hosting right now
   BuildInfo build = 6;           // the running daemon's build identity
+  repeated Lock locks = 7;       // per-project workspace locks held right now
+}
+
+// Lock is one held per-project workspace lock and the process holding it.
+//
+// A held lock is the NORMAL state of a mutating run, so this is state and never a
+// fault: it must not fail a readiness or liveness check, because a run queued behind
+// a peer is waiting correctly and restarting it only sends it to the back of the
+// queue. It is on the wire because an OS file lock carries no identity of its own, so
+// without the holder a blocked run is indistinguishable from a hung one - and a lock
+// is held for exactly as long as its holder lives, which means one held by a process
+// nobody remembers starting blocks everything else silently and forever.
+message Lock {
+  string project = 1;                            // workspace-relative path; "." is the root
+  int32 pid = 2;                                 // holder's process id
+  string command = 3;                            // holder's argv, for recognising what it is
+  string dir = 4;                                // holder's working directory; a path that no longer exists means abandoned
+  google.protobuf.Timestamp acquire_time = 5;    // when the holder took it; age is the signal a human reads
 }
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built

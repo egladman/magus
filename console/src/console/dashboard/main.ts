@@ -37,6 +37,7 @@ import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { workspacesTile } from "./tiles/workspaces";
+import { locksTile } from "./tiles/locks";
 import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
@@ -248,6 +249,7 @@ function mountTiles(): void {
   const remote = remoteTile();
   const workspaces = workspacesTile(activeWorkspace);
   const services = servicesTile();
+  const locks = locksTile();
   const config = configTile();
   const latency = latencyTile();
   const buzz = buzzTile();
@@ -267,6 +269,7 @@ function mountTiles(): void {
     targets,
     workspaces,
     services,
+    locks,
     config,
     latency,
     buzz,

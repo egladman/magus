@@ -155,9 +155,10 @@ type StatusLock struct {
 	PID     int    `json:"pid,omitempty" yaml:"pid,omitempty"`
 	Command string `json:"command,omitempty" yaml:"command,omitempty"`
 	Dir     string `json:"dir,omitempty" yaml:"dir,omitempty"`
-	// Since is when the holder acquired it. Age is the signal a human reads: seconds
-	// is a peer, days is something nobody knows is running.
-	Since time.Time `json:"since,omitempty" yaml:"since,omitempty"`
+	// AcquireTime is when the holder took it. Age is the signal a human reads: seconds
+	// is a peer, days is something nobody knows is running. Named per AIP-142, which
+	// asks for a _time suffix on a timestamp rather than the _at spelling.
+	AcquireTime time.Time `json:"acquire_time,omitempty" yaml:"acquire_time,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the

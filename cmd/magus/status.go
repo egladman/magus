@@ -851,8 +851,8 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 		if l.PID != 0 {
 			line += fmt.Sprintf("  pid %d", l.PID)
 		}
-		if !l.Since.IsZero() {
-			line += "  " + formatDur(time.Since(l.Since))
+		if !l.AcquireTime.IsZero() {
+			line += "  " + formatDur(time.Since(l.AcquireTime))
 		}
 		if l.Command != "" {
 			line += "  " + l.Command

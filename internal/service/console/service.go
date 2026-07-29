@@ -152,6 +152,10 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 	// the dashboard shows the same "up to date / out of date" the CLI status does.
 	if s.magus != nil {
 		out.SymbolIndexes = s.magus.SymbolIndexStatus(ctx)
+		// Held locks come from the workspace cache rather than the pool query, because a
+		// lock is taken by whichever process mutates a project - usually a plain
+		// `magus run` the daemon never sees.
+		out.Locks = magus.HeldLocks(s.magus.CacheDir())
 	}
 	return out
 }

@@ -426,7 +426,7 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		}
 		lock := types.StatusLock{Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir}
 		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
-			lock.Since = started
+			lock.AcquireTime = started
 		}
 		out = append(out, lock)
 		return nil

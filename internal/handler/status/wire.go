@@ -47,7 +47,23 @@ func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.
 	for _, svc := range r.Services {
 		s.Services = append(s.Services, serviceToProto(svc))
 	}
+	for _, l := range r.Locks {
+		s.Locks = append(s.Locks, lockToProto(l))
+	}
 	return s
+}
+
+// lockToProto maps one held workspace lock onto the wire message. It deliberately
+// does not influence deriveHealth above: a held lock is what a working run looks
+// like, and reporting it as unhealthy would make a queued peer look like an outage.
+func lockToProto(l types.StatusLock) *statusv1.Lock {
+	return &statusv1.Lock{
+		Project:     l.Project,
+		Pid:         int32(l.PID),
+		Command:     l.Command,
+		Dir:         l.Dir,
+		AcquireTime: tsFromTime(l.AcquireTime),
+	}
 }
 
 // serviceToProto maps one hosted shared service onto the wire message.

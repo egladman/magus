@@ -405,7 +405,7 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 		if h.PID != os.Getpid() {
 			t.Errorf("project %s: pid = %d, want %d", h.Project, h.PID, os.Getpid())
 		}
-		if h.Since.IsZero() {
+		if h.AcquireTime.IsZero() {
 			t.Errorf("project %s: Since is zero; age is the signal that separates a peer from an abandoned holder", h.Project)
 		}
 		if h.Dir == "" {
