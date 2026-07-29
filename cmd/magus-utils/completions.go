@@ -4,12 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/internal/emit"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
+	"github.com/egladman/magus/internal/godecl"
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
@@ -42,7 +40,7 @@ func runCompletions(args []string) error {
 		return err
 	}
 
-	subs, err := parseSurface(*surfacePath)
+	subs, err := readSurface(*surfacePath)
 	if err != nil {
 		return err
 	}
@@ -77,55 +75,21 @@ func runCompletions(args []string) error {
 	return nil
 }
 
-// parseSurface reads the `subcommands = []subcommand{...}` literal. It parses the Go
-// AST rather than matching text so a reformatted or reordered declaration still reads
-// correctly - the same approach the config generator takes with config.go.
-func parseSurface(path string) ([]subcommandDoc, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+// readSurface reads the subcommand table out of the CLI surface declaration.
+func readSurface(path string) ([]subcommandDoc, error) {
+	file, err := godecl.Parse(path)
 	if err != nil {
 		return nil, err
 	}
 	var out []subcommandDoc
-	ast.Inspect(file, func(n ast.Node) bool {
-		vs, ok := n.(*ast.ValueSpec)
-		if !ok || len(vs.Names) == 0 || vs.Names[0].Name != "subcommands" || len(vs.Values) == 0 {
-			return true
+	for _, entry := range godecl.SliceOfStructs(file, "subcommands") {
+		if name := entry["Name"]; name != "" {
+			out = append(out, subcommandDoc{Name: name, Short: entry["Short"]})
 		}
-		lit, ok := vs.Values[0].(*ast.CompositeLit)
-		if !ok {
-			return true
-		}
-		for _, el := range lit.Elts {
-			entry, ok := el.(*ast.CompositeLit)
-			if !ok {
-				continue
-			}
-			var doc subcommandDoc
-			for _, f := range entry.Elts {
-				kv, ok := f.(*ast.KeyValueExpr)
-				if !ok {
-					continue
-				}
-				key, _ := kv.Key.(*ast.Ident)
-				val, _ := kv.Value.(*ast.BasicLit)
-				if key == nil || val == nil {
-					continue
-				}
-				switch key.Name {
-				case "Name":
-					doc.Name = strings.Trim(val.Value, `"`)
-				case "Short":
-					doc.Short = strings.Trim(val.Value, `"`)
-				}
-			}
-			if doc.Name != "" {
-				out = append(out, doc)
-			}
-		}
-		return false
-	})
+	}
 	return out, nil
 }
+
 
 func renderBashList(subs []subcommandDoc) string {
 	names := make([]string, len(subs))
