@@ -20,8 +20,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/service/identity"
+	"github.com/egladman/magus/internal/serviceaudit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -1069,4 +1069,9 @@ func isSocketAlive(path string) bool {
 // checkStaleWorktrees reports orphaned checkout directories under .claude/worktrees.
 func (r *runner) checkStaleWorktrees() Check {
 	return checkStaleWorktrees(r.ws.Root())
+}
+
+// checkSpellContract reports each registered spell's mgs_ contract coverage.
+func (r *runner) checkSpellContract() Check {
+	return checkSpellContract(project.DefaultSpellRegistry().All())
 }

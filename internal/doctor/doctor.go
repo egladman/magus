@@ -157,6 +157,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkStaleServiceSuppressions(projects),
 		r.checkMagusfileSyntax(projects),
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
+		r.checkSpellContract(),
 		r.checkGraphCycles(),
 		r.checkSymlinks(),
 		r.checkStaleWorktrees(),
