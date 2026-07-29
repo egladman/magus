@@ -311,37 +311,43 @@ a guard that errors on every tool call is worse than no guard.
 
 Every host gets the same RULES - they come from one binary, and none of them is
 per-host. What differs is how much of a verdict a host's hook surface can carry.
-The templates close every gap the host allows; the rest is recorded here rather
-than left to be discovered.
 
 | | command rules | declared-output rule | `deny` reaches the model | `advise` reaches the model |
 | --- | --- | --- | --- | --- |
 | Claude Code | yes (verified) | yes (verified) | yes | yes (`additionalContext`) |
-| Cursor | yes (verified) | **no template** | yes (`agent_message`) | no - collapses to allow |
+| Codex | yes (verified) | yes, per OpenAI's docs (unverified here) | yes | yes (`additionalContext`) |
+| Cursor | yes (verified) | no template - see below | yes (`agent_message`) | no - collapses to allow |
 | OpenCode | written, unverified | written, unverified | yes (thrown) | no - logged for the human |
-| Codex | **no template** | **no template** | - | - |
 
 "Verified" means executed against this binary with a real event on stdin.
-Claude Code is the setup this repository dogfoods, so both of its rules are
-exercised continuously; Cursor's command wrapper was run the same way. OpenCode's
-plugin cannot be executed here - it needs a Bun runtime and OpenCode's own tool
-names - so its tool identifiers (`edit`/`write`) and argument fields are written
-against the published spec and NOT confirmed. Treat it as a starting point and
-check it against OpenCode's current docs.
 
-Two known gaps, both waiting on ground truth about the host rather than on magus:
+Codex needs no new script. Its PreToolUse event carries the command at
+`tool_input.command` and it replies with the same
+`hookSpecificOutput.permissionDecision` envelope Claude Code uses, so the two
+generic templates run unmodified - only the wiring file differs. Two Codex
+caveats: hooks are experimental and OFF by default (opt in with
+`[features].codex_hooks = true` in `~/.codex/config.toml`), and they are not
+available on Windows. Reporting also disagrees on whether `apply_patch` /
+`Edit` / `Write` fire PreToolUse - OpenAI's hooks page says they do, at least one
+third-party reference says Bash only - so treat the second matcher as
+provisional and confirm it against the current docs. Note that `apply_patch`
+delivers a PATCH in `tool_input.command`, not a path, so the declared-output
+guard wants the `Edit`/`Write` matcher rather than `apply_patch`.
 
-- **Cursor has no declared-output guard.** Cursor's documented blocking hook is
-  `beforeShellExecution`; whether it exposes a *pre*-write file hook (as opposed
-  to an after-edit notification, which cannot block) is not established here. If
-  it does, the wrapper is four lines: set `HOST_EVENT_PATH`, `HOST_RESPONSE` and
-  `GUARD_UNAVAILABLE_RESPONSE`, then exec `magus-guard-path.sh`.
-- **Codex has no guard template.** Its skills and `AGENTS.md` guidance are
-  installed and current; only the hook half is missing.
+OpenCode's plugin cannot be executed here - it needs a Bun runtime and
+OpenCode's own tool names - so its tool identifiers (`edit`/`write`) and argument
+fields are written against the published spec and NOT confirmed.
 
-Both are additive: a host with no file-write hook still gets every command rule,
-and adding one later changes no magus code, because the rules and the verdict
-already exist and only the wrapper is host-shaped.
+One gap remains, waiting on ground truth about the host rather than on magus:
+**Cursor has no declared-output guard.** Its documented blocking hook is
+`beforeShellExecution`; whether it exposes a *pre*-write file hook (as opposed
+to an after-edit notification, which cannot block) is not established here. If it
+does, the wrapper is four lines: set `HOST_EVENT_PATH`, `HOST_RESPONSE` and
+`GUARD_UNAVAILABLE_RESPONSE`, then exec `magus-guard-path.sh`.
+
+That gap is additive: a host with no file-write hook still gets every command
+rule, and adding one later changes no magus code, because the rules and the
+verdict already exist and only the wrapper is host-shaped.
 
 This split is deliberate. magus owns the guard rules and the verdict, not
 integration code for each host. Maintaining a codec per host as the tools keep
@@ -408,16 +414,16 @@ These are files, not snippets. They sit beside this page in [`docs/guides/integr
 rather than keeping a private copy, so what it dogfoods is what you get, and a test fails if either
 drifts from the other.
 
-There is ONE implementation of the command guard. A host-specific file sets three overrides and
-delegates to it: `HOST_EVENT_PATH` (where the command or path sits in that host's event),
-`HOST_RESPONSE` (a Go template rendering that host's reply), and `GUARD_UNAVAILABLE_RESPONSE` (what
-to say when magus is not installed, so each host picks its own fail-open or fail-closed stance).
-`GUARD_MAGUS_BIN` points at the binary when it is not on PATH; the name deliberately avoids the
-`MAGUS_*` space, which is magus's own configuration surface.
+There is ONE implementation of each guard. A host-specific file sets overrides and delegates:
+`HOST_EVENT_PATH` (where the command or path sits in that host's event), `HOST_RESPONSE` (a Go
+template rendering that host's reply), and `GUARD_UNAVAILABLE_RESPONSE` (what to say when magus is
+not installed, so each host picks its own fail-open or fail-closed stance). `GUARD_MAGUS_BIN` points
+at the binary when it is not on PATH; that name deliberately avoids the `MAGUS_*` space, which is
+magus's own configuration surface.
 
 #### `magus-guard-command.sh`
 
-Command guard. Every host uses this one; the per-host files below only set its three overrides.
+Command guard. Every host uses this one; the per-host files below only set its overrides.
 
 ```sh
 #!/usr/bin/env sh
@@ -497,6 +503,39 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 fi
 
 exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
+```
+
+#### `codex-hooks.json`
+
+Codex wiring. Codex's event and reply match Claude Code's, so the scripts above run unmodified; only this file is Codex-specific. Put it in `~/.codex/hooks.json` or `.codex/hooks.json`, and enable `[features].codex_hooks = true`.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "statusMessage": "magus guard: checking command"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "statusMessage": "magus guard: checking file"
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
 
 #### `cursor-guard.sh`

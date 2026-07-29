@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "statusMessage": "magus guard: checking command"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "statusMessage": "magus guard: checking file"
+          }
+        ]
+      }
+    ]
+  }
+}
