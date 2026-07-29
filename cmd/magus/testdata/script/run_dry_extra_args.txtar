@@ -1,0 +1,33 @@
+# --dry-run exists to show the exact command a target would run. It used to show
+# the op's own args and silently omit the ones forwarded after `--`, because
+# project.WithExtraArgs was applied AFTER the dry-run branch returned - so the
+# one flag the user was asking about was the one thing missing from the report.
+
+# A dry run reports the command without executing it.
+exec magus run acme::lint --dry-run
+stderr 'dry run - commands shown, not executed'
+stderr '\$ acme lint \.'
+
+# Forwarded args appear in the reported command, so dry-run and a real run agree
+# about what would happen.
+exec magus run acme::lint --dry-run -- --flag one
+stderr '\$ acme lint \. --flag one'
+
+# A dry run stays a dry run with args forwarded: still nothing executed.
+exec magus run acme::lint --dry-run -- --flag one
+stderr 'dry run - commands shown, not executed'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
