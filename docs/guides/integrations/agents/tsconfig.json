@@ -1,0 +1,19 @@
+{
+  "//": "Type-check gate for the agent-hook templates (the OpenCode plugin). Same shape as the console/docs/textsearch TS gates: nothing is compiled here, the plugin ships as source that OpenCode loads, so this only drives `tsc --noEmit`. @opencode-ai/plugin supplies the Plugin type; Bun.spawn comes from bun-types, which the plugin's runtime is.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "allowJs": false,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["bun-types"]
+  },
+  "include": ["*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,24 +1,69 @@
 #!/usr/bin/env sh
-# magus guard hook for Cursor's beforeShellExecution hook, which runs a PROGRAM
-# rather than an inline shell string - hence a wrapper. Copy this directory's
-# scripts to .cursor/hooks/ (chmod +x) and point .cursor/hooks.json here.
+# magus guard for Cursor. ONE file, both hooks - download only this.
 #
-# This file holds ONLY what is Cursor-specific and delegates the rest, so there
-# is one implementation of the guard rather than one per host:
+# Cursor runs a hook as a PROGRAM rather than an inline shell string, and its two
+# relevant events carry different payloads, so this reads the event once and
+# branches on what it finds instead of needing a wrapper per event:
 #
-#   - the command is at the event's TOP LEVEL (`command`), not nested under a
-#     tool_input object
-#   - Cursor's reply is {"permission": ...}, with agent_message on a denial
-#   - Cursor delivers agent_message only on a DENIAL, so `advise` collapses to a
-#     plain allow here; those nudges live in the installed skills instead
-#   - on a missing magus this ALLOWS. Cursor already fails open on a hook crash
-#     or malformed JSON unless the hook sets failClosed, so pretending otherwise
-#     would give false assurance. For strict behaviour set failClosed on the hook
-#     and change GUARD_UNAVAILABLE_RESPONSE below to a deny.
+#   beforeShellExecution  {"command": "...", "cwd": "...", "sandbox": false}
+#   afterFileEdit         {"file_path": "<absolute>", "edits": [...]}
+#
+# Save to .cursor/hooks/cursor-guard.sh, chmod +x, and point both events at it:
+#
+#   {"version": 1, "hooks": {
+#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
+#     "afterFileEdit":        [{"command": "./.cursor/hooks/cursor-guard.sh"}]}}
+#
+# Self-contained on purpose. The other hosts' templates delegate to
+# magus-guard-command.sh, but Cursor would then need three files downloaded to
+# work, and a guard nobody finishes installing guards nothing.
+#
+# Two Cursor facts shape the behaviour:
+#
+#   - A denial carries BOTH user_message (shown to you) and agent_message (sent
+#     to the model); neither is delivered on an allow, so `advise` collapses to a
+#     plain allow here. Those nudges live in the installed skills instead.
+#   - There is NO pre-write file hook. beforeReadFile blocks reads; afterFileEdit
+#     fires after the write and cannot stop it. So the declared-output rule is
+#     DETECTION here, not prevention: it reports that the edit will be
+#     overwritten, which still corrects the belief that the change survived.
+#     Cursor's preToolUse is documented as blocking for any tool and may be a
+#     route to real prevention, but its payload is not established here, so this
+#     file does not guess at one.
 
-HOST_EVENT_PATH='command'
-HOST_RESPONSE='{{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
-GUARD_UNAVAILABLE_RESPONSE='{"permission":"allow"}'
-export HOST_EVENT_PATH HOST_RESPONSE GUARD_UNAVAILABLE_RESPONSE
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
-exec "$(dirname "$0")/magus-guard-command.sh"
+event=$(cat)
+
+case "$event" in
+*'"file_path"'*)
+	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+		exit 0
+	fi
+	# -o name prints the bare decision word, which is all this needs. magus
+	# re-roots the absolute path Cursor sends onto the workspace itself.
+	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
+	[ "$verdict" = "deny" ] || exit 0
+	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+	# prose rather than as a verdict it would not read.
+	printf '%s\n' \
+		"magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
+		"The edit you just made will be overwritten by the next run of its producing target." \
+		"Change the SOURCE instead, then regenerate and commit both together." \
+		"Cursor has no pre-write hook, so this could only be reported after the fact." >&2
+	exit 0
+	;;
+esac
+
+# beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
+# hook crash or malformed JSON unless the hook sets failClosed, so pretending
+# otherwise would give false assurance. For strict behaviour, set failClosed on
+# the hook and change this to a deny.
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+	printf '%s' '{"permission":"allow"}'
+	exit 0
+fi
+
+printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --from-json command \
+	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'

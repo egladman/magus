@@ -316,7 +316,7 @@ per-host. What differs is how much of a verdict a host's hook surface can carry.
 | --- | --- | --- | --- | --- |
 | Claude Code | yes (verified) | yes (verified) | yes | yes (`additionalContext`) |
 | Codex | yes (verified) | yes, per OpenAI's docs (unverified here) | yes | yes (`additionalContext`) |
-| Cursor | yes (verified) | no template - see below | yes (`agent_message`) | no - collapses to allow |
+| Cursor | yes (verified) | detect only, after the fact (verified) | yes (`user_message` + `agent_message`) | no - collapses to allow |
 | OpenCode | yes (verified) | yes (verified) | yes (thrown) | no - logged for the human |
 
 "Verified" means executed against this binary with a real event on stdin.
@@ -339,16 +339,25 @@ OpenCode's tool identifiers were confirmed against an installed OpenCode
 binary, and `filePath` is the field its edit tools carry. `opencode debug config`
 confirms a plugin in `~/.config/opencode/plugins/` is loaded.
 
-One gap remains, waiting on ground truth about the host rather than on magus:
-**Cursor has no declared-output guard.** Its documented blocking hook is
-`beforeShellExecution`; whether it exposes a *pre*-write file hook (as opposed
-to an after-edit notification, which cannot block) is not established here. If it
-does, the wrapper is four lines: set `HOST_EVENT_PATH`, `HOST_RESPONSE` and
-`GUARD_UNAVAILABLE_RESPONSE`, then exec `magus-guard-path.sh`.
+**Cursor gets the declared-output rule as DETECTION rather than prevention.**
+Its documented events are `beforeReadFile` (blocks) and `afterFileEdit` (fires
+after the write, cannot block); there is no `beforeFileEdit` or
+`beforeWriteFile`. Rather than ship nothing there, `cursor-guard-path.sh` wires
+to `afterFileEdit` and reports when the edited file is a declared output.
 
-That gap is additive: a host with no file-write hook still gets every command
-rule, and adding one later changes no magus code, because the rules and the
-verdict already exist and only the wrapper is host-shaped.
+That recovers most of the value. The failure this rule exists to stop is an
+agent quietly hand-editing a generated file and believing the change survived;
+saying so immediately - before it builds more work on that edit - fixes the
+belief even though the write already landed. What is lost is prevention, and the
+message says so plainly rather than implying the edit was stopped.
+
+Cursor's `preToolUse` is documented as blocking for any tool and may be a route
+to real prevention, but its input shape is not established here, and this page
+does not guess at one.
+
+Everything else is additive: a host missing a file-write hook still gets every
+command rule, and adding one later changes no magus code, because the rules and
+the verdict already exist and only the wrapper is host-shaped.
 
 This split is deliberate. magus owns the guard rules and the verdict, not
 integration code for each host. Maintaining a codec per host as the tools keep
@@ -410,21 +419,32 @@ The `--path` hook only ever denies, so it needs no `advise` arm.
 
 ## Hook templates
 
-These are files, not snippets. They sit beside this page in [`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents)
-- download them, or copy from the blocks below. magus's own repository invokes these same files
-rather than keeping a private copy, so what it dogfoods is what you get, and a test fails if either
-drifts from the other.
+These are files, not snippets. They sit beside this page in [`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents):
+download them from there, or copy any block below. magus's own repository invokes these same files
+rather than keeping a private copy, so what it dogfoods is what you get - and two tests fail if the
+config stops referencing them or a block here drifts from the file.
 
-There is ONE implementation of each guard. A host-specific file sets overrides and delegates:
-`HOST_EVENT_PATH` (where the command or path sits in that host's event), `HOST_RESPONSE` (a Go
-template rendering that host's reply), and `GUARD_UNAVAILABLE_RESPONSE` (what to say when magus is
-not installed, so each host picks its own fail-open or fail-closed stance). `GUARD_MAGUS_BIN` points
-at the binary when it is not on PATH; that name deliberately avoids the `MAGUS_*` space, which is
-magus's own configuration surface.
+They are a magus project of their own, so the TypeScript is held to the same gates as the rest of
+the workspace (`magus run lint docs/guides/integrations/agents` runs `tsc --noEmit` and Biome).
+
+### How they fit together
+
+One implementation per guard; a host file sets overrides and delegates:
+
+| variable | what it is |
+| --- | --- |
+| `HOST_EVENT_PATH` | dot-path to the command or file path inside your host's event JSON |
+| `HOST_RESPONSE` | Go template rendering your host's reply from the verdict |
+| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance |
+| `GUARD_MAGUS_BIN` | absolute path to magus when it is not on PATH |
+
+`GUARD_MAGUS_BIN` deliberately avoids the `MAGUS_*` prefix: that space is magus's own configuration
+surface, and a variable these templates invent must not look like a setting magus reads.
 
 #### `magus-guard-command.sh`
 
-Command guard. Every host uses this one; the per-host files below only set its overrides.
+The command guard. Claude Code, Codex and OpenCode all run this one file; a host file sets its
+overrides and execs it, so there is one implementation to reason about.
 
 ```sh
 #!/usr/bin/env sh
@@ -470,7 +490,8 @@ exec "$GUARD_MAGUS_BIN" agent hook --from-json "$HOST_EVENT_PATH" -o "template=$
 
 #### `magus-guard-path.sh`
 
-Declared-output guard. Wire to your host's file-editing tool.
+The declared-output guard. Wire to your host's file-editing tool. The only rule that is not a
+heuristic - magus reads the target's declared outputs, so a generated file is generated by definition.
 
 ```sh
 #!/usr/bin/env sh
@@ -508,7 +529,9 @@ exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "tem
 
 #### `codex-hooks.json`
 
-Codex wiring. Codex's event and reply match Claude Code's, so the scripts above run unmodified; only this file is Codex-specific. Put it in `~/.codex/hooks.json` or `.codex/hooks.json`, and enable `[features].codex_hooks = true`.
+Codex wiring. Codex's event and reply match Claude Code's, so both scripts above run unmodified.
+Save as `~/.codex/hooks.json` (or `.codex/hooks.json`) and enable hooks with
+`[features].codex_hooks = true` in `~/.codex/config.toml`.
 
 ```json
 {
@@ -541,38 +564,85 @@ Codex wiring. Codex's event and reply match Claude Code's, so the scripts above 
 
 #### `cursor-guard.sh`
 
-Cursor wrapper: sets Cursor-specific overrides and delegates.
+Cursor: ONE file covering both of its events. Download only this - it is self-contained, because
+needing three files to install a guard is how a guard ends up not installed.
 
 ```sh
 #!/usr/bin/env sh
-# magus guard hook for Cursor's beforeShellExecution hook, which runs a PROGRAM
-# rather than an inline shell string - hence a wrapper. Copy this directory's
-# scripts to .cursor/hooks/ (chmod +x) and point .cursor/hooks.json here.
+# magus guard for Cursor. ONE file, both hooks - download only this.
 #
-# This file holds ONLY what is Cursor-specific and delegates the rest, so there
-# is one implementation of the guard rather than one per host:
+# Cursor runs a hook as a PROGRAM rather than an inline shell string, and its two
+# relevant events carry different payloads, so this reads the event once and
+# branches on what it finds instead of needing a wrapper per event:
 #
-#   - the command is at the event's TOP LEVEL (`command`), not nested under a
-#     tool_input object
-#   - Cursor's reply is {"permission": ...}, with agent_message on a denial
-#   - Cursor delivers agent_message only on a DENIAL, so `advise` collapses to a
-#     plain allow here; those nudges live in the installed skills instead
-#   - on a missing magus this ALLOWS. Cursor already fails open on a hook crash
-#     or malformed JSON unless the hook sets failClosed, so pretending otherwise
-#     would give false assurance. For strict behaviour set failClosed on the hook
-#     and change GUARD_UNAVAILABLE_RESPONSE below to a deny.
+#   beforeShellExecution  {"command": "...", "cwd": "...", "sandbox": false}
+#   afterFileEdit         {"file_path": "<absolute>", "edits": [...]}
+#
+# Save to .cursor/hooks/cursor-guard.sh, chmod +x, and point both events at it:
+#
+#   {"version": 1, "hooks": {
+#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
+#     "afterFileEdit":        [{"command": "./.cursor/hooks/cursor-guard.sh"}]}}
+#
+# Self-contained on purpose. The other hosts' templates delegate to
+# magus-guard-command.sh, but Cursor would then need three files downloaded to
+# work, and a guard nobody finishes installing guards nothing.
+#
+# Two Cursor facts shape the behaviour:
+#
+#   - A denial carries BOTH user_message (shown to you) and agent_message (sent
+#     to the model); neither is delivered on an allow, so `advise` collapses to a
+#     plain allow here. Those nudges live in the installed skills instead.
+#   - There is NO pre-write file hook. beforeReadFile blocks reads; afterFileEdit
+#     fires after the write and cannot stop it. So the declared-output rule is
+#     DETECTION here, not prevention: it reports that the edit will be
+#     overwritten, which still corrects the belief that the change survived.
+#     Cursor's preToolUse is documented as blocking for any tool and may be a
+#     route to real prevention, but its payload is not established here, so this
+#     file does not guess at one.
 
-HOST_EVENT_PATH='command'
-HOST_RESPONSE='{{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
-GUARD_UNAVAILABLE_RESPONSE='{"permission":"allow"}'
-export HOST_EVENT_PATH HOST_RESPONSE GUARD_UNAVAILABLE_RESPONSE
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
-exec "$(dirname "$0")/magus-guard-command.sh"
+event=$(cat)
+
+case "$event" in
+*'"file_path"'*)
+	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+		exit 0
+	fi
+	# -o name prints the bare decision word, which is all this needs. magus
+	# re-roots the absolute path Cursor sends onto the workspace itself.
+	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
+	[ "$verdict" = "deny" ] || exit 0
+	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+	# prose rather than as a verdict it would not read.
+	printf '%s\n' \
+		"magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
+		"The edit you just made will be overwritten by the next run of its producing target." \
+		"Change the SOURCE instead, then regenerate and commit both together." \
+		"Cursor has no pre-write hook, so this could only be reported after the fact." >&2
+	exit 0
+	;;
+esac
+
+# beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
+# hook crash or malformed JSON unless the hook sets failClosed, so pretending
+# otherwise would give false assurance. For strict behaviour, set failClosed on
+# the hook and change this to a deny.
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+	printf '%s' '{"permission":"allow"}'
+	exit 0
+fi
+
+printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --from-json command \
+	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
 #### `opencode-plugin.ts`
 
 OpenCode plugin. OpenCode has no shell-hook config, so this is a plugin covering both surfaces.
+Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `opencode debug config`.
 
 ```ts
 // magus guard hook for OpenCode. OpenCode has no shell-command hook config: a

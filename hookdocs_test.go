@@ -30,6 +30,19 @@ const (
 	hookTemplateDir     = "docs/guides/integrations/agents"
 )
 
+// hookTemplates are the artifacts a reader installs. The directory also holds
+// the project's own scaffolding (package.json, tsconfig.json, biome.json, the
+// lockfile, node_modules) which exists to LINT the templates and is not itself
+// something anyone copies into a host - so the list is explicit rather than a
+// directory walk that would drag all of it into the guide.
+var hookTemplates = []string{
+	"magus-guard-command.sh",
+	"magus-guard-path.sh",
+	"codex-hooks.json",
+	"cursor-guard.sh",
+	"opencode-plugin.ts",
+}
+
 type hookSettings struct {
 	Hooks struct {
 		PreToolUse []struct {
@@ -78,16 +91,9 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 	require.NoError(t, err, "read %s", hookGuideDoc)
 	doc := string(guide)
 
-	entries, err := os.ReadDir(hookTemplateDir)
-	require.NoError(t, err, "read %s", hookTemplateDir)
-	require.NotEmpty(t, entries, "%s holds no templates", hookTemplateDir)
-
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(hookTemplateDir, e.Name()))
-		require.NoError(t, err)
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "every template in hookTemplates must exist")
 
 		// Compare on the executable lines only. Comments carry the reasoning and
 		// are worth reading in the file itself; requiring the guide to mirror
@@ -105,6 +111,6 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 		assert.Empty(t, missing,
 			"%s embeds %s incompletely: the lines below are in the template but not in the guide.\n"+
 				"Re-copy the template into its code block - a reader exploring the docs site must see\n"+
-				"what they would download.", hookGuideDoc, e.Name())
+				"what they would download.", hookGuideDoc, name)
 	}
 }

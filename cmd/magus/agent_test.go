@@ -264,6 +264,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git clean -fd", deny: true},
 		{command: "git clean -n"},
 		{command: "git commit -m 'x'", context: "magus-vcs"},
+		// Push, not commit: committing mid-mess is ordinary, publishing is the
+		// moment the work stops being yours alone.
+		{command: "git push origin HEAD", context: "magus affected ci"},
+		{command: "git push --force-with-lease", context: "magus affected ci"},
 		{command: "git add -A", context: "magus-vcs"},
 		// The advisory names an explicit ladder: top-level target, then a single
 		// spell op which still runs through magus. The old text ended with "if no
