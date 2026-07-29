@@ -411,7 +411,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		enumDef := vm.asEnumDef(obj)
 		for i, c := range enumDef.Cases {
 			if c == name {
-				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name, Ordinal: int64(i)}), nil
+				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name, Val: enumDef.Values[i]}), nil
 			}
 		}
 		return Null, fmt.Errorf("buzz: enum %s has no case %q", enumDef.Name, name)
@@ -420,7 +420,7 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		case "name":
 			return StrValue(vm.asEnumVal(obj).Case), nil
 		case "value":
-			return IntValue(vm.asEnumVal(obj).Ordinal), nil
+			return vm.asEnumVal(obj).Val, nil
 		}
 		return Null, nil
 	default:

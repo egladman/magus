@@ -81,7 +81,7 @@ func nodeToMap(n ast.Node) any {
 	case *ast.WhileStmt:
 		return map[string]any{"kind": "WhileStmt", "pos": pos(v.Pos), "cond": nodeToMap(v.Cond), "body": nodeToMap(v.Body)}
 	case *ast.ForStmt:
-		return map[string]any{"kind": "ForStmt", "pos": pos(v.Pos), "init": nodeToMap(v.Init), "cond": nodeToMap(v.Cond), "post": nodeToMap(v.Post), "body": nodeToMap(v.Body)}
+		return map[string]any{"kind": "ForStmt", "pos": pos(v.Pos), "init": ns(v.Init), "cond": nodeToMap(v.Cond), "post": ns(v.Post), "body": nodeToMap(v.Body)}
 	case *ast.ForEachStmt:
 		return map[string]any{"kind": "ForEachStmt", "pos": pos(v.Pos), "keyName": v.KeyName, "valName": v.ValName, "iter": nodeToMap(v.Iter), "body": nodeToMap(v.Body)}
 	case *ast.BreakStmt:

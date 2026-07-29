@@ -14,13 +14,16 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**27 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+**34 of 83** upstream behavior tests pass, measured against `UpstreamRef`
 (`0.5.0-251-ged42f47`) on 2026-07-28.
 
 The baseline when this record started was 12; `is` grammar, typed for-init, and
 the bitwise family, the inferred enum case, char literals plus `as!`, and string
 iteration/subscripting, the iterator protocol, decimal string escapes, ordered
-JSON encoding, and static object fields have banked fifteen since. Measure against the PINNED commit,
+JSON encoding, static object fields, generics-as-erasure, multi-clause `for`,
+nullable declarations without an initializer, object-literal field punning,
+`> void` arrow bodies, `enum<T>` backing types, optional chaining, and default
+argument values have banked twenty-two since. Measure against the PINNED commit,
 not a local `main` checkout: a newer checkout has files that do not exist at the
 pin, which is how an earlier hand-count reached a wrong 13-of-84.
 
@@ -39,28 +42,33 @@ therefore only go up, and closing a gap forces the gain to be banked.
 ### What works
 
 Objects (fields with defaults, methods, `static fun` and static fields, `mut` instances, optional
-unwrap `if (x -> y)`), enums, namespaces and imports, optionals with `??` and
-`as?`, error sets on declarations plus `try`/`catch`, fibers with `resolve`,
-ranges, string interpolation, pattern literals, `zdef` FFI, closures, and the
-collection/loop core. Two deliberate supersets: the contextual `test` keyword
-(below) and named-argument labels.
+unwrap `if (x -> y)`, field punning), enums (`enum<str>`/`enum<int>` backing
+types and explicit case values), namespaces and imports, optionals with `??`,
+`as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
+initializer, default argument values, error sets on declarations plus
+`try`/`catch`, fibers with `resolve`, ranges, string interpolation, pattern
+literals, `zdef` FFI, closures, generics as erasure, and the collection/loop
+core (including multi-clause `for`). Two deliberate supersets: the contextual
+`test` keyword (below) and named-argument labels.
 
 ### What does not, ranked by upstream tests blocked
 
 | Gap | Blocks | Example |
 | --- | ---: | --- |
-| Type-value literal `<T>` | 4 | `typeof x == <mut [int]>` |
-| Generics `::<T>` | 3 | `fun count::<T>(l: [T])` |
-| Optional chaining `?.` | 2 | `list?.len()` |
-| Labeled loops | 2 | `while (true) :outer { break :outer; }` |
+| Type-value literal `<T>` | 5 | `typeof x == <mut [int]>` |
+| Inferred enum case where a type is declared | 3 | `hash(.Md5, data: s)` |
+| Generic OBJECT declarations `object F::<T>` | 2 | `object Payload::<K, V> { … }` |
+| Labeled loops | 2 | `while (true) :outer { break outer; }` |
 | Multiple/typed `catch` | 2 | `catch (e: str) {} catch (e: Err) {}` |
 | Raw identifiers `@"..."` | 2 | `tuple.@"0"` |
+| Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
+| `!>`/`*>` inside a parameter's function type | 2 | `fn: fun () > int *> int?` |
 | `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
 
 Plus a long tail of single-test gaps (block expressions, selective imports,
-inline `catch void`, if-expressions, field punning, checked subscripts, anonymous
-object types, `enum<str>` backing types). Two remaining differences are
-deliberate, not pending:
+inline `catch void`, if-expressions, `match`, anonymous object TYPES, nested
+backtick interpolation, assignment as an arrow-lambda body). Two remaining
+differences are deliberate, not pending:
 
 - **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
   constant of 57.295779513082195; the correctly-rounded f64 value is

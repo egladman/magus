@@ -240,7 +240,7 @@ func (c *checker) funDeclType(fd *ast.FunDecl) *types.FuncType {
 	if fd.YieldAnnot != "" {
 		yield = c.resolveAnnot(fd.YieldAnnot)
 	}
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: fd.Params}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: fd.Params, ParamDefaults: fd.ParamDefaults}
 }
 
 // resolveAnnot parses a type annotation string and resolves NamedType references.
@@ -304,8 +304,8 @@ func (c *checker) checkStmt(n ast.Node) {
 		}
 	case *ast.ForStmt:
 		c.pushScope()
-		if v.Init != nil {
-			c.checkStmt(v.Init)
+		for _, init := range v.Init {
+			c.checkStmt(init)
 		}
 		if v.Cond != nil {
 			cond := c.infer(v.Cond)
@@ -313,8 +313,8 @@ func (c *checker) checkStmt(n ast.Node) {
 				c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "for condition must be bool, got %s", cond.TypeName())
 			}
 		}
-		if v.Post != nil {
-			c.checkStmt(v.Post)
+		for _, post := range v.Post {
+			c.checkStmt(post)
 		}
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
@@ -870,7 +870,9 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 // an unknown or duplicate label, a label colliding with a positional slot, a
 // missing parameter — is a checker error at the call site.
 func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
-	if v.ArgNames == nil {
+	// A call with no labels still needs this pass when the callee declares
+	// defaults: `hey("John")` fills three slots the caller never wrote.
+	if v.ArgNames == nil && !hasDefault(ft) {
 		return
 	}
 	defer func() { v.ArgNames = nil }()
@@ -885,7 +887,10 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 	sawNamed := false
 	pos := 0
 	for i, arg := range v.Args {
-		name := v.ArgNames[i]
+		name := ""
+		if i < len(v.ArgNames) {
+			name = v.ArgNames[i]
+		}
 		if name == "" {
 			if sawNamed {
 				c.errorfc(v.Pos, ArgumentError, "positional argument after named argument")
@@ -920,12 +925,25 @@ func (c *checker) resolveNamedArgs(v *ast.CallExpr, ft *types.FuncType) {
 		filled[idx] = true
 	}
 	for j, ok := range filled {
-		if !ok {
-			c.errorfc(v.Pos, ArgumentError, "missing argument %q", ft.ParamNames[j])
-			return
+		if ok {
+			continue
 		}
+		// An unwritten slot takes the parameter's declared default, evaluated here
+		// at the call site. Upstream restricts defaults to constants, so there is
+		// nothing in one that could see the callee's scope rather than this one.
+		if j < len(ft.ParamDefaults) && ft.ParamDefaults[j] != nil {
+			slots[j] = ft.ParamDefaults[j]
+			continue
+		}
+		c.errorfc(v.Pos, ArgumentError, "missing argument %q", ft.ParamNames[j])
+		return
 	}
 	v.Args = slots
+}
+
+// hasDefault reports whether any of ft's parameters declares a default value.
+func hasDefault(ft *types.FuncType) bool {
+	return slices.ContainsFunc(ft.ParamDefaults, func(n ast.Node) bool { return n != nil })
 }
 
 func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
@@ -1039,7 +1057,7 @@ func (c *checker) inferFunExpr(v *ast.FunExpr) types.Type {
 	c.retTyp = savedRet
 	c.yieldTyp = savedYield
 
-	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: v.Params}
+	return &types.FuncType{Params: params, Ret: ret, Yield: yield, ParamNames: v.Params, ParamDefaults: v.ParamDefaults}
 }
 
 func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {

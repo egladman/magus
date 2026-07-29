@@ -1225,9 +1225,9 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 						vm.push(IntValue(int64(state.idx)))
 					}
 					vm.push(vm.allocEnumVal(&enumValObj{
-						Enum:    state.enumDef.Name,
-						Case:    state.enumDef.Cases[state.idx],
-						Ordinal: int64(state.idx),
+						Enum: state.enumDef.Name,
+						Case: state.enumDef.Cases[state.idx],
+						Val:  state.enumDef.Values[state.idx],
 					}))
 					state.idx++
 				} else {
