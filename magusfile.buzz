@@ -206,6 +206,26 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["tool", "mockery"]);
 }
 
+// Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
+//
+// The installed copies are GENERATED, and declaring them says so: without this
+// they classified as ordinary source, so `magus describe file .claude/skills/...`
+// reported a hand-editable file and the agent guard stayed silent on the one edit
+// that is always wrong. CLAUDE.md has said "edit the sources, not the installed
+// copies" all along; this is the declaration that makes the tooling say it too.
+//
+// AGENTS.md is deliberately NOT declared. Only its marked section is managed -
+// bytes outside the markers are hand-owned - so calling the whole file generated
+// would tell a reader never to edit a file they are meant to edit. `magus graph
+// verify` still checks that section's stamp.
+export fun skills_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
+    magus\cmd(["agent", "install", ".claude/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install", ".agents/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install", ".opencode/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install-agents-md"], {"quiet": true});
+}
+
 // Regenerates the CLI config-flag plumbing from internal/config/config.go. One
 // generator invocation, four trees: the flag/bind plumbing beside the CLI, the
 // schema field list, and the env applier next to config itself. All four are
