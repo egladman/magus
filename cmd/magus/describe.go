@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -232,7 +233,10 @@ func unknownEntity(kind, name string, all []string) error {
 }
 
 func describeSpells(ctx context.Context, root string, args []string) error {
+	var withVersions bool
 	pos, err := cmdParse("describe spells", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&withVersions, "versions", false,
+			"run each spell's version probe and report what it returns, plus the cache-key fragment it produces")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe spell[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -294,8 +298,50 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		if t.Opaque {
 			fmt.Printf("    opaque: true\n")
 		}
+		if withVersions {
+			printSpellVersions(ctx, t.Name, root)
+		}
 	}
 	return nil
+}
+
+// printSpellVersions EXECUTES a spell's version probes and reports what they return
+// today, alongside the cache-key fragment each produces.
+//
+// Declared and observed are different questions, and only the second one debugs
+// anything. The existing surface answers the first with a bare boolean, which says a
+// probe exists and nothing about what it reports - so a toolchain that has drifted
+// from what the project pins is invisible even though its value is sitting in every
+// cache key. It is also the first thing to check for MGS1009 (a target that never
+// replays), because a probe returning a moving value moves the key with it.
+//
+// Never cached. A probe's whole job is to observe what is installed right now, and a
+// cached probe's failure mode is a wrong cache HIT, which trades away the guarantee
+// the probe exists to provide.
+func printSpellVersions(ctx context.Context, name, dir string) {
+	sp, ok := project.DefaultSpellRegistry().Lookup(name)
+	if !ok || !sp.HasVersionProbe() {
+		return
+	}
+	fmt.Printf("    versions (probed just now, never cached):\n")
+	if v, err := sp.ProbeVersion(ctx, dir); err != nil {
+		fmt.Printf("      %-16s probe failed: %v\n", name, err)
+	} else if v != "" {
+		fmt.Printf("      %-16s %s\n", name, v)
+		fmt.Printf("      %-16s key: spell:version=%s\n", "", v)
+	}
+	for _, tool := range sp.VersionProbeNames() {
+		v, err := sp.ProbeVersionOf(ctx, tool, dir)
+		switch {
+		case err != nil:
+			fmt.Printf("      %-16s probe failed: %v\n", tool, err)
+		case v == "":
+			fmt.Printf("      %-16s (no version reported)\n", tool)
+		default:
+			fmt.Printf("      %-16s %s\n", tool, v)
+			fmt.Printf("      %-16s key: spell:%s:version=%s\n", "", tool, v)
+		}
+	}
 }
 
 // describeCharms routes `describe charm[s]`: no name lists every charm known in the
