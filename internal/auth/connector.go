@@ -21,7 +21,7 @@ import (
 )
 
 // Connector tokens are the SECOND auth tier: named, hashed-at-rest, expiring
-// secrets minted for EXTERNAL MCP clients (a Claude connector, an IDE). Unlike
+// secrets minted for EXTERNAL MCP clients (a hosted connector, an IDE). Unlike
 // the single retrievable cli token (token.go), a connector token is shown ONCE
 // at creation and only its SHA-256 is stored, so it can never be re-displayed -
 // rotate by minting a new one. Multiple named tokens coexist so each client

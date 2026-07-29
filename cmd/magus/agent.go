@@ -25,8 +25,8 @@ import (
 var skillFS embed.FS
 
 // agentsSection is the distilled always-on block installed into AGENTS.md for
-// platforms that read that contract instead of skill directories (Codex, Aider,
-// and most other AGENTS.md-reading agents). Same rules as the skills, compressed.
+// hosts that read that contract instead of skill directories. Same rules as the
+// skills, compressed.
 //
 //go:embed agents-section.md
 var agentsSection string
@@ -203,19 +203,19 @@ func printAgentInstallNextSteps(written []string) {
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
 	interactive.Emit(os.Stderr, "the skills point at MAGUS.md's routing table:  magus describe graph -o markdown")
-	interactive.Emit(os.Stderr, "safety: consider a line in your CLAUDE.md/AGENTS.md so parallel agents cannot wipe each other's work:")
+	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
 }
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
-// CLAUDE.md/AGENTS.md: it stops one agent's whole-tree revert from destroying
+// repo's agent instruction file: it stops one agent's whole-tree revert from destroying
 // another's uncommitted work. Shared by the install hint and the sample doc.
 const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
 // agentSampleDoc returns a complete, opinionated-but-tweakable AGENTS.md starter a
 // developer can paste and adapt. It is print-only (magus agent sample): unlike
-// `agent install codex`, which manages a marked magus section inside an existing
+// a host-named subcommand, which would manage a marked magus section inside an existing
 // AGENTS.md, this hands over a whole file to own, so magus never risks clobbering
 // one. The magus block reproduces agents-section.md verbatim.
 func agentSampleDoc() string {

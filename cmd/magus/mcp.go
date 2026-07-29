@@ -52,18 +52,21 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "Start the daemon:\n  magus server start\n\n")
 	fmt.Fprintf(os.Stderr, "MCP endpoint (Streamable HTTP):\n  http://%s/mcp\n\n", addr)
 	fmt.Fprintf(os.Stderr, "The endpoint requires a bearer token. Print it with:\n  magus config mcp token print\n\n")
-	fmt.Fprintf(os.Stderr, "Codex configuration (user-level ~/.codex/config.toml; do not commit it):\n")
-	fmt.Fprintf(os.Stderr, "  [mcp_servers.magus]\n  url = \"http://%s/mcp\"\n", addr)
-	fmt.Fprintf(os.Stderr, "  bearer_token_env_var = \"MAGUS_MCP_TOKEN\"\n  enabled = true\n\n")
-	fmt.Fprintf(os.Stderr, "For Codex CLI, export MAGUS_MCP_TOKEN before launching Codex:\n")
-	fmt.Fprintf(os.Stderr, "  export MAGUS_MCP_TOKEN=\"$(magus config mcp token print)\"\n")
-	fmt.Fprintf(os.Stderr, "  codex mcp list              # confirms registration\n")
-	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp  # confirms the endpoint is serving\n\n")
-	fmt.Fprintf(os.Stderr, "For the desktop app or IDE, set the variable in its launch environment and restart it.\n")
-	fmt.Fprintf(os.Stderr, "If mcp.address changes, update the Codex URL too. See: docs/guides/mcp.md\n\n")
-	fmt.Fprintf(os.Stderr, "Claude Desktop / IDE configuration:\n")
-	fmt.Fprintf(os.Stderr, "  { \"type\": \"streamable-http\", \"url\": \"http://%s/mcp\",\n", addr)
-	fmt.Fprintf(os.Stderr, "    \"headers\": { \"Authorization\": \"Bearer <token>\" } }\n")
+	// Everything above is what EVERY client needs: transport, URL, credential.
+	// What each client does with them - a TOML table, a JSON object, an env var
+	// read at launch - is that client's dialect, and it belongs in documentation
+	// the reader owns, not in this binary. Naming clients here would make a
+	// change to any one of them a magus release. See docs/guides/mcp.md.
+	fmt.Fprintf(os.Stderr, "Point your MCP client at that endpoint. Most take three settings:\n")
+	fmt.Fprintf(os.Stderr, "  transport  streamable-http\n")
+	fmt.Fprintf(os.Stderr, "  url        http://%s/mcp\n", addr)
+	fmt.Fprintf(os.Stderr, "  auth       Authorization: Bearer <token>, or a token env var\n\n")
+	fmt.Fprintf(os.Stderr, "Many clients read a token from the environment at launch:\n")
+	fmt.Fprintf(os.Stderr, "  export MAGUS_MCP_TOKEN=\"$(magus config mcp token print)\"\n\n")
+	fmt.Fprintf(os.Stderr, "Then confirm the endpoint is actually serving:\n")
+	fmt.Fprintf(os.Stderr, "  magus status --probe=liveness,mcp\n\n")
+	fmt.Fprintf(os.Stderr, "Per-client configuration, and what to re-register when mcp.address\n")
+	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/mcp.md\n")
 	return nil
 }
 
