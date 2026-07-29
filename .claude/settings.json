@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\"; if [ ! -x \"$MAGUS_BIN\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: go build -o /tmp/magus ./cmd/magus\"}}'; exit 0; fi; exec \"$MAGUS_BIN\" agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/templates/agent-hooks/magus-guard-command.sh",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; exec \"$MAGUS_BIN\" agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/templates/agent-hooks/magus-guard-path.sh",
             "timeout": 10
           }
         ]
