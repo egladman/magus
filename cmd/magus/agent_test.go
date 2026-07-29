@@ -461,7 +461,8 @@ func TestAgentHookPathMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
 			require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(""), &out, tt.args))
-			assert.Equal(t, "pass\n", out.String(), "an unclassifiable path must fail open, never block an edit")
+			assert.Equal(t, "pass\n", out.String(),
+				"an unclassifiable path says nothing: an advisory fired on a guess trains the reader to ignore it")
 		})
 	}
 }

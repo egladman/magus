@@ -107,7 +107,14 @@ type Binding struct {
 
 // Project is the record magus maintains for every directory with a marker file.
 type Project struct {
-	Path           string // repo-relative directory, forward slashes (e.g. "api", ".")
+	Path string // repo-relative directory, forward slashes (e.g. "api", ".")
+	// Name is the declared human label from magus.project's "name" key, or "" to
+	// derive one from the path. It exists for the ROOT project, whose path is "."
+	// and whose label would otherwise fall back to the checkout's directory
+	// basename - so a worktree, a clone under a different name, or a CI checkout
+	// each renamed the root project and rewrote every generated index that names
+	// it. Declaring the name makes generated output reproducible anywhere.
+	Name           string
 	Dir            string // absolute filesystem path
 	Spell          string // primary spell name; use Spells for fan-out dispatch
 	Spells         []string

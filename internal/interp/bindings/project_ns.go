@@ -20,7 +20,7 @@ import (
 
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
-	"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+	"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
 }
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
@@ -124,6 +124,11 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	if sv, ok := v.MapGet("sources"); ok {
 		if paths := buzzValToStringSlice(sv); len(paths) > 0 {
 			opts = append(opts, workspace.WithSources(paths...))
+		}
+	}
+	if nv, ok := v.MapGet("name"); ok && nv.IsStr() {
+		if name := strings.TrimSpace(nv.AsString()); name != "" {
+			opts = append(opts, workspace.WithName(name))
 		}
 	}
 	if ev, ok := v.MapGet("exclusive"); ok {
