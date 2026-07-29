@@ -459,6 +459,26 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 				memo[key] = v
 			}
 			vers = append(vers, s.Name()+":"+v)
+			// Named probes contribute spell:tool:version, so a spell driving several
+			// binaries records each. Sorted by VersionProbeNames, and memoized on the
+			// same (spell, dir, tool) basis as the primary, so N tools cost N spawns
+			// per project per run rather than N per target.
+			for _, tool := range s.VersionProbeNames() {
+				tk := key + "\x00" + tool
+				tv, ok := memo[tk]
+				if !ok {
+					probed, err := s.ProbeVersionOf(ctx, tool, dir)
+					if err != nil {
+						slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
+							slog.String("spell", s.Name()), slog.String("tool", tool),
+							slog.String("dir", dir), slog.String("err", err.Error()))
+						probed = "UNPROBED"
+					}
+					tv = probed
+					memo[tk] = tv
+				}
+				vers = append(vers, s.Name()+":"+tool+":"+tv)
+			}
 		}
 		if len(vers) > 0 {
 			out[p.Path] = vers

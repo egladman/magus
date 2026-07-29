@@ -26,6 +26,18 @@ export fun mgs_listProvidedGlobs() > [str] { return ["gen/**"]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 
+// No protoc-gen-* probes here, deliberately. buf generate delegates codegen to
+// plugins, so THEY produce the committed output - but WHICH plugins is declared in
+// each workspace's buf.gen.yaml, not by this spell: one repo pins `local: [go,
+// tool, protoc-gen-go]`, another uses a remote plugin needing no local binary at
+// all. A built-in shipped to every user cannot name them without probing tools
+// most workspaces do not have, and a probe that always fails records a constant
+// UNPROBED, which tracks nothing while adding noise to every key.
+//
+// Where a plugin is pinned by a manifest (go.mod's tool directive), the honest fix
+// is for the project to declare that manifest an input, so the pin's own change
+// invalidates the codegen.
+
 fun bufBuild(target: Target) > Command { return Command{bin = "buf", args = ["build"]}; }
 fun bufGenerate(target: Target) > Command { return Command{bin = "buf", args = ["generate"]}; }
 fun bufLint(target: Target) > Command {

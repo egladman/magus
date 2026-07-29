@@ -229,6 +229,10 @@ var goldenBuiltins = map[string]Descriptor{
 		Name:       "docker",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
+		// hadolint is a second binary the spell drives, pinned by no manifest, so it
+		// needs its own probe: upgrading it changes lint verdicts with nothing in any
+		// cache key to notice.
+		VersionCmds: map[string][]string{"hadolint": {"hadolint", "--version"}},
 		Ops: map[string]types.SpellOp{
 			"docker-build":       {Command: types.Command{Bin: "docker", Args: []string{"build"}}},
 			"docker-buildx":      {Command: types.Command{Bin: "docker", Args: []string{"buildx", "build"}}},

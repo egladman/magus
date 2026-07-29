@@ -14,6 +14,11 @@ pnpm = "10.33.0"
 # Lints the POSIX sh guard templates in docs/guides/integrations/agents. Pinned so
 # the gate is the same everywhere rather than whatever a developer happens to have.
 "aqua:koalaman/shellcheck" = "0.11.0"
+# Dockerfile linter driven by the docker spell's hadolint op. Pinned because it was
+# previously whatever happened to be on PATH: an upgrade changes which Dockerfiles
+# lint clean, and unlike the `go tool` plugins it is bound to no module graph, so
+# nothing else would have caught the drift.
+"aqua:hadolint/hadolint" = "2.14.0"
 tinygo = "0.41.1"
 "aqua:WebAssembly/binaryen" = "129"
 "aqua:bufbuild/buf" = "1.58.0"

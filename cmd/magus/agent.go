@@ -463,7 +463,15 @@ type bashGuardVerdict struct {
 // Deliberately NOT applied to the whole-tree VCS patterns: those deny work that
 // cannot be recovered, so a rare false positive there is the safe direction, and
 // `cd /repo && git stash` must keep matching however it is reached.
-const cmdPos = `(?:^|[;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
+// A separator preceded by a BACKSLASH is not a shell separator - it is an escape
+// inside a quoted argument, and the commonest case is a grep alternation
+// (`grep "golangci-lint\|mockery"`). RE2 has no lookbehind, so the char before the
+// separator is consumed by a negated class instead. `^` keeps the start-of-string
+// case, where there is no preceding char to inspect.
+//
+// Found by dogfooding: this pattern denied `grep -n "golangci-lint\|mockery|gofmt"`,
+// reading the regex alternation as a pipe into `mockery`.
+const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
 // The guard patterns. [^&|;]* keeps a flag search inside one segment of a
 // compound command, so `git reset && tool --hard-mode` does not false-positive.

@@ -168,6 +168,42 @@ invalidation is additive. Reverting a change restores the earlier key and replay
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
 
+### Anti-pattern: a shared manifest as an input
+
+The commonest way to wreck a cache is to reach for the file that pins your tools -
+`mise.toml`, `package.json`, `go.mod`, a lockfile - and declare it an input,
+usually project-wide.
+
+The intent is right: a tool version really is part of what produced the output, and
+a bump really should invalidate. The result is not. A manifest pins _many_ tools,
+and it moves for reasons unrelated to most of them. Wire it into every project and
+one linter bump rebuilds the entire graph - in CI, the difference between an
+affected run and a from-scratch build, for a change that could not have altered
+almost any of it. Do that a few times and people stop trusting the affected set,
+which is the actual loss: a cache nobody believes is worse than no cache.
+
+**Declare what changed, not what contains it.** The blast radius should match the
+tools a project genuinely uses:
+
+- **a tool with a version probe** (`mgs_getVersionCommand`, or
+  `mgs_getVersionCommands` for a spell driving several binaries) contributes
+  `spell:tool:version` to the key of every project binding that spell, and
+  _nothing_ to any other. Bumping hadolint moves projects using the docker spell;
+  a Go project's key never notices. This is almost always the right answer for an
+  external binary.
+- **a manifest that is genuinely a source** of one project - `go.mod` for a Go
+  project whose build reads it - belongs in that project's `sources`, where it
+  already is. That is not this anti-pattern: the file really does feed those
+  targets.
+- **a pin that reaches one target only** wants a per-target declaration, not a
+  project-wide one. `magus\inputs` in that target's body keeps a sibling target's
+  key still.
+
+If you find yourself adding a manifest to `sources` to fix a staleness bug, the
+question to ask first is _which tool_ went stale, and whether it can be probed
+instead. A probe invalidates the projects that use the tool. A manifest
+invalidates everyone who happens to live near it.
+
 ### Opting out and busting
 
 Four controls, at four different scopes:
