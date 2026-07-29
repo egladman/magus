@@ -475,15 +475,15 @@ const (
 	// a spell op still runs through magus, so the cache, the sandbox, and
 	// affected tracking all survive.
 	//
-	// Rung 2 deliberately does NOT promise argument passthrough: `magus run
-	// go::go-test <p> -- -run TestX` silently DROPS the extra args (verified -
-	// it even serves a cached result, so they are not in the cache key either).
-	// Teaching a passthrough that does not exist would send agents in a circle.
+	// Rung 2 DOES forward args: `magus run go::go-test <p> -- -run TestX` runs
+	// `go test ./... -run TestX`. That looked broken until the cache keyed extra
+	// args - the run replayed a cached success, so the arg never executed and the
+	// feature appeared missing.
 	runGuardContext = "magus workspace: run this through magus, not the raw tool - a raw tool bypasses the cache, the sandbox, and affected tracking. Escalate only as far as you actually need:\n" +
 		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - MAGUS.md lists every target\n" +
 		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
 		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
-		"Narrow by PROJECT rather than by tool flag - `magus run test libs/foo` is the supported way to run less. A spell op does not forward ad-hoc flags: extra args after -- are dropped, so reaching for the raw binary to pass one is the only case left, and it is a last resort you should say you are taking. Load the magus-run skill if not already loaded."
+		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it -
 	// but a generate target rewriting its declared outputs is the system working,
@@ -491,8 +491,15 @@ const (
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
 	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs skill if not already loaded."
-	// Blocked, not advised: a repo-wide text search is the single habit that keeps
-	// the graph unused, and an advisory it can scroll past does not change it.
+	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
+	// search to fall back on, verified against a built binary - `magus query`
+	// fuzzy-matches the DOMAIN graph (targets, Buzz functions, docs) and returns
+	// 0 for a host-language symbol, `magus refs` needs the exact symbol name, and
+	// `magus x` is an interactive TTY picker. So "where does this string appear"
+	// has no magus answer, and denying grep removed a capability with no
+	// replacement - it blocked three legitimate lookups in one session. The
+	// advisory still fires on every repo-wide search, which is the pressure that
+	// matters, without making the agent unable to work.
 	//
 	// The reason must ROUTE, not scold. The two surfaces answer different
 	// questions and confusing them is why the graph gets abandoned: `magus query`
@@ -505,13 +512,13 @@ const (
 	// that the project is an argument and never needs to be implied by the CWD.
 	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
 
-	searchGuardReason = "repo-wide text search is blocked here: this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
+	searchGuardReason = "this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
 		"  CODE SYMBOL (where is it defined / used):  magus refs <symbol>   -> definition file, every referencing file, exact lines\n" +
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
 		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
 		"  HOW two things connect:  magus path <a> <b>\n" +
 		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
-		"Searching text for its own sake still works: grep a SPECIFIC file (`grep pattern path/to/file`), which is not blocked. Load the magus-query skill for the full grammar."
+		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// flags are the actionable part, and a weaker model needs the exact spelling.
@@ -550,7 +557,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):
-		return bashGuardVerdict{Deny: searchGuardReason}
+		return bashGuardVerdict{Context: searchGuardReason}
 	}
 	return bashGuardVerdict{}
 }

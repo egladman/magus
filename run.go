@@ -573,6 +573,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			step := m.buildStep(p, st.target)
 			step.ToolVersions = toolVer[p.Path]
 			step.Charms = charmKey
+			// Args after `--` change what the target does, so they key the cache
+			// exactly as charms do; without this a run with different args
+			// replays the previous run's result.
+			step.ExtraArgs = opts.ExtraArgs
 			if raceForcesNoCache(opts) {
 				step.NoCache = true
 			}
