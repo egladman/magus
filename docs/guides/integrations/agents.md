@@ -266,6 +266,22 @@ supplies the rule evaluation; the host supplies the hook that calls it.
 `magus agent hook` reads one command, applies the guard rules, and returns a
 neutral verdict.
 
+magus denies only what cannot be undone, and explains everything else. That is
+the whole rule, and it is worth stating plainly because the temptation runs the
+other way: a guard that CAN prove something is wrong is tempted to block it.
+
+A whole-tree `git reset --hard` destroys uncommitted and untracked work, including
+a concurrent agent's, and nothing recovers it - so it is denied. A hand-edited
+generated file is wasteful, not destructive: regenerating erases it. magus knows
+definitively that the file is generated, and still only explains, because
+blocking would treat the agent as unable to learn when the classification it
+needs is one `magus describe file` away. An agent told why an edit was futile
+does not repeat it; an agent whose call was rejected has only lost a turn.
+
+The practical effect is that magus stays out of the way. It is the same standard
+the tool holds itself to everywhere else - never get between someone and the
+work - extended to the agent doing it.
+
 - `deny`, with a `reason` written for the model: destructive whole-tree VCS
   operations (`git stash`, `git reset --hard`, `git checkout .`,
   `git restore .`, `git clean -f`) that permanently destroy uncommitted and
@@ -291,11 +307,11 @@ neutral verdict.
 - `pass`: everything else.
 
 `magus agent hook --path <file>` is the one rule that is not a heuristic. It
-classifies the path against every target's DECLARED outputs and denies an edit to
-a generated file, because magus knows definitively which files a target
-regenerates. Wire it to your host's file-editing tool, not its shell tool. It
-fails open on any uncertainty - no workspace, an unclaimed path - since a guard
-that blocks edits when it cannot tell is worse than one that misses some.
+classifies the path against every target's DECLARED outputs, so it knows
+definitively which files a target regenerates. It ADVISES rather than blocks -
+see the rule above - and says nothing on any uncertainty, since an advisory
+fired on a guess trains the reader to ignore it. Wire it to your host's
+file-editing tool, not its shell tool.
 
 That verdict is the whole contract. The command arrives however your host can
 produce it: as arguments, as raw stdin, or extracted from a JSON event on
@@ -316,7 +332,7 @@ per-host. What differs is how much of a verdict a host's hook surface can carry.
 | --- | --- | --- | --- | --- |
 | Claude Code | yes (verified) | yes (verified) | yes | yes (`additionalContext`) |
 | Codex | yes (verified) | yes, per OpenAI's docs (unverified here) | yes | yes (`additionalContext`) |
-| Cursor | yes (verified) | detect only, after the fact (verified) | yes (`user_message` + `agent_message`) | no - collapses to allow |
+| Cursor | yes (verified) | yes, reported after the write (verified) | yes (`user_message` + `agent_message`) | no - collapses to allow |
 | OpenCode | yes (verified) | yes (verified) | yes (thrown) | no - logged for the human |
 
 "Verified" means executed against this binary with a real event on stdin.
@@ -339,21 +355,17 @@ OpenCode's tool identifiers were confirmed against an installed OpenCode
 binary, and `filePath` is the field its edit tools carry. `opencode debug config`
 confirms a plugin in `~/.config/opencode/plugins/` is loaded.
 
-**Cursor gets the declared-output rule as DETECTION rather than prevention.**
-Its documented events are `beforeReadFile` (blocks) and `afterFileEdit` (fires
-after the write, cannot block); there is no `beforeFileEdit` or
-`beforeWriteFile`. Rather than ship nothing there, `cursor-guard-path.sh` wires
-to `afterFileEdit` and reports when the edited file is a declared output.
+Cursor has no pre-write file hook - its documented events are `beforeReadFile`
+(blocks) and `afterFileEdit` (fires after the write) - and under this rule that
+no longer matters. The declared-output rule only ever explains, so reporting
+after the write is the intended behavior on every host, not a Cursor concession.
+What differs between hosts is the CHANNEL the explanation travels on: injected
+context where the host has one, stderr prose where it does not.
 
-That recovers most of the value. The failure this rule exists to stop is an
-agent quietly hand-editing a generated file and believing the change survived;
-saying so immediately - before it builds more work on that edit - fixes the
-belief even though the write already landed. What is lost is prevention, and the
-message says so plainly rather than implying the edit was stopped.
-
-Cursor's `preToolUse` is documented as blocking for any tool and may be a route
-to real prevention, but its input shape is not established here, and this page
-does not guess at one.
+Cursor did shape one thing genuinely: its `advise` on a shell command collapses
+to a plain allow, because it delivers `agent_message` only on a denial. Those
+nudges live in the installed skills instead, which is why the skills and the
+guard say the same things.
 
 Everything else is additive: a host missing a file-write hook still gets every
 command rule, and adding one later changes no magus code, because the rules and
@@ -490,8 +502,8 @@ exec "$GUARD_MAGUS_BIN" agent hook --from-json "$HOST_EVENT_PATH" -o "template=$
 
 #### `magus-guard-path.sh`
 
-The declared-output guard. Wire to your host's file-editing tool. The only rule that is not a
-heuristic - magus reads the target's declared outputs, so a generated file is generated by definition.
+The declared-output guard. Wire to your host's file-editing tool. It explains rather than blocks -
+editing a generated file is wasteful, not destructive.
 
 ```sh
 #!/usr/bin/env sh
@@ -504,9 +516,12 @@ heuristic - magus reads the target's declared outputs, so a generated file is ge
 # DECLARED outputs, so a generated file is generated by definition and an edit to
 # it would be overwritten by the next run.
 #
-# It only ever denies, so it needs no advise arm, and it fails open on any
-# uncertainty - no magus, no workspace, an unclaimed path - because a guard that
-# blocks edits when it cannot tell is worse than one that misses some.
+# It ADVISES rather than blocks. magus denies only what cannot be undone; a
+# hand-edited generated file is wasteful, not destructive, since regenerating
+# erases it. So this explains that the edit will be overwritten and lets the
+# agent correct itself, rather than treating it as unable to learn. It says
+# nothing on any uncertainty - no magus, no workspace, an unclaimed path -
+# because an advisory fired on a guess trains the reader to ignore it.
 #
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
@@ -514,7 +529,7 @@ heuristic - magus reads the target's declared outputs, so a generated file is ge
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
@@ -593,13 +608,10 @@ needing three files to install a guard is how a guard ends up not installed.
 #   - A denial carries BOTH user_message (shown to you) and agent_message (sent
 #     to the model); neither is delivered on an allow, so `advise` collapses to a
 #     plain allow here. Those nudges live in the installed skills instead.
-#   - There is NO pre-write file hook. beforeReadFile blocks reads; afterFileEdit
-#     fires after the write and cannot stop it. So the declared-output rule is
-#     DETECTION here, not prevention: it reports that the edit will be
-#     overwritten, which still corrects the belief that the change survived.
-#     Cursor's preToolUse is documented as blocking for any tool and may be a
-#     route to real prevention, but its payload is not established here, so this
-#     file does not guess at one.
+#   - There is NO pre-write file hook, and it does not matter: magus advises on
+#     generated files rather than blocking them, so reporting after the write is
+#     the intended behavior everywhere, not a Cursor concession. What Cursor
+#     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
 
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -614,7 +626,7 @@ case "$event" in
 	# -o name prints the bare decision word, which is all this needs. magus
 	# re-roots the absolute path Cursor sends onto the workspace itself.
 	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
-	[ "$verdict" = "deny" ] || exit 0
+	[ "$verdict" = "advise" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
 	# prose rather than as a verdict it would not read.
 	printf '%s\n' \

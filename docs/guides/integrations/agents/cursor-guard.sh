@@ -23,13 +23,10 @@
 #   - A denial carries BOTH user_message (shown to you) and agent_message (sent
 #     to the model); neither is delivered on an allow, so `advise` collapses to a
 #     plain allow here. Those nudges live in the installed skills instead.
-#   - There is NO pre-write file hook. beforeReadFile blocks reads; afterFileEdit
-#     fires after the write and cannot stop it. So the declared-output rule is
-#     DETECTION here, not prevention: it reports that the edit will be
-#     overwritten, which still corrects the belief that the change survived.
-#     Cursor's preToolUse is documented as blocking for any tool and may be a
-#     route to real prevention, but its payload is not established here, so this
-#     file does not guess at one.
+#   - There is NO pre-write file hook, and it does not matter: magus advises on
+#     generated files rather than blocking them, so reporting after the write is
+#     the intended behavior everywhere, not a Cursor concession. What Cursor
+#     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
 
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -44,7 +41,7 @@ case "$event" in
 	# -o name prints the bare decision word, which is all this needs. magus
 	# re-roots the absolute path Cursor sends onto the workspace itself.
 	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
-	[ "$verdict" = "deny" ] || exit 0
+	[ "$verdict" = "advise" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
 	# prose rather than as a verdict it would not read.
 	printf '%s\n' \

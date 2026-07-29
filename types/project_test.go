@@ -83,3 +83,21 @@ func TestProject_AttachSpell(t *testing.T) {
 	assert.Equal(t, "go", p.Spell, "primary Spell must not change on second AttachSpell")
 	assert.Len(t, p.Spells, 2)
 }
+
+// TestProjectDisplayNamePrefersDeclaredName pins the fix for the root project's
+// label. Without a declared name it falls back to the checkout's directory
+// basename, so a worktree, a renamed clone, or a CI checkout each renamed the
+// ROOT project and rewrote every generated index that names it - which is why
+// regenerating MAGUS.md from a worktree used to produce spurious diffs.
+func TestProjectDisplayNamePrefersDeclaredName(t *testing.T) {
+	// The root: path "." carries no name of its own, so the declared one is the
+	// only thing that survives being checked out somewhere else.
+	assert.Equal(t, "magus", ProjectDisplayName(".", "magus", "/tmp/some-worktree-name"),
+		"a declared name must win over the directory basename")
+	assert.Equal(t, "some-worktree-name", ProjectDisplayName(".", "", "/tmp/some-worktree-name"),
+		"without one, the basename is still the fallback")
+
+	// A nested project already has an unambiguous path, so nothing changes there.
+	assert.Equal(t, "libs/foo", ProjectDisplayName("libs/foo", "", "/tmp/w/libs/foo"))
+	assert.Equal(t, "custom", ProjectDisplayName("libs/foo", "custom", "/tmp/w/libs/foo"))
+}

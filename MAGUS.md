@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2160 nodes** and **4694 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2482 nodes** and **4775 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -44,8 +44,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 8 | `magus query kind:project` | `plans-buzz-parity-handoff-9b8119`, `docs`, `libs/gopherbuzz` |
-| target | 79 | `magus query kind:target` | `content-generate`, `generate`, `image-build` |
+| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 82 | `magus query kind:target` | `content-generate`, `bindings-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -53,25 +53,26 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 45 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 204 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 113 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 229 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1098 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 116 | `magus query kind:import` | `std`, `magus`, `fs` |
+| doc | 215 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 414 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 230 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1102 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 117 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 25 | `magus query project:.` | `generate`, `image-build`, `format` |
+| . | 25 | `magus query project:.` | `bindings-generate`, `generate`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
+| docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
 | libs/diag | 8 | `magus query project:libs/diag` | `format`, `build`, `generate` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
-## Project: plans-buzz-parity-handoff-9b8119
+## Project: magus
 
 | Target | What it does |
 |---|---|
@@ -142,6 +143,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `changelog-generate` | changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. |
 | `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
+
+## Project: docs/guides/integrations/agents
+
+| Target | What it does |
+|---|---|
+| `lint` | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
+| `ci` | 'ci' is the anchor `magus affected ci` keys off. |
+| `preflight` |  |
 
 ## Project: libs/diag
 

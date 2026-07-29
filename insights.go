@@ -94,7 +94,7 @@ func (m *Magus) Affinity(ctx context.Context, opts types.InsightOptions) (types.
 
 func (m *Magus) projectDisplayName(path string) string {
 	if p := m.Get(path); p != nil {
-		return types.ProjectLabel(p.Path, p.Dir)
+		return types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 	}
 	return types.ProjectLabel(path, "")
 }

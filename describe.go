@@ -294,7 +294,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					}
 				}
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectLabel(p.Path, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -341,7 +341,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// the exact stale-hit failure this footprint exists to prevent.
 						return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
 							"%s: target %q: ctx.outputs declares an output into %q, which does not resolve to a path in this workspace",
-							types.ProjectLabel(p.Path, p.Dir), n.Name, ref.Project)
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Project)
 					}
 					if p.TargetOutputs == nil {
 						p.TargetOutputs = map[string][]types.OutputRef{}
@@ -366,7 +366,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
 							return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
 								"%s: target %q: ctx.outputs glob %q must be relative to %q and must not contain ..",
-								types.ProjectLabel(p.Path, p.Dir), n.Name, ref.Glob, owner)
+								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
 						}
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
 					}
@@ -502,16 +502,20 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			continue // best-effort introspection: a project we can't read just omits its graph
 		}
 		for _, src := range srcs {
-			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectLabel(p.Path, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn}
+			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectDisplayName(p.Path, p.Name, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn}
 			if repoRoot != "" {
 				if rel, err := filepath.Rel(repoRoot, p.Dir); err == nil {
 					entry.RelPath = filepath.ToSlash(rel)
 				}
 			}
 			// The workspace-root project's path is ".", which would render as the
-			// ambiguous "## Project: ." heading; types.ProjectLabel collapses it to the
-			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
-			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
+			// ambiguous "## Project: ." heading. A DECLARED name wins outright - it is
+			// the only label that survives being checked out under a different
+			// directory name (a worktree, a renamed clone, a CI checkout), each of
+			// which otherwise renamed the root project and rewrote every generated
+			// index naming it. Without one, fall back to the directory-derived label.
+			// A non-root RelPath is kept as-is.
+			entry.RelPath = types.ProjectDisplayName(entry.RelPath, p.Name, p.Dir)
 			entry.Name = entry.RelPath
 			if src.Engine == "buzz" {
 				nodes := collectTargetNodes(src)

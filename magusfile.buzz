@@ -40,6 +40,12 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // `magus clean --outputs` still sees them all (Project.AllOutputs unions the
 // per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
 magus\project({
+    // Declared so the root project's label is stable. Without it the label falls
+    // back to the checkout's directory basename, so a worktree, a differently
+    // named clone, or a CI checkout each renamed the root project and rewrote
+    // every generated index naming it - which is why regenerating MAGUS.md from
+    // a worktree produced spurious diffs.
+    "name": "magus",
     "spells": [magusfile, go, buzz, md],
     "targets": {
         "watch": {"skip_cache": true},

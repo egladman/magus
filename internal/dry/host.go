@@ -313,7 +313,7 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 // the same typos the real engine does instead of silently dropping them.
 var (
 	dryKnownProjectOptionKeys = []string{
-		"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+		"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
 	}
 	dryKnownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
 )

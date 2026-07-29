@@ -495,7 +495,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		for _, st := range stages {
 			for _, p := range st.projects {
-				label := types.ProjectLabel(p.Path, p.Dir)
+				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				if m.cache != nil {
 					m.cache.LogDry(label, st.target)
 				} else {

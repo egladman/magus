@@ -608,7 +608,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: ispell.BuiltinsHash(),
-		Label:           types.ProjectLabel(p.Path, p.Dir),
+		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}
 }
 
