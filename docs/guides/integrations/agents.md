@@ -317,7 +317,7 @@ per-host. What differs is how much of a verdict a host's hook surface can carry.
 | Claude Code | yes (verified) | yes (verified) | yes | yes (`additionalContext`) |
 | Codex | yes (verified) | yes, per OpenAI's docs (unverified here) | yes | yes (`additionalContext`) |
 | Cursor | yes (verified) | no template - see below | yes (`agent_message`) | no - collapses to allow |
-| OpenCode | written, unverified | written, unverified | yes (thrown) | no - logged for the human |
+| OpenCode | yes (verified) | yes (verified) | yes (thrown) | no - logged for the human |
 
 "Verified" means executed against this binary with a real event on stdin.
 
@@ -334,9 +334,10 @@ provisional and confirm it against the current docs. Note that `apply_patch`
 delivers a PATCH in `tool_input.command`, not a path, so the declared-output
 guard wants the `Edit`/`Write` matcher rather than `apply_patch`.
 
-OpenCode's plugin cannot be executed here - it needs a Bun runtime and
-OpenCode's own tool names - so its tool identifiers (`edit`/`write`) and argument
-fields are written against the published spec and NOT confirmed.
+OpenCode's tool identifiers were confirmed against an installed OpenCode
+1.18.5: `bash`, `edit`, `write`, `read`, `patch` and `glob` all appear in its
+binary, and `filePath` is the field its edit tools carry. `opencode debug config`
+confirms a plugin in `~/.config/opencode/plugins/` is loaded.
 
 One gap remains, waiting on ground truth about the host rather than on magus:
 **Cursor has no declared-output guard.** Its documented blocking hook is
@@ -574,84 +575,158 @@ exec "$(dirname "$0")/magus-guard-command.sh"
 OpenCode plugin. OpenCode has no shell-hook config, so this is a plugin covering both surfaces.
 
 ```ts
-// magus guard hook for OpenCode, which has no shell-command hook config: a
-// plugin gets Bun's `$` shell handle instead, and throwing from
-// tool.execute.before blocks the call.
+// magus guard hook for OpenCode. OpenCode has no shell-command hook config: a
+// plugin intercepts tool calls instead, and throwing from tool.execute.before
+// blocks the call.
 //
-// This file is the source of truth. Drop it in .opencode/plugins/ and adjust to
-// taste; nothing in it is magus-internal.
+// This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
+// .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
+//
+// It encodes no magus rule. Every decision comes from `magus agent hook`, so
+// this stays host-only glue rather than a second rule set that drifts out of
+// step with the other hosts' templates.
 //
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
-//   - bash        -> the command rules (deny + advise)
-//   - edit/write  -> the declared-output rule (deny only)
-// A host that wires only the first silently loses the generated-file guard,
-// which is the one rule that is not a heuristic.
+//   bash          the command rules (deny; advise surfaced to the human)
+//   edit | write  the declared-output rule (deny only)
 //
-// Stance on a missing magus: this BLOCKS, unlike the Cursor wrapper, which
-// allows. Throwing is OpenCode's only way to stop a call, so failing closed is
-// the natural default here; Cursor's contract already fails open on a crash
-// unless failClosed is set, so a wrapper pretending otherwise would mislead.
-//
-// Bun's `$` escapes the interpolated value, so passing it as one argument is
-// injection-safe.
+// PATH contract: this shells out to `magus` by name, inheriting PATH from the
+// opencode process. If magus lives in a prefix PATH does not include (mise,
+// brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
+// deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opencode-ai/plugin";
 
-type Verdict = {
-  schema_version?: number
-  decision?: string
-  reason?: string
-  context?: string
+/** The verdict schema this plugin understands; a bump means re-read the docs. */
+const SUPPORTED_SCHEMA = 1;
+
+/**
+ * magus's guard verdict. A discriminated union on `decision`, so the compiler
+ * enforces that `reason` is only read on a deny and `context` on an advise.
+ */
+type Verdict =
+  | { schema_version: number; decision: "pass" }
+  | { schema_version: number; decision: "advise"; context: string }
+  | { schema_version: number; decision: "deny"; reason: string };
+
+/**
+ * Narrows untrusted JSON to a Verdict. A type guard rather than a cast because
+ * this is another process's stdout: a cast would let a malformed payload reach
+ * the branches below as though it had been checked.
+ */
+function isVerdict(value: unknown): value is Verdict {
+  if (typeof value !== "object" || value === null) return false;
+  const fields = value as Record<string, unknown>;
+  if (typeof fields.schema_version !== "number") return false;
+  switch (fields.decision) {
+    case "pass":
+      return true;
+    case "advise":
+      return typeof fields.context === "string";
+    case "deny":
+      return typeof fields.reason === "string";
+    default:
+      return false;
+  }
 }
 
-export const MagusGuard: Plugin = async ({ $ }) => {
-  // Fail closed on every uncertainty: a missing binary, a non-zero exit, or
-  // unparseable output must block rather than wave the call through.
-  // `.nothrow()` keeps Bun from throwing on exit status so the decision stays
-  // ours to make.
-  const judge = async (args: string[]): Promise<Verdict> => {
-    const res = await $`magus ${args}`.nothrow()
-    if (res.exitCode !== 0) {
-      throw new Error(`magus agent hook unavailable (exit ${res.exitCode}); blocking`)
-    }
-    let verdict: Verdict
-    try {
-      verdict = JSON.parse(res.text())
-    } catch {
-      throw new Error("magus agent hook returned unparseable output; blocking")
-    }
-    if (verdict.schema_version !== 1) {
-      throw new Error(`unsupported hook schema ${verdict.schema_version}; blocking`)
-    }
-    return verdict
+/** First non-empty string among `keys` in a tool's untyped args, else "". */
+function argString(args: unknown, keys: readonly string[]): string {
+  if (typeof args !== "object" || args === null) return "";
+  const fields = args as Record<string, unknown>;
+  for (const key of keys) {
+    const value = fields[key];
+    if (typeof value === "string" && value.length > 0) return value;
   }
+  return "";
+}
+
+export const MagusGuard: Plugin = async () => {
+  const magus = process.env.GUARD_MAGUS_BIN ?? "magus";
+
+  /**
+   * Runs one guard query. Returns null when no verdict could be obtained, which
+   * every caller treats as allow.
+   *
+   * Failing OPEN is deliberate. Throwing is OpenCode's only way to stop a call,
+   * so a guard that threw whenever magus was missing would block every tool
+   * call and make the session unusable - worse than no guard. The failure is
+   * logged rather than swallowed, so an unguarded session stays visible.
+   */
+  const judge = async (args: readonly string[]): Promise<Verdict | null> => {
+    let stdout: string;
+    try {
+      const proc = Bun.spawn([magus, ...args], { stdout: "pipe", stderr: "ignore" });
+      stdout = await new Response(proc.stdout).text();
+      await proc.exited;
+    } catch {
+      console.warn(
+        `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
+          "Install magus, or set GUARD_MAGUS_BIN to its path.",
+      );
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      console.warn("[magus guard] verdict was not JSON; allowing");
+      return null;
+    }
+    if (!isVerdict(parsed)) {
+      console.warn("[magus guard] unrecognized verdict shape; allowing");
+      return null;
+    }
+    if (parsed.schema_version !== SUPPORTED_SCHEMA) {
+      console.warn(
+        `[magus guard] verdict schema ${parsed.schema_version} differs from the expected ` +
+          `${SUPPORTED_SCHEMA}; allowing. Update this plugin from the magus docs.`,
+      );
+      return null;
+    }
+    return parsed;
+  };
+
+  /** Throws on a deny; logs an advise, which OpenCode cannot inject as context. */
+  const apply = (verdict: Verdict | null): void => {
+    if (verdict === null) return;
+    switch (verdict.decision) {
+      case "deny":
+        throw new Error(`[magus guard] ${verdict.reason}`);
+      case "advise":
+        // OpenCode has no context-injection arm, so this cannot reach the
+        // model. Logging keeps it in front of the human instead of dropping it;
+        // the same guidance ships in the installed skills, which is why the
+        // skills and the guard say the same things.
+        console.warn(`[magus guard] ${verdict.context}`);
+        return;
+      case "pass":
+        return;
+    }
+  };
 
   return {
     "tool.execute.before": async (input, output) => {
-      // A pass and a deny are BOTH exit 0, so `decision` is the only signal - a
-      // plugin branching on exit status alone would never block anything.
       if (input.tool === "bash") {
-        const command = output.args.command ?? ""
-        const verdict = await judge(["agent", "hook", "-o", "json", "--", command])
-        if (verdict.decision === "deny") throw new Error(verdict.reason)
-        // OpenCode has no context-injection arm, so an advise cannot reach the
-        // model here. Logging keeps it visible to the human instead of dropping
-        // it silently; the same guidance is in the installed skills.
-        if (verdict.decision === "advise" && verdict.context) {
-          console.warn(`magus: ${verdict.context}`)
-        }
-        return
+        const command = argString(output.args, ["command"]);
+        if (command === "") return;
+        apply(await judge(["agent", "hook", "-o", "json", "--", command]));
+        return;
       }
 
       if (input.tool === "edit" || input.tool === "write") {
-        const path = output.args.filePath ?? output.args.path ?? ""
-        if (!path) return
-        const verdict = await judge(["agent", "hook", "--path", "-o", "json", "--", path])
-        if (verdict.decision === "deny") throw new Error(verdict.reason)
+        // OpenCode names this filePath; the fallbacks cost nothing and keep the
+        // plugin working if a future tool spells it differently.
+        const path = argString(output.args, ["filePath", "file_path", "path"]);
+        if (path === "") return;
+        apply(await judge(["agent", "hook", "--path", "-o", "json", "--", path]));
       }
     },
-  }
-}
+  };
+};
+
+export default MagusGuard;
 ```
 
 ### Other agents
