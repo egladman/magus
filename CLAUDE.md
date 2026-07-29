@@ -111,8 +111,9 @@ deliberately instead:
 - No emojis anywhere: code, output, commits, docs.
 - User-facing message strings are plain ASCII (no em-dashes, curly quotes);
   code comments are exempt. Docs frontmatter is plain ASCII too.
-- Never hand-edit generated files (`gen/` dirs, `*.gen.buzz`, `MAGUS.md`,
-  `docs/gen/`); change the source of truth and regenerate.
+- Never hand-edit generated files (`gen/` dirs, `MAGUS.md`, `docs/gen/`); change
+  the source of truth and regenerate. Generated output lives in a `gen/` dir and
+  carries no extra suffix - the directory is the signal.
 - Docs site follows classless Pico: semantic HTML, minimal custom classes,
   no inline styles.
 - Language-level changes in `gopherbuzz/` must match upstream Buzz behavior.

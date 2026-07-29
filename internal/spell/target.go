@@ -20,8 +20,8 @@ const TargetModulePath = "magus/target"
 // other value types (ExecResult/Commit/FileInfo/...) are appended at runtime
 // registration only (see registerMagusModules), since built-ins don't use them.
 //
-//go:generate go run ../../cmd/magus-utils types -type Target -out buzzlib/target.gen.buzz
-//go:embed buzzlib/target.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Target -out buzzlib/gen/target.buzz
+//go:embed buzzlib/gen/target.buzz
 var TargetModuleSource string
 
 // PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
@@ -32,16 +32,16 @@ var TargetModuleSource string
 // bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
 //
-//go:generate go run ../../cmd/magus-utils types -type PatchOp -out buzzlib/patchop.gen.buzz
-//go:embed buzzlib/patchop.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type PatchOp -out buzzlib/gen/patchop.buzz
+//go:embed buzzlib/gen/patchop.buzz
 var PatchOpSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Charm -out buzzlib/charm.gen.buzz
-//go:embed buzzlib/charm.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Charm -out buzzlib/gen/charm.buzz
+//go:embed buzzlib/gen/charm.buzz
 var CharmTypeSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Command -out buzzlib/command.gen.buzz
-//go:embed buzzlib/command.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Command -out buzzlib/gen/command.buzz
+//go:embed buzzlib/gen/command.buzz
 var CommandSource string
 
 // ServiceSource is the generated Buzz `object Service` mirror of types.Service: the
@@ -50,8 +50,8 @@ var CommandSource string
 // can author a service op; it must follow CommandSource there (Service's fields are
 // typed Command).
 //
-//go:generate go run ../../cmd/magus-utils types -type Service -out buzzlib/service.gen.buzz
-//go:embed buzzlib/service.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Service -out buzzlib/gen/service.buzz
+//go:embed buzzlib/gen/service.buzz
 var ServiceSource string
 
 // ExecResultSource is the generated Buzz `object ExecResult` mirror of
@@ -60,8 +60,8 @@ var ServiceSource string
 // magus.describe / captured-op result as `> ExecResult`; the runtime value is the
 // matching {stdout, stderr, code, ok} record (see run.ExecResult.Record).
 //
-//go:generate go run ../../cmd/magus-utils types -type ExecResult -out buzzlib/execresult.gen.buzz
-//go:embed buzzlib/execresult.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type ExecResult -out buzzlib/gen/execresult.buzz
+//go:embed buzzlib/gen/execresult.buzz
 var ExecResultSource string
 
 // CommitAuthorSource / CommitSource are the generated Buzz mirrors of
@@ -70,12 +70,12 @@ var ExecResultSource string
 // compile-checked field access. CommitAuthor must precede Commit in the module
 // source (Commit's author field is typed CommitAuthor).
 //
-//go:generate go run ../../cmd/magus-utils types -type CommitAuthor -out buzzlib/commitauthor.gen.buzz
-//go:embed buzzlib/commitauthor.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type CommitAuthor -out buzzlib/gen/commitauthor.buzz
+//go:embed buzzlib/gen/commitauthor.buzz
 var CommitAuthorSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Commit -out buzzlib/commit.gen.buzz
-//go:embed buzzlib/commit.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Commit -out buzzlib/gen/commit.buzz
+//go:embed buzzlib/gen/commit.buzz
 var CommitSource string
 
 // FileInfoSource / HTTPResponseSource / SemverVersionSource / URLSource are the
@@ -83,20 +83,20 @@ var CommitSource string
 // http.*, semver.parse, encoding.parse_url), shipped in the magus/target module
 // so a magusfile can annotate those results for compile-checked field access.
 //
-//go:generate go run ../../cmd/magus-utils types -type FileInfo -out buzzlib/fileinfo.gen.buzz
-//go:embed buzzlib/fileinfo.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type FileInfo -out buzzlib/gen/fileinfo.buzz
+//go:embed buzzlib/gen/fileinfo.buzz
 var FileInfoSource string
 
-//go:generate go run ../../cmd/magus-utils types -type HttpResponse -out buzzlib/httpresponse.gen.buzz
-//go:embed buzzlib/httpresponse.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type HttpResponse -out buzzlib/gen/httpresponse.buzz
+//go:embed buzzlib/gen/httpresponse.buzz
 var HTTPResponseSource string
 
-//go:generate go run ../../cmd/magus-utils types -type SemverVersion -out buzzlib/semverversion.gen.buzz
-//go:embed buzzlib/semverversion.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type SemverVersion -out buzzlib/gen/semverversion.buzz
+//go:embed buzzlib/gen/semverversion.buzz
 var SemverVersionSource string
 
-//go:generate go run ../../cmd/magus-utils types -type URL -out buzzlib/url.gen.buzz
-//go:embed buzzlib/url.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type URL -out buzzlib/gen/url.buzz
+//go:embed buzzlib/gen/url.buzz
 var URLSource string
 
 // ProjectEntrySource / ProjectsSource are the generated Buzz mirrors of
@@ -106,12 +106,12 @@ var URLSource string
 // ProjectEntry must precede Projects in the module source (Projects.projects is
 // [ProjectEntry]).
 //
-//go:generate go run ../../cmd/magus-utils types -type ProjectEntry -out buzzlib/projectentry.gen.buzz
-//go:embed buzzlib/projectentry.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type ProjectEntry -out buzzlib/gen/projectentry.buzz
+//go:embed buzzlib/gen/projectentry.buzz
 var ProjectEntrySource string
 
-//go:generate go run ../../cmd/magus-utils types -type Projects -out buzzlib/projects.gen.buzz
-//go:embed buzzlib/projects.gen.buzz
+//go:generate go run ../../cmd/magus-utils types -type Projects -out buzzlib/gen/projects.buzz
+//go:embed buzzlib/gen/projects.buzz
 var ProjectsSource string
 
 // CharmModulePath is the import path of the pure-Buzz charm module.

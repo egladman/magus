@@ -179,8 +179,15 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen).
+// Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the
+// Buzz value-type mirrors (internal/spell/buzzlib/gen), both driven by the
+// go:generate directives in internal/spell.
+//
+// Both trees are declared: undeclared, magus classified them as ordinary source,
+// so `magus describe file` told a reader a generated file was safe to hand-edit
+// and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("internal/spell/gen/*.bo", "internal/spell/buzzlib/gen/*.buzz");
     os\exec("go", ["generate", "./internal/spell/..."]);
 }
 
