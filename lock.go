@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -122,8 +123,9 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 				if _, err := os.Stat(root); err == nil || !errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
-				slog.Warn("magus: workspace root is gone; releasing its locks so other runs are not blocked behind a process whose tree no longer exists",
-					slog.String("root", root))
+				slog.Warn("lock.root_vanished",
+					slog.String("root", root),
+					slog.String("action", "released this run's locks so peers are not blocked behind a tree that no longer exists"))
 				release()
 				// Returning is the whole shutdown: the deferred close(stopped) below
 				// unblocks any later stop(). Calling stop() here would wait on the
@@ -179,7 +181,7 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 // <cacheDir>/locks, mirroring the workspace project tree. When noWait is true a
 // contended acquire fails fast with a *lockContendedError instead of blocking.
 func newProjectLocker(cacheDir string, noWait bool, opts ...lockerOption) *projectLocker {
-	l := &projectLocker{dir: filepath.Join(cacheDir, "locks"), noWait: noWait}
+	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName), noWait: noWait}
 	for _, o := range opts {
 		o(l)
 	}
@@ -272,9 +274,9 @@ func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (
 func (l *projectLocker) lockPath(projectPath string) string {
 	p := strings.TrimSpace(projectPath)
 	if p == "" || p == "." {
-		return filepath.Join(l.dir, "lock")
+		return filepath.Join(l.dir, lockFileName)
 	}
-	return filepath.Join(l.dir, filepath.FromSlash(p), "lock")
+	return filepath.Join(l.dir, filepath.FromSlash(p), lockFileName)
 }
 
 // emitWaiting tells the user, up front, that the run is not hung: another magus
@@ -301,7 +303,15 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 	// line above announces the event and then scrolls away; a run that is blocked
 	// needs the state to stay on screen, because the alternative a reader sees is
 	// silence.
-	slog.Info("lock.waiting", slog.String("project", p), slog.String("holder", owner))
+	// Structured, not the rendered line above: that string is this package's own
+	// stderr output, and handing it to another package to display verbatim would put
+	// presentation for a surface magus cannot see inside magus. The region composes
+	// its own from these fields.
+	rec := l.readOwner(projectPath)
+	slog.Info("lock.waiting",
+		slog.String("project", p),
+		slog.Int("holder_pid", rec.PID),
+		slog.String("holder_command", rec.Command))
 }
 
 // lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
@@ -396,10 +406,20 @@ type processRecord struct {
 	Started string `json:"started"`
 }
 
+// The sidecar layout, in ONE place. HeldLocks previously re-derived these by hand
+// (suffix match plus filepath.Rel), so changing lockPath would have made it silently
+// return nothing instead of failing.
+const (
+	lockFileName = "lock"
+	ownerSuffix  = ".owner"
+	waiterInfix  = ".waiter."
+	locksDirName = "locks"
+)
+
 // ownerPath is the sidecar beside the lock file itself, so it inherits the same
 // per-project directory layout and is removed with it.
 func (l *projectLocker) ownerPath(projectPath string) string {
-	return l.lockPath(projectPath) + ".owner"
+	return l.lockPath(projectPath) + ownerSuffix
 }
 
 // recordOwner writes the sidecar after a successful acquire. Every failure is
@@ -435,12 +455,8 @@ func selfRecord() []byte {
 // released the flock otherwise - so this never needs to probe liveness. It only
 // answers which process, started when, from where.
 func (l *projectLocker) describeOwner(projectPath string) string {
-	data, err := os.ReadFile(l.ownerPath(projectPath))
-	if err != nil {
-		return ""
-	}
-	var o processRecord
-	if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
+	o := l.readOwner(projectPath)
+	if o.PID == 0 {
 		return ""
 	}
 	desc := fmt.Sprintf("pid %d", o.PID)
@@ -488,7 +504,7 @@ func orphanHint(elapsed time.Duration, owner string) string {
 // waiterPath is this process's waiter marker for a project. One file per blocked pid,
 // so several waiters coexist without coordinating.
 func (l *projectLocker) waiterPath(projectPath string) string {
-	return fmt.Sprintf("%s.waiter.%d", l.lockPath(projectPath), os.Getpid())
+	return fmt.Sprintf("%s%s%d", l.lockPath(projectPath), waiterInfix, os.Getpid())
 }
 
 // recordWaiter marks this process as blocked on a project, and returns the cleanup.
@@ -527,11 +543,17 @@ func (l *projectLocker) removeOwner(projectPath string) {
 // failing the caller, because status must never be the thing that breaks. A sidecar
 // with no live flock behind it can linger if a holder was killed between unlocking
 // and cleanup, so treat an entry as a strong hint, never as proof.
-func HeldLocks(cacheDir string) []types.StatusLock {
-	dir := filepath.Join(cacheDir, "locks")
+func (m *Magus) HeldLocks() []types.StatusLock {
+	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg))
+}
+
+// heldLocks is the cacheDir-addressed form, kept separate so a test can point it at a
+// temp dir without constructing a whole workspace.
+func heldLocks(cacheDir string) []types.StatusLock {
+	dir := filepath.Join(cacheDir, locksDirName)
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, "lock.owner") {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
 			return nil //nolint:nilerr // a walk error on one entry must not abort the report
 		}
 		data, rerr := os.ReadFile(path)
@@ -555,7 +577,7 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		// be taken, nothing holds it and the sidecar is a corpse. Reporting a dead pid
 		// as the holder is worse than reporting nothing, because the escalated hint
 		// then points a user at a process that does not exist.
-		if !lockIsHeld(strings.TrimSuffix(path, ".owner")) {
+		if !lockIsHeld(strings.TrimSuffix(path, ownerSuffix)) {
 			return nil
 		}
 		lock := types.StatusLock{
@@ -571,6 +593,21 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 	})
 	slices.SortFunc(out, func(a, b types.StatusLock) int { return strings.Compare(a.Project, b.Project) })
 	return out
+}
+
+// readOwner decodes the owner sidecar, or returns a zero record when there is nothing
+// trustworthy to read. The structured form both the stderr line and the sticky region
+// are built from, so neither has to parse the other's text.
+func (l *projectLocker) readOwner(projectPath string) processRecord {
+	data, err := os.ReadFile(l.ownerPath(projectPath))
+	if err != nil {
+		return processRecord{}
+	}
+	var o processRecord
+	if uerr := codec.Unmarshal(data, &o); uerr != nil {
+		return processRecord{}
+	}
+	return o
 }
 
 // lockIsHeld reports whether some process currently holds the flock at path.
@@ -593,6 +630,11 @@ func lockIsHeld(path string) bool {
 	return true
 }
 
+// staleWaiterAfter bounds how long a waiter marker is believed. Generous relative to
+// LockStaleAfter, because a genuine wait behind a slow holder is legitimate; this only
+// has to be shorter than "forever".
+const staleWaiterAfter = 24 * time.Hour
+
 // readWaiters collects the waiter markers beside a lock. Best-effort: an unreadable
 // marker is skipped, and a marker whose process died before cleanup can linger, so
 // the list is a snapshot rather than proof.
@@ -603,7 +645,7 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 	}
 	var out []types.StatusLockWaiter
 	for _, e := range entries {
-		if e.IsDir() || !strings.Contains(e.Name(), "lock.waiter.") {
+		if e.IsDir() || !strings.HasPrefix(e.Name(), lockFileName+waiterInfix) {
 			continue
 		}
 		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
@@ -617,9 +659,18 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 		w := types.StatusLockWaiter{PID: o.PID, Command: o.Command, Dir: o.Dir}
 		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
 			w.WaitTime = started
+			// A waiter killed while blocked never runs its own cleanup, and nothing
+			// else collects these, so without an upper bound the directory grows
+			// forever and status reports phantom waiters. There is no flock behind a
+			// waiter marker to probe, so age is the only available signal: past a
+			// bound no honest wait reaches, treat it as debris and sweep it.
+			if time.Since(started) > staleWaiterAfter {
+				_ = os.Remove(filepath.Join(dir, e.Name()))
+				continue
+			}
 		}
 		out = append(out, w)
 	}
-	slices.SortFunc(out, func(a, b types.StatusLockWaiter) int { return a.PID - b.PID })
+	slices.SortFunc(out, func(a, b types.StatusLockWaiter) int { return cmp.Compare(a.PID, b.PID) })
 	return out
 }

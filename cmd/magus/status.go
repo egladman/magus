@@ -13,7 +13,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
@@ -215,12 +214,14 @@ func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 // it is workspace-local and daemon-independent: a lock is taken by whichever process
 // mutates a project, which is usually a plain `magus run` with no daemon at all.
 func loadHeldLocks(ctx context.Context) []types.StatusLock {
+	// No Close here: loadMagus is a sync.Once singleton, and loadSymbolIndexStatus
+	// above already owns its lifetime. Closing a second time tears down a shared buzz
+	// pool the first caller still expects to be open.
 	m, err := loadMagus(ctx, "")
 	if err != nil {
 		return nil
 	}
-	defer func() { _ = m.Close() }()
-	return magus.HeldLocks(m.CacheDir())
+	return m.HeldLocks()
 }
 
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput.

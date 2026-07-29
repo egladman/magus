@@ -9,13 +9,13 @@ import (
 
 func TestResolve(t *testing.T) {
 	ok := func(t *testing.T, input, anchor, want string) {
-		got, err := resolveTwoMode(input, anchor)
-		require.NoError(t, err, "resolveTwoMode(%q, %q)", input, anchor)
+		got, err := resolveAmbiguous(input, anchor)
+		require.NoError(t, err, "resolveAmbiguous(%q, %q)", input, anchor)
 		assert.Equal(t, want, got)
 	}
 	fail := func(t *testing.T, input, anchor, wantErr string) {
-		got, err := resolveTwoMode(input, anchor)
-		require.Error(t, err, "resolveTwoMode(%q, %q) = %q, want error containing %q", input, anchor, got, wantErr)
+		got, err := resolveAmbiguous(input, anchor)
+		require.Error(t, err, "resolveAmbiguous(%q, %q) = %q, want error containing %q", input, anchor, got, wantErr)
 		assert.ErrorContains(t, err, wantErr)
 	}
 

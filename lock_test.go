@@ -381,7 +381,7 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 	cache := t.TempDir()
 	l := newProjectLocker(cache, false)
 
-	if got := HeldLocks(cache); len(got) != 0 {
+	if got := heldLocks(cache); len(got) != 0 {
 		t.Fatalf("HeldLocks on a fresh cache = %v, want none", got)
 	}
 
@@ -394,7 +394,7 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 		t.Fatalf("acquire web/api: %v", err)
 	}
 
-	held := HeldLocks(cache)
+	held := heldLocks(cache)
 	if len(held) != 2 {
 		t.Fatalf("HeldLocks = %d entries, want 2: %+v", len(held), held)
 	}
@@ -415,11 +415,11 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 	}
 
 	relWeb()
-	if held := HeldLocks(cache); len(held) != 1 || held[0].Project != "." {
+	if held := heldLocks(cache); len(held) != 1 || held[0].Project != "." {
 		t.Errorf("after releasing web/api, HeldLocks = %+v; want only the root", held)
 	}
 	relRoot()
-	if held := HeldLocks(cache); len(held) != 0 {
+	if held := heldLocks(cache); len(held) != 0 {
 		t.Errorf("after releasing everything, HeldLocks = %+v; want none", held)
 	}
 }
@@ -437,14 +437,14 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 	}
 	defer release()
 
-	if held := HeldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+	if held := heldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
 		t.Fatalf("HeldLocks with no contention = %+v; want one holder and no waiters", held)
 	}
 
 	// A waiter marker is written while blocked and cleared when the wait ends, so
 	// record/clear is exercised directly rather than racing a second process.
 	stop := l.recordWaiter("web/api")
-	held := HeldLocks(cache)
+	held := heldLocks(cache)
 	if len(held) != 1 {
 		t.Fatalf("HeldLocks = %d entries, want 1", len(held))
 	}
@@ -459,7 +459,7 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 	}
 
 	stop()
-	if held := HeldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+	if held := heldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
 		t.Errorf("after the wait ended, waiters = %+v; want none", held[0].Waiters)
 	}
 }

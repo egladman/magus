@@ -65,7 +65,7 @@ func writeYAML(w io.Writer, v any) error {
 func writeJSONL(w io.Writer, v any) error {
 	enc := codec.NewEncoder(w)
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
 	if rv.Kind() == reflect.Struct {
@@ -282,7 +282,7 @@ func writeFieldBlock(w io.Writer, t reflect.Type) []reflect.Type {
 
 // structType dereferences pointers and returns rt when it is a struct, else nil.
 func structType(rt reflect.Type) reflect.Type {
-	for rt != nil && rt.Kind() == reflect.Ptr {
+	for rt != nil && rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	if rt == nil || rt.Kind() != reflect.Struct {
@@ -296,7 +296,7 @@ func structType(rt reflect.Type) reflect.Type {
 func elemType(rt reflect.Type) reflect.Type {
 	for rt != nil {
 		switch rt.Kind() {
-		case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 			rt = rt.Elem()
 		default:
 			return rt
@@ -328,7 +328,7 @@ func jsonFieldKey(f reflect.StructField) string {
 // so the listing reads like the json shape rather than Go's fully-qualified names.
 func typeLabel(rt reflect.Type) string {
 	switch rt.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return "*" + typeLabel(rt.Elem())
 	case reflect.Slice, reflect.Array:
 		return "[]" + typeLabel(rt.Elem())

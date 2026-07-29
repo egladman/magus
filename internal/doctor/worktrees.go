@@ -41,19 +41,25 @@ func checkStaleWorktrees(root string) Check {
 	}
 
 	var stale []string
+	live := 0
 	for _, e := range entries {
+		// A symlinked worktree reports as a link, not a dir, so resolve before judging:
+		// skipping it would both under-count and never report it stale.
 		if !e.IsDir() {
-			continue
+			if info, serr := os.Stat(filepath.Join(dir, e.Name())); serr != nil || !info.IsDir() {
+				continue
+			}
 		}
 		// A live worktree carries a .git FILE pointing at the real gitdir; a directory
 		// git has forgotten has neither.
 		if _, statErr := os.Stat(filepath.Join(dir, e.Name(), ".git")); statErr == nil {
+			live++
 			continue
 		}
 		stale = append(stale, e.Name())
 	}
 	if len(stale) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", len(entries))}
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d live worktree(s); none orphaned", live)}
 	}
 	sort.Strings(stale)
 

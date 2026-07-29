@@ -155,7 +155,7 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 		// Held locks come from the workspace cache rather than the pool query, because a
 		// lock is taken by whichever process mutates a project - usually a plain
 		// `magus run` the daemon never sees.
-		out.Locks = magus.HeldLocks(s.magus.CacheDir())
+		out.Locks = s.magus.HeldLocks()
 	}
 	return out
 }

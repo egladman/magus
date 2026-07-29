@@ -16,7 +16,7 @@ import (
 
 func TestResolveWindows(t *testing.T) {
 	ok := func(t *testing.T, input, anchor, want string) {
-		got, err := resolveTwoMode(input, anchor)
+		got, err := resolveAmbiguous(input, anchor)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	}

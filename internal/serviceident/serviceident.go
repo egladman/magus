@@ -66,9 +66,13 @@ func (i Identity) IsContainer() bool { return i.Image != "" }
 // root is the workspace root path, which is what a workspace IS. Two worktrees of
 // one repo are therefore separate workspaces and correctly get separate services:
 // their file state differs, so sharing a process between them would be wrong even
-// though the declared config is identical. An empty root (a bare `magus buzz`
-// script with no workspace) forms its own namespace rather than joining any real
-// workspace's.
+// though the declared config is identical.
+//
+// An empty root is a KNOWN GAP, not a namespace. Every rootless invocation on the
+// machine collapses into the same "" bucket, so two unrelated bare `magus buzz`
+// scripts declaring the same image would still share one container. Callers that can
+// supply a root must; closing it properly means giving a rootless run a stable
+// identity of its own, which nothing currently has.
 func InstanceKey(root string, s types.Service) string {
 	return root + "\x00" + Fingerprint(s)
 }

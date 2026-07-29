@@ -249,7 +249,16 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// State, not a failure: the run is correctly queued behind a peer. It is
 		// pinned rather than logged-and-forgotten because the wait is unbounded.
 		h.status.blocked = recordStr(r, "project")
-		h.status.blockedBy = recordStr(r, "holder")
+		// Composed here, from fields: the emitting package sends who the holder IS,
+		// this package decides how a terminal shows it.
+		if pid := recordStr(r, "holder_pid"); pid != "" && pid != "0" {
+			h.status.blockedBy = "pid " + pid
+			if cmd := recordStr(r, "holder_command"); cmd != "" {
+				h.status.blockedBy += " (" + cmd + ")"
+			}
+		} else {
+			h.status.blockedBy = ""
+		}
 		h.paintStatus()
 		return h.err
 	case "lock.acquired":
