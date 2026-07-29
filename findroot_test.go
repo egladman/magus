@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// mkTree creates dirs and marker files under root. Each entry is a path relative to
-// root; a trailing "/" makes it a directory, otherwise it is an empty marker file.
+// mkTree creates dirs and marker files under root. A trailing "/" makes a directory,
+// otherwise an empty marker file.
 func mkTree(t *testing.T, root string, paths ...string) {
 	t.Helper()
 	for _, p := range paths {
@@ -27,101 +27,74 @@ func mkTree(t *testing.T, root string, paths ...string) {
 	}
 }
 
-// TestFindRootWithLineage pins the one-workspace rule. A magusfile marks a PROJECT,
-// not a workspace, so the walk must accrue enclosing projects and keep going rather
-// than stopping at the first one it meets.
-func TestFindRootWithLineage(t *testing.T) {
+func mustFindRoot(t *testing.T, dir string) string {
+	t.Helper()
+	got, err := FindRoot(dir)
+	if err != nil {
+		t.Fatalf("FindRoot(%s): %v", dir, err)
+	}
+	return got
+}
+
+// TestFindRoot pins the one-workspace rule: a magusfile marks a PROJECT, and only
+// magus.yaml declares where a workspace begins.
+func TestFindRoot(t *testing.T) {
 	t.Run("a nested project does not become its own workspace", func(t *testing.T) {
 		root := t.TempDir()
 		mkTree(t, root, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
-
-		got, lineage, err := FindRootWithLineage(filepath.Join(root, "console"))
-		if err != nil {
-			t.Fatalf("FindRootWithLineage: %v", err)
-		}
-		if got != root {
-			t.Errorf("root = %q, want %q; halting at console's magusfile is the bug this guards", got, root)
-		}
-		if len(lineage) != 1 || lineage[0] != "console" {
-			t.Errorf("lineage = %v, want [console]", lineage)
+		if got := mustFindRoot(t, filepath.Join(root, "console")); got != root {
+			t.Errorf("root = %q, want %q; halting at console's magusfile is the original bug", got, root)
 		}
 	})
 
-	t.Run("deep nesting records the whole chain innermost first", func(t *testing.T) {
+	// The regression the first attempt shipped: go.mod was treated as a workspace
+	// marker on the theory it only sits at a repo's top, which is false in any
+	// multi-module repo. A submodule then locked its own cache dir and stopped
+	// excluding the root run despite touching the same files.
+	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
 		root := t.TempDir()
-		mkTree(t, root, "magus.yaml", "docs/magusfile.buzz", "docs/guides/agents/magusfile.buzz")
-
-		got, lineage, err := FindRootWithLineage(filepath.Join(root, "docs", "guides", "agents"))
-		if err != nil {
-			t.Fatalf("FindRootWithLineage: %v", err)
-		}
-		if got != root {
-			t.Errorf("root = %q, want %q", got, root)
-		}
-		want := []string{"docs/guides/agents", "docs"}
-		if len(lineage) != len(want) || lineage[0] != want[0] || lineage[1] != want[1] {
-			t.Errorf("lineage = %v, want %v (innermost first)", lineage, want)
+		mkTree(t, root, "magus.yaml", "go.mod", "libs/diag/go.mod", "libs/diag/magusfile.buzz")
+		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
+			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
 		}
 	})
 
-	t.Run("a root that is also a project still ends the walk", func(t *testing.T) {
-		root := t.TempDir()
-		mkTree(t, root, "go.mod", "magusfile.buzz")
+	// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows
+	// them. The nearest declaration governs, the same way .git behaves.
+	t.Run("nearest magus.yaml wins so a nested worktree keeps its own", func(t *testing.T) {
+		outer := t.TempDir()
+		mkTree(t, outer, "magus.yaml", "magusfile.buzz",
+			".claude/worktrees/feature/magus.yaml",
+			".claude/worktrees/feature/magusfile.buzz",
+			".claude/worktrees/feature/console/magusfile.buzz")
 
-		got, lineage, err := FindRootWithLineage(root)
-		if err != nil {
-			t.Fatalf("FindRootWithLineage: %v", err)
+		wt := filepath.Join(outer, ".claude", "worktrees", "feature")
+		if got := mustFindRoot(t, wt); got != wt {
+			t.Errorf("root = %q, want the worktree %q, not its parent repo", got, wt)
 		}
-		if got != root {
-			t.Errorf("root = %q, want %q", got, root)
+		if got := mustFindRoot(t, filepath.Join(wt, "console")); got != wt {
+			t.Errorf("root from inside the worktree = %q, want %q", got, wt)
 		}
-		// A workspace is not nested inside itself, so it never appears in its own lineage.
-		if len(lineage) != 0 {
-			t.Errorf("lineage = %v, want empty for the root itself", lineage)
+		if got := mustFindRoot(t, outer); got != outer {
+			t.Errorf("root from the parent = %q, want %q", got, outer)
 		}
 	})
 
-	t.Run("a standalone project with no workspace marker still resolves", func(t *testing.T) {
+	t.Run("a standalone project with no magus.yaml resolves to its outermost marker", func(t *testing.T) {
 		root := t.TempDir()
 		mkTree(t, root, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
-
-		got, _, err := FindRootWithLineage(filepath.Join(root, "solo", "nested"))
-		if err != nil {
-			t.Fatalf("FindRootWithLineage: %v", err)
-		}
-		// The OUTERMOST project wins, so a nested one never silently becomes the
-		// workspace while a larger enclosing unit exists.
-		if want := filepath.Join(root, "solo"); got != want {
+		if got, want := mustFindRoot(t, filepath.Join(root, "solo", "nested")), filepath.Join(root, "solo"); got != want {
 			t.Errorf("root = %q, want %q", got, want)
 		}
 	})
 
-	t.Run("no markers at all is an error", func(t *testing.T) {
-		// t.TempDir() sits under the OS temp root, which has no markers above it on a
-		// normal machine; guard by pointing at a directory that definitely has none.
-		dir := filepath.Join(t.TempDir(), "empty")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := FindRootWithLineage(dir); err == nil {
-			t.Skip("temp dir has a marker above it on this machine; nothing to assert")
-		}
-	})
-
-	t.Run("FindRoot agrees with the lineage form", func(t *testing.T) {
+	// Contiguity bounds the fallback: without it, one stray magusfile in a home
+	// directory would adopt every project beneath it.
+	t.Run("a gap stops the fallback from reaching a stray ancestor", func(t *testing.T) {
 		root := t.TempDir()
-		mkTree(t, root, "magus.yaml", "web/magusfile.buzz")
-
-		a, err := FindRoot(filepath.Join(root, "web"))
-		if err != nil {
-			t.Fatalf("FindRoot: %v", err)
-		}
-		b, _, err := FindRootWithLineage(filepath.Join(root, "web"))
-		if err != nil {
-			t.Fatalf("FindRootWithLineage: %v", err)
-		}
-		if a != b {
-			t.Errorf("FindRoot = %q but FindRootWithLineage = %q; they must not diverge", a, b)
+		mkTree(t, root, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
+		if got, want := mustFindRoot(t, filepath.Join(root, "gap", "proj")), filepath.Join(root, "gap", "proj"); got != want {
+			t.Errorf("root = %q, want %q; the marker-less gap must stop the walk", got, want)
 		}
 	})
 }

@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -50,8 +51,15 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if err != nil {
 		return nil, err
 	}
-	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, release)
-	return func() { stopWatchdog(); release() }, nil
+	// Idempotent: the watchdog below is a SECOND caller of release. Without this, a
+	// watchdog release followed by the caller's deferred release runs removeOwner
+	// twice, and between them another process can take the lock and write its own
+	// sidecar - which the finished run would then delete, making the live holder
+	// invisible to `magus status` and to every waiter.
+	var releaseOnce sync.Once
+	releaseIdempotent := func() { releaseOnce.Do(release) }
+	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, releaseIdempotent)
+	return func() { stopWatchdog(); releaseIdempotent() }, nil
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -78,9 +86,18 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 		return func() {}
 	}
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	var once sync.Once
-	stop := func() { once.Do(func() { close(done) }) }
+	// Joins the goroutine, mirroring startWaitHeartbeat. Closing done alone only
+	// narrows the race: a goroutine already past the inner select still reaches
+	// release(), and in the daemon - one long-lived process running many invocations
+	// - that late release lands on whatever the NEXT run holds.
+	stop := func() {
+		once.Do(func() { close(done) })
+		<-stopped
+	}
 	go func() {
+		defer close(stopped)
 		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
@@ -98,13 +115,19 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 					return
 				default:
 				}
-				if _, err := os.Stat(root); err == nil {
+				// Only a genuine absence counts. Treating every stat error as "gone"
+				// means an EACCES after a permissions change, or an EIO on a network
+				// mount, withdraws a live run's exclusivity while it keeps mutating -
+				// the precise thing the lock exists to prevent.
+				if _, err := os.Stat(root); err == nil || !errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
 				slog.Warn("magus: workspace root is gone; releasing its locks so other runs are not blocked behind a process whose tree no longer exists",
 					slog.String("root", root))
 				release()
-				stop()
+				// Returning is the whole shutdown: the deferred close(stopped) below
+				// unblocks any later stop(). Calling stop() here would wait on the
+				// channel this goroutine has not closed yet, and deadlock.
 				return
 			}
 		}
@@ -366,7 +389,7 @@ func (l *projectLocker) emitResumed(projectPath string) {
 // say "another magus process", which is exactly what turned a six-day-old orphaned
 // `magus run serve` - running in a worktree that had since been deleted - into an
 // investigation instead of one line of output.
-type lockOwner struct {
+type processRecord struct {
 	PID     int    `json:"pid"`
 	Command string `json:"command"`
 	Dir     string `json:"dir"`
@@ -383,17 +406,26 @@ func (l *projectLocker) ownerPath(projectPath string) string {
 // swallowed: not being able to say who holds a lock must never fail a run that
 // already holds it.
 func (l *projectLocker) recordOwner(projectPath string) {
+	if data := selfRecord(); data != nil {
+		_ = os.WriteFile(l.ownerPath(projectPath), data, 0o600)
+	}
+}
+
+// selfRecord marshals this process's identity, the payload both the owner and waiter
+// sidecars carry. Returns nil when it cannot be built, which every caller treats as
+// "skip the sidecar": failing to say who we are must never fail the run.
+func selfRecord() []byte {
 	dir, _ := os.Getwd()
-	data, err := codec.Marshal(lockOwner{
+	data, err := codec.Marshal(processRecord{
 		PID:     os.Getpid(),
 		Command: strings.Join(os.Args, " "),
 		Dir:     dir,
 		Started: time.Now().Format(time.RFC3339),
 	})
 	if err != nil {
-		return
+		return nil
 	}
-	_ = os.WriteFile(l.ownerPath(projectPath), data, 0o600)
+	return data
 }
 
 // describeOwner renders the current holder for a wait message, or "" when there is
@@ -407,7 +439,7 @@ func (l *projectLocker) describeOwner(projectPath string) string {
 	if err != nil {
 		return ""
 	}
-	var o lockOwner
+	var o processRecord
 	if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
 		return ""
 	}
@@ -462,14 +494,8 @@ func (l *projectLocker) waiterPath(projectPath string) string {
 // asked by whoever is looking at a queue that is not moving. Best-effort, like the
 // owner record, and never load-bearing.
 func (l *projectLocker) recordWaiter(projectPath string) func() {
-	dir, _ := os.Getwd()
-	data, err := codec.Marshal(lockOwner{
-		PID:     os.Getpid(),
-		Command: strings.Join(os.Args, " "),
-		Dir:     dir,
-		Started: time.Now().Format(time.RFC3339),
-	})
-	if err != nil {
+	data := selfRecord()
+	if data == nil {
 		return func() {}
 	}
 	path := l.waiterPath(projectPath)
@@ -508,7 +534,7 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		if rerr != nil {
 			return nil //nolint:nilerr // one unreadable sidecar must not abort the whole report
 		}
-		var o lockOwner
+		var o processRecord
 		if uerr := codec.Unmarshal(data, &o); uerr != nil || o.PID == 0 {
 			return nil //nolint:nilerr // a malformed sidecar is skipped, not fatal to the report
 		}
@@ -520,6 +546,14 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		if project == "." || project == "" {
 			project = "."
 		}
+		// A sidecar outlives a SIGKILLed holder, because only removeOwner deletes it
+		// and a killed process never runs it. Ask the kernel instead: if the flock can
+		// be taken, nothing holds it and the sidecar is a corpse. Reporting a dead pid
+		// as the holder is worse than reporting nothing, because the escalated hint
+		// then points a user at a process that does not exist.
+		if !lockIsHeld(strings.TrimSuffix(path, ".owner")) {
+			return nil
+		}
 		lock := types.StatusLock{Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir}
 		lock.Waiters = readWaiters(filepath.Dir(path))
 		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
@@ -530,6 +564,26 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 	})
 	slices.SortFunc(out, func(a, b types.StatusLock) int { return strings.Compare(a.Project, b.Project) })
 	return out
+}
+
+// lockIsHeld reports whether some process currently holds the flock at path.
+//
+// Probing by acquisition is the only honest test: a pid check would be wrong under
+// pid reuse, and the sidecar cannot answer for itself. Taking the lock to answer is
+// safe because it is released immediately; the race that matters (a holder acquiring
+// between the probe and the report) resolves to under-reporting for one status call,
+// never to naming a process that is not there.
+func lockIsHeld(path string) bool {
+	fl := flock.New(path)
+	got, err := fl.TryLock()
+	if err != nil {
+		return true // cannot tell; assume held rather than erase a real holder
+	}
+	if got {
+		_ = fl.Unlock()
+		return false
+	}
+	return true
 }
 
 // readWaiters collects the waiter markers beside a lock. Best-effort: an unreadable
@@ -549,7 +603,7 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 		if rerr != nil {
 			continue
 		}
-		var o lockOwner
+		var o processRecord
 		if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
 			continue
 		}

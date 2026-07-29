@@ -513,3 +513,46 @@ func TestWatchWorkspaceRootStops(t *testing.T) {
 		t.Error("released after stop; a finished run must not have its locks touched")
 	}
 }
+
+// TestWatchWorkspaceRootIgnoresTransientStatErrors pins that only a genuine absence
+// counts. Treating any stat error as "gone" withdraws a live run's exclusivity on a
+// permissions blip or a network-mount hiccup, which is the opposite of the lock's job.
+func TestWatchWorkspaceRootIgnoresTransientStatErrors(t *testing.T) {
+	// A path whose PARENT is not a directory makes Stat fail with ENOTDIR rather
+	// than ENOENT, standing in for the transient-error class.
+	base := t.TempDir()
+	notADir := filepath.Join(base, "file")
+	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(notADir, "under")
+
+	var released atomic.Bool
+	stop := watchWorkspaceRoot(context.Background(), root, 5*time.Millisecond, func() { released.Store(true) })
+	defer stop()
+
+	time.Sleep(60 * time.Millisecond)
+	if released.Load() {
+		t.Error("released on a non-ENOENT stat error; a transient failure must not withdraw a live run's locks")
+	}
+}
+
+// TestWatchWorkspaceRootStopJoins pins that stop() waits for the goroutine. Closing
+// the signal alone leaves a goroutine that can still reach release() afterwards, and
+// in the daemon that late release lands on whatever the NEXT run holds.
+func TestWatchWorkspaceRootStopJoins(t *testing.T) {
+	root := t.TempDir()
+	var released atomic.Bool
+	stop := watchWorkspaceRoot(context.Background(), root, time.Millisecond, func() { released.Store(true) })
+
+	stop()
+	// Once stop() returns the goroutine is done, so deleting the root now can never
+	// trigger a release.
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if released.Load() {
+		t.Error("released after stop() returned; stop must join, not merely signal")
+	}
+}
