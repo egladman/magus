@@ -6,7 +6,7 @@ package magus_test
 // shipped config had moved on, so a reader copying the documented form got a
 // guard that fails open in silence - the exact failure the change removed.
 //
-// The templates under docs/templates/agent-hooks/ are the source of truth. This
+// The templates under docs/guides/integrations/agents/ are the source of truth. This
 // repository's own config invokes them rather than inlining a copy, so
 // dogfooding exercises the artifact readers actually get. These tests keep that
 // true: a config that stops referencing a template, or a template that stops
@@ -27,7 +27,7 @@ import (
 const (
 	dogfoodedHookConfig = ".claude/settings.json"
 	hookGuideDoc        = "docs/guides/integrations/agents.md"
-	hookTemplateDir     = "docs/templates/agent-hooks"
+	hookTemplateDir     = "docs/guides/integrations/agents"
 )
 
 type hookSettings struct {

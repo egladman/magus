@@ -312,7 +312,7 @@ a guard that errors on every tool call is worse than no guard.
 Every host gets the same RULES - they come from one binary, and none of them is
 per-host. What differs is how much of the verdict a host's hook surface can
 carry, so the gaps belong in a table rather than in a reader's assumptions. The
-templates under `docs/templates/agent-hooks/` are written to close every gap the
+templates under `docs/guides/integrations/agents/` are written to close every gap the
 host allows.
 
 | | command rules | declared-output rule | `deny` reaches the model | `advise` reaches the model |
@@ -387,18 +387,21 @@ The `--path` hook only ever denies, so it needs no `advise` arm.
 
 ## Hook templates
 
-These are files, not snippets. They live in [`docs/templates/agent-hooks/`](https://github.com/egladman/magus/tree/main/docs/templates/agent-hooks) - download them, or copy
-from the blocks below. magus's own repository invokes these same files rather than keeping a
-private copy, so what it dogfoods is what you get, and a test fails if either drifts from the other.
+These are files, not snippets. They sit beside this page in [`docs/guides/integrations/agents/`](https://github.com/egladman/magus/tree/main/docs/guides/integrations/agents)
+- download them, or copy from the blocks below. magus's own repository invokes these same files
+rather than keeping a private copy, so what it dogfoods is what you get, and a test fails if either
+drifts from the other.
 
-The shell templates are POSIX `sh` and take three overrides: `HOST_EVENT_PATH` (where the command or
-path sits in your host's event), `HOST_RESPONSE` (a Go template rendering your host's reply), and
-`GUARD_MAGUS_BIN` (when magus is not on PATH). That last name deliberately avoids the `MAGUS_*`
-space, which is magus's own configuration surface.
+There is ONE implementation of the command guard. A host-specific file sets three overrides and
+delegates to it: `HOST_EVENT_PATH` (where the command or path sits in that host's event),
+`HOST_RESPONSE` (a Go template rendering that host's reply), and `GUARD_UNAVAILABLE_RESPONSE` (what
+to say when magus is not installed, so each host picks its own fail-open or fail-closed stance).
+`GUARD_MAGUS_BIN` points at the binary when it is not on PATH; the name deliberately avoids the
+`MAGUS_*` space, which is magus's own configuration surface.
 
 #### `magus-guard-command.sh`
 
-Command guard (any host that can run a program).
+Command guard. Every host uses this one; the per-host files below only set its three overrides.
 
 ```sh
 #!/usr/bin/env sh
@@ -414,6 +417,8 @@ Command guard (any host that can run a program).
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
+#                    host can choose its own fail-open or fail-closed stance
 #
 # The defaults are Claude Code's event and response shape.
 #
@@ -430,9 +435,10 @@ Command guard (any host that can run a program).
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-  printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
+  printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
   exit 0
 fi
 
@@ -441,7 +447,7 @@ exec "$GUARD_MAGUS_BIN" agent hook --from-json "$HOST_EVENT_PATH" -o "template=$
 
 #### `magus-guard-path.sh`
 
-Declared-output guard (wire to your host's file-editing tool).
+Declared-output guard. Wire to your host's file-editing tool.
 
 ```sh
 #!/usr/bin/env sh
@@ -467,14 +473,50 @@ Declared-output guard (wire to your host's file-editing tool).
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
-[ -n "$GUARD_MAGUS_BIN" ] && [ -x "$GUARD_MAGUS_BIN" ] || exit 0
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  # Prints nothing by default: for most hosts an empty response means "allow".
+  # Set GUARD_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
+  [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] && printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
 
 exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
 ```
 
+#### `cursor-guard.sh`
+
+Cursor wrapper: sets Cursor-specific overrides and delegates.
+
+```sh
+#!/usr/bin/env sh
+# magus guard hook for Cursor's beforeShellExecution hook, which runs a PROGRAM
+# rather than an inline shell string - hence a wrapper. Copy this directory's
+# scripts to .cursor/hooks/ (chmod +x) and point .cursor/hooks.json here.
+#
+# This file holds ONLY what is Cursor-specific and delegates the rest, so there
+# is one implementation of the guard rather than one per host:
+#
+#   - the command is at the event's TOP LEVEL (`command`), not nested under a
+#     tool_input object
+#   - Cursor's reply is {"permission": ...}, with agent_message on a denial
+#   - Cursor delivers agent_message only on a DENIAL, so `advise` collapses to a
+#     plain allow here; those nudges live in the installed skills instead
+#   - on a missing magus this ALLOWS. Cursor already fails open on a hook crash
+#     or malformed JSON unless the hook sets failClosed, so pretending otherwise
+#     would give false assurance. For strict behaviour set failClosed on the hook
+#     and change GUARD_UNAVAILABLE_RESPONSE below to a deny.
+
+HOST_EVENT_PATH='command'
+HOST_RESPONSE='{{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+GUARD_UNAVAILABLE_RESPONSE='{"permission":"allow"}'
+export HOST_EVENT_PATH HOST_RESPONSE GUARD_UNAVAILABLE_RESPONSE
+
+exec "$(dirname "$0")/magus-guard-command.sh"
+```
+
 #### `opencode-plugin.ts`
 
-OpenCode plugin (covers both surfaces).
+OpenCode plugin. OpenCode has no shell-hook config, so this is a plugin covering both surfaces.
 
 ```ts
 // magus guard hook for OpenCode, which has no shell-command hook config: a
@@ -555,41 +597,6 @@ export const MagusGuard: Plugin = async ({ $ }) => {
     },
   }
 }
-```
-
-#### `cursor-guard.sh`
-
-Cursor wrapper.
-
-```sh
-#!/usr/bin/env sh
-# magus guard hook for Cursor's beforeShellExecution hook, which runs a PROGRAM
-# rather than an inline shell string - hence a wrapper script. POSIX sh, no
-# bashisms. Copy to .cursor/hooks/ (chmod +x) and point .cursor/hooks.json at it.
-#
-# Two Cursor-specific facts shape this file:
-#
-#   - The command is at the event's TOP LEVEL (--from-json command), not nested
-#     under a tool_input object.
-#   - Cursor delivers agent_message to the model only on a DENIAL, not on an
-#     allow, so `advise` collapses to a plain allow here. The advisory nudges
-#     live in the installed guidance instead.
-#
-# Stance on a missing magus: this ALLOWS, unlike the OpenCode plugin, which
-# blocks. Cursor already fails open on a hook crash or malformed JSON unless the
-# hook sets failClosed, so a wrapper pretending otherwise would give false
-# assurance. For the strict behaviour, set failClosed on the hook and replace the
-# allow below with an explicit deny.
-
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
-
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-  printf '%s' '{"permission":"allow"}'
-  exit 0
-fi
-
-exec "$GUARD_MAGUS_BIN" agent hook --from-json command \
-  -o 'template={{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
 ### Other agents

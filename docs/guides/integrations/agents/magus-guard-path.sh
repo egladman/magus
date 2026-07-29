@@ -21,6 +21,11 @@
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
-[ -n "$GUARD_MAGUS_BIN" ] && [ -x "$GUARD_MAGUS_BIN" ] || exit 0
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  # Prints nothing by default: for most hosts an empty response means "allow".
+  # Set GUARD_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
+  [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] && printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  exit 0
+fi
 
 exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
