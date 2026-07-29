@@ -94,3 +94,21 @@ func notAFlagSet() {
 	assert.NotContains(t, got, "attr", "slog.Bool is not a flag binding")
 	assert.NotContains(t, got, "nope", "a non-fs receiver is not a flag binding")
 }
+
+// TestFlagNamesInScopesToOneFunction is the distinction that made a shared extractor
+// worth it: a file can hold several commands, so "what this FILE exposes" and "what
+// this COMMAND binds" are different questions with different right answers.
+func TestFlagNamesInScopesToOneFunction(t *testing.T) {
+	f := parseSrc(t, `package p
+
+func parent() { fs.Bool("dry-run", false, "") }
+
+func subMode() { fs.Int("max-shards", 0, "") }
+`)
+	assert.Equal(t, []string{"dry-run"}, FlagNamesIn(f, "parent"),
+		"a sibling function's flags must not leak into the parent command's set")
+	assert.Equal(t, []string{"max-shards"}, FlagNamesIn(f, "subMode"))
+	assert.ElementsMatch(t, []string{"dry-run", "max-shards"}, FlagNames(f),
+		"the whole-file scope still sees both")
+	assert.Nil(t, FlagNamesIn(f, "nosuchfunc"), "an absent function yields nothing, not a panic")
+}

@@ -136,17 +136,35 @@ var flagBinders = map[string]bool{
 
 // FlagNames returns every flag name bound on a *flag.FlagSet anywhere in file.
 //
-// WHOLE file, every function, deliberately. The scanner this replaces read a single
-// named function, which made it report a flag as nonexistent whenever the binding
-// lived in a sibling function - three false positives for every real finding. A
-// reader that is wrong three times out of four teaches people to ignore it.
+// Use this to answer "what flags does this FILE make reachable" - checking a
+// completion script, say, where a flag bound in any function is one a user can type.
+// Scoped to a single function it reported a flag as nonexistent whenever the binding
+// lived in a sibling, which is three false positives for every real finding.
 //
 // The receiver is not checked against a type: matching any x.Bool("name", ...) would
 // catch slog.Bool and similar, so the receiver must be spelled `fs`, which is the
 // convention every FlagSet in this repo follows.
-func FlagNames(file *ast.File) []string {
+func FlagNames(file *ast.File) []string { return flagNames(file) }
+
+// FlagNamesIn returns the flag names bound inside one named function.
+//
+// This is the other question, and it is not the same one: "what flags does this
+// COMMAND bind" is per-function, because a file can hold several commands. affected.go
+// binds flags in affected, affectedPlan and affectedImpact, so a whole-file read would
+// mix a sub-mode's flags into the parent command's set. Both scopes share one
+// extractor so the two answers cannot drift the way three hand-rolled copies did.
+func FlagNamesIn(file *ast.File, funcName string) []string {
+	for _, d := range file.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == funcName && fn.Body != nil {
+			return flagNames(fn.Body)
+		}
+	}
+	return nil
+}
+
+func flagNames(root ast.Node) []string {
 	var out []string
-	ast.Inspect(file, func(n ast.Node) bool {
+	ast.Inspect(root, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok || len(call.Args) == 0 {
 			return true
