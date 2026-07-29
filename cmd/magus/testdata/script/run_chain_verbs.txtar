@@ -1,0 +1,81 @@
+# Chaining: a target's result is not a string the CLI prints, it is a thing the CLI
+# knows verbs for.
+#
+#   magus run build --then outputs
+#   magus run build --then file dist/app.txt contents
+#
+# Where magus improves on Dagger's version: Dagger makes you construct and RETURN a
+# File. magus needs no return statement at all, because the target already declared
+# ctx.outputs(...) for the cache. The artifact set is known without asking the author
+# for anything, and it has been sitting there powering `magus clean` the whole time.
+#
+# The separator is "--then", not "--": "--" already forwards extra args to spells
+# (`magus run test -- -run TestFoo`). And it is a separator rather than bare words
+# because `magus run build web api` already takes trailing project args, so
+# `magus run build file x` would be indistinguishable from a project named "file".
+#
+# The separator is split off the RAW args, before splitTargetFromArgs, which
+# partitions flags from positionals and REORDERS them. Parsed later, a verb's own
+# --path is hoisted across the separator and the chain is handed a bare flag.
+
+# outputs lists what the target produced, one per line, ready to pipe.
+exec magus run bundle:rw --then outputs
+stdout 'dist/app\.txt'
+
+# Global flags go BEFORE the separator: everything after it belongs to the verb.
+exec magus run bundle:rw -o json --then outputs
+stdout '"path": "dist/app\.txt"'
+stdout '"role": "output"'
+
+# file <path> resolves one artifact. Bare, it prints the absolute path, which is what
+# a caller substitutes into another command.
+exec magus run bundle:rw --then file dist/app.txt
+stdout 'dist/app\.txt'
+
+# contents streams the bytes, so a build artifact can be read without knowing where
+# the build chose to put it.
+exec magus run bundle:rw --then file dist/app.txt contents
+stdout 'built'
+
+# export copies it out. The destination is echoed so the path is scriptable.
+exec magus run bundle:rw --then file dist/app.txt export --path ./out/app.txt
+exists out/app.txt
+grep 'built' out/app.txt
+
+# outputs export copies the whole set, preserving workspace-relative layout.
+exec magus run bundle:rw --then outputs export --path ./dist-copy
+exists dist-copy/dist/app.txt
+
+# A path that is not an artifact names what the target DID produce: that turns a typo
+# into a one-line fix, where "no such file" is equally true of a path that was never
+# an artifact at all.
+! exec magus run bundle:rw --then file nope.txt
+stderr 'is not an artifact of this target \(produced: dist/app\.txt\)'
+
+# An unknown verb is a usage error (exit 2, per the CLI-wide convention) and prints
+# the whole grammar rather than only naming what failed.
+! exec magus run bundle:rw --then bogus
+stderr 'unknown --then verb "bogus"'
+stderr 'outputs export --path'
+stderr 'file <path> contents'
+
+# --then with nothing after it is the same class of error.
+! exec magus run bundle:rw --then
+stderr '--then needs a verb'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "os";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

@@ -26,6 +26,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return targetUsage()
 	}
 
+	// The chain is split off the RAW args, before anything else touches them.
+	// splitTargetFromArgs partitions flags from positionals and reorders them
+	// (flags first), which would hoist a verb's own --path across the separator and
+	// leave the chain holding a bare flag.
+	args, chainArgs, chained := splitOnThen(args)
+
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
 	// flags + any project args for cmdParse below.
@@ -279,6 +285,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return err
 	}
 
+	if chained {
+		return runChain(ctx, m, opts, targetName, targets, chainArgs)
+	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
 		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns())

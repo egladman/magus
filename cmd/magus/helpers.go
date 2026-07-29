@@ -218,3 +218,23 @@ func splitOnDashDash(args []string) (before, after []string) {
 	}
 	return args, nil
 }
+
+// splitOnThen splits args at the chain separator, returning the run's own args and
+// the verbs to apply to what it produced.
+//
+// The separator is "--then" rather than "--" because "--" already forwards extra
+// args to spells (`magus run test -- -run TestFoo`), and it is a separator rather
+// than bare words because `magus run build web api` already takes trailing project
+// args - `magus run build file x` would otherwise be indistinguishable from a
+// project named "file".
+// found distinguishes an ABSENT separator from one with no verb after it. Without
+// it, `magus run build --then` silently ran as a plain build - the same
+// accepted-and-ignored failure this grammar exists to avoid.
+func splitOnThen(args []string) (before, after []string, found bool) {
+	for i, a := range args {
+		if a == "--then" {
+			return args[:i], args[i+1:], true
+		}
+	}
+	return args, nil, false
+}
