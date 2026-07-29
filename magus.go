@@ -98,7 +98,9 @@ func (m *Magus) ServeDaemon(ctx context.Context) error {
 	return m.daemon.Serve(ctx)
 }
 
-// rootMarkers lists workspace-root markers in priority order; magus markers precede go.mod.
+// rootMarkers lists every marker that can identify a workspace root when no stronger
+// signal exists; magus markers precede go.mod. This is the FALLBACK set, not the
+// primary rule - see FindRootWithLineage.
 var rootMarkers = []string{
 	"magusfiles",
 	"magusfile.buzz",
@@ -106,44 +108,103 @@ var rootMarkers = []string{
 	"go.mod",
 }
 
-// FindRoot walks up from dir (or cwd when empty) to find the nearest workspace root.
+// workspaceMarkers END the upward walk: a directory carrying one IS the workspace root.
+// A workspace is the whole unit of work and there is exactly one per invocation, so
+// these are the markers that only ever appear at its top.
+var workspaceMarkers = []string{"magus.yaml", "go.mod"}
+
+// projectMarkers mark a PROJECT, a unit INSIDE a workspace, and say nothing about
+// where the workspace begins.
+//
+// Keeping these out of workspaceMarkers is the whole fix. Treating a magusfile as a
+// root meant the walk halted at the first one it met, so running from a subproject
+// silently redefined the workspace as that subproject: `magus ls` from a nested
+// directory reported one project instead of the real set, and `affected` answered
+// confidently about a workspace that did not exist. Nesting is not going away, so the
+// walk accrues these and keeps going.
+var projectMarkers = []string{"magusfiles", "magusfile.buzz"}
+
+// dirHasMarker reports whether dir carries any of the named markers.
+func dirHasMarker(dir string, markers []string) bool {
+	for _, m := range markers {
+		if _, err := os.Stat(filepath.Join(dir, m)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// FindRoot walks up from dir (or cwd when empty) to find the workspace root.
 func FindRoot(dir string) (string, error) {
+	root, _, err := FindRootWithLineage(dir)
+	return root, err
+}
+
+// FindRootWithLineage returns the workspace root plus the chain of project
+// directories enclosing dir, innermost first, as workspace-relative paths.
+//
+// The walk ACCRUES rather than halting. Every project marker it passes is a project
+// that contains dir, and only a workspace marker ends the walk. So from console/ in a
+// repo whose root carries magus.yaml, the root is the repo and the lineage is
+// ["console"]: one workspace, with the nesting recorded rather than collapsed.
+//
+// Fallback: a tree with project markers but no workspace marker above it (a project
+// checked out on its own) resolves to the OUTERMOST project marker seen. That keeps
+// a standalone checkout working while still preferring the largest unit, so a nested
+// project never quietly becomes its own workspace when a real one encloses it.
+func FindRootWithLineage(dir string) (string, []string, error) {
 	if dir == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		dir = cwd
 	}
 	cur, err := filepath.Abs(dir)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	markerSet := make(map[string]struct{}, len(rootMarkers))
-	for _, m := range rootMarkers {
-		markerSet[m] = struct{}{}
-	}
+
+	var projectDirs []string // every enclosing project, innermost first
 	for {
-		entries, err := os.ReadDir(cur)
-		if err == nil {
-			for _, e := range entries {
-				if _, ok := markerSet[e.Name()]; ok {
-					return cur, nil
-				}
-			}
-		} else {
-			for _, marker := range rootMarkers {
-				if _, err := os.Stat(filepath.Join(cur, marker)); err == nil {
-					return cur, nil
-				}
-			}
+		if dirHasMarker(cur, projectMarkers) {
+			projectDirs = append(projectDirs, cur)
+		}
+		// Checked after the project marker so a root that is ALSO a project (the common
+		// case: a magusfile.buzz beside magus.yaml) still ends the walk here.
+		if dirHasMarker(cur, workspaceMarkers) {
+			return cur, relLineage(cur, projectDirs), nil
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
-			return "", errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.buzz, magus.yaml, or go.mod found)")
+			break
 		}
 		cur = parent
 	}
+
+	if len(projectDirs) > 0 {
+		root := projectDirs[len(projectDirs)-1]
+		return root, relLineage(root, projectDirs), nil
+	}
+	return "", nil, errors.New("magus: could not locate workspace root (no magusfiles/, magusfile.buzz, magus.yaml, or go.mod found)")
+}
+
+// relLineage renders the enclosing project dirs relative to root, dropping the root
+// itself: the lineage describes what sits BETWEEN a directory and its workspace, and
+// the workspace is not nested inside itself.
+func relLineage(root string, projectDirs []string) []string {
+	out := make([]string, 0, len(projectDirs))
+	for _, d := range projectDirs {
+		rel, err := filepath.Rel(root, d)
+		if err != nil || rel == "." {
+			continue
+		}
+		out = append(out, filepath.ToSlash(rel))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Inspect discovers the workspace without opening the cache (for introspection commands).
