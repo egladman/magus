@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/types"
 )
 
 // Cache is an on-disk content-addressed build cache handle.
@@ -371,6 +372,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			if err == nil {
 				result.Hit = true
 				result.Outputs = paths
+				// A hit never invokes the target, so re-capture the value the entry
+				// recorded. Without this a target returning a value prints it on the
+				// first run and nothing on the second.
+				types.CaptureReturn(ctx, s.ProjectPath, manifest.Value)
 				c.hits.Add(1)
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
@@ -475,7 +480,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	if c.mutable && !s.NoCache {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
-		outs, err := c.snapshot(s, hash)
+		outs, err := c.snapshot(ctx, s, hash)
 		endSnap(err)
 		if err != nil {
 			result.Duration = time.Since(start)

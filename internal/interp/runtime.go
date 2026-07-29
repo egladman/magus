@@ -111,8 +111,13 @@ type Target struct {
 
 // Run compiles each file in src, executes them on a fresh Buzz session with host
 // bindings registered, then invokes the named target.
+//
+// It runs the target for its EFFECT and discards any return value. Use [RunDir]
+// when the value is wanted: that is the entry the magusfile spell's invoker calls,
+// and the one whose result reaches InvokeResponse.Data.
 func Run(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
-	return runBuzz(ctx, src, target, extraArgs, workDir)
+	_, err := runBuzz(ctx, src, target, extraArgs, workDir)
+	return err
 }
 
 // RunDir runs target for the project in dir. Returns ErrNoMagusfile or
@@ -122,20 +127,21 @@ func Run(ctx context.Context, src *Source, target string, extraArgs []string, wo
 // the seam a second engine would extend: each source is fully executed (including
 // top-level declarations such as magus.project) before its target registry is
 // consulted, and an unknown target falls through to the next source.
-func RunDir(ctx context.Context, dir, target string, extraArgs []string) error {
+func RunDir(ctx context.Context, dir, target string, extraArgs []string) (any, error) {
 	srcs, err := FindAll(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, src := range srcs {
-		err = Run(ctx, src, target, extraArgs, dir)
+		var val any
+		val, err = runBuzz(ctx, src, target, extraArgs, dir)
 		if errors.Is(err, ErrUnknownTarget) {
 			continue
 		}
-		return err
+		return val, err
 	}
-	return ErrUnknownTarget
+	return nil, ErrUnknownTarget
 }
 
 // Parse executes src in parse mode (name discovery only) and returns discovered targets.
@@ -246,7 +252,7 @@ func importTargetCollisionErr(name, importPath string) error {
 }
 
 // runBuzz executes src on a fresh Buzz session and invokes target.
-func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
+func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) (any, error) {
 	// Carry the target's directory on the context instead of os.Chdir-ing the whole
 	// process. The host modules (std.*) resolve relative paths against this cwd, so
 	// magusfile targets across projects (including a cross-project ctx.needs that
@@ -259,7 +265,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 
 	load, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = load.Session.Close() }()
 
@@ -274,7 +280,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 		slices.Sort(names)
 		// Carries the MGS1006 code for lookup, but still Unwraps to ErrUnknownTarget so the fan-out
 		// suppression (errors.Is(err, ErrUnknownTarget)) that skips projects lacking this target keeps working.
-		return types.WrapDiagnostic(types.UnknownTarget, ErrUnknownTarget,
+		return nil, types.WrapDiagnostic(types.UnknownTarget, ErrUnknownTarget,
 			"magusfile: unknown target %q (registered: %s)", target, strings.Join(names, ", "))
 	}
 	// A target's signature is (ctx: magus\Context, args: [str]): ONE context and
@@ -290,14 +296,20 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	buzzArgs := []vm.Value{vm.ListValue(items)}
 	ctx, exitCode := types.WithExitCapture(ctx)
 	ctx = WithSource(ctx, src)
-	_, err = fn(ctx, buzzArgs)
+	val, err := fn(ctx, buzzArgs)
 	if code, ok := exitCode(); ok {
-		return types.ExitError{Code: code}
+		return nil, types.ExitError{Code: code}
 	}
 	if err != nil {
-		return fmt.Errorf("magusfile: target %s: %w", target, err)
+		return nil, fmt.Errorf("magusfile: target %s: %w", target, err)
 	}
-	return nil
+	// The value was discarded here for as long as targets existed, which is what
+	// made `> void` look like a rule rather than a convention.
+	ret, err := buzzReturnToGo(val)
+	if err != nil {
+		return nil, fmt.Errorf("magusfile: target %s: %w", target, err)
+	}
+	return ret, nil
 }
 
 // parseBuzz executes src in parse mode to collect target names.

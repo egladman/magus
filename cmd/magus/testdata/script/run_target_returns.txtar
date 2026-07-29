@@ -1,0 +1,70 @@
+# A target may RETURN a value, and the returnable set is deliberately tiny.
+#
+# The value used to be discarded at four separate places even though the pipe between
+# them was fully built: the interpreter dropped it (runtime.go), the magusfile spell's
+# invoker hardcoded nil (magusfile.go), and the run path discarded InvokeResponse three
+# times (run.go). `> void` was a convention, not a mechanism.
+#
+# The rule for what may be returned: every type is either TERMINAL (renders and stops)
+# or CHAINABLE (carries CLI verbs). Today that is void, str and [str]; File and
+# Directory join as the chainable pair. A map is refused despite serializing perfectly
+# well, because it carries no verbs and so can never chain - allowing it invites
+# targets to return structures that dead-end at the CLI.
+#
+# There is no error return and that is not a gap: a target already signals failure
+# out-of-band, so a second, ignorable failure channel would only compete with it.
+
+# str is terminal.
+exec magus run describe -o json
+stdout '"value": "v1.2.3"'
+
+# The result is per project. A run fans out, so a single value would be meaningless
+# the moment more than one project ran.
+stdout '"path": "\."'
+
+# [str] is the other terminal form.
+exec magus run listy -o json
+stdout '"alpha"'
+stdout '"beta"'
+
+# A void target has NO value key rather than a null one. Absent and present-but-null
+# are different answers to "did this target return anything", and every target that
+# exists today is void, so this is the case that must stay quiet.
+exec magus run voidy -o json
+! stdout '"value"'
+
+# THE CASE THAT DECIDES WHETHER THIS SHIPS. A second run is a cache hit, and a hit
+# never invokes the target. The design plan called this out: print on the first run
+# and nothing on the second is worse than not having returns at all. The value is
+# stored on the cache manifest and re-captured on replay, so both runs agree.
+exec magus run describe -o json
+stdout '"value": "v1.2.3"'
+exec magus run listy -o json
+stdout '"alpha"'
+
+# A map is refused, and the message names the type it got AND the set it accepts, so
+# the fix is in the error rather than in the docs.
+! exec magus run mappy
+stderr 'a target may return str, \[str\], or nothing; got a map'
+
+# So is a bool, for the same reason: it is neither terminal-by-rule nor chainable. A
+# target reporting a flag returns a str, which is what the CLI prints either way.
+! exec magus run booly
+stderr 'got a bool'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun describe(ctx: magus\Context, args: [str]) > str { return "v1.2.3"; }
+export fun listy(ctx: magus\Context, args: [str]) > [str] { return ["alpha", "beta"]; }
+export fun voidy(ctx: magus\Context, args: [str]) > void { }
+export fun mappy(ctx: magus\Context, args: [str]) > {str: str} { return {"a": "b"}; }
+export fun booly(ctx: magus\Context, args: [str]) > bool { return true; }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

@@ -12,6 +12,10 @@
 #
 # The artifacts are scoped to the ONE target asked about (buildStep, the same fold the
 # cache keys and snapshots), not the project-wide output union.
+#
+# The result is shaped PER PROJECT because a run fans out: a flat artifact list could
+# not say which project produced which file, and a single return value would be
+# meaningless once more than one project ran.
 
 exec magus run bundle:rw -o json
 stdout '"target": "bundle"'
@@ -43,6 +47,7 @@ stdout 'path: dist/app.txt'
 exec magus run bundle --dry-run -o json
 stdout '"dry_run": true'
 ! stdout 'artifacts'
+! stdout '"value"'
 
 # The text form is untouched: -o is purely additive here.
 exec magus run bundle:rw

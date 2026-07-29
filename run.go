@@ -998,14 +998,16 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	req := types.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
-		_, err := s.Invoke(ctx, req)
+		resp, err := s.Invoke(ctx, req)
+		types.CaptureReturn(ctx, p.Path, resp.Data)
 		return err
 	}
 
 	volatileTarget := s.Name() + "/" + name
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
-	_, err := s.Invoke(ctx, req)
+	resp, err := s.Invoke(ctx, req)
+	types.CaptureReturn(ctx, p.Path, resp.Data)
 	result := "pass"
 	attempts := 1
 	decision := volatility.Decision{}
@@ -1013,7 +1015,8 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	if err != nil {
 		decision = rt.Decide(p.Path, volatileTarget, affected)
 		if decision.Retry {
-			_, err2 := s.Invoke(ctx, req)
+			resp2, err2 := s.Invoke(ctx, req)
+			types.CaptureReturn(ctx, p.Path, resp2.Data)
 			attempts = 2
 			if err2 == nil {
 				result = "volatile"

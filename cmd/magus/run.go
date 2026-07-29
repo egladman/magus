@@ -258,6 +258,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
+	// The sink rides the context down through the fan-out, so collecting return
+	// values needs no signature change anywhere between here and invokeSpell.
+	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	if targetName == "ci" {
 		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
@@ -278,7 +281,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, targetName, charms, targets)
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns())
 	}
 	return nil
 }
@@ -483,14 +486,26 @@ type runArtifact struct {
 	Role string `json:"role,omitempty" yaml:"role,omitempty"`
 }
 
+// runProject is one project's slice of the run. Artifacts and Value are per
+// project because a run fans out: a single flat list could not say which project
+// produced which file, and a single value would be meaningless for a multi-project
+// run.
+type runProject struct {
+	Path string `json:"path" yaml:"path"`
+	// Value is what the target returned (str or [str]), absent for a `> void`
+	// target. Replayed from the cache entry on a hit, so it is present whether or
+	// not this invocation actually executed the target.
+	Value     any           `json:"value,omitempty"     yaml:"value,omitempty"`
+	Artifacts []runArtifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+}
+
 // runOutput is the structured result of `magus run <target>`.
 type runOutput struct {
-	Target    string        `json:"target"              yaml:"target"`
-	Charms    []string      `json:"charms,omitempty"    yaml:"charms,omitempty"`
-	DryRun    bool          `json:"dry_run"             yaml:"dry_run"`
-	Projects  []string      `json:"projects"            yaml:"projects"`
-	Count     int           `json:"count"               yaml:"count"`
-	Artifacts []runArtifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Target   string       `json:"target"           yaml:"target"`
+	Charms   []string     `json:"charms,omitempty" yaml:"charms,omitempty"`
+	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
+	Count    int          `json:"count"            yaml:"count"`
+	Projects []runProject `json:"projects"         yaml:"projects"`
 }
 
 // emitRunResult renders what a run produced. It is deliberately NOT a second
@@ -500,14 +515,14 @@ type runOutput struct {
 // A dry run reports no artifacts: nothing executed, so any file matching an output
 // glob is left over from a previous run and reporting it would claim this invocation
 // produced it.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, targets []types.Target) error {
+func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, targets []types.Target, returns map[string]any) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun}
 	projects := m.ResolveProjects(targets)
-	for _, p := range projects {
-		out.Projects = append(out.Projects, p.Path)
-	}
-	out.Count = len(out.Projects)
+	out.Count = len(projects)
 
+	// Artifacts are resolved once for the whole set, then bucketed by owning
+	// project, so the expansion walks each project's globs exactly once.
+	byProject := map[string][]runArtifact{}
 	if !out.DryRun {
 		artifacts, err := m.ResolveTargetOutputs(ctx, projects, target)
 		if err != nil {
@@ -518,13 +533,28 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 			paths[i] = a.Path
 		}
 		roles := m.DescribeFiles(paths)
-		byPath := make(map[string]string, len(roles.Files))
+		roleOf := make(map[string]string, len(roles.Files))
 		for _, f := range roles.Files {
-			byPath[f.Path] = f.Role
+			roleOf[f.Path] = f.Role
 		}
-		for _, a := range artifacts {
-			out.Artifacts = append(out.Artifacts, runArtifact{Path: a.Path, Glob: a.Glob, Role: byPath[a.Path]})
+		for _, p := range projects {
+			for _, a := range artifacts {
+				if owner := m.FindOutputProducer(filepath.Join(m.Root(), a.Path)); owner != nil && owner.Path != p.Path {
+					continue
+				}
+				byProject[p.Path] = append(byProject[p.Path], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
+			}
 		}
+	}
+
+	for _, p := range projects {
+		entry := runProject{Path: p.Path, Artifacts: byProject[p.Path]}
+		// A dry run executed nothing, so it has no return value and no artifacts to
+		// report; anything on disk is left over from an earlier run.
+		if !out.DryRun {
+			entry.Value = returns[p.Path]
+		}
+		out.Projects = append(out.Projects, entry)
 	}
 	return emitFormatted(opts, out)
 }
