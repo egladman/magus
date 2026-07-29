@@ -127,7 +127,7 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 // and a run killed mid-write leaves a partial final line, so an unparseable line is
 // skipped rather than treated as a corrupt file.
 func scanJournal(path string, only map[string]bool, fn func(project, target, status string, durMs int64)) error {
-	f, err := os.Open(path) //nolint:gosec // path comes from a glob of magus's own cache dir
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}

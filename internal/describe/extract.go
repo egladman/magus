@@ -189,7 +189,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
+									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef(ref))
 								}
 							}
 						}

@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
@@ -204,7 +204,7 @@ func newServiceViewer(targets map[string]types.SpellOp) func(string) (*types.Ser
 		view := &types.ServiceView{
 			Idle:        op.Service.Idle,
 			Distinct:    op.Service.Distinct,
-			Fingerprint: serviceident.Fingerprint(svc),
+			Fingerprint: identity.Fingerprint(svc),
 		}
 		if op.Service.Readiness.Bin != "" {
 			view.Readiness = append([]string{op.Service.Readiness.Bin}, op.Service.Readiness.Args...)

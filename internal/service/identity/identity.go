@@ -1,5 +1,5 @@
-// Package serviceident derives the identity of a long-running service from its
-// resolved process command, for two purposes:
+// Package identity derives the identity of a long-running service from its resolved
+// process command, for three purposes:
 //
 //   - Fingerprint: the exact-match "sharing key". Two services with the same
 //     fingerprint are the same instance and may be deduped/auto-shared. It is
@@ -15,10 +15,19 @@
 //     run as separate processes. They cannot be safely auto-merged, so they are
 //     surfaced to a human via [NearDuplicates].
 //
+//   - InstanceKey: [Fingerprint] namespaced to one workspace, which is the key a
+//     RUNNING instance may actually be shared under. The daemon hosts services for
+//     every workspace on the machine, so config identity alone would let two
+//     checkouts share one container.
+//
+// It sits under internal/service rather than beside it because it answers one
+// question about the thing that package runs, and a sibling package named for an
+// abbreviation invited the reader to guess at the relationship.
+//
 // Today identity is inferred with a docker-argv heuristic ([Parse]), since the
 // canonical case is a container service. A future spell-provided identity
 // descriptor on types.Service will supersede the heuristic where present.
-package serviceident
+package identity
 
 import (
 	"crypto/sha256"

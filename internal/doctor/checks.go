@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/serviceaudit"
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -47,7 +47,7 @@ func (*runner) checkNearDuplicateServices(projects []*types.Project) Check {
 	if len(clusters) == 0 {
 		return Check{Name: name, Status: StatusOK, Message: "no near-duplicate services detected"}
 	}
-	details := strings.Split(serviceident.FormatWarning(clusters), "\n")
+	details := strings.Split(identity.FormatWarning(clusters), "\n")
 	details = append(details, fmt.Sprintf("see %s: %s", types.NearDuplicateServices, types.CodeURL(types.NearDuplicateServices)))
 	return Check{
 		Name:    name,

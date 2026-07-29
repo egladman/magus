@@ -1,4 +1,4 @@
-package serviceident
+package identity
 
 import (
 	"fmt"

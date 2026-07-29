@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/types"
 )
 
@@ -219,7 +219,7 @@ type ServiceStatus struct {
 	Label string
 	// Command is the full process command, bin and args space-joined.
 	Command string
-	// Ports are the container-side published ports (from serviceident), empty when
+	// Ports are the container-side published ports (from service/identity), empty when
 	// the command is not a recognized container run.
 	Ports []string
 	// State is one of "starting" (before ready), "running" (ready, with dependents),
@@ -243,7 +243,7 @@ func (r *Registry) Snapshot() []ServiceStatus {
 			ID:         shortServiceID(key),
 			Label:      serviceLabel(e.svc),
 			Command:    commandString(e.svc.Command),
-			Ports:      serviceident.Parse(e.svc.Command).Ports,
+			Ports:      identity.Parse(e.svc.Command).Ports,
 			Dependents: e.refs,
 			StartedAt:  e.startedAt,
 		}
@@ -282,13 +282,13 @@ func shortServiceID(key string) string {
 // serviceLabel derives a human name for a service: image[:tag] for a recognized
 // container run, else the process binary's basename.
 func serviceLabel(s types.Service) string {
-	if id := serviceident.Parse(s.Command); id.IsContainer() {
+	if id := identity.Parse(s.Command); id.IsContainer() {
 		if id.Tag != "" {
 			return id.Image + ":" + id.Tag
 		}
 		return id.Image
 	}
-	return serviceident.Basename(s.Command.Bin)
+	return identity.Basename(s.Command.Bin)
 }
 
 // commandString renders a Command as its space-joined bin and args, for display.

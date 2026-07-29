@@ -285,7 +285,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
 	// event - there is never a live listener with a dead token or vice versa.
-	ctx, cancel := context.WithTimeout(m.parent, ttl) //nolint:gosec // cancel is stored in active.cancel below and called on supersede/Close/teardown, not leaked
+	ctx, cancel := context.WithTimeout(m.parent, ttl)
 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if

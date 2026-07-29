@@ -22,7 +22,7 @@ package ward
 import (
 	"strings"
 
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,7 +54,7 @@ func Check(opName string, op types.SpellOp) []*types.DiagnosticError {
 // not misread. It recognizes -d, --detach, --detach=true, and combined short-flag
 // blocks like -itd.
 func detachFlag(cmd types.Command) (string, bool) {
-	if !serviceident.IsContainerRuntime(cmd.Bin) {
+	if !identity.IsContainerRuntime(cmd.Bin) {
 		return "", false
 	}
 	for _, a := range cmd.Args {
@@ -94,7 +94,7 @@ func watchFlag(cmd types.Command) (string, bool) {
 // invokesWatchTool reports whether the command's effective tool is a known watcher,
 // looking through common runners (npx, pnpm, yarn, bunx) to their first argument.
 func invokesWatchTool(cmd types.Command) bool {
-	bin := serviceident.Basename(cmd.Bin)
+	bin := identity.Basename(cmd.Bin)
 	if watchTools[bin] {
 		return true
 	}

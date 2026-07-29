@@ -62,7 +62,7 @@ func collectSchema(t reflect.Type, prefix []string, sliceParent string) []fieldS
 				tn = "duration"
 			}
 			result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: tn, sliceParent: sliceParent})
-		case reflect.Ptr:
+		case reflect.Pointer:
 			// Tri-state pointer scalars (nil = inherit default). Only *bool occurs today.
 			if f.Type.Elem().Kind() == reflect.Bool {
 				result = append(result, fieldSchema{dotted: strings.Join(path, "."), typeName: "*bool", sliceParent: sliceParent})

@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -84,7 +84,7 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 		if ws := types.WorkspaceFromContext(ctx); ws != nil {
 			root = ws.Root()
 		}
-		if handled, serr := service.TrySupervise(ctx, serviceident.InstanceKey(root, svc), svc); handled {
+		if handled, serr := service.TrySupervise(ctx, identity.InstanceKey(root, svc), svc); handled {
 			return run.ExecResult{}, serr
 		}
 	}
