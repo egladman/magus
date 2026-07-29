@@ -337,6 +337,32 @@ func (r *Region) SetStatus(msg string) error {
 	return err
 }
 
+// ReturnCursor parks the cursor at column 1 of the last row ABOVE the region,
+// which is where a caller that owns its own cursor should resume writing.
+//
+// It exists for the interactive case. [SetStatus] leaves the cursor inside the
+// region, which is harmless for a caller whose next write addresses a row anyway
+// (that is every logging consumer), and fatal for one holding a prompt: the cursor
+// sits outside the scroll region, so the next thing printed - and every character
+// the terminal echoes as the user types - lands in the footer instead of the
+// transcript.
+//
+// The obvious alternative is for SetStatus to save and restore the cursor itself.
+// It cannot: [Reserve] already holds the terminal's single cursor-save slot
+// (\e[s) for the whole life of the region so [Release] can restore it, and a
+// per-repaint save would clobber that, leaving Release to restore wherever the last
+// repaint happened. So the caller that owns the cursor is the one told where to put
+// it back, and Region's save slot stays untouched.
+//
+// A disabled Region does nothing, so a piped or non-TTY caller needs no branch.
+func (r *Region) ReturnCursor() error {
+	if !r.enabled || !r.open {
+		return nil
+	}
+	_, err := fmt.Fprintf(r.w, cupFmt, r.firstRow()-1, 1)
+	return err
+}
+
 // ellipsis marks a clipped line. Three ASCII dots rather than U+2026
 // because this lands in user-facing terminal output.
 const ellipsis = "..."

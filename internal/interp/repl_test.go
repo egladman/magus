@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -686,4 +687,42 @@ func TestPry_WhereamiWithSource(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "From:")
 	assert.Contains(t, out, "l3")
+}
+
+// TestReplStateNamesTheContinuationDepth covers the footer line's whole point. A
+// ">>" continuation prompt is indistinguishable from a hung process, which is what
+// makes people kill a REPL mid-expression; the footer says how deep it is and
+// therefore how many closers are owed.
+func TestReplStateNamesTheContinuationDepth(t *testing.T) {
+	assert.Equal(t, "magus repl  |  buzz  |  /w  |  .help", replState("buzz", "/w", 0, false))
+	assert.Equal(t, "magus repl  |  buzz  |  /w  |  continuing (depth 2)  |  .help", replState("buzz", "/w", 2, false))
+	assert.Equal(t, "magus repl  |  buzz  |  /w  |  continuing  |  .help", replState("buzz", "/w", 0, true),
+		"buffered input with depth 0 (an unterminated statement) still reports continuing")
+	assert.Equal(t, "magus repl  |  .help", replState("", "", 0, false),
+		"an unknown language and cwd drop out rather than printing empty separators")
+}
+
+// TestShortenPathKeepsTheIdentifyingTail pins which half survives clipping. A
+// footer clipped from the right would show the same home-directory prefix for every
+// session; the tail is what names the project.
+func TestShortenPathKeepsTheIdentifyingTail(t *testing.T) {
+	short := "/home/e/magus"
+	assert.Equal(t, short, shortenPath(short), "a path that fits is untouched")
+
+	long := "/Users/someone/very/deeply/nested/checkout/path/magus/console"
+	got := shortenPath(long)
+	assert.True(t, strings.HasPrefix(got, "..."), "clipping is marked")
+	assert.True(t, strings.HasSuffix(got, "/magus/console"), "the tail identifies the project")
+	assert.NotContains(t, got, "/Users/someone", "the uninformative prefix is what goes")
+}
+
+// TestReplFooterIsInertOffATTY keeps a piped or scripted session byte-identical to
+// one with no footer at all: no escape sequences, no status line, no branch at the
+// call site.
+func TestReplFooterIsInertOffATTY(t *testing.T) {
+	var buf bytes.Buffer // a plain buffer has no Fd, so Region reports disabled
+	f := newReplFooter(&buf)
+	f.paint(replState("buzz", "/w", 1, true))
+	f.release()
+	assert.Empty(t, buf.String(), "a non-TTY REPL emits nothing extra")
 }

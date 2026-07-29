@@ -458,3 +458,49 @@ func TestRegionReleasesRowsWhenAResizeMakesItUnviable(t *testing.T) {
 	assert.Contains(t, out, decstbmReset, "the reserved rows must be handed back")
 	assert.Contains(t, out, "after", "the failure still reaches the user, plainly")
 }
+
+// TestReturnCursorParksAboveTheRegion pins the interactive contract. SetStatus
+// leaves the cursor inside the region; a caller holding a prompt needs it back on
+// the transcript's last row, or the prompt and every echoed keystroke land in the
+// footer. Row is termHeight-height, i.e. the row just above firstRow.
+func TestReturnCursorParksAboveTheRegion(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 1, terminal(80, 24))
+	require.True(t, r.Enabled())
+	require.NoError(t, r.Reserve())
+
+	buf.Reset()
+	require.NoError(t, r.ReturnCursor())
+	assert.Equal(t, "\x1b[23;1H", buf.String(),
+		"parks at column 1 of the last scrolling row, one above the 1-row region")
+}
+
+// TestReturnCursorDoesNotTouchTheSaveSlot is the reason ReturnCursor exists at all
+// rather than SetStatus saving and restoring around its repaint: Reserve holds the
+// terminal's single cursor-save slot for the region's whole life so Release can use
+// it, and a per-repaint save would clobber it.
+func TestReturnCursorDoesNotTouchTheSaveSlot(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 2, terminal(80, 24))
+	require.NoError(t, r.Reserve())
+
+	buf.Reset()
+	require.NoError(t, r.SetStatus("running"))
+	require.NoError(t, r.ReturnCursor())
+	assert.NotContains(t, buf.String(), cursorSave,
+		"a repaint must not re-save; Release would then restore the repaint position")
+
+	buf.Reset()
+	require.NoError(t, r.Release())
+	assert.Contains(t, buf.String(), cursorRestore, "Release still restores Reserve's save")
+}
+
+// TestReturnCursorIsSafeWhenDisabled keeps the caller branch-free: off a TTY every
+// region method is a no-op, so a piped REPL session emits no escape sequences.
+func TestReturnCursorIsSafeWhenDisabled(t *testing.T) {
+	var buf ttyBuf
+	r := NewRegion(&buf, 1, notATerminal())
+	require.False(t, r.Enabled())
+	require.NoError(t, r.ReturnCursor())
+	assert.Empty(t, buf.String(), "a disabled region writes nothing")
+}

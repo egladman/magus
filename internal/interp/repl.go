@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/fatih/color"
 )
@@ -21,6 +22,92 @@ type ReplOptions struct {
 	Stderr  io.Writer
 	Banner  string                  // printed once before the first prompt
 	Locals  map[string]engine.Value // injected as globals before the loop
+}
+
+// stickyFooterRows is the height of the REPL's pinned status region.
+//
+// One row, and status only: a REPL's errors belong inline in the transcript where
+// the input that caused them is, not in a region that overwrites its oldest entry.
+// That is the opposite of the cache handler's use, where failures scroll away
+// during a long run and the region is what keeps them on screen.
+const stickyFooterRows = 1
+
+// replFooter pins one dim row at the bottom of the terminal with the session state
+// a REPL otherwise makes you remember: which language you are in, where the working
+// directory is, and whether the parser is mid-expression.
+//
+// The last of those is the reason it is worth the row. A continuation prompt says
+// ">>" and nothing else, so an unclosed brace looks identical to a REPL that has
+// simply stopped responding - the state that makes people kill the process. The
+// footer names the depth instead.
+//
+// It degrades to nothing off a TTY: Region reports disabled, and every method here
+// is a no-op, so a piped or scripted session behaves exactly as before.
+type replFooter struct {
+	region *tty.Region
+}
+
+func newReplFooter(out io.Writer) *replFooter {
+	return &replFooter{region: tty.NewRegion(out, stickyFooterRows, tty.SystemProbe)}
+}
+
+// paint redraws the footer and returns the cursor to the transcript, so the prompt
+// printed next - and the characters the terminal echoes as the user types - land
+// above the region rather than inside it.
+func (f *replFooter) paint(state string) {
+	if f == nil || !f.region.Enabled() {
+		return
+	}
+	// Both errors are deliberately dropped rather than surfaced. A footer is
+	// decoration on an interactive session: a terminal that refuses the escape
+	// sequence should cost the reader a status line, never an aborted REPL or a
+	// diagnostic interleaved with their own typing.
+	_ = f.region.SetStatus(state)
+	_ = f.region.ReturnCursor()
+}
+
+func (f *replFooter) release() {
+	if f == nil {
+		return
+	}
+	_ = f.region.Release()
+}
+
+// replState renders the footer's one line. Ordering is fixed so the eye lands in
+// the same place every repaint: what is running, then where, then what it is
+// waiting for.
+func replState(lang, workDir string, depth int, pending bool) string {
+	parts := []string{"magus repl"}
+	if lang != "" {
+		parts = append(parts, lang)
+	}
+	if workDir != "" {
+		parts = append(parts, shortenPath(workDir))
+	}
+	switch {
+	case depth > 0:
+		// The count, not just the fact: it tells you how many closers to type.
+		parts = append(parts, fmt.Sprintf("continuing (depth %d)", depth))
+	case pending:
+		parts = append(parts, "continuing")
+	}
+	parts = append(parts, ".help")
+	return strings.Join(parts, "  |  ")
+}
+
+// shortenPath keeps the tail of a long path, which is the half that identifies the
+// project; a footer clipped from the left would show the same home prefix for every
+// session.
+func shortenPath(p string) string {
+	const max = 40
+	if len(p) <= max {
+		return p
+	}
+	tail := p[len(p)-max:]
+	if i := strings.IndexByte(tail, '/'); i >= 0 {
+		tail = tail[i:]
+	}
+	return "..." + tail
 }
 
 // replDrivers returns the available REPL drivers for sess. The caller may use
@@ -73,6 +160,12 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	var pending strings.Builder
 	depth := 0
 
+	footer := newReplFooter(opts.Stdout)
+	// Released on every exit path, including the ctx-cancelled one below: leaving
+	// the scroll margins set would hand the shell back a terminal that only
+	// scrolls its top rows, and the user has no obvious way to undo that.
+	defer footer.release()
+
 	for {
 		if ctx.Err() != nil {
 			return nil //nolint:nilerr // ctx cancelled: exit the REPL loop cleanly, not as an error
@@ -82,6 +175,14 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		if pending.Len() > 0 || depth > 0 {
 			prompt = ">> "
 		}
+		// Painted before the prompt, not after: paint leaves the cursor on the
+		// transcript's last row, so the prompt and the user's echoed keystrokes
+		// land there rather than in the region.
+		lang := ""
+		if currentDriver != nil {
+			lang = currentDriver.Language()
+		}
+		footer.paint(replState(lang, opts.WorkDir, depth, pending.Len() > 0))
 		fmt.Fprint(opts.Stdout, prompt)
 
 		if !scanner.Scan() {
