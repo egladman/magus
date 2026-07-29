@@ -134,6 +134,14 @@ var reservedIdents = map[string]bool{
 	"int": true, "str": true, "bool": true, "void": true,
 }
 
+// IsReservedIdent reports whether name is a word upstream Buzz reserves, so it
+// cannot be used as a plain binding name. A code GENERATOR emitting Buzz needs
+// this: a Go field named Type mirrors to a field named `type`, which does not
+// parse, and the generator has to reach for a free identifier (@"type") instead.
+// Exported so there is one list rather than a copy that silently drifts from the
+// parser's.
+func IsReservedIdent(name string) bool { return reservedIdents[name] }
+
 // eatBindingIdent consumes an identifier used as a binding name and rejects any
 // upstream-reserved word (strict parity with upstream Buzz).
 func (p *parser) eatBindingIdent() (token.Token, error) {

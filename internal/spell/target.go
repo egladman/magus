@@ -114,6 +114,40 @@ var ProjectEntrySource string
 //go:embed gen/types/projects.buzz
 var ProjectsSource string
 
+// TagSource / AffectedSource / GraphSource and the Module trio complete the set:
+// every Go boundary type with a ToMap (the marker for "this crosses into Buzz")
+// now has a mirror, so a magusfile can name the type of any host result rather
+// than indexing an untyped map. Affected and Graph are magus.affected's and
+// magus.graph's returns - the in-process verbs beside ls, which had the same gap
+// Projects did.
+//
+//go:generate go run ../../cmd/magus-utils types -type Tag -out gen/types/tag.buzz
+//go:embed gen/types/tag.buzz
+var TagSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Affected -out gen/types/affected.buzz
+//go:embed gen/types/affected.buzz
+var AffectedSource string
+
+//go:generate go run ../../cmd/magus-utils types -type Graph -out gen/types/graph.buzz
+//go:embed gen/types/graph.buzz
+var GraphSource string
+
+// ModuleFieldEntry and ModuleMethodEntry must precede Module (its fields/methods
+// are lists of them).
+//
+//go:generate go run ../../cmd/magus-utils types -type ModuleFieldEntry -out gen/types/modulefieldentry.buzz
+//go:embed gen/types/modulefieldentry.buzz
+var ModuleFieldEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type ModuleMethodEntry -out gen/types/modulemethodentry.buzz
+//go:embed gen/types/modulemethodentry.buzz
+var ModuleMethodEntrySource string
+
+//go:generate go run ../../cmd/magus-utils types -type Module -out gen/types/module.buzz
+//go:embed gen/types/module.buzz
+var ModuleSource string
+
 // CharmModulePath is the import path of the pure-Buzz charm module.
 const CharmModulePath = "magus/charm"
 

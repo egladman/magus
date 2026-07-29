@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,6 +32,15 @@ var registry = map[string]reflect.Type{
 	"HttpResponse":  reflect.TypeOf(types.HTTPResponse{}),
 	"SemverVersion": reflect.TypeOf(types.SemverVersion{}),
 	"URL":           reflect.TypeOf(types.URL{}),
+	"Tag":           reflect.TypeOf(types.Tag{}),
+	// magus.affected and magus.graph, the in-process verbs beside ls.
+	"Affected": reflect.TypeOf(types.AffectedResult{}),
+	"Graph":    reflect.TypeOf(types.GraphView{}),
+	// magus.modules / magus.module. Field and method entries precede the module
+	// entry that lists them.
+	"ModuleFieldEntry":  reflect.TypeOf(types.ModuleFieldEntry{}),
+	"ModuleMethodEntry": reflect.TypeOf(types.ModuleMethodEntry{}),
+	"Module":            reflect.TypeOf(types.ModuleEntry{}),
 	// magus.ls's result. ProjectEntry keeps its Go name because a struct-valued
 	// field mirrors as t.Name(), so the element type of Projects.projects has to
 	// resolve under that spelling; only the top-level name, which nothing
@@ -112,6 +123,12 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 		}
 		return "[" + elem + "]", "[]", nil
 	case reflect.Struct:
+		// A timestamp crosses the boundary as an RFC3339 string, never as an object:
+		// every ToMap in types/ formats it that way (and emits "" for a zero time),
+		// so mirroring it as a `Time` object would describe a value Buzz never sees.
+		if t == reflect.TypeOf(time.Time{}) {
+			return "str", `""`, nil
+		}
 		// A struct field maps to the Buzz object of the same name (e.g. ExecResult),
 		// which must be generated and ordered before this type in the module source.
 		// Its zero value is an empty object literal.
@@ -137,9 +154,19 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 // `buzz:"name"` tag wins (needed for initialisms and renames — OK → ok, Path →
 // projectPath); otherwise the leading capital is lowercased to match Buzz's
 // camelCase convention (Mode → mode, Pattern → pattern).
+//
+// A name that collides with a Buzz reserved word is emitted as a FREE IDENTIFIER
+// (@"type"), which is precisely what free identifiers exist for: upstream reserves
+// those words in binding positions only, so `@"type": str` declares the field and
+// `entry.type` still reads it back. Without this, mirroring a Go field named Type
+// or Any emits source that does not parse.
 func buzzFieldName(f reflect.StructField) string {
-	if tag := f.Tag.Get("buzz"); tag != "" {
-		return tag
+	name := f.Tag.Get("buzz")
+	if name == "" {
+		name = strings.ToLower(f.Name[:1]) + f.Name[1:]
 	}
-	return strings.ToLower(f.Name[:1]) + f.Name[1:]
+	if buzz.IsReservedIdent(name) {
+		return `@"` + name + `"`
+	}
+	return name
 }

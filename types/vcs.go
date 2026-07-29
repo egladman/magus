@@ -72,7 +72,7 @@ type Tag struct {
 	// recorded. Zero if the VCS reported no timestamp.
 	Date time.Time
 	// ID is the revision identifier the tag resolves to.
-	ID string
+	ID string `buzz:"id"`
 }
 
 // ToMap is the Buzz boundary map vcs.tags entries return: {name, date, id}.
