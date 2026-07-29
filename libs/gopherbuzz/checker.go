@@ -351,6 +351,8 @@ func (c *checker) checkStmt(n ast.Node) {
 		}
 	case *ast.ThrowStmt:
 		c.infer(v.Value)
+	case *ast.OutStmt:
+		c.infer(v.Value)
 	}
 }
 
@@ -622,6 +624,17 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return c.inferMember(v)
 	case *ast.IndexExpr:
 		return c.inferIndex(v)
+	case *ast.BlockExpr:
+		// The body is checked so names inside it are still resolved, but the
+		// block's own type is Unknown: it comes from whichever `out` runs, and
+		// picking one statically would be a guess. Unknown is compatible with
+		// every target, so the annotation at the use site decides.
+		c.pushScope()
+		for _, s := range v.Body.Stmts {
+			c.checkStmt(s)
+		}
+		c.popScope()
+		return types.Unknown
 	case *ast.ForceExpr:
 		// Optionals are erased to their base type in this checker, so force-unwrap
 		// reports the operand's type unchanged.

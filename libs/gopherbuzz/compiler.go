@@ -424,6 +424,10 @@ type compiler struct {
 	parent    *compiler
 	typeDecls map[string]*ast.ObjectDecl
 	loops     []loopInfo
+	// blockExprs is a stack, one entry per `from { ... }` currently being
+	// compiled, holding the jump indexes each `out` inside it emitted. They are
+	// patched to the block's end once its body is done.
+	blockExprs [][]int
 	// useSlots selects slot-based locals (a stack register window) over runtime
 	// Env bindings for this scope's declarations and lookups. Always true for
 	// function bodies; true for the top-level chunk only when compiled as a
@@ -816,6 +820,17 @@ func (c *compiler) compileStmt(n ast.Node) error {
 	case *ast.ForEachStmt:
 		return c.compileForEach(v)
 
+	case *ast.OutStmt:
+		if len(c.blockExprs) == 0 {
+			return fmt.Errorf("buzz: out outside a from block")
+		}
+		if err := c.compileExpr(v.Value); err != nil {
+			return err
+		}
+		top := len(c.blockExprs) - 1
+		c.blockExprs[top] = append(c.blockExprs[top], c.chunk.EmitJump(vmpackage.OpJump))
+		return nil
+
 	case *ast.BreakStmt:
 		target := c.targetLoop(v.Label)
 		if target < 0 {
@@ -1079,6 +1094,30 @@ func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 	c.chunk.Emit(vmpackage.OpJumpFalse, int32(top), 0)
 	popped := c.popLoop()
 	c.patchBreaks(popped)
+	return nil
+}
+
+// compileBlockExpr lowers `from { ... }` inline rather than as a called closure:
+// the body's statements run in the enclosing frame, and each `out` pushes its
+// value and jumps to the end. Falling off the end without an out yields null.
+//
+// Statements leave the stack balanced, so the only value live at an out is the
+// one it just pushed - which is what makes jumping straight out safe.
+func (c *compiler) compileBlockExpr(v *ast.BlockExpr) error {
+	c.blockExprs = append(c.blockExprs, nil)
+	c.enterBlock()
+	for _, s := range v.Body.Stmts {
+		if err := c.compileStmt(s); err != nil {
+			return err
+		}
+	}
+	c.exitBlock()
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	outs := c.blockExprs[len(c.blockExprs)-1]
+	c.blockExprs = c.blockExprs[:len(c.blockExprs)-1]
+	for _, idx := range outs {
+		c.chunk.PatchJump(idx)
+	}
 	return nil
 }
 
@@ -1550,6 +1589,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			return err
 		}
 		return emitIndex()
+	case *ast.BlockExpr:
+		return c.compileBlockExpr(v)
 	case *ast.ForceExpr:
 		if err := c.compileExpr(v.Operand); err != nil {
 			return err

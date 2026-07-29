@@ -66,7 +66,10 @@ import (
 //     name, declared error type, and body) instead of one name plus one block.
 //   - WhileStmt, ForStmt, ForEachStmt, BreakStmt and ContinueStmt each carry a
 //     loop label string, so `break outer` reaches the loop it names.
-const BytecodeVersion uint16 = 14
+//
+// v15 adds the OutStmt and BlockExpr node tags for `from { ... out v; }`. An
+// older decoder has no case for either tag and rejects the node outright.
+const BytecodeVersion uint16 = 15
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -365,6 +368,8 @@ const (
 	nodeResumeExpr   = 40
 	nodeResolveExpr  = 41
 	nodeCatchExpr    = 42
+	nodeOutStmt      = 43
+	nodeBlockExpr    = 44
 )
 
 func (e *enc) node(n ast.Node) error {
@@ -665,6 +670,14 @@ func (e *enc) node(n ast.Node) error {
 				return err
 			}
 		}
+	case *ast.OutStmt:
+		e.u8(nodeOutStmt)
+		e.pos(p)
+		return e.node(v.Value)
+	case *ast.BlockExpr:
+		e.u8(nodeBlockExpr)
+		e.pos(p)
+		return e.node(v.Body)
 	case *ast.ThrowStmt:
 		e.u8(nodeThrowStmt)
 		e.pos(p)
@@ -1641,6 +1654,22 @@ func (d *dec) node() (ast.Node, error) {
 			catches[i] = ast.CatchClause{Pos: cp, ErrName: errName, TypeName: typeName, Body: blockCatch}
 		}
 		return &ast.TryStmt{Pos: p, Body: blockBody, Catches: catches}, nil
+	case nodeOutStmt:
+		val, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.OutStmt{Pos: p, Value: val}, nil
+	case nodeBlockExpr:
+		body, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		blockBody, ok := body.(*ast.BlockStmt)
+		if !ok {
+			return nil, fmt.Errorf("BlockExpr body: expected *ast.BlockStmt, got %T", body)
+		}
+		return &ast.BlockExpr{Pos: p, Body: blockBody}, nil
 	case nodeThrowStmt:
 		val, err := d.node()
 		if err != nil {
