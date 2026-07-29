@@ -60,7 +60,7 @@ func agentCmd(ctx context.Context, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return fmt.Errorf("agent: unknown subcommand %q (try: install, install-agents-md, sample, hook)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, install-agents-md, sample, or hook)", args[0])
 	}
 }
 

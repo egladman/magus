@@ -10,16 +10,17 @@ import (
 )
 
 func manCmd(args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 {
 		manUsage()
-		if len(args) == 0 {
-			return fmt.Errorf("magus man: subcommand required")
-		}
+		return usagef("magus man: subcommand required (want install)")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		manUsage()
 		return nil
 	}
 	if args[0] != "install" {
 		manUsage()
-		return fmt.Errorf("magus man: unknown subcommand %q", args[0])
+		return usagef("magus man: unknown subcommand %q (want install)", args[0])
 	}
 
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)

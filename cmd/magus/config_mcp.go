@@ -50,9 +50,8 @@ func configMCPCmd(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp: unknown subcommand %q", sub)
+		return usagef("magus config mcp: unknown subcommand %q", sub)
 	}
 }
 
@@ -94,9 +93,8 @@ func configMCPToken(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp token: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp token: unknown subcommand %q", sub)
+		return usagef("magus config mcp token: unknown subcommand %q", sub)
 	}
 }
 
@@ -229,9 +227,8 @@ func configMCPConnector(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp connector: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp connector: unknown subcommand %q", sub)
+		return usagef("magus config mcp connector: unknown subcommand %q", sub)
 	}
 }
 

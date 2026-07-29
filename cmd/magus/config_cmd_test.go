@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -97,9 +99,27 @@ func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
 
+// TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
+// quiet success. It previously returned nil, so `magus config` exited 0 and a script
+// could not tell a bare invocation from one that did work - and it disagreed with
+// `magus man`, which exited 1 for the same mistake. Usage errors exit 2 across the CLI.
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
-	assert.NoError(t, configCmd(context.Background(), "", cfg, nil), "no args should print usage, not error")
+	err := configCmd(context.Background(), "", cfg, nil)
+	require.Error(t, err, "no args should be a usage error, not a quiet success")
+
+	var usage errUsage
+	require.ErrorAs(t, err, &usage, "should be errUsage so it exits %d", exitUsage)
+	assert.Equal(t, exitUsage, exitCodeOf(err))
+}
+
+// TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
+// is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
+func TestUsageErrorsExitTwo(t *testing.T) {
+	assert.Equal(t, 0, exitCodeOf(nil), "success")
+	assert.Equal(t, 0, exitCodeOf(flag.ErrHelp), "an explicit -h is a request that was satisfied")
+	assert.Equal(t, exitUsage, exitCodeOf(usagef("bad invocation")), "misuse")
+	assert.Equal(t, 1, exitCodeOf(errors.New("the work failed")), "runtime failure")
 }
 
 // runOnlyFlags lists flags that intentionally exist on `magus run` but not

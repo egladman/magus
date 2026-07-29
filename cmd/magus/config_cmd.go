@@ -34,7 +34,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
-		return nil
+		return usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
 	}
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
@@ -52,7 +52,8 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 		fs.Usage()
 		return nil
 	default:
-		return fmt.Errorf("config: unknown subcommand %q", sub)
+		fs.Usage()
+		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, or mcp)", sub)
 	}
 }
 
@@ -154,7 +155,7 @@ func runConfigSet(args []string) error {
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("magus config set: requires one argument in key=<key>,value=<value> form")
+		return usagef("magus config set: requires one argument in key=<key>,value=<value> form")
 	}
 	key, value, err := parseConfigSetArg(fs.Arg(0))
 	if err != nil {

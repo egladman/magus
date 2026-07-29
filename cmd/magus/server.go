@@ -26,7 +26,11 @@ import (
 )
 
 func serverCmd(ctx context.Context, root string, args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 {
+		serverUsage()
+		return usagef("magus server: target required (want start, stop, or job)")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
 		return nil
 	}
@@ -43,7 +47,7 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	case jobs.NameRotateLogs:
 		return serverRotateLogs(ctx, root, rest)
 	default:
-		return fmt.Errorf("magus server: unknown target %q (want start, stop, or job); use `%s` to inspect daemon state", sub, clihint.Status)
+		return usagef("magus server: unknown target %q (want start, stop, or job); use `%s` to inspect daemon state", sub, clihint.Status)
 	}
 }
 

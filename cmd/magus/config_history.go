@@ -34,7 +34,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 	case "dedup":
 		return runHistoryDedup(ctx, rest)
 	default:
-		return fmt.Errorf("magus config history: unknown subcommand %q (choose: import, dedup)", sub)
+		return usagef("magus config history: unknown subcommand %q (choose: import, dedup)", sub)
 	}
 }
 

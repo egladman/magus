@@ -46,9 +46,8 @@ func configCacheCmd(ctx context.Context, root string, args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config cache: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config cache: unknown subcommand %q", sub)
+		return usagef("magus config cache: unknown subcommand %q", sub)
 	}
 }
 
