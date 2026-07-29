@@ -538,3 +538,65 @@ fun probe() > bool {
 }`)
 	assert.True(t, v.AsBool(), "a generic object declares, instantiates, and type-tests")
 }
+
+func TestParity_InlineIfExpression(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "constant condition", body: `return if (true) "then" else "else";`, want: "then"},
+		{name: "computed condition", body: `return if ("hello".len() == 2) "then" else "else";`, want: "else"},
+		{
+			name: "else-if chain",
+			body: `
+    final value = 12;
+    return if (value == 14)
+        "hello"
+    else if (value == 12)
+        "yolo"
+    else
+        "fallback";`,
+			want: "yolo",
+		},
+		{
+			name: "nested in a larger expression",
+			body: `
+    final value = 12;
+    return (if (value == 14) "hello" else "yolo") + "!";`,
+			want: "yolo!",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, "fun probe() > str {\n"+tc.body+"\n}")
+			assert.Equal(t, tc.want, v.AsString(), "only the selected branch's value survives")
+		})
+	}
+}
+
+func TestParity_InlineIfRequiresBothBranches(t *testing.T) {
+	// An expression has to produce a value on every path, so unlike the statement
+	// form the else is mandatory.
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `fun probe() > int { return if (true) 1; }`)
+	require.Error(t, err, "an inline if without else cannot compile")
+}
+
+func TestParity_InlineCatchVoid(t *testing.T) {
+	v := evalParity(t, `
+fun willFailVoid() > void !> str {
+    throw "i'm failing";
+}
+
+fun willFail() > int !> str {
+    throw "i'm failing";
+}
+
+fun probe() > int {
+    willFailVoid() catch void;
+    return willFail() catch 7;
+}`)
+	assert.Equal(t, int64(7), v.AsInt(), "catch void swallows the error and yields nothing")
+}

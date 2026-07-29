@@ -25,6 +25,8 @@ foreach.buzz
 free-identifiers.buzz
 if-arrow.buzz
 inferred-var-type.buzz
+inline-catch.buzz
+inline-if.buzz
 interpolation.buzz
 invoke.buzz
 is.buzz

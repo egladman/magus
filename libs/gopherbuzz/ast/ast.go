@@ -198,6 +198,15 @@ type OutStmt struct {
 
 // ---- expressions ----
 
+// IfExpr: if (cond) thenExpr else elseExpr — the inline-if (ternary) form. Both
+// branches are required, since the expression must always produce a value.
+type IfExpr struct {
+	Pos
+	Cond Node
+	Then Node
+	Else Node
+}
+
 // BlockExpr: from { stmts } — a block used as an expression. Its value is the
 // one an `out` statement inside it produces, or null if none runs.
 type BlockExpr struct {
