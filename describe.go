@@ -624,7 +624,13 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 		if p == nil {
 			continue
 		}
-		step := m.baseStep(p)
+		// buildStep, not baseStep: this entry describes ONE target, and baseStep
+		// carries only the project-wide globs. A target's own ctx.outputs (and
+		// ctx.inputs) were therefore missing from its own description - `magus
+		// describe target md-generate` reported no outputs while the target
+		// declares MAGUS.md - so the described plan disagreed with the plan the
+		// cache actually keys and snapshots.
+		step := m.buildStep(p, et.Name)
 
 		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
 		charmSet := map[string]struct{}{}
