@@ -1442,7 +1442,7 @@ func (p *parser) parseBlock() (*ast.BlockStmt, error) {
 
 // ---- expression precedence climbing ----
 
-func (p *parser) parseExpr() (ast.Node, error) { return p.parseCoalesce() }
+func (p *parser) parseExpr() (ast.Node, error) { return p.parseOr() }
 
 // parseRange sits between comparison and additive, so `..` binds TIGHTER than
 // `==`: upstream writes `range == 0..10`, which at a looser precedence would
@@ -1463,14 +1463,23 @@ func (p *parser) parseRange() (ast.Node, error) {
 	return left, nil
 }
 
+// parseCoalesce parses `??` at upstream Buzz's Precedence.NullCoalescing, which
+// sits BETWEEN Term (`+`/`-`) and Bitwise - so `sum + resume f ?? 0` is
+// `sum + (resume f ?? 0)`, not `(sum + resume f) ?? 0`.
+//
+// It used to sit above `or`, looser than every binary operator, which made the
+// upstream idiom "coalesce a nullable right where it is used" a runtime error:
+// the `+` saw the null before the `??` could replace it
+// (tests/behavior/generics.buzz, "Generic with fibers"). `typeof` shares this
+// level upstream and belongs here too when it lands.
 func (p *parser) parseCoalesce() (ast.Node, error) {
-	left, err := p.parseOr()
+	left, err := p.parseBitwise()
 	if err != nil {
 		return nil, err
 	}
 	for p.check(token.Coalesce) {
 		t := p.advance()
-		right, err := p.parseOr()
+		right, err := p.parseBitwise()
 		if err != nil {
 			return nil, err
 		}
@@ -1592,7 +1601,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 }
 
 func (p *parser) parseAdditive() (ast.Node, error) {
-	left, err := p.parseBitwise()
+	left, err := p.parseCoalesce()
 	if err != nil {
 		return nil, err
 	}
@@ -1602,7 +1611,7 @@ func (p *parser) parseAdditive() (ast.Node, error) {
 		if t.Kind == token.Minus {
 			op = "-"
 		}
-		right, err := p.parseBitwise()
+		right, err := p.parseCoalesce()
 		if err != nil {
 			return nil, err
 		}

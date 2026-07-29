@@ -26,6 +26,7 @@ enums.buzz
 for.buzz
 foreach.buzz
 free-identifiers.buzz
+generics.buzz
 if-arrow.buzz
 inferred-var-type.buzz
 inline-catch.buzz
@@ -41,6 +42,7 @@ labels.buzz
 lambda.buzz
 list-map-properties.buzz
 long-namespace.buzz
+math.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz

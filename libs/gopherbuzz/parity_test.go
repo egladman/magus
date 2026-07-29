@@ -976,3 +976,28 @@ final __r = probe();`)
 	require.Error(t, err, "a zero divisor must report, not yield NaN")
 	assert.Contains(t, err.Error(), "modulo by zero")
 }
+
+// TestParity_NullCoalescingBindsTighterThanTerm pins `??` at upstream's
+// Precedence.NullCoalescing, which sits between Term (`+`/`-`) and Bitwise.
+// gopherbuzz had it above `or`, looser than every binary operator, so the
+// upstream idiom of coalescing a nullable where it is used raised at runtime:
+// the `+` saw the null before `??` could replace it.
+func TestParity_NullCoalescingBindsTighterThanTerm(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final n: int? = null;
+    return 1 + n ?? 0;
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "`1 + n ?? 0` is `1 + (n ?? 0)`")
+}
+
+// TestParity_NullCoalescingStillLooserThanBitwise pins the other side of the
+// level: moving `??` down must not push it past Bitwise.
+func TestParity_NullCoalescingStillLooserThanBitwise(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final n: int? = null;
+    return n ?? 1 | 2;
+}`)
+	assert.Equal(t, int64(3), v.AsInt(), "`n ?? 1 | 2` is `n ?? (1 | 2)`")
+}
