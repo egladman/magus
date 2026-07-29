@@ -1065,3 +1065,8 @@ func isSocketAlive(path string) bool {
 	_ = conn.Close()
 	return true
 }
+
+// checkStaleWorktrees reports orphaned checkout directories under .claude/worktrees.
+func (r *runner) checkStaleWorktrees() Check {
+	return checkStaleWorktrees(r.ws.Root())
+}
