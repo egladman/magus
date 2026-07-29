@@ -60,15 +60,13 @@ export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 		// resolves through /private on macOS). callerRel is then "a", so the resolver
 		// yields "b/go.mod" and magus.inputs (a runtime no-op) accepts it.
 		ctx := types.WithWorkspace(context.Background(), rootOnlyWS{root: filepath.Dir(src.Dir)})
-		require.NoError(t,
-			interp.Run(ctx, src, "build", nil, filepath.Join(root, "a")),
-			"b.file(...) must resolve and feed magus.inputs without error")
+		_, err := interp.RunDir(ctx, filepath.Join(root, "a"), "build", nil)
+		require.NoError(t, err, "b.file(...) must resolve and feed magus.inputs without error")
 	})
 
 	t.Run("without a workspace degrades without error", func(t *testing.T) {
-		require.NoError(t,
-			interp.Run(context.Background(), src, "build", nil, filepath.Join(root, "a")),
-			"a bare script must degrade the resolver, not error")
+		_, err := interp.RunDir(context.Background(), filepath.Join(root, "a"), "build", nil)
+		require.NoError(t, err, "a bare script must degrade the resolver, not error")
 	})
 }
 
@@ -142,10 +140,8 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	src, err := interp.Find(dir)
+	_, err := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, err)
-	require.NotNil(t, src)
-	require.NoError(t, interp.Run(context.Background(), src, "check", nil, dir))
 }
 
 // TestBuzzSpellImportNoOps verifies that a Buzz spell with no ops still registers
@@ -190,9 +186,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     widget.capture({"cwd": "sub", "args": ["alpha", "beta"]});
 }`)
 
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "invoking spell method with opts")
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr, "invoking spell method with opts")
 
 	// The file must land in opts.cwd (sub/), proving cwd was honored, and contain
 	// exactly the appended args, proving opts.args reached the forked command.
@@ -220,9 +215,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     widget.capture({"env": {"MYVAR": "overridden"}});
 }`)
 
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "invoking spell method with env")
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr, "invoking spell method with env")
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
 	require.NoError(t, err, "expected out.txt")
@@ -250,9 +244,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     if (r.ok != true) { error("ok mismatch"); }
 }`)
 
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "captured buzz target")
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr, "captured buzz target")
 }
 
 // TestBuzzSpellPipeStdin verifies pipe-style chaining: a captured target's stdout
@@ -277,9 +270,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     if (b.stdout != "ALPHA") { error("pipe mismatch: " + b.stdout); }
 }`)
 
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "pipe stdin")
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr, "pipe stdin")
 }
 
 // TestVcsCommitFacadeBuzz exercises the vcs.commit() facade end-to-end the way
@@ -314,9 +306,8 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     if (c.id == "") { error("id empty"); }
 }`)
 
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit facade")
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr, "vcs.commit facade")
 }
 
 // TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
@@ -333,9 +324,8 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
     if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
 }`)
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "vcs.commit empty-record case")
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr, "vcs.commit empty-record case")
 }
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
@@ -483,10 +473,8 @@ export fun go(ctx: magus\Context, args: [str]) > void {}`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
-	src, err := interp.Find(filepath.Join(root, "a"))
-	require.NoError(t, err)
-	require.NoError(t,
-		interp.Run(context.Background(), src, "go", nil, filepath.Join(root, "a")),
+	_, runErr := interp.RunDir(context.Background(), filepath.Join(root, "a"), "go", nil)
+	require.NoError(t, runErr,
 		"a project/ import must resolve when a target is run, not only parsed")
 }
 
@@ -494,7 +482,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 // dependency surface end to end: `import "project/<path>" as b` binds each of the
 // sibling's exported targets as a callable handle, so ctx.needs(b.build) declares
 // the dependency (recognized by value identity through the session's handle registry)
-// and b.build() dispatches it directly. Under interp.Run there is no CrossDispatch
+// and b.build() dispatches it directly. Under interp.RunDir there is no CrossDispatch
 // coordinator, so the actual cross dispatch no-ops; this asserts the binding,
 // identity-recognition, and direct-invocation paths all load and run without error
 // (a bad target name in either form would fail at load).
@@ -509,10 +497,8 @@ export fun go(ctx: magus\Context, args: [str]) > void {
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
-	src, err := interp.Find(filepath.Join(root, "a"))
-	require.NoError(t, err)
-	require.NoError(t,
-		interp.Run(context.Background(), src, "go", nil, filepath.Join(root, "a")),
+	_, runErr := interp.RunDir(context.Background(), filepath.Join(root, "a"), "go", nil)
+	require.NoError(t, runErr,
 		"ctx.needs(b.build) and the direct b.build() call must both resolve the cross handle")
 }
 
@@ -528,4 +514,104 @@ magus.project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 
 	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
+}
+
+func writeSpellMagusfile(t *testing.T, dir, content string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(content), 0o644))
+}
+
+// TestSpellModuleForkTarget verifies that a fork target (which has no function
+// in the compiled spell table — only a spells.json data entry) is still
+// callable programmatically. registerSpells overlays a Go-backed function for
+// each fork target; here go-vet is a fork no-op that must resolve to
+// a function and run without error.
+func TestSpellModuleForkTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeSpellMagusfile(t, dir, `
+import "magus";
+import "magus/spell/go";
+
+export fun check(ctx: magus\Context, _args: [str]) > void {
+    if (go.name != "go") { throw "spell not found"; }
+    if (go["go-vet"] == null) { throw "fork go-vet must be a function (overlay)"; }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+// TestSpellModuleRequireBuiltin verifies a built-in spell can be imported as a
+// typed module: import "magus/spell/docker" binds the handle under its basename
+// (docker), and the resolved value is the live spell handle (docker-build is callable).
+func TestSpellModuleRequireBuiltin(t *testing.T) {
+	dir := t.TempDir()
+	writeSpellMagusfile(t, dir, `
+import "magus";
+import "magus/spell/docker";
+
+export fun check(ctx: magus\Context, _args: [str]) > void {
+    if (docker.name != "docker") { error("name mismatch: " + docker.name); }
+    if (docker["docker-build"] == null) { throw "docker-build op must be callable as a method"; }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+// TestSpellModuleRequireUnknownFailsToCompile verifies a misspelled built-in
+// module is a compile error — the point of typed import — not a silent runtime nil.
+func TestSpellModuleRequireUnknownFailsToCompile(t *testing.T) {
+	dir := t.TempDir()
+	writeSpellMagusfile(t, dir, `
+import "magus";
+import "magus/spell/dockr";
+magus.project(".", {"spells": [dockr]});
+`)
+	_, err := interp.RunDir(context.Background(), dir, "noop", nil)
+	assert.Error(t, err, "expected a compile error for the misspelled module")
+}
+
+// TestSpellModuleRequireLocal verifies a workspace-local Buzz spell is
+// importable by path — import "spells/locreq" resolves ./spells/locreq.buzz,
+// binds the handle under the basename (locreq), so its target dispatches.
+func TestSpellModuleRequireLocal(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "spells"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "spells", "locreq.buzz"), []byte(`
+export fun mgs_getName() > str { return "locreq"; }
+export fun mgs_listTargets() > any {
+    return {"build": {"bin": "true"}};
+}
+`), 0o644))
+	writeSpellMagusfile(t, dir, `
+import "magus";
+import "spells/locreq";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    if (locreq.name != "locreq") { error("name mismatch: " + locreq.name); }
+}
+magus.project(".", {"spells": [locreq]});
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+// TestSpellMultipleFields verifies that the spell handle for the go spell has
+// the expected fork-target methods beyond just name.
+func TestSpellMultipleFields(t *testing.T) {
+	dir := t.TempDir()
+	writeSpellMagusfile(t, dir, `
+import "magus";
+import "magus/spell/go";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    if (go.name != "go") { error("name mismatch: " + go.name); }
+    if (go["go-build"] == null) { throw "go-build must be a function"; }
+    if (go["go-fmt"] == null) { throw "go-fmt must be a function"; }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
 }

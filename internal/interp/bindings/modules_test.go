@@ -2,15 +2,35 @@ package bindings
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func writeMagusfile(t *testing.T, dir, body string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(body), 0o644))
+}
+
+// runTargetIn runs target over the magusfile in dir for its EFFECT, discarding any
+// return value.
+func runTargetIn(t *testing.T, dir, target string, args ...string) error {
+	t.Helper()
+	_, err := interp.RunDir(context.Background(), dir, target, args)
+	return err
+}
 
 // TestSupersetModules verifies that registerMagusModules exposes the magus host
 // methods under the same bare names as Buzz's stdlib (a superset), and that the
@@ -135,9 +155,8 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     if (fs.methods.len() == 0) { magus.fatal("fs module has no methods"); }
     if (fs.methods[0].buzz == "") { magus.fatal("fs method missing its Buzz signature"); }
 }`)
-	srcs, err := interp.FindAll(dir)
-	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "magus.modules/module end-to-end")
+	_, err := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, err, "magus.modules/module end-to-end")
 }
 
 // TestTemplatePartialsEndToEnd drives the template module from a real magusfile,
@@ -157,7 +176,1110 @@ func TestTemplatePartialsEndToEnd(t *testing.T) {
 		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n"+
 		"    if (got != want) { magus.fatal(\"renderPartials mismatch: got \" + got); }\n"+
 		"}")
-	srcs, err := interp.FindAll(dir)
+	_, err := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, err, "template.renderPartials end-to-end")
+}
+
+// TestMagusBustCacheReachable guards that magus.bustCache is actually bound. It
+// is declared in the std.Magus descriptor but was historically only described,
+// never registered, so a magusfile calling it failed at runtime. With no cache
+// in context (the test harness) it is a no-op, so a clean run proves the binding
+// resolves.
+func TestMagusBustCacheReachable(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    magus.bustCache();
+    fs.writeFile("ran", "ok");
+}
+`)
+	if err := runTargetIn(t, dir, "build"); err != nil {
+		t.Fatalf("magus.bustCache() should be bound and a no-op without a cache: %v", err)
+	}
+}
+
+// TestCtxlessTargetRejected pins the ctx-form contract: an exported magusfile function
+// whose first parameter is not a magus\Context is rejected at load with MGS1008, before
+// any target dispatches. A parameterized ctx-form target and a zero-extra-arg one both
+// load and run, so the enforcement targets the missing context, not the arg shape.
+func TestCtxlessTargetRejected(t *testing.T) {
+	t.Run("ctx-less form rejected with MGS1008", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+export fun build(args: [str]) > void {}
+`)
+		err := runTargetIn(t, dir, "build")
+		require.Error(t, err, "a ctx-less target must be rejected at load")
+		require.ErrorIs(t, err, types.TargetMissingContext, "carries the MGS1008 code")
+		assert.Contains(t, err.Error(), "magus\\Context", "names the required context type")
+	})
+
+	t.Run("ctx form loads and runs", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void { fs.writeFile("ran", "ok"); }
+`)
+		require.NoError(t, runTargetIn(t, dir, "build"))
+		got, err := os.ReadFile(sentinel(dir))
+		require.NoError(t, err)
+		assert.Equal(t, "ok", string(got))
+	})
+}
+
+func sentinel(dir string) string { return filepath.Join(dir, "ran") }
+
+func TestRunTopLevelTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", "build");
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "build"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "build", string(got))
+}
+
+func TestRunPathTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", "db:migrate");
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "db:migrate"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "db:migrate", string(got))
+}
+
+// TestRunImportTargetCollision verifies a target whose name collides with an imported
+// module's bound name fails at load with a clear shadow error, not a silent null when
+// the target later reads a member off the shadowed module.
+func TestRunImportTargetCollision(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs" as render;
+export fun render(ctx: magus\Context, args: [str]) > void {
+    render.writeFile("ran", "x");
+}
+`)
+	err := runTargetIn(t, dir, "render")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `target "render" shadows the module import "fs"`)
+}
+
+// TestRunImportsMagusfilesSibling verifies a magusfile resolves a plain
+// `import "<name>"` against the project's magusfiles/ directory (magus's
+// override of gopherbuzz's default search paths). The helper lives in a
+// magusfiles/ subdirectory so it is not auto-loaded as a magusfile source.
+func TestRunImportsMagusfilesSibling(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "magusfiles", "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfiles", "lib", "calc.buzz"),
+		[]byte(`export final tag = "calc-ok";`), 0o644))
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+import "lib/calc";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", tag);
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "build"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "calc-ok", string(got))
+}
+
+// TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
+// end-to-end: the magus-utils bindings-emitted host/gen trampolines must decode a variadic
+// call (fs.join), a slice-in/map-out call (charm.append), and a void call
+// (fs.writeFile). Modules are reached under bare module imports (fs.join,
+// charm.append), with camelCase methods (Buzz's convention).
+func TestRunBuzzStdModule(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "fs";
+import "charm";
+
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
+    var joined = fs.join("a", "b", "c");
+    var patch = charm.append(["y", "z"]);
+    fs.writeFile("ran", joined + "|" + patch.ops[1].value);
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "verify"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "a/b/c|z", string(got))
+}
+
+// TestRunBuzzMarkdownModule proves the markdown host module is reachable under
+// the bare module import (markdown.toHtml), so a docs-site project can
+// render Markdown to HTML in its own magusfile target.
+func TestRunBuzzMarkdownModule(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "fs";
+import "markdown";
+
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
+    fs.writeFile("ran", markdown.toHtml("# Hi"));
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "verify"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Contains(t, string(got), `id="hi"`)
+	assert.Contains(t, string(got), "Hi</h1>")
+}
+
+// TestRunBuzzFmtSprintf exercises fmt.sprintf end-to-end. It is the first std
+// method with a variadic arg preceded by a fixed one (format), so it guards the
+// magus-utils bindings lua/buzz variadic-offset decode in addition to the formatting itself.
+func TestRunBuzzFmtSprintf(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "fmt";
+import "fs";
+
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
+    var asset = fmt.sprintf("magus_%s_%s_%s.tar.gz", "1.0", "linux", "amd64");
+    var none = fmt.sprintf("literal");
+    fs.writeFile("ran", asset + "|" + none);
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "verify"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "magus_1.0_linux_amd64.tar.gz|literal", string(got))
+}
+
+// TestRunBuzzAggregateUtil proves the magus host utilities resolve under bare
+// module imports (fs.join / os.execSh, in camelCase) and coexist with Buzz's own
+// stdlib in the same file: the magus fs/os methods are layered onto the bare
+// fs/os modules, while hashing uses the stdlib `crypto.hash`.
+func TestRunBuzzAggregateUtil(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "fs";
+import "os";
+import "crypto";
+
+export fun verify(ctx: magus\Context, _opts: [str]) > void {
+    var joined = fs.join("a", "b", "c");
+    var res = os.execSh("printf hello").stdout;
+    var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "");
+    fs.writeFile("ran", joined + "|" + res + "|" + digest);
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "verify"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	want := "a/b/c|hello|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	assert.Equal(t, want, string(got))
+}
+
+func TestRunTargetWithArgs(t *testing.T) {
+	dir := t.TempDir()
+	// Forwarded args arrive as ONE list, matching the (ctx, args: [str]) signature
+	// every real magusfile target declares. They used to be spread as positional
+	// parameters, which meant `args: [str]` bound to the FIRST arg as a str and
+	// the rest were dropped - so the documented convention and the runtime
+	// disagreed, and every target in this repo was on the losing side.
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", args.join(" "));
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "db:migrate", "a", "b", "c"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "a b c", string(got))
+}
+
+// TestRunTargetWithNoArgs pins the other half of the contract: a target with no
+// forwarded args still receives a list, not null, so `args.len()` is safe in
+// every target rather than only in the ones someone remembered to pass args to.
+func TestRunTargetWithNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun probe(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", "len={args.len()}");
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "probe"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "len=0", string(got))
+}
+
+func TestRunTargetReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+    throw "boom";
+}
+`)
+	err := runTargetIn(t, dir, "db:migrate")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "boom")
+}
+
+func TestRunUnknownTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
+`)
+	err := runTargetIn(t, dir, "no-such-target")
+	assert.Error(t, err, "expected non-nil error for unknown target")
+}
+
+// TestParseLocalSpellFromOtherDir verifies a magusfile that require/imports a
+// workspace-local spell parses (preloads) when its directory is not the process
+// cwd — the workspace-preload case that used to fail with "module not found"
+// (Teal) / "undefined variable" (Buzz) because local-spell lookup was cwd-relative.
+func TestParseLocalSpellFromOtherDir(t *testing.T) {
+	spell := `export fun mgs_getName() > str { return "hello"; }
+export fun mgs_listTargets() > any { return {"build": {"bin": "echo", "args": ["hi"]}}; }`
+	magusfile := `import "magus";
+import "spells/hello";
+export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`
+
+	proj := filepath.Join(t.TempDir(), "proj")
+	require.NoError(t, os.MkdirAll(filepath.Join(proj, "spells"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "spells", "hello.buzz"), []byte(spell), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(proj, "magusfile.buzz"), []byte(magusfile), 0o644))
+	// Parse from the test's cwd, NOT from proj — exactly what workspace
+	// preload does when it visits a sub-project's magusfile.
+	srcs, err := interp.FindAll(proj)
 	require.NoError(t, err)
-	require.NoError(t, interp.Run(context.Background(), srcs[0], "check", nil, dir), "template.renderPartials end-to-end")
+	require.NotEmpty(t, srcs, "FindAll: no sources")
+	for _, src := range srcs {
+		_, err := interp.Parse(context.Background(), src)
+		require.NoError(t, err, "Parse local-spell magusfile from other dir")
+	}
+}
+
+// TestNeedsNonTargetFunctionFails verifies a needs on a function that is not an
+// exported target - a non-exported helper, or a typo that resolves to some other
+// in-scope function - fails fast rather than silently no-op'ing. (A name that
+// resolves to nothing at all is a Buzz undefined-variable error even earlier; this
+// guards the reachable footgun of passing a real function value that names no target.)
+func TestNeedsNonTargetFunctionFails(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+fun helper(args: [str]) > void {}
+export fun top(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(helper);
+}
+`)
+	err := runTargetIn(t, dir, "top")
+	require.Error(t, err, "expected an error for a needs on a non-target function")
+	assert.Contains(t, err.Error(), "does not name an exported target")
+}
+
+// TestNeedsForwardReference verifies a magus.needs on an exported target declared
+// LATER in the file resolves: target bodies run post-load, so the forward reference
+// to the later export is already bound by the time top runs.
+func TestNeedsForwardReference(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun top(ctx: magus\Context, _a: [str]) > void {
+    ctx.needs(dep);
+    fs.writeFile("ran", "top");
+}
+export fun dep(ctx: magus\Context, _a: [str]) > void { fs.writeFile("dep-ran", "dep"); }
+`)
+	require.NoError(t, runTargetIn(t, dir, "top"))
+	_, err := os.Stat(filepath.Join(dir, "dep-ran"))
+	require.NoError(t, err, "forward-referenced dependency did not run")
+}
+
+// TestNeedsStringArgumentFails verifies magus.needs rejects a bare string - the
+// classic footgun - and points the author at magus.glob for patterns.
+func TestNeedsStringArgumentFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+export fun dep(ctx: magus\Context, _a: [str]) > void {}
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs("dep"); }
+`), 0o644))
+	err := runTargetIn(t, dir, "top")
+	require.Error(t, err, "expected an error for a string argument to magus.needs")
+	assert.Contains(t, err.Error(), "must be a target function")
+}
+
+// TestNeedsAnonymousFunctionFails verifies magus.needs rejects an anonymous function
+// literal: it names no target, so it cannot declare a dependency.
+func TestNeedsAnonymousFunctionFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(fun (_a: [str]) > void {}); }
+`), 0o644))
+	err := runTargetIn(t, dir, "top")
+	require.Error(t, err, "expected an error for an anonymous function argument to magus.needs")
+	assert.Contains(t, err.Error(), "anonymous function is not a target")
+}
+
+// TestRunBuzzTargetNameCollision is the Buzz counterpart: two exports that
+// normalize to the same canonical target must error.
+func TestRunBuzzTargetNameCollision(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+
+export fun foo_bar(ctx: magus\Context, _a: [str]) > void {}
+export fun fooBar(ctx: magus\Context, _a: [str]) > void {}
+`), 0o644))
+	err := runTargetIn(t, dir, "foo-bar")
+	require.Error(t, err, "expected collision error")
+	assert.Contains(t, err.Error(), "foo-bar")
+	assert.Contains(t, err.Error(), "normalize")
+}
+
+// TestOsExitRaisesExitError verifies os.exit(code) aborts the target with a
+// types.ExitError carrying the code (it must NOT call os.Exit), and that the
+// typed error survives the VM boundary so the CLI/daemon can honor the code.
+func TestOsExitRaisesExitError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "os";
+
+export fun bail(ctx: magus\Context, _a: [str]) > void { os.exit(3); }
+`), 0o644))
+	err := runTargetIn(t, dir, "bail")
+	require.Error(t, err, "expected error from os.exit")
+	var ex types.ExitError
+	require.ErrorAs(t, err, &ex)
+	assert.Equal(t, 3, ex.Code)
+}
+
+// TestOsSleep exercises os.sleep (milliseconds, matching Buzz) from a Buzz
+// magusfile, confirming the TypeFloat binding path works for fractional and int
+// literals and returns.
+func TestOsSleep(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "os";
+
+export fun nap(ctx: magus\Context, _a: [str]) > void {
+    os.sleep(1.5);
+    os.sleep(0);
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "nap"))
+}
+
+// TestOsWhich verifies os.which resolves a real command to a non-empty path and
+// returns "" for a missing one (asserted inside the magusfile via os.exit).
+func TestOsWhich(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "os";
+
+export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
+    if (os.which("sh") == "") { os.exit(2); }
+    if (os.which("definitely-no-such-cmd-zzz") != "") { os.exit(3); }
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "checkwhich"))
+}
+
+// TestMagusHint confirms magus.hint is callable (and a repeated message is
+// tolerated — dedup happens in the shared channel).
+func TestMagusHint(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+
+export fun nudge(ctx: magus\Context, _a: [str]) > void {
+    magus.hint("stale generated code — run: magus run generate -- --write");
+    magus.hint("stale generated code — run: magus run generate -- --write");
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "nudge"))
+}
+
+// TestMagusFatal verifies magus.fatal aborts with a types.ExitError carrying
+// code 1 (Buzz preserves the typed error across the boundary).
+func TestMagusFatal(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+
+export fun boom(ctx: magus\Context, _a: [str]) > void { magus.fatal("boom"); }
+`), 0o644))
+	err := runTargetIn(t, dir, "boom")
+	require.Error(t, err, "expected error from magus.fatal")
+	var ex types.ExitError
+	require.ErrorAs(t, err, &ex)
+	assert.Equal(t, 1, ex.Code)
+}
+
+// TestOsExecShShellOption verifies opts.shell is accepted and the chosen shell
+// runs (sh is always present; the flag/derivation is unit-tested in host).
+func TestOsExecShShellOption(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "os";
+
+export fun viash(ctx: magus\Context, _a: [str]) > void {
+    os.execSh("true", "", {"shell": "sh"});
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "viash"))
+}
+
+// TestNeedsDedup verifies magus.needs runs a duplicated target once — the footgun
+// where the same exported target is listed more than once in one needs call.
+func TestNeedsDedup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+import "os";
+
+export fun dep(ctx: magus\Context, _a: [str]) > void { os.execSh("printf x >> mark", ""); }
+export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "top"))
+	got, err := os.ReadFile(filepath.Join(dir, "mark"))
+	require.NoError(t, err, "dep did not run")
+	assert.Equal(t, "x", string(got), "dep should run once")
+}
+
+// TestMagusLoggingBuzz exercises the logging methods bound onto the magus
+// namespace from a Buzz magusfile (with and without a fields map).
+func TestMagusLoggingBuzz(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+
+export fun logit(ctx: magus\Context, _a: [str]) > void {
+    magus.info("hello");
+    magus.debug("dbg", {"k": "v"});
+    magus.warn("warn");
+    magus.error("err");
+}
+`), 0o644))
+	require.NoError(t, runTargetIn(t, dir, "logit"))
+}
+
+func TestParseIncludesPathTargets(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	src, err := interp.Find(dir)
+	require.NoError(t, err)
+	require.NotNil(t, src, "Find: no source found")
+
+	targets, err := interp.Parse(context.Background(), src)
+	require.NoError(t, err)
+
+	keys := make(map[string]bool, len(targets))
+	for _, tgt := range targets {
+		keys[tgt.Key] = true
+	}
+	assert.True(t, keys["build"], "Parse missing 'build'")
+	assert.True(t, keys["db-migrate"], "Parse missing 'db-migrate'")
+}
+
+// TestNeedsGlobHandle covers ctx.needs(ctx.glob(...)) feeding a meta-target: the matched
+// targets run (sorted) before the body, and non-matching targets are skipped. With
+// no pool in ctx the deps run sequentially in the current VM, so the order is
+// deterministic.
+func TestNeedsGlobHandle(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "os";
+fun note(s: str) > void {
+   os.execSh("printf '%s\n' " + s + " >> ran", "");
+}
+export fun go_build(ctx: magus\Context, _a: [str]) > void { note("go-build"); }
+export fun image_build(ctx: magus\Context, _a: [str]) > void { note("image-build"); }
+export fun go_test(ctx: magus\Context, _a: [str]) > void { note("go-test"); }
+export fun build(ctx: magus\Context, _a: [str]) > void {
+   ctx.needs(ctx.glob("*-build"));
+   note("build-body");
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "build"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	// Deps (sorted) run before the body; go-test does not match "*-build".
+	want := "go-build\nimage-build\nbuild-body\n"
+	assert.Equal(t, want, string(got))
+	assert.NotContains(t, string(got), "go-test", "go-test ran but does not match *-build")
+}
+
+// TestTargetNamespaceIsGone verifies the removed magus.target.* query namespace no
+// longer exists: a magusfile referencing it must error at runtime (magus.target is
+// undefined), so the old needs-by-query API cannot silently linger.
+func TestTargetNamespaceIsGone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(`
+import "magus";
+export fun build(ctx: magus\Context, _a: [str]) > void { ctx.needs(magus.target.literal("build")); }
+`), 0o644))
+	err := runTargetIn(t, dir, "build")
+	assert.Error(t, err, "expected an error: the magus.target namespace was removed")
+}
+
+// TestRunRelativeFsResolvesToProjectDir verifies the chdir->ctx-cwd change: a
+// magusfile target running from a process cwd that is NOT the project dir still
+// resolves relative filesystem paths (read/write/mkdir/glob/copy/walk) against
+// the project dir, and glob/walk return paths relative to it. This is the
+// regression guard for the deserialization that removed os.Chdir.
+func TestRunRelativeFsResolvesToProjectDir(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    fs.mkdirall("sub");
+    fs.writeFile("sub/a.txt", "alpha");
+    fs.copyFile("sub/a.txt", "sub/b.txt");
+    // glob must return paths relative to the project dir, sorted.
+    var hits = fs.glob("sub/*.txt");
+    var acc = "";
+    var first = true;
+    foreach (h in hits) {
+        if (!first) { acc = acc + ","; }
+        acc = acc + h;
+        first = false;
+    }
+    fs.writeFile("glob.out", acc);
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "build"))
+
+	// Files landed in the project dir, not the process cwd.
+	for _, rel := range []string{"sub/a.txt", "sub/b.txt", "glob.out"} {
+		_, err := os.Stat(filepath.Join(dir, rel))
+		require.NoErrorf(t, err, "%s not created in project dir", rel)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "glob.out"))
+	require.NoError(t, err)
+	// Relative, sorted — not absolute paths.
+	assert.Equal(t, "sub/a.txt,sub/b.txt", string(got))
+}
+
+// TestExecResultAnnotationChecksFields proves the typed-returns mechanism: a
+// magusfile may annotate an exec result `> ExecResult` (from `import
+// "magus/target"`), and because Buzz objects are structural the runtime map
+// satisfies the type while the checker validates field access against the
+// declared fields. A good field loads and runs; a typo'd field is a compile-time
+// error, not a silent runtime null.
+func TestExecResultAnnotationChecksFields(t *testing.T) {
+	t.Run("good field type-checks and runs", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `
+import "magus";
+import "os";
+import "fs";
+import "magus/target";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    final r: ExecResult = os.exec("echo", ["hi"]);
+    fs.writeFile("ran", r.stdout);
+}
+`)
+		require.NoError(t, runTargetIn(t, dir, "build"))
+	})
+
+	t.Run("typo'd field is a compile error", func(t *testing.T) {
+		dir := t.TempDir()
+		writeMagusfile(t, dir, `
+import "magus";
+import "os";
+import "magus/target";
+export fun build(ctx: magus\Context, args: [str]) > void {
+    final r: ExecResult = os.exec("echo", ["hi"]);
+    final x = r.stduot;
+}
+`)
+		err := runTargetIn(t, dir, "build")
+		require.Error(t, err, "r.stduot on an ExecResult must fail to compile")
+		assert.Contains(t, strings.ToLower(err.Error()), "field",
+			"error should name the missing field; got: %v", err)
+	})
+}
+
+// TestRecordAnnotationsCheckFields proves every host-record mirror shipped in
+// magus/target gives compile-checked field access: annotating a host result with
+// the object type makes a valid field compile and a typo'd field a compile error.
+// The annotated access lives in an unexecuted probe fn, so the file type-checks
+// without the test performing any network/git/exec — only build (a no-op) runs.
+func TestRecordAnnotationsCheckFields(t *testing.T) {
+	cases := []struct {
+		typ, expr, good, bad string
+		imports              string
+	}{
+		{"ExecResult", `os.exec("echo", ["hi"])`, "stdout", "stduot", `import "os";`},
+		{"Commit", `vcs.commit()`, "author", "auther", `import "vcs";`},
+		{"FileInfo", `fs.stat(".")`, "size", "sizes", `import "fs";`},
+		{"HttpResponse", `http.get("http://x")`, "status", "staus", `import "http";`},
+		{"SemverVersion", `semver.parse("1.2.3")`, "major", "majr", `import "semver";`},
+		{"URL", `encoding.parseUrl("http://x")`, "scheme", "sceme", `import "encoding";`},
+	}
+
+	mkfile := func(c struct{ typ, expr, good, bad, imports string }, field string) string {
+		return fmt.Sprintf(`
+import "magus";
+import "fs";
+import "magus/target";
+%s
+fun probe() > void {
+    final r: %s = %s;
+    final _ = r.%s;
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", "ok");
+}
+`, c.imports, c.typ, c.expr, field)
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.typ, func(t *testing.T) {
+			good := t.TempDir()
+			writeMagusfile(t, good, mkfile(c, c.good))
+			require.NoError(t, runTargetIn(t, good, "build"),
+				"%s: valid field %q should compile and the no-op target should run", c.typ, c.good)
+
+			bad := t.TempDir()
+			writeMagusfile(t, bad, mkfile(c, c.bad))
+			err := runTargetIn(t, bad, "build")
+			require.Error(t, err, "%s: typo'd field %q must fail to compile", c.typ, c.bad)
+			assert.Contains(t, strings.ToLower(err.Error()), "field",
+				"%s: error should name the missing field; got: %v", c.typ, err)
+		})
+	}
+}
+
+func TestRunAndParse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	content := `
+import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr)
+
+	src, err := interp.Find(dir)
+	require.NoError(t, err)
+	targets, err := interp.Parse(context.Background(), src)
+	require.NoError(t, err)
+	require.Len(t, targets, 2)
+}
+
+func TestOsExecShExitCode(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "os";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    var rc = os.execSh("true", "", {"allow_failure": true}).code;
+    if (rc != 0) {
+        throw "os.execSh('true').code = {rc}";
+    }
+    var rc2 = os.execSh("false", "", {"allow_failure": true}).code;
+    if (rc2 == 0) {
+        throw "os.execSh('false').code = 0, expected non-zero";
+    }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+func TestOsWithEnvShellCapture(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "os";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    os.withEnv({"MY_BUZZ_VAR": "hello"}, fun() > void {
+        var captured = os.execSh("echo $MY_BUZZ_VAR").stdout;
+        if (captured != "hello") {
+            throw "expected 'hello', got: [" + captured + "]";
+        }
+    });
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+func TestFsJoinBinding(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    var p = fs.join("a", "b", "c");
+    if (p == "") {
+        throw "fs.join returned empty string";
+    }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+func TestFsListDirBinding(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "subdir")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subdir, "a.txt"), []byte("x"), 0o644))
+
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    var entries = fs.listDir("subdir");
+    if (entries.len() == 0) {
+        throw "expected at least one entry in subdir";
+    }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+func TestFsRemoveAllBinding(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	target := filepath.Join(dir, "todelete")
+	require.NoError(t, os.MkdirAll(target, 0o755))
+
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    fs.removeAll("todelete");
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+	_, err := os.Stat(target)
+	assert.True(t, os.IsNotExist(err), "expected todelete to be removed")
+}
+
+func TestVcsBindings(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "vcs";
+
+export fun check(ctx: magus\Context, args: [str]) > void {
+    // All may be empty or false outside a repo; just confirm they don't crash.
+    var h     = vcs.shortHash();
+    var b     = vcs.branch();
+    var d     = vcs.commitDate();
+    var dirty = vcs.isDirty();
+    var msg = h + b + d + "{dirty}";
+    if (msg.len() < 0) { throw "unreachable"; }
+}
+`)
+	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
+	require.NoError(t, runErr)
+}
+
+func TestParseTargetsPath(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	source := `
+import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun go_vet(ctx: magus\Context, args: [str]) > void {}
+`
+	path := filepath.Join(dir, "magusfile.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(source), 0o644))
+
+	src := &interp.Source{Dir: dir, Files: []string{path}}
+	targets, err := interp.Parse(context.Background(), src)
+	require.NoError(t, err)
+
+	got := map[string]interp.Target{}
+	for _, tgt := range targets {
+		got[tgt.Key] = tgt
+	}
+
+	assert.Contains(t, got, "build", "missing target 'build'")
+	assert.Contains(t, got, "test", "missing target 'test'")
+	assert.Contains(t, got, "go-vet", "missing target 'go-vet'")
+}
+
+var largeMagefile = `
+import "magus";
+export fun go_build(ctx: magus\Context, args: [str]) > void {}
+export fun go_test(ctx: magus\Context, args: [str]) > void {}
+export fun go_lint(ctx: magus\Context, args: [str]) > void {}
+export fun go_vet(ctx: magus\Context, args: [str]) > void {}
+export fun docker_build(ctx: magus\Context, args: [str]) > void {}
+export fun docker_push(ctx: magus\Context, args: [str]) > void {}
+export fun release_tag(ctx: magus\Context, args: [str]) > void {}
+export fun release_sign(ctx: magus\Context, args: [str]) > void {}
+export fun ci_lint(ctx: magus\Context, args: [str]) > void {}
+export fun ci_test(ctx: magus\Context, args: [str]) > void {}
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {}
+export fun db_seed(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun clean(ctx: magus\Context, args: [str]) > void {}
+`
+
+func BenchmarkParse(b *testing.B) {
+	dir := b.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	if err := os.WriteFile(path, []byte(largeMagefile), 0o644); err != nil {
+		b.Fatal(err)
+	}
+	src := &interp.Source{Dir: dir, Files: []string{path}}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := interp.Parse(context.Background(), src)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkFind(b *testing.B) {
+	dir := b.TempDir()
+	path := filepath.Join(dir, "magusfile.buzz")
+	if err := os.WriteFile(path, []byte("import \"magus\";\nexport fun noop(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := interp.Find(dir)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkRunBuzzParallel runs independent magusfile targets across many
+// projects concurrently. Each body does cwd-relative I/O (fs.writeFile), the very
+// thing the process-global chdirMu serializes — so comparing -cpu=1 against -cpu=N
+// quantifies how much real parallelism the chdir lock costs, and guards the
+// chdirMu->ctx-cwd deserialization follow-up against regressing.
+func BenchmarkRunBuzzParallel(b *testing.B) {
+	const nProjects = 16
+	ctx := context.Background()
+	body := "import \"fs\";\nexport fun build(ctx: magus\\Context, args: [str]) > void { fs.writeFile(\"out.txt\", \"x\"); }\n"
+
+	type proj struct {
+		src *interp.Source
+		dir string
+	}
+	projects := make([]proj, nProjects)
+	for i := range projects {
+		dir := b.TempDir()
+		path := filepath.Join(dir, "magusfile.buzz")
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			b.Fatal(err)
+		}
+		projects[i] = proj{src: &interp.Source{Dir: dir, Files: []string{path}, Engine: "buzz"}, dir: dir}
+	}
+
+	var ctr atomic.Int64
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			p := projects[int(ctr.Add(1))%nProjects]
+			if _, err := interp.RunDir(ctx, p.dir, "build", nil); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+// TestEveryBoundaryTypeHasAMirror is the completeness gate. A ToMap method on a
+// types/ struct means "this value crosses into Buzz", so every one of them owes
+// the magus/target module an `object` mirror - otherwise a magusfile can only
+// index the result as an untyped map, and the checker has nothing to verify a
+// field name against.
+//
+// This is the test that would have caught the shipped `magus.ls` documentation
+// telling readers to annotate `> Projects` when no such type existed.
+func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
+	t.Parallel()
+	// Every types/ struct carrying ToMap, paired with the Buzz object it mirrors.
+	// The names differ where the Buzz one reads better (ProjectsOutput -> Projects).
+	for _, tc := range []struct{ goType, buzzObject string }{
+		{"ExecResult", "ExecResult"},
+		// Commit owns ToMap; CommitRecord/CommitAuthor describe the map it emits.
+		{"CommitRecord", "Commit"},
+		{"CommitAuthor", "CommitAuthor"},
+		{"FileInfo", "FileInfo"},
+		{"HTTPResponse", "HttpResponse"},
+		{"SemverVersion", "SemverVersion"},
+		{"URL", "URL"},
+		{"Tag", "Tag"},
+		{"ProjectEntry", "ProjectEntry"},
+		{"ProjectsOutput", "Projects"},
+		{"AffectedResult", "Affected"},
+		{"GraphView", "Graph"},
+		{"ModuleFieldEntry", "ModuleFieldEntry"},
+		{"ModuleMethodEntry", "ModuleMethodEntry"},
+		{"ModuleEntry", "Module"},
+	} {
+		t.Run(tc.buzzObject, func(t *testing.T) {
+			t.Parallel()
+			assertMirrorConstructs(t, tc.buzzObject)
+		})
+	}
+}
+
+// assertMirrorConstructs execs a bare `Name{}` against the real magus/target
+// bundle. Constructing it is the whole assertion: an object that is absent,
+// misordered relative to a type it references, or emitted with an unparseable
+// field name (a Go field named Type mirrors to the reserved word `type`) all
+// fail here.
+func assertMirrorConstructs(t *testing.T, object string) {
+	t.Helper()
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = s.Close() })
+	RegisterSpellSourceModules(s)
+	require.NoError(t, s.Exec(ctx, `import "magus/target"; final __r = `+object+`{};`),
+		"%s{} must construct: the mirror is missing from the magus/target bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
+	require.NotNil(t, s.GetGlobal("__r"), "%s{} produced nothing", object)
+}
+
+// TestMirrorFieldsMatchToMap pins each mirror against the map its Go type
+// actually produces. A mirror that merely parses is not enough: a field the Buzz
+// value never carries (or one it carries under another name) is a type that lies,
+// and the checker would reject correct code or accept a typo.
+func TestMirrorFieldsMatchToMap(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		object string
+		toMap  map[string]any
+	}{
+		{"Tag", types.Tag{}.ToMap()},
+		{"Affected", types.AffectedResult{}.ToMap()},
+		{"Graph", types.GraphView{}.ToMap()},
+		{"Projects", types.ProjectsOutput{}.ToMap()},
+		{"ProjectEntry", types.ProjectEntry{}.ToMap()},
+		{"Module", types.ModuleEntry{}.ToMap()},
+		{"ModuleFieldEntry", types.ModuleFieldEntry{}.ToMap()},
+		{"ModuleMethodEntry", types.ModuleMethodEntry{}.ToMap()},
+		{"ExecResult", types.ExecResult{}.ToMap()},
+	} {
+		t.Run(tc.object, func(t *testing.T) {
+			t.Parallel()
+			for key := range tc.toMap {
+				assertMirrorReadsField(t, tc.object, key)
+			}
+		})
+	}
+}
+
+// assertMirrorReadsField reads one field off a zero-valued mirror. A reserved-word
+// key is read through ordinary member access (entry.type), which upstream permits
+// even where the same word cannot be a binding name - so this exercises the free
+// identifier the generator emits for it.
+func assertMirrorReadsField(t *testing.T, object, field string) {
+	t.Helper()
+	ctx := context.Background()
+	s := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = s.Close() })
+	RegisterSpellSourceModules(s)
+	err := s.Exec(ctx, `import "magus/target"; final __r = `+object+`{}.`+field+`;`)
+	assert.NoError(t, err, "%s has no field %q, but %s's ToMap emits that key: the mirror and the boundary map disagree", object, field, object)
+}
+
+// TestEveryToMapOwnerIsMirrored guards the LIST above rather than the mirrors.
+// ToMap is the marker that a value crosses into Buzz, so every type carrying one
+// owes the module a mirror; adding a ToMap without adding the mirror would leave
+// the gate above passing while the new type stayed untyped.
+//
+// A mirror is not always generated from the ToMap owner. Commit owns ToMap while
+// CommitRecord is a dedicated struct describing the map it emits (dates format to
+// RFC3339 strings, so the shape and the source differ). Either arrangement is
+// fine; what must hold is that each owner below has a Buzz object, which the
+// tests above check by construction.
+func TestEveryToMapOwnerIsMirrored(t *testing.T) {
+	t.Parallel()
+	owners := []any{
+		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
+		types.SemverVersion{}, types.URL{}, types.Tag{}, types.ProjectEntry{},
+		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{},
+		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
+	}
+	for _, v := range owners {
+		rt := reflect.TypeOf(v)
+		_, ok := rt.MethodByName("ToMap")
+		assert.True(t, ok, "%s is listed as a boundary type but has no ToMap; drop it from this list", rt.Name())
+	}
+	assert.Len(t, owners, 14,
+		"a types/ struct gained or lost ToMap: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
 }

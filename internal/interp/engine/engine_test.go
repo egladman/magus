@@ -1,14 +1,13 @@
-package engine_test
+package engine
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEngineValues_String(t *testing.T) {
-	v := engine.StringValue("hello")
+	v := StringValue("hello")
 	assert.False(t, v.IsNil(), "StringValue.IsNil()")
 	s, ok := v.AsString()
 	assert.True(t, ok)
@@ -17,7 +16,7 @@ func TestEngineValues_String(t *testing.T) {
 }
 
 func TestEngineValues_Number(t *testing.T) {
-	v := engine.NumberValue(3.14)
+	v := NumberValue(3.14)
 	assert.False(t, v.IsNil(), "NumberValue.IsNil()")
 	n, ok := v.AsNumber()
 	assert.True(t, ok)
@@ -27,16 +26,16 @@ func TestEngineValues_Number(t *testing.T) {
 }
 
 func TestEngineValues_Bool(t *testing.T) {
-	vt := engine.BoolValue(true)
+	vt := BoolValue(true)
 	assert.False(t, vt.IsNil(), "BoolValue(true).IsNil()")
 	assert.True(t, vt.AsBool(), "BoolValue(true).AsBool()")
 
-	vf := engine.BoolValue(false)
+	vf := BoolValue(false)
 	assert.False(t, vf.AsBool(), "BoolValue(false).AsBool()")
 }
 
 func TestEngineValues_Nil(t *testing.T) {
-	v := engine.NilValue
+	v := NilValue
 	assert.True(t, v.IsNil(), "NilValue.IsNil()")
 	assert.False(t, v.AsBool(), "NilValue.AsBool()")
 	_, ok := v.AsString()
@@ -46,5 +45,5 @@ func TestEngineValues_Nil(t *testing.T) {
 }
 
 func TestEngineFor_Unknown(t *testing.T) {
-	assert.Nil(t, engine.Lookup("no_such_engine_xyz"), "For(unknown engine) should return nil")
+	assert.Nil(t, Lookup("no_such_engine_xyz"), "For(unknown engine) should return nil")
 }

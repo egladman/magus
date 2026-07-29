@@ -109,17 +109,6 @@ type Target struct {
 	Name string // mixed-case display name
 }
 
-// Run compiles each file in src, executes them on a fresh Buzz session with host
-// bindings registered, then invokes the named target.
-//
-// It runs the target for its EFFECT and discards any return value. Use [RunDir]
-// when the value is wanted: that is the entry the magusfile spell's invoker calls,
-// and the one whose result reaches InvokeResponse.Data.
-func Run(ctx context.Context, src *Source, target string, extraArgs []string, workDir string) error {
-	_, err := runBuzz(ctx, src, target, extraArgs, workDir)
-	return err
-}
-
 // RunDir runs target for the project in dir. Returns ErrNoMagusfile or
 // ErrUnknownTarget when not found.
 //
