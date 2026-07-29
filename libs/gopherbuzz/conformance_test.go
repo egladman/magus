@@ -71,6 +71,13 @@ func TestUpstreamConformance(t *testing.T) {
 		t.Fatalf("load allowlist: %v", err)
 	}
 
+	// Upstream runs this suite from its own repo root, and several files depend on
+	// that: fs.buzz stats README.md, run-file.buzz runs tests/utils/testing.buzz.
+	// Reading them from elsewhere failed on the working directory rather than on
+	// anything about the language. Done after loadAllowlist, which resolves
+	// allowlistPath relative to THIS package's directory.
+	t.Chdir(dir)
+
 	seen := make(map[string]bool, len(files))
 	var regressions, improvements []string
 	for _, path := range files {
