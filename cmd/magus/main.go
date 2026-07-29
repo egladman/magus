@@ -296,6 +296,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	interactive.SetHintsEnabled(hintsOn)
 
 	global.quiet = extractQuietFlag(args)
+	global.silent = extractSilentFlag(args)
 	if v := extractVerbosityCount(args); v > 0 {
 		global.verbose = verbosity(v)
 	}
@@ -855,9 +856,27 @@ func extractRootFlag(args []string) string {
 	return ""
 }
 
+// extractQuietFlag peeks --quiet/--silent before the main flag parse, because
+// applyDisplay runs during early startup and decides progress suppression from
+// global.quiet. --silent counts here: it is documented as "like --quiet, but
+// ...", and reading only --quiet made -s byte-identical to no flag on a passing
+// run - the flag parse set global.silent long after the display was configured.
 func extractQuietFlag(args []string) bool {
 	for _, a := range args {
-		if a == "-q" || a == "--quiet" || a == "-quiet" {
+		switch a {
+		case "-q", "--quiet", "-quiet", "-s", "--silent", "-silent":
+			return true
+		}
+	}
+	return false
+}
+
+// extractSilentFlag peeks --silent for the same reason, so the bounded-dump and
+// notice-bubbling behavior is configured in the same early pass.
+func extractSilentFlag(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-s", "--silent", "-silent":
 			return true
 		}
 	}

@@ -374,12 +374,43 @@ var (
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
 	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
 	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
-	guardRawToolRe   = regexp.MustCompile(`\bgo\s+(test|build|vet)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bpytest\b|\btsc\b|\bcargo\s+(test|build|check|clippy)\b`)
+	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
+	// whole-tree forms above already deny; this one is legitimate often enough
+	// that it only advises, but it is the shape of the most common wrong reflex
+	// an agent has about generated files.
+	// `git checkout ... -- <paths>` needs the `--` separator to be a revert at
+	// all; without it the argument is a branch (`git checkout main`, `-b foo`),
+	// which is not this rule's business. `git restore` targets worktree files by
+	// definition, so its bare form counts.
+	guardScopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
+	guardRawToolRe      = regexp.MustCompile(`\bgo\s+(test|build|vet|generate)\b|\bgofmt\b|\bgoimports\b|\bgolangci-lint\b|\bmockery\b|\bbuf\s+(generate|lint|breaking)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bbiome\b|\bvitest\b|\bjest\b|\bpytest\b|\bruff\b|\bblack\b|\bmypy\b|\btsc\b|\bcargo\s+(test|build|check|clippy|fmt)\b|\brustfmt\b`)
+	// A magus invocation whose own output is truncated or filtered by the shell.
+	// magus has output flags for this; a pipe throws away the parts the agent
+	// then has to guess at. jq is deliberately absent: it composes with -o json
+	// rather than fighting it.
+	//
+	// magus must be the COMMAND, not merely a substring: it is anchored to the
+	// start of a command segment (start of line, or after ; && || |) and allows a
+	// leading path or env assignments. Matching a bare \bmagus\b fired on
+	// `grep x cmd/magus/*_test.go | head`, where the word is only a path.
+	magusCmd          = `(^|[;&|]|&&|\|\|)\s*(\w+=\S+\s+)*(\S*/)?magus\s`
+	guardMagusPipeRe  = regexp.MustCompile(magusCmd + `[^|;&]*\|\s*(tail|head|grep|wc|sed|awk|cut|sort|uniq)\b`)
+	guardMagusRedirRe = regexp.MustCompile(magusCmd + `[^|;&]*2>&1`)
 )
 
 const (
 	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Load the magus-vcs skill for the commit checklist if not already loaded."
 	runGuardContext = "magus workspace: a magus target likely covers this (magus run build / test / lint / format / generate; MAGUS.md lists every target). Raw language tools bypass the cache, the sandbox, and affected tracking. Load the magus-run skill if not already loaded; if no target covers this work, proceed."
+	// Reverting regenerated output is the wrong default. An agent that did not
+	// hand-edit a gen/ file concludes it is not "its" change and discards it -
+	// but a generate target rewriting its declared outputs is the system working,
+	// and those outputs belong in the same commit as the source that moved them.
+	// The honest test is whether the SOURCE changed, not whether the agent typed
+	// into the output.
+	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Regenerated output (gen/ trees, MAGUS.md, *.gen.*) is a declared target output: if a source change moved it, that is correct and it belongs in the SAME commit as the source - reverting it is what makes CI fail on drift. Classify before discarding: magus describe file <paths> (role=output means generated). Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a baked-in path) rather than yours - say so instead of silently discarding it. Load the magus-vcs skill if not already loaded."
+	// Named for what the agent should do instead, not for what it did wrong: the
+	// flags are the actionable part, and a weaker model needs the exact spelling.
+	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading."
 )
 
 func denyWholeTree(op string) string {
@@ -403,8 +434,12 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyWholeTree("git clean")}
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext}
+	case guardScopedRevertRe.MatchString(command):
+		return bashGuardVerdict{Context: revertGuardContext}
 	case guardRawToolRe.MatchString(command):
 		return bashGuardVerdict{Context: runGuardContext}
+	case guardMagusPipeRe.MatchString(command), guardMagusRedirRe.MatchString(command):
+		return bashGuardVerdict{Context: outputGuardContext}
 	}
 	return bashGuardVerdict{}
 }
