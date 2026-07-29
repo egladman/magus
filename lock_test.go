@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -323,4 +324,52 @@ func waitForFile(t *testing.T, path string, within time.Duration) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", path)
+}
+
+// TestLockOwnerNamesTheHolder pins the observability half of the lock: flock decides
+// exclusion, this decides whether a blocked run can say WHO it is waiting on. A wait
+// message that can only say "another magus process" is what turned a six-day-old
+// orphan into an investigation.
+func TestLockOwnerNamesTheHolder(t *testing.T) {
+	l := newProjectLocker(t.TempDir(), false)
+
+	release, err := l.acquire(context.Background(), "web/api")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+
+	desc := l.describeOwner("web/api")
+	if want := "pid " + strconv.Itoa(os.Getpid()); !strings.Contains(desc, want) {
+		t.Errorf("describeOwner = %q, want it to carry %q; the pid is the actionable part", desc, want)
+	}
+	if !strings.Contains(desc, "in ") {
+		t.Errorf("describeOwner = %q, want the holder's directory; that identifies an orphan in a deleted worktree", desc)
+	}
+
+	release()
+	if got := l.describeOwner("web/api"); got != "" {
+		t.Errorf("describeOwner after release = %q, want empty; a released lock must not name a finished process", got)
+	}
+}
+
+// TestOrphanHintEscalates pins that the message stops reassuring once a wait is long
+// enough that "busy peer" is no longer the likely explanation.
+func TestOrphanHintEscalates(t *testing.T) {
+	if got := orphanHint(5*time.Second, "pid 1"); got != "" {
+		t.Errorf("orphanHint(5s) = %q, want empty; a short contention must not cry wolf", got)
+	}
+	if got := orphanHint(lockOrphanHint-time.Second, "pid 1"); got != "" {
+		t.Errorf("orphanHint(just under threshold) = %q, want empty", got)
+	}
+
+	hint := orphanHint(lockOrphanHint+time.Second, "pid 71557 (magus run serve)")
+	for _, want := range []string{"may be abandoned", "pid 71557", "worktree"} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("orphanHint past threshold = %q, want it to contain %q", hint, want)
+		}
+	}
+
+	if got := orphanHint(lockOrphanHint+time.Second, ""); !strings.Contains(got, "the holder") {
+		t.Errorf("orphanHint with unreadable sidecar = %q, want it to escalate without a name", got)
+	}
 }

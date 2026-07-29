@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
 )
 
@@ -144,7 +145,8 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		}
 		l.emitResumed(projectPath)
 	}
-	return func() { _ = fl.Unlock() }, nil
+	l.recordOwner(projectPath)
+	return func() { l.removeOwner(projectPath); _ = fl.Unlock() }, nil
 }
 
 // acquireAll takes the EXCLUSIVE lock for every project path, acquiring them in
@@ -198,7 +200,11 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p)
+	held := ""
+	if owner := l.describeOwner(projectPath); owner != "" {
+		held = " (held by " + owner + ")"
+	}
+	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, held)
 }
 
 // lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
@@ -244,9 +250,10 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 			case <-ctx.Done():
 				return
 			case <-t.C:
+				elapsed := time.Since(start)
 				fmt.Fprintf(os.Stderr,
-					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.\n",
-					p, time.Since(start).Round(time.Second))
+					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
+					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
 			}
 		}
 	}()
@@ -268,4 +275,107 @@ func (l *projectLocker) emitResumed(projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(os.Stderr, "magus: lock on project %s released; starting.\n", p)
+}
+
+// lockOwner is the best-effort record of which process holds a project lock,
+// written beside the lock file on acquire.
+//
+// Purely informational. The flock is the ONLY thing that decides exclusion; this
+// record never gates, and a caller that cannot read it proceeds exactly as before.
+// That split matters: a lock whose correctness depended on a hand-written pid file
+// would go stale the moment a process died, whereas the kernel releases a flock
+// then. Here staleness is harmless, because it is only ever read to answer "who am
+// I waiting on".
+//
+// It exists because flock carries no identity. Without it the wait message can only
+// say "another magus process", which is exactly what turned a six-day-old orphaned
+// `magus run serve` - running in a worktree that had since been deleted - into an
+// investigation instead of one line of output.
+type lockOwner struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	Dir     string `json:"dir"`
+	Started string `json:"started"`
+}
+
+// ownerPath is the sidecar beside the lock file itself, so it inherits the same
+// per-project directory layout and is removed with it.
+func (l *projectLocker) ownerPath(projectPath string) string {
+	return l.lockPath(projectPath) + ".owner"
+}
+
+// recordOwner writes the sidecar after a successful acquire. Every failure is
+// swallowed: not being able to say who holds a lock must never fail a run that
+// already holds it.
+func (l *projectLocker) recordOwner(projectPath string) {
+	dir, _ := os.Getwd()
+	data, err := codec.Marshal(lockOwner{
+		PID:     os.Getpid(),
+		Command: strings.Join(os.Args, " "),
+		Dir:     dir,
+		Started: time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(l.ownerPath(projectPath), data, 0o600)
+}
+
+// describeOwner renders the current holder for a wait message, or "" when there is
+// nothing trustworthy to say.
+//
+// A blocked acquire already proves the holder is ALIVE - the kernel would have
+// released the flock otherwise - so this never needs to probe liveness. It only
+// answers which process, started when, from where.
+func (l *projectLocker) describeOwner(projectPath string) string {
+	data, err := os.ReadFile(l.ownerPath(projectPath))
+	if err != nil {
+		return ""
+	}
+	var o lockOwner
+	if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
+		return ""
+	}
+	desc := fmt.Sprintf("pid %d", o.PID)
+	if o.Command != "" {
+		desc += fmt.Sprintf(" (%s)", o.Command)
+	}
+	if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
+		desc += fmt.Sprintf(", running %s", time.Since(started).Round(time.Second))
+	}
+	if o.Dir != "" {
+		desc += fmt.Sprintf(", in %s", o.Dir)
+	}
+	return desc
+}
+
+// lockOrphanHint is how long a wait runs before the message stops reassuring and
+// starts suggesting the holder may be abandoned. Well past any honest build, so a
+// normal contention never sees it.
+var lockOrphanHint = 2 * time.Minute
+
+// orphanHint returns the escalated advice for a wait that has gone on too long, or
+// "" while the wait is still plausibly normal.
+//
+// The 15s heartbeat says "this run is NOT hung", which is correct at 15 seconds and
+// actively misleading at six days. Past the threshold the likeliest explanation is
+// no longer a busy peer but a holder nobody knows is running, and the message says
+// so along with where to look.
+func orphanHint(elapsed time.Duration, owner string) string {
+	if elapsed < lockOrphanHint {
+		return ""
+	}
+	where := "the holder"
+	if owner != "" {
+		where = owner
+	}
+	return fmt.Sprintf(" This has waited %s, which is long enough that %s may be abandoned"+
+		" rather than busy; check it with `magus doctor`, and note a process whose worktree"+
+		" was deleted keeps running and keeps its lock.", elapsed.Round(time.Second), where)
+}
+
+// removeOwner clears the sidecar on release so a later reader never attributes a
+// lock to a process that has finished. Best-effort, like the write.
+func (l *projectLocker) removeOwner(projectPath string) {
+	_ = os.Remove(l.ownerPath(projectPath))
 }
