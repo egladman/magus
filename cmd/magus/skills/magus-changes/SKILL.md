@@ -1,14 +1,14 @@
 # Recent changes in a magus workspace
 
 Turn a large workspace's recent change history into a short, evidence-backed
-brief. The output is a decision aid, not a chronological commit dump.
+brief.<!-- why --> The output is a decision aid, not a chronological commit dump.<!-- /why -->
 
 ## Gather evidence
 
 1. Get the project map and target vocabulary from the workspace: `magus ls`
    for projects, `magus describe targets` for the target vocabulary. Do not
-   read `MAGUS.md` for this - it is a generated index for human readers, and
-   a history brief that describes stale structure is worse than none.
+   read `MAGUS.md` for this<!-- why --> - it is a generated index for human readers, and
+   a history brief that describes stale structure is worse than none<!-- /why -->.
 2. Establish the requested time boundary. On Git, inspect merge commits first:
 
    ```sh
@@ -36,8 +36,8 @@ brief. The output is a decision aid, not a chronological commit dump.
    ```
 
 5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
-   hidden coupling, ownership risk, or unusually rising activity. They do not
-   prove that a feature landed.
+   hidden coupling, ownership risk, or unusually rising activity.<!-- why --> They do not
+   prove that a feature landed.<!-- /why -->
 
 ## Write the brief
 

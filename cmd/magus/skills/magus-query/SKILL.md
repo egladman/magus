@@ -1,25 +1,25 @@
 # magus knowledge graph
 
 magus keeps a deterministic, cache-backed graph of its own domain. Query it to
-find and relate entities instead of grepping source. This skill teaches HOW to use
+find and relate entities instead of grepping source.<!-- why --> This skill teaches HOW to use
 the tools; the verbs below say WHAT is in this specific workspace. The division is
 strict, so this skill never goes stale when a workspace changes - only when the
-tool surface does.
+tool surface does.<!-- /why -->
 
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
 shaped like "what exists / what depends on X / where is Y used / how do A and B
-relate" is a graph query FIRST - do not open Grep or Glob for it. Unlike a
+relate" is a graph query FIRST - do not open Grep or Glob for it.<!-- why --> Unlike a
 grep hit, a graph answer is verified: every edge is extracted from a declared
-source or scored by a rubric, and says which. If the graph cannot answer,
-say so and then fall back - a silent fallback hides the gap that should be
-reported.
+source or scored by a rubric, and says which.<!-- /why --> If the graph cannot answer,
+say so and then fall back<!-- why --> - a silent fallback hides the gap that should be
+reported<!-- /why -->.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
-HUMAN reading the repo, and it is only as true as its last regeneration - a
+HUMAN reading the repo, and it is only as true as its last regeneration<!-- why --> - a
 workspace whose generate target has not run since the last change describes a
 tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
-workspace. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
+workspace<!-- /why -->. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
 unavailable too, or when a human explicitly asks what the committed index says.
 
 ## Act in this order
@@ -27,14 +27,14 @@ unavailable too, or when a human explicitly asks what the committed index says.
 1. Ask the workspace what exists, with the verb that answers your question:
    `magus describe targets` (every target; `-o name` for bare names),
    `magus ls` (every project with its spell, sources, outputs, depends_on),
-   `magus describe spells`, `magus describe projects`. These are live, so they
-   are right even mid-change, and they take a `-o json` for machine reading.
+   `magus describe spells`, `magus describe projects`.<!-- why --> These are live, so they
+   are right even mid-change, and they take a `-o json` for machine reading.<!-- /why -->
 
 2. Then reach for the verbs. Prefer the MCP tools. At session start, or after an
    MCP call fails, check `magus status --probe=mcp`. If it is unavailable, tell
    the user once that `magus server start` restores the full agent surface, then
-   use the CLI equivalent from the same row below. Do not stop or grep. CLI
-   fallback remains correct, but has no tool discovery or warm daemon graph.
+   use the CLI equivalent from the same row below. Do not stop or grep.<!-- why --> CLI
+   fallback remains correct, but has no tool discovery or warm daemon graph.<!-- /why -->
 
    | question                                      | MCP tool        | CLI                                |
    | --------------------------------------------- | --------------- | ---------------------------------- |
@@ -46,14 +46,14 @@ unavailable too, or when a human explicitly asks what the committed index says.
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus_refs`
-   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
+   needs a workspace that declares a SCIP index (`knowledge.symbols` in config);<!-- why --> it
    is the occurrence-shaped def/references answer, so use it over `magus_query` for a
-   symbol's fan-in. When refs (or `kind:symbol`) reports no match for a symbol that
+   symbol's fan-in.<!-- /why --> When refs (or `kind:symbol`) reports no match for a symbol that
    plainly exists, the index is probably unbuilt, not the name wrong: `magus status`
    lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
 
-   The graph relates entities; the evaluated dispatch plan lives one verb over.
-   `magus describe target <name>` prints, per project, the resolved source globs,
+<!-- why -->   The graph relates entities; the evaluated dispatch plan lives one verb over.
+<!-- /why -->   `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target - use it
    when the question is "what feeds or comes out of this target", not "what relates
    to it".
@@ -85,8 +85,8 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
   bare IDs for piping. Do not scrape the human text or trim it with `head`.
   Over MCP the tools already return structured content; nothing to shape.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
-  `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them; a rename
-  is a delete plus an add.
+  `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them<!-- why -->; a rename
+  is a delete plus an add<!-- /why -->.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
 - Node `attrs` surface metadata: a project's `engine` and `target_count`, a
@@ -105,8 +105,8 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. Combine that with dependency edges to
 answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind:owner` to list owners. Only
-declared CODEOWNERS ownership appears - it is not blame-inferred.
+node's owners and dependents, or `magus query kind:owner` to list owners.<!-- why --> Only
+declared CODEOWNERS ownership appears - it is not blame-inferred.<!-- /why -->
 
 ## Across workspaces and neighbors
 
@@ -122,8 +122,8 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
 human an export - `magus graph export -o json` (or `-o graphml`) opens directly in
-Gephi, yEd, or a browser graph tool. The emit-never-render rule that governs magus
-governs you too.
+Gephi, yEd, or a browser graph tool.<!-- why --> The emit-never-render rule that governs magus
+governs you too.<!-- /why -->
 
 ## Fetching current behavior
 

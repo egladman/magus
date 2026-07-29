@@ -41,6 +41,156 @@ type AgentSkill struct {
 	Body        string
 }
 
+// Variant selects which permutation of a skill body to render.
+//
+// BOTH PERMUTATIONS ARE CURATED, and that is the whole design. The simple one is
+// not a summary, a truncation, or a model-generated paraphrase: there is exactly
+// one human-written body per skill, and its author brackets the spans that only
+// the full permutation keeps. So the two can never come to describe different
+// behaviour, they share one content digest, and they version together - which is
+// the property a second hand-maintained file could not give.
+//
+// The reason to offer a shorter one at all: a skill is a bet about what the reader
+// cannot infer, and that bet ages. Models keep getting better at inferring the
+// why, so the rationale that earns its context today is the same text that is
+// dead weight in a year. Rather than let the skills quietly become bricks, the
+// choice is a flag - and re-asking "does this still earn its context?" is the
+// audit, not a rewrite.
+type Variant int
+
+const (
+	// VariantFull is the default: the imperative steps plus the rationale that
+	// says why each one is the right move and what goes wrong otherwise.
+	VariantFull Variant = iota
+	// VariantSimple keeps the imperative steps and withholds the rationale, for a
+	// capable reader that would rather spend the context on the task. It is a bet
+	// ON the reader, not a lossy compression - which is why the split is a
+	// judgement an author records, and why anything a step cannot survive losing
+	// belongs in the unmarked core instead.
+	VariantSimple
+)
+
+func (v Variant) String() string {
+	if v == VariantSimple {
+		return "simple"
+	}
+	return "full"
+}
+
+// VariantOf maps a --simple boolean to a Variant, so the CLI does not spell the
+// conditional at every call site.
+func VariantOf(simple bool) Variant {
+	if simple {
+		return VariantSimple
+	}
+	return VariantFull
+}
+
+// whyOpen and whyClose bracket prose that only [VariantFull] keeps.
+//
+// They are HTML comments so a marked body stays valid Markdown that renders
+// identically either way - the source is readable, and a skill file opened in any
+// viewer shows no scaffolding. One pair covers both granularities: a whole
+// paragraph, or a trailing clause inside a numbered step, because the span is
+// taken verbatim between the markers regardless of newlines. One rule, not two.
+//
+// The name says the intent rather than the mechanism. What a simple skill drops
+// is the WHY; what both keep is the WHAT. An author deciding where the marker
+// goes is answering "would a capable reader still do the right thing without this
+// sentence?", and that question is the curation.
+const (
+	whyOpen  = "<!-- why -->"
+	whyClose = "<!-- /why -->"
+)
+
+// applyVariant renders body for v: [VariantSimple] removes each marked span,
+// [VariantFull] keeps the prose and removes only the markers themselves, so no
+// scaffolding reaches an installed file either way.
+//
+// Unbalanced markers are an ERROR, never a best guess. A generator that silently
+// mis-elides ships a skill missing a step, and a missing step in an instruction
+// file is indistinguishable from an instruction not to do it.
+func applyVariant(name, body string, v Variant) (string, error) {
+	var b strings.Builder
+	rest := body
+	for {
+		open := strings.Index(rest, whyOpen)
+		if open < 0 {
+			if strings.Contains(rest, whyClose) {
+				return "", fmt.Errorf("skill %q: %s with no matching %s", name, whyClose, whyOpen)
+			}
+			b.WriteString(rest)
+			break
+		}
+		after := rest[open+len(whyOpen):]
+		close := strings.Index(after, whyClose)
+		if close < 0 {
+			return "", fmt.Errorf("skill %q: %s with no matching %s", name, whyOpen, whyClose)
+		}
+		if inner := after[:close]; strings.Contains(inner, whyOpen) {
+			return "", fmt.Errorf("skill %q: nested %s", name, whyOpen)
+		}
+		b.WriteString(rest[:open])
+		if v == VariantFull {
+			b.WriteString(after[:close])
+		}
+		rest = after[close+len(whyClose):]
+		if v == VariantSimple {
+			trimSeam(&b, rest)
+		}
+	}
+	return tidyBlankLines(b.String()), nil
+}
+
+// trimSeam drops the space left dangling at an elision boundary, when the removed
+// span sat between a space and the punctuation that closed the sentence: "done - a
+// long reason<!-- /why -->." would otherwise render as "done ." with a floating space.
+//
+// It looks at exactly the two characters either side of the cut, and nowhere else.
+// A global " ." -> "." pass is the obvious shortcut and it is wrong: it silently
+// rewrote `git checkout .` to `git checkout.` in the middle of a command the skill
+// tells the reader never to run - corrupting content that was never elided at all.
+func trimSeam(b *strings.Builder, rest string) {
+	if b.Len() == 0 || rest == "" {
+		return
+	}
+	if !strings.ContainsRune(".,;:)!?", rune(rest[0])) {
+		return
+	}
+	s := b.String()
+	if !strings.HasSuffix(s, " ") {
+		return
+	}
+	b.Reset()
+	b.WriteString(strings.TrimRight(s, " "))
+}
+
+// tidyBlankLines collapses the blank-line runs a dropped paragraph leaves behind
+// and strips trailing whitespace, so an elided body is still well-formed Markdown.
+//
+// It does not rewrap prose. A paragraph left with ragged line lengths renders
+// identically - Markdown folds single newlines inside a paragraph into spaces - and
+// a rewrapper would have to understand fenced code, tables and list indentation to
+// avoid breaking them, which is a lot of machinery to buy nothing the reader sees.
+func tidyBlankLines(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	blank := 0
+	for _, l := range lines {
+		l = strings.TrimRight(l, " \t")
+		if l == "" {
+			blank++
+			if blank > 1 {
+				continue
+			}
+		} else {
+			blank = 0
+		}
+		out = append(out, l)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
 // Status is the verification verdict for one installed skill location.
 type Status struct {
 	Location  string
@@ -81,7 +231,8 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 	return c
 }
 
-func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
+// EmbeddedSkills returns every embedded skill rendered for v, in name order.
+func (c *Catalog) EmbeddedSkills(v Variant) ([]AgentSkill, error) {
 	sources := append([]skillSource(nil), skillSources...)
 	sort.Slice(sources, func(i, j int) bool { return sources[i].name < sources[j].name })
 	skills := make([]AgentSkill, 0, len(sources))
@@ -90,7 +241,11 @@ func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: strings.TrimSpace(string(body))})
+		rendered, err := applyVariant(source.name, strings.TrimSpace(string(body)), v)
+		if err != nil {
+			return nil, err
+		}
+		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: rendered})
 	}
 	return skills, nil
 }
@@ -104,14 +259,14 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
-func (c *Catalog) SkillBytes(name string) ([]byte, error) {
-	skills, err := c.EmbeddedSkills()
+func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
 	for _, skill := range skills {
 		if skill.Name == name {
-			return c.StampSkill(c.RenderSkill(skill)), nil
+			return c.StampSkill(c.RenderSkill(skill), v), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown skill %q", name)
@@ -119,7 +274,7 @@ func (c *Catalog) SkillBytes(name string) ([]byte, error) {
 
 // SkillNames returns the embedded skill names in deterministic order.
 func (c *Catalog) SkillNames() ([]string, error) {
-	skills, err := c.EmbeddedSkills()
+	skills, err := c.EmbeddedSkills(VariantFull)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +293,8 @@ func (c *Catalog) SkillNames() ([]string, error) {
 // result to `tar -xf - -C <dir>` is the supported way to install skills
 // outside the workspace root - the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
-func (c *Catalog) SkillTar(dest string) ([]byte, error) {
-	skills, err := c.EmbeddedSkills()
+func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +305,7 @@ func (c *Catalog) SkillTar(dest string) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.StampSkill(c.RenderSkill(skill))
+		body := c.StampSkill(c.RenderSkill(skill), v)
 		hdr := &tar.Header{
 			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
 			Mode:    0o644,
@@ -177,11 +332,11 @@ func (c *Catalog) SkillTar(dest string) ([]byte, error) {
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool) ([]string, error) {
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
-	skills, err := c.EmbeddedSkills()
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +354,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool) ([]string, error)
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill)), 0o644); err != nil {
+		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill), v), 0o644); err != nil {
 			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
@@ -284,21 +439,26 @@ func (c *Catalog) WriteAgentsSection(dir string) ([]string, error) {
 	return []string{"AGENTS.md"}, nil
 }
 
-func (c *Catalog) provenance() string {
-	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.contentDigest)
+func (c *Catalog) provenance(v Variant) string {
+	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.contentDigest, v)
 }
 
-func (c *Catalog) footer() string {
-	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.contentDigest)
+func (c *Catalog) footer(v Variant) string {
+	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.contentDigest, v)
 }
 
 // StampSkill injects provenance frontmatter and appends a generated-by footer.
-func (c *Catalog) StampSkill(body []byte) []byte {
-	body = c.injectProvenance(body)
-	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer()...)
+//
+// The stamp names the variant but keeps the SOURCE content digest, deliberately:
+// both permutations come from one body, so they must report the same digest and go
+// stale together. A per-variant digest would let a simple install look current
+// against a source its full sibling had already outgrown.
+func (c *Catalog) StampSkill(body []byte, v Variant) []byte {
+	body = c.injectProvenance(body, v)
+	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer(v)...)
 }
 
-func (c *Catalog) injectProvenance(body []byte) []byte {
+func (c *Catalog) injectProvenance(body []byte, v Variant) []byte {
 	s := string(body)
 	if !strings.HasPrefix(s, "---\n") {
 		return body
@@ -308,7 +468,7 @@ func (c *Catalog) injectProvenance(body []byte) []byte {
 		return body
 	}
 	closeAt := len("---\n") + rel + 1
-	return []byte(s[:closeAt] + c.provenance() + s[closeAt:])
+	return []byte(s[:closeAt] + c.provenance(v) + s[closeAt:])
 }
 
 func (c *Catalog) computeContentDigest() string {

@@ -2,20 +2,20 @@
 
 magus is the task orchestrator: targets declare their inputs, outputs, and
 sandbox, and magus caches results and computes what a change affects. Invoking a
-raw language tool directly bypasses all of that, so the cache goes stale, declared
-outputs drift, and `magus affected` can no longer vouch for your change.
+raw language tool directly bypasses all of that<!-- why -->, so the cache goes stale, declared
+outputs drift, and `magus affected` can no longer vouch for your change<!-- /why -->.
 
 ## Which project a command hits
 
 magus is CWD-relative: a bare `magus run`/`ls`/`describe` acts on the project holding
 your current directory, or the whole workspace from the root. Do not assume the root.
-Scope explicitly so a command means the same anywhere: name the project (`magus run
+Scope explicitly<!-- why --> so a command means the same anywhere<!-- /why -->: name the project (`magus run
 test web`), or let `magus affected` compute the set from the diff. `magus where <name>`
 resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the CWD.
 
 ## Rules
 
-1. Prefer the MCP tools; they return structured content with nothing to silence.
+1. Prefer the MCP tools<!-- why -->; they return structured content with nothing to silence<!-- /why -->.
    At session start, or after an MCP call fails, check `magus status --probe=mcp`.
    If it is unavailable, say once that `magus server start` restores the full
    agent experience, then continue with the CLI fallback below. Do not make the
@@ -29,22 +29,22 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    Fallback is an instruction, not a hint: if the MCP tool errors or no magus
    daemon is connected, run the CLI equivalent (`magus run <target>` /
    `magus affected <target>`) instead. Do not stop, and do not drop to a raw
-   language tool. When you shell out, silence it (`-s`, next section) so a
-   passing run costs a few lines, not a scroll of progress.
+   language tool. When you shell out, silence it (`-s`, next section)<!-- why --> so a
+   passing run costs a few lines, not a scroll of progress<!-- /why -->.
 2. Always reach for a top-level target first: `build`, `test`, `lint`, `format`,
    `generate`, or a custom target from the catalog. `magus describe targets`
    lists every target (`-o name` for bare names) and classifies each as
    canonical, spell, or custom; `magus_describe` (kind=targets) is the MCP
-   equivalent. Ask the workspace rather than reading `MAGUS.md`: that file is a
-   generated index for humans, true only as of its last regeneration.
+   equivalent. Ask the workspace rather than reading `MAGUS.md`<!-- why -->: that file is a
+   generated index for humans, true only as of its last regeneration<!-- /why -->.
 3. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 4. `ci` is the canonical anchor target: the one command that composes the
    pipeline (typically generate, lint, build, test). When you consider your
-   change done, run `magus affected ci` as the final gate - it runs the full
+   change done, run `magus affected ci` as the final gate<!-- why --> - it runs the full
    pipeline over every project your change reaches, which is how you learn about
-   ramifications in projects you never touched. Verify the build in place; never
+   ramifications in projects you never touched<!-- /why -->. Verify the build in place; never
    `git stash`/`reset` first (data-loss-prone and pointless - the tree is
    already what you want to verify).
 
@@ -66,7 +66,7 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
 
 ## Output control: silence runs, read structure
 
-You are a machine reader; no news is good news. Shape the output instead of
+<!-- why -->You are a machine reader; no news is good news.<!-- /why --> Shape the output instead of
 truncating it after the fact:
 
 - `-s` / `--silent`: the default for every CLI run. Progress is dropped; a pass
@@ -83,7 +83,7 @@ truncating it after the fact:
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
 or `wc`.** Every magus command already has an output contract, so filtering its
-text after the fact is always the wrong tool. It is not a style preference; it
+text after the fact is always the wrong tool.<!-- why --> It is not a style preference; it
 actively breaks things:
 
 - It is lossy in the direction that matters. A truncating filter drops the
@@ -94,7 +94,7 @@ actively breaks things:
   stable contract that is not.
 - `grep` cannot see structure. A field you matched textually may belong to a
   different record entirely.
-
+<!-- /why -->
 Replace the filter with the flag that already does it:
 
 | Instead of | Use |
@@ -106,12 +106,12 @@ Replace the filter with the flag that already does it:
 | `\| awk '{print $1}'` | `-o name` |
 | `\| jq` after `-o text` | `-o json` first, then `jq` |
 
-`jq` on `-o json` is fine: that is consuming a contract, not scraping text. The
-prohibition is on text filters standing in for an output format.
+`jq` on `-o json` is fine<!-- why -->: that is consuming a contract, not scraping text. The
+prohibition is on text filters standing in for an output format<!-- /why -->.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`). These are contracts on both
-ends, so they are the opposite of the antipattern above:
+`--stdin`, not a tee flag (there is no `--tee`).<!-- why --> These are contracts on both
+ends, so they are the opposite of the antipattern above:<!-- /why -->
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
@@ -142,25 +142,25 @@ magus run buf::buf-lint
 List the ops behind a target with `magus describe target <name>`: it prints the
 fully-evaluated dispatch plan per project (sources, outputs, spells, policy).
 Reach for op-direct forms to iterate on one failure, then re-run the top-level
-target before you call the work done: ci runs the full composition, so the
-full composition is what has to pass.
+target before you call the work done<!-- why -->: ci runs the full composition, so the
+full composition is what has to pass<!-- /why -->.
 
 ## When a target fails
 
 Each target's result line mints an output reference id (`ref1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI. Do this instead of re-running the
-   target to see the error again.
+   `magus query output ref1a2b3c` on the CLI.<!-- why --> Do this instead of re-running the
+   target to see the error again.<!-- /why -->
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.
 3. `magus doctor` validates the workspace itself (config, cache, tool
-   availability, cycles) when failures look environmental rather than caused by
-   your change.
+   availability, cycles)<!-- why --> when failures look environmental rather than caused by
+   your change<!-- /why -->.
 
 ## Fetching current behavior
 
 Flags and target sets differ per workspace and magus version. Trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
-over anything remembered - and over `MAGUS.md`, which is generated output that
-lags the tree between regenerations.
+over anything remembered - and over `MAGUS.md`<!-- why -->, which is generated output that
+lags the tree between regenerations<!-- /why -->.
