@@ -19,18 +19,18 @@
 //	limitations under the License.
 //
 // Source: https://github.com/prometheus/prometheus/blob/main/promql/quantile.go
-package quantile
+package metrics
 
 import (
 	"math"
 	"sort"
 )
 
-// Bucket is one cumulative histogram bucket: CumulativeCount observations fell at or
+// histBucket is one cumulative histogram bucket: CumulativeCount observations fell at or
 // below UpperBound. Buckets are cumulative and ascending by UpperBound; the last
 // bucket's UpperBound is conventionally +Inf (math.Inf(1)), which an OTel explicit-bucket
 // histogram always carries as its implied final bucket.
-type Bucket struct {
+type histBucket struct {
 	UpperBound      float64
 	CumulativeCount float64
 }
@@ -44,7 +44,7 @@ type Bucket struct {
 // implied +Inf bucket, fewer than two buckets, or zero observations) yields NaN. A
 // rank that falls in the final +Inf bucket clamps to the largest finite upper bound,
 // since that overflow bucket has no finite boundary to interpolate toward.
-func Quantile(q float64, buckets []Bucket) float64 {
+func quantileOf(q float64, buckets []histBucket) float64 {
 	switch {
 	case math.IsNaN(q):
 		return math.NaN()
@@ -58,7 +58,7 @@ func Quantile(q float64, buckets []Bucket) float64 {
 	}
 
 	// Sort a copy so callers keep their slice order (and any shared backing array).
-	bs := make([]Bucket, len(buckets))
+	bs := make([]histBucket, len(buckets))
 	copy(bs, buckets)
 	sort.Slice(bs, func(i, j int) bool { return bs[i].UpperBound < bs[j].UpperBound })
 

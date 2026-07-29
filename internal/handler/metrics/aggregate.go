@@ -11,7 +11,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/egladman/magus/internal/quantile"
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -521,9 +520,9 @@ func foldHistogram[N int64 | float64](dps []metricdata.HistogramDataPoint[N]) *m
 	}
 
 	buckets := cumulativeBuckets(bounds, bucketCounts)
-	lat.P50 = sanitize(quantile.Quantile(0.50, buckets))
-	lat.P95 = sanitize(quantile.Quantile(0.95, buckets))
-	lat.P99 = sanitize(quantile.Quantile(0.99, buckets))
+	lat.P50 = sanitize(quantileOf(0.50, buckets))
+	lat.P95 = sanitize(quantileOf(0.95, buckets))
+	lat.P99 = sanitize(quantileOf(0.99, buckets))
 	if haveMax {
 		lat.Max = maxObserved
 	} else {
@@ -533,10 +532,10 @@ func foldHistogram[N int64 | float64](dps []metricdata.HistogramDataPoint[N]) *m
 }
 
 // cumulativeBuckets converts OTel explicit bounds plus per-bucket counts into the ascending
-// cumulative buckets quantile.Quantile expects, appending the implied +Inf overflow bucket.
+// cumulative buckets quantileOf expects, appending the implied +Inf overflow bucket.
 // bucketCounts has one more entry than bounds (the final +Inf bucket).
-func cumulativeBuckets(bounds []float64, bucketCounts []uint64) []quantile.Bucket {
-	buckets := make([]quantile.Bucket, 0, len(bucketCounts))
+func cumulativeBuckets(bounds []float64, bucketCounts []uint64) []histBucket {
+	buckets := make([]histBucket, 0, len(bucketCounts))
 	var cum uint64
 	for i, c := range bucketCounts {
 		cum += c
@@ -544,7 +543,7 @@ func cumulativeBuckets(bounds []float64, bucketCounts []uint64) []quantile.Bucke
 		if i < len(bounds) {
 			upper = bounds[i]
 		}
-		buckets = append(buckets, quantile.Bucket{UpperBound: upper, CumulativeCount: float64(cum)})
+		buckets = append(buckets, histBucket{UpperBound: upper, CumulativeCount: float64(cum)})
 	}
 	return buckets
 }
