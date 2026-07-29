@@ -506,15 +506,15 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		}
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
-			return nil
+			return nil //nolint:nilerr // one unreadable sidecar must not abort the whole report
 		}
 		var o lockOwner
-		if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
-			return nil
+		if uerr := codec.Unmarshal(data, &o); uerr != nil || o.PID == 0 {
+			return nil //nolint:nilerr // a malformed sidecar is skipped, not fatal to the report
 		}
 		rel, rerr := filepath.Rel(dir, filepath.Dir(path))
 		if rerr != nil {
-			return nil
+			return nil //nolint:nilerr // an unrelatable path is skipped, not fatal to the report
 		}
 		project := filepath.ToSlash(rel)
 		if project == "." || project == "" {

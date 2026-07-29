@@ -98,16 +98,6 @@ func (m *Magus) ServeDaemon(ctx context.Context) error {
 	return m.daemon.Serve(ctx)
 }
 
-// rootMarkers lists every marker that can identify a workspace root when no stronger
-// signal exists; magus markers precede go.mod. This is the FALLBACK set, not the
-// primary rule - see FindRootWithLineage.
-var rootMarkers = []string{
-	"magusfiles",
-	"magusfile.buzz",
-	"magus.yaml",
-	"go.mod",
-}
-
 // workspaceMarkers END the upward walk: a directory carrying one IS the workspace root.
 // A workspace is the whole unit of work and there is exactly one per invocation, so
 // these are the markers that only ever appear at its top.
