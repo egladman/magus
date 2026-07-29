@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -460,5 +461,63 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 	stop()
 	if held := HeldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
 		t.Errorf("after the wait ended, waiters = %+v; want none", held[0].Waiters)
+	}
+}
+
+// TestWatchWorkspaceRootReleasesOnVanish pins the orphan case. A process whose
+// checkout is deleted keeps running and, because a flock lives exactly as long as its
+// holder, keeps every lock it took. Peers then wait forever on a holder that is never
+// coming back.
+func TestWatchWorkspaceRootReleasesOnVanish(t *testing.T) {
+	prev := rootWatchdogInterval
+	rootWatchdogInterval = 5 * time.Millisecond
+	t.Cleanup(func() { rootWatchdogInterval = prev })
+
+	root := filepath.Join(t.TempDir(), "tree")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	released := make(chan struct{})
+	var once sync.Once
+	stop := watchWorkspaceRoot(context.Background(), root, func() { once.Do(func() { close(released) }) })
+	defer stop()
+
+	// While the tree exists, the watchdog must keep its hands off.
+	select {
+	case <-released:
+		t.Fatal("released while the workspace root still existed")
+	case <-time.After(30 * time.Millisecond):
+	}
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-released:
+	case <-time.After(2 * time.Second):
+		t.Fatal("workspace root vanished but the locks were never released; this is the orphan that blocks every later run")
+	}
+}
+
+// TestWatchWorkspaceRootStops pins that stopping is what a normal run does, and that
+// it does not release afterwards.
+func TestWatchWorkspaceRootStops(t *testing.T) {
+	prev := rootWatchdogInterval
+	rootWatchdogInterval = 5 * time.Millisecond
+	t.Cleanup(func() { rootWatchdogInterval = prev })
+
+	root := t.TempDir()
+	var released atomic.Bool
+	stop := watchWorkspaceRoot(context.Background(), root, func() { released.Store(true) })
+	stop()
+	stop() // idempotent: a release path may stop twice
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if released.Load() {
+		t.Error("released after stop; a finished run must not have its locks touched")
 	}
 }

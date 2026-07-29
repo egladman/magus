@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -45,7 +46,61 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 		paths = append(paths, p.Path)
 	}
 	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), noWaitLocks())
-	return l.acquireAll(ctx, paths)
+	release, err := l.acquireAll(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
+	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, release)
+	return func() { stopWatchdog(); release() }, nil
+}
+
+// rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
+// still exists. Slow enough to be free, fast enough that a deleted tree does not
+// block peers for long.
+var rootWatchdogInterval = 30 * time.Second
+
+// watchWorkspaceRoot releases the run's locks if the workspace root disappears
+// underneath it, and returns a stop func.
+//
+// This is the orphan case, made harmless. A magus process keeps running when its
+// checkout is deleted - a worktree removed while a dev loop is still watching it -
+// and because a flock lives exactly as long as its holder, it goes on holding every
+// lock it took. Nothing notices, and every later run in that workspace simply waits,
+// with no indication that the holder is never coming back.
+//
+// It releases rather than exits: a lock exists to prevent concurrent mutation, and a
+// process whose tree is gone is not mutating anything, so continuing to hold is pure
+// harm to peers. Killing the process outright is the caller's decision, not the lock
+// layer's.
+func watchWorkspaceRoot(ctx context.Context, root string, release func()) func() {
+	if root == "" {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var once sync.Once
+	stop := func() { once.Do(func() { close(done) }) }
+	go func() {
+		t := time.NewTicker(rootWatchdogInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if _, err := os.Stat(root); err == nil {
+					continue
+				}
+				slog.Warn("magus: workspace root is gone; releasing its locks so other runs are not blocked behind a process whose tree no longer exists",
+					slog.String("root", root))
+				release()
+				stop()
+				return
+			}
+		}
+	}()
+	return stop
 }
 
 // A projectLocker hands out per-project advisory workspace locks that serialize
