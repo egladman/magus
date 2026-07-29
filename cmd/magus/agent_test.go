@@ -265,7 +265,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git clean -n"},
 		{command: "git commit -m 'x'", context: "magus-vcs"},
 		{command: "git add -A", context: "magus-vcs"},
-		{command: "go test ./...", context: "magus-run"},
+		// The advisory names an explicit ladder: top-level target, then a single
+		// spell op which still runs through magus. The old text ended with "if no
+		// target covers this work, proceed", which read as permission to reach
+		// straight for the raw binary.
+		{command: "go test ./...", context: "<spell>::<op>"},
 		{command: "npm test", context: "magus-run"},
 		{command: "npx prettier --check .", context: "magus-run"},
 		{command: "pytest tests/", context: "magus-run"},
