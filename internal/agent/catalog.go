@@ -21,7 +21,7 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 17
+const SkillVersion = 18
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -57,6 +57,7 @@ type skillSource struct {
 
 var skillSources = []skillSource{
 	{name: "magus-architecture", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture/SKILL.md"},
+	{name: "magus-buzz", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz/SKILL.md"},
 	{name: "magus-changes", description: "Summarize what merged, changed, or landed recently in a magus workspace. Use for questions such as \"what's been merged lately?\", \"what features landed recently?\", \"catch me up since last week\", or \"what changed in this monorepo?\" Ground each conclusion in VCS history plus magus project and knowledge-graph evidence; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
 	{name: "magus-docs", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs/SKILL.md"},
 	{name: "magus-memory", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
