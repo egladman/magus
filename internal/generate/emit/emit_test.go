@@ -107,3 +107,105 @@ func TestRegionRefusesAmbiguity(t *testing.T) {
 		})
 	}
 }
+
+// TestFileSurfacesAnUnreadablePath covers the read error that is neither nil nor
+// NotExist. The distinction matters: a missing file is the normal first-generation
+// case and must fall through to the write, while anything else means the path is
+// not a file this generator may own - and silently proceeding to WriteFile there
+// would report success for output that never landed.
+func TestFileSurfacesAnUnreadablePath(t *testing.T) {
+	dir := t.TempDir()
+	// A directory where a file is expected: ReadFile fails with neither nil nor
+	// NotExist, which is exactly the branch under test.
+	occupied := filepath.Join(dir, "occupied")
+	require.NoError(t, os.Mkdir(occupied, 0o755))
+
+	err := File(occupied, []byte("data"))
+	require.Error(t, err, "a directory at the target path must not be reported as a successful write")
+	assert.NotErrorIs(t, err, os.ErrNotExist, "NotExist is the create case, not this one")
+}
+
+// TestGoTemplateNamesTheFailingKey covers the template-execution branch. missingkey
+//=error is what turned a misspelled field from a silent "<no value>" in shipped
+// output into a failure, so the error must name the lookup that failed - otherwise
+// the report is "template failed" over a template with fifty fields.
+func TestGoTemplateNamesTheFailingKey(t *testing.T) {
+	tmpl := template.Must(template.New("x").Option("missingkey=error").
+		Parse("package p\n\nconst V = \"{{.Nope}}\"\n"))
+
+	path := filepath.Join(t.TempDir(), "out.go")
+	err := GoTemplate(path, tmpl, map[string]string{"Yep": "v"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Nope", "the error must name the missing key")
+	assert.NoFileExists(t, path, "a failed template must not leave a partial file")
+}
+
+// TestGoTemplateSurfacesAWriteFailure covers the branch after a SUCCESSFUL format:
+// the template rendered, gofmt accepted it, and only the write failed. Reported as
+// a template error it would send the reader to the template that was fine.
+func TestGoTemplateSurfacesAWriteFailure(t *testing.T) {
+	tmpl := template.Must(template.New("x").Parse("package p\n"))
+	// A path under a non-directory: formatting succeeds, writing cannot.
+	file := filepath.Join(t.TempDir(), "notadir")
+	require.NoError(t, os.WriteFile(file, []byte("x"), FileMode))
+
+	err := GoTemplate(filepath.Join(file, "out.go"), tmpl, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write", "a write failure must not read as a template failure")
+}
+
+// TestRegionIsIdempotent is the property the marker design rests on, and nothing
+// proved it: re-running a generator over its own output must be a no-op. If the
+// second pass differed, every generate run would dirty the file and the cache
+// would rebuild the world on a target that changed nothing.
+func TestRegionIsIdempotent(t *testing.T) {
+	m := CommentMarker("#", "subcommands")
+	src := "before\n" + m.Begin + "\nstale\n" + m.End + "\nafter\n"
+
+	once, err := Region(src, m, "run\ntest")
+	require.NoError(t, err)
+	twice, err := Region(once, m, "run\ntest")
+	require.NoError(t, err)
+	assert.Equal(t, once, twice, "a generator re-run over its own output must not change it")
+
+	// And it converges from any prior body, not only from its own: replacing a
+	// longer region with a shorter one must not leave a tail behind.
+	shorter, err := Region(once, m, "run")
+	require.NoError(t, err)
+	assert.NotContains(t, shorter, "test", "the previous body must be gone, not appended to")
+}
+
+// TestRegionTreatsAMarkerInAStringLiteralAsAMarker pins the known limitation
+// rather than pretending it does not exist. Region is line-based and matches by
+// substring, so a marker spelled inside a string literal in the target file IS
+// found and the "region" between it and the real end marker is replaced.
+//
+// This is left as-is deliberately. Every consumer is a generator writing a region
+// into an artifact it owns (four shell completion scripts), the markers carry a
+// magus-utils: prefix no unrelated line would spell by accident, and teaching
+// Region to lex Go and four shell dialects to avoid it would be far more machinery
+// than the hazard justifies. The test exists so the behavior is a documented
+// choice, and so anyone who later needs marker-in-string to be safe finds this
+// first instead of discovering it in a corrupted artifact.
+func TestRegionTreatsAMarkerInAStringLiteralAsAMarker(t *testing.T) {
+	m := CommentMarker("//", "list")
+	src := "package p\n\nconst doc = \"" + m.Begin + "\"\n" + m.End + "\ntail\n"
+
+	out, err := Region(src, m, "BODY")
+	require.NoError(t, err, "the quoted marker is matched, not skipped")
+	assert.Contains(t, out, "BODY")
+	assert.Contains(t, out, "const doc", "the marker line itself is preserved, quotes and all")
+}
+
+// TestRegionRefusesADuplicateEndMarker completes the ambiguity guard. A duplicated
+// BEGIN was already covered; a duplicated END is the more dangerous half, because
+// the first-wins reading would silently truncate everything between the two ends -
+// deleting hand-written content the generator does not own.
+func TestRegionRefusesADuplicateEndMarker(t *testing.T) {
+	m := CommentMarker("#", "list")
+	src := m.Begin + "\nbody\n" + m.End + "\nkeep me\n" + m.End + "\n"
+
+	_, err := Region(src, m, "new")
+	require.Error(t, err, "two end markers is ambiguous, and guessing would delete 'keep me'")
+	assert.Contains(t, err.Error(), "more than once")
+}
