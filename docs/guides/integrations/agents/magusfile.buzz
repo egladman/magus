@@ -1,0 +1,85 @@
+// magusfile.buzz for @magus/agents, the guard-hook templates at
+// docs/guides/integrations/agents. They live beside the guide that documents them
+// (../agents.md) rather than in a separate tree, so the page, the files it embeds, and the
+// config that invokes them are one directory instead of three places to keep in sync.
+//
+//   magus run lint docs/guides/integrations/agents   type-check (tsc) + biome
+//   magus run ci docs/guides/integrations/agents     lint
+//
+// Registered as its own project for one reason: the OpenCode plugin is real TypeScript that
+// ships to users, so it must be held to the same gates as the rest of the workspace instead
+// of being prose in a markdown file nobody type-checks. The shell templates are POSIX sh and
+// are exercised by the Go tests at the repo root (hookdocs_test.go), which assert that this
+// repository's own agent config invokes these files and that the guide embeds them verbatim.
+//
+// There is deliberately NO build target: nothing here is compiled. The shell templates are
+// copied into a host's hook config, and the plugin is loaded FROM SOURCE by OpenCode's own
+// Bun runtime. devDependencies are the two gates only.
+//
+// The docs SSG ignores this directory's non-markdown files - it renders only *.md - so these
+// templates never become pages, and this magusfile is invisible to it.
+
+import "magus";
+// fs guards the node_modules install; os shells out to pnpm for the two gates.
+import "fs";
+import "os";
+
+// magusfile binds this file's exported targets; bash adds shellcheck for the sh
+// templates; ts adds the TypeScript spell so the plugin is
+// symbol-capable (its `scip` op indexes it for the knowledge graph). ts is opaque - pnpm owns
+// the dependency graph - and does not run in ci, which uses the custom targets below.
+import "magus/spell/magusfile";
+import "magus/spell/bash";
+import "magus/spell/ts";
+
+magus\project({
+    "spells": [magusfile, bash, ts],
+    // Affected tracking is glob-based, not import-graph-based, so every input must be named to
+    // be watched: the templates themselves, and the config files that drive the gates.
+    "sources": ["magusfile.buzz", "*.ts", "*.sh", "codex-hooks.json",
+                "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json"],
+    "targets": {
+        // No declared outputs, so nothing to snapshot: the ts spell contributes a
+        // dist/** provided-glob this source-only project never fills, and a cacheable
+        // target with no matching output fails at snapshot time. libs/textsearch solves
+        // that by generating a MAGUS.md to act as the output; that fix is unavailable
+        // here, because a *.md file in a docs/ subtree becomes a rendered PAGE - the SSG
+        // walks every markdown file it finds. Skipping the cache is the honest answer for
+        // two fast gates over five files.
+        "lint": {"skip_cache": true},
+    },
+});
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
+
+// install restores the dev-only gate deps (typescript, biome, and the two type packages) with
+// pnpm, honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a
+// warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.
+fun install() > void {
+    if (!fs\isDir("node_modules")) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    }
+}
+
+// lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus
+// Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors
+// libs/textsearch's rules so the whole workspace writes TypeScript the same way).
+// os.exec raises on a non-zero exit, so either gate fails lint.
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    install();
+    os\exec("pnpm", ["run", "typecheck"], ".", {});
+    os\exec("pnpm", ["run", "biome"], ".", {});
+    // The shell templates are POSIX sh that users copy into their own hook config, so
+    // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
+    // bashisms that would break on a host whose /bin/sh is dash.
+    os\exec("shellcheck", ["--shell=sh", "--severity=style",
+                          "magus-guard-command.sh", "magus-guard-path.sh", "cursor-guard.sh"], ".", {});
+}
+
+// 'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to
+// build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root
+// (hookdocs_test.go runs them against real host events).
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
+}

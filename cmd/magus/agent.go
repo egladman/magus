@@ -420,6 +420,12 @@ var (
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
 	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
 	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
+	// Push, NOT commit. Committing in a half-finished state is ordinary and
+	// sometimes necessary; a gate there would fire constantly and be tuned out.
+	// Publishing is where the work stops being yours alone, so that is where the
+	// reminder earns its place - and it stays an advise, because a push can
+	// legitimately carry a work-in-progress branch.
+	guardPushRe = regexp.MustCompile(`\bgit\s+push\b`)
 	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
 	// whole-tree forms above already deny; this one is legitimate often enough
 	// that it only advises, but it is the shape of the most common wrong reflex
@@ -520,6 +526,8 @@ const (
 		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
 		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
 
+	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."
+
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// flags are the actionable part, and a weaker model needs the exact spelling.
 	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading."
@@ -544,6 +552,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyWholeTree("git restore .")}
 	case guardCleanRe.MatchString(command):
 		return bashGuardVerdict{Deny: denyWholeTree("git clean")}
+	case guardPushRe.MatchString(command):
+		return bashGuardVerdict{Context: pushGuardContext}
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext}
 	case guardScopedRevertRe.MatchString(command):
