@@ -420,3 +420,69 @@ fun probe() > int {
 	require.Error(t, err, "a label naming no enclosing loop cannot compile")
 	assert.Contains(t, err.Error(), "elsewhere")
 }
+
+func TestParity_BlockExpression(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want any
+	}{
+		{name: "straight out", body: `return from { out "my value"; };`, want: "my value"},
+		{
+			name: "out from either branch",
+			body: `
+    final flag = false;
+    return from {
+        if (flag) {
+            out "then";
+        } else {
+            out "else";
+        }
+    };`,
+			want: "else",
+		},
+		{
+			// The early out must skip the fallback, not fall through to it.
+			name: "early out beats the fallback out",
+			body: `
+    final flag = true;
+    return from {
+        if (flag) {
+            out "early";
+        }
+        out "fallback";
+    };`,
+			want: "early",
+		},
+		{name: "no out yields null", body: `return from { final unused = 1; };`, want: nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := tc.body
+			if body == "" {
+				body = tc.name
+			}
+			v := evalParity(t, "fun probe() > any {\n"+body+"\n}")
+			if tc.want == nil {
+				assert.True(t, v.IsNull(), "a block that never outs is null")
+				return
+			}
+			assert.Equal(t, tc.want, v.AsString(), "the block's value is the out that ran")
+		})
+	}
+}
+
+func TestParity_NestedBlockExpressionOutBindsInnermost(t *testing.T) {
+	// Each `out` leaves the block it sits in, so the inner block's value feeds
+	// the outer one rather than escaping past it.
+	v := evalParity(t, `
+fun probe() > str {
+    return from {
+        final inner = from {
+            out "in";
+        };
+        out "{inner}/out";
+    };
+}`)
+	assert.Equal(t, "in/out", v.AsString(), "out targets the innermost enclosing from block")
+}

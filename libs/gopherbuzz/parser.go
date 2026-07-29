@@ -24,6 +24,10 @@ type parser struct {
 	// it for gopherbuzz's embedded use (REPL/eval/magusfiles), where top-level
 	// statements are the whole point.
 	strict bool
+	// fromDepth counts the `from { ... }` block expressions currently open, which
+	// is what makes `out` a statement keyword inside one and an ordinary
+	// identifier everywhere else.
+	fromDepth int
 	// typeTextSkips are half-open token spans that skipType consumed but that
 	// readType must leave out of the annotation text it reconstructs (a function
 	// type's `!>` error set and `*>` yield type). Append-only for the parse.
@@ -221,6 +225,18 @@ func (p *parser) parseStmt() (ast.Node, error) {
 	if t.Kind == token.Ident && t.Val == "test" &&
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
+	}
+	// `out expr;` leaves the enclosing block expression. Contextual like `test`:
+	// outside a `from` block `out` stays an ordinary identifier, so the check is
+	// gated on one actually being open.
+	if t.Kind == token.Ident && t.Val == "out" && p.fromDepth > 0 {
+		p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.optSemicolon()
+		return &ast.OutStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Value: val}, nil
 	}
 	switch t.Kind {
 	case token.Namespace:
@@ -1095,6 +1111,19 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	return out, nil
 }
 
+// parseBlockExpr parses `from { stmts }`, a block used as an expression whose
+// value comes from an `out` statement inside it.
+func (p *parser) parseBlockExpr() (*ast.BlockExpr, error) {
+	t := p.advance() // `from`
+	p.fromDepth++
+	body, err := p.parseBlock()
+	p.fromDepth--
+	if err != nil {
+		return nil, err
+	}
+	return &ast.BlockExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body}, nil
+}
+
 // parseLoopLabel parses the optional `:name` a loop header may carry between its
 // clause and its body (`while (i < 100) :here { ... }`), which `break name` and
 // `continue name` then target.
@@ -1837,6 +1866,12 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 
 func (p *parser) parsePrimary() (ast.Node, error) {
 	t := p.peek()
+	// `from` is a contextual keyword like `test`: it opens a block expression
+	// only in the unambiguous `from {` shape, so a variable or field named
+	// `from` still parses everywhere else.
+	if t.Kind == token.Ident && t.Val == "from" && p.peekAt(1).Kind == token.LBrace {
+		return p.parseBlockExpr()
+	}
 	switch t.Kind {
 	case token.Dot:
 		// Inferred enum case: `.one` with no receiver. Unambiguous in primary
