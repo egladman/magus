@@ -599,7 +599,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  config         view or update magus configuration")
 	fmt.Fprintln(os.Stderr, "  server         manage the persistent daemon (start / stop / status; MCP starts with it)")
 	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
-	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
+	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (Buzz stdlib + every magus host module)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
 	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
 	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
