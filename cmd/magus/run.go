@@ -272,7 +272,15 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputTemplate:
+		return emitRunResult(ctx, m, opts, targetName, charms, targets)
+	}
+	return nil
 }
 
 // resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all.
@@ -463,4 +471,60 @@ func parseTarget(s string) (spell, target string) {
 
 type runConfig struct {
 	watchIgnores []types.IgnorePattern
+}
+
+// runArtifact is one file the run produced, with the classification `magus describe
+// file` would give it. Role rides along because "where did the build put it" and "is
+// this thing generated" are the two questions an agent asks in sequence, and
+// answering only the first leaves it to guess the second.
+type runArtifact struct {
+	Path string `json:"path"           yaml:"path"`
+	Glob string `json:"glob"           yaml:"glob"`
+	Role string `json:"role,omitempty" yaml:"role,omitempty"`
+}
+
+// runOutput is the structured result of `magus run <target>`.
+type runOutput struct {
+	Target    string        `json:"target"              yaml:"target"`
+	Charms    []string      `json:"charms,omitempty"    yaml:"charms,omitempty"`
+	DryRun    bool          `json:"dry_run"             yaml:"dry_run"`
+	Projects  []string      `json:"projects"            yaml:"projects"`
+	Count     int           `json:"count"               yaml:"count"`
+	Artifacts []runArtifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+}
+
+// emitRunResult renders what a run produced. It is deliberately NOT a second
+// progress stream: -o jsonl already streams events, and this answers the different
+// question of what exists on disk now that the run is done.
+//
+// A dry run reports no artifacts: nothing executed, so any file matching an output
+// glob is left over from a previous run and reporting it would claim this invocation
+// produced it.
+func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, targets []types.Target) error {
+	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun}
+	projects := m.ResolveProjects(targets)
+	for _, p := range projects {
+		out.Projects = append(out.Projects, p.Path)
+	}
+	out.Count = len(out.Projects)
+
+	if !out.DryRun {
+		artifacts, err := m.ResolveTargetOutputs(ctx, projects, target)
+		if err != nil {
+			return err
+		}
+		paths := make([]string, len(artifacts))
+		for i, a := range artifacts {
+			paths[i] = a.Path
+		}
+		roles := m.DescribeFiles(paths)
+		byPath := make(map[string]string, len(roles.Files))
+		for _, f := range roles.Files {
+			byPath[f.Path] = f.Role
+		}
+		for _, a := range artifacts {
+			out.Artifacts = append(out.Artifacts, runArtifact{Path: a.Path, Glob: a.Glob, Role: byPath[a.Path]})
+		}
+	}
+	return emitFormatted(opts, out)
 }

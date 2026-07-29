@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -15,6 +16,57 @@ import (
 // ResolveProjects resolves targets to project records; unmatched targets are silently dropped.
 func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 	return m.targetProjects(targets)
+}
+
+// TargetArtifact is one file a target actually produced: a declared output glob
+// expanded against the working tree. Glob is carried alongside Path because the
+// declaration is what makes the file a build artifact rather than an incidental
+// file, and a reader chasing an unexpected artifact needs to know which
+// ctx.outputs(...) claimed it.
+type TargetArtifact struct {
+	Path string // workspace-relative
+	Glob string // the declaration it matched
+}
+
+// ResolveTargetOutputs expands the output globs target declares for each project
+// into the files that exist on disk right now.
+//
+// It reads buildStep, not the project-wide union, so the answer is scoped to the
+// ONE target asked about - the same fold the cache keys and snapshots, so what this
+// reports and what the cache replays cannot disagree.
+//
+// This is the question an agent otherwise has to guess at: a build says it passed,
+// and where the artifact landed is left to be inferred from the target's name.
+func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Project, target string) ([]TargetArtifact, error) {
+	var found []TargetArtifact
+	for _, p := range projects {
+		if ctx.Err() != nil {
+			return found, ctx.Err()
+		}
+		fsys := os.DirFS(p.Dir)
+		for _, glob := range m.buildStep(p, target).Outputs {
+			matches, err := doublestar.Glob(fsys, glob)
+			if err != nil {
+				return found, fmt.Errorf("%s: expand %q: %w", p.Path, glob, err)
+			}
+			for _, rel := range matches {
+				abs := filepath.Join(p.Dir, rel)
+				// A glob can match a directory (dist/** matches dist itself); an
+				// artifact list is about files, and a directory entry would make
+				// the count disagree with what a consumer can open.
+				if fi, statErr := os.Stat(abs); statErr != nil || fi.IsDir() {
+					continue
+				}
+				wsRel, err := filepath.Rel(m.Root(), abs)
+				if err != nil {
+					continue
+				}
+				found = append(found, TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob})
+			}
+		}
+	}
+	slices.SortFunc(found, func(a, b TargetArtifact) int { return cmp.Compare(a.Path, b.Path) })
+	return slices.CompactFunc(found, func(a, b TargetArtifact) bool { return a.Path == b.Path }), nil
 }
 
 // CleanOutputs removes files matched by each project's declared Outputs globs.
