@@ -254,7 +254,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git checkout main"},
 		{command: "git checkout -b feat/x"},
 		{command: "git restore .", deny: true},
-		{command: "git restore cmd/magus/agent.go"},
+		// A path-scoped revert advises now: discarding a file because you did not
+		// hand-edit it is the most common wrong reflex about generated output.
+		{command: "git restore cmd/magus/agent.go", context: "magus-vcs"},
+		{command: "git checkout -- gen/", context: "Regenerated output"},
+		{command: "git checkout HEAD -- docs/gen", context: "Regenerated output"},
 		{command: "git clean -fd", deny: true},
 		{command: "git clean -n"},
 		{command: "git commit -m 'x'", context: "magus-vcs"},
@@ -264,6 +268,21 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "npx prettier --check .", context: "magus-run"},
 		{command: "pytest tests/", context: "magus-run"},
 		{command: "cargo build --release", context: "magus-run"},
+		{command: "gofmt -w x.go", context: "magus-run"},
+		{command: "golangci-lint run", context: "magus-run"},
+		{command: "buf generate", context: "magus-run"},
+		{command: "mockery", context: "magus-run"},
+		// Trimming magus's own output with the shell: magus has output flags, and
+		// a pipe discards exactly what the agent then has to guess at.
+		{command: "magus affected ci 2>&1 | tail -30", context: "--silent"},
+		{command: "/tmp/magus run test | head -5", context: "--silent"},
+		{command: "MAGUS_X=1 magus query foo | grep bar", context: "--silent"},
+		// magus must be the COMMAND, not a substring: these are paths and text.
+		{command: "grep -n x cmd/magus/agent_test.go | head"},
+		{command: "ls cmd/magus | wc -l"},
+		{command: "cat x | magus buzz -"},
+		// jq composes with -o json rather than fighting it.
+		{command: "magus graph export -o json | jq ."},
 		{command: "go version"},
 		{command: "magus run test"},
 		{command: "ls -la"},

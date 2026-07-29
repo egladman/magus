@@ -590,7 +590,10 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "-- svc/api (failed) --")
-	assert.Contains(t, out, "earlier line(s) omitted; full log: "+lp)
+	// Bounded AND diagnostic-focused: a plain tail of a test log is mostly
+	// successful lines, so silent mode runs the same excerpt filter the default
+	// display uses. The full-log path keeps everything it drops reachable.
+	assert.Contains(t, out, "showing likely diagnostics; full log: "+lp)
 	assert.Contains(t, out, fmt.Sprintf("line %d", maxFailTailLines+9)) // last line present
 	assert.NotContains(t, out, "line 0\n")                              // earliest line trimmed
 	// Failure log is retained in silent mode so the printed path resolves.

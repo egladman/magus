@@ -1101,15 +1101,21 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		}
 		switch {
 		case c.silent:
-			// Bound the dump to the log's tail and keep the full log so its path resolves.
+			// Bound the dump AND filter it: a plain tail of a test log is mostly
+			// successful lines, so the diagnostics that explain the failure scroll
+			// off the top exactly when they are the only thing wanted. Use the same
+			// diagnostic-focused excerpt the default display uses, and keep the
+			// full-log path so nothing is unreachable.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
-				tail, omitted := tailLines(data, maxFailTailLines)
+				excerpt, omitted := failureExcerpt(data, maxFailTailLines)
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
-					_, _ = fmt.Fprintf(os.Stderr, "... %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
+					_, _ = fmt.Fprintf(os.Stderr, "... %d line(s) omitted; showing likely diagnostics; full log: %s\n", omitted, logPath)
 				}
-				_, _ = io.WriteString(os.Stderr, ann.Quote(string(tail)))
-				_, _ = fmt.Fprintln(os.Stderr)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
+				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
+					_, _ = fmt.Fprintln(os.Stderr)
+				}
 			}
 		case collapse:
 			// The live view (status + indented stage lines) went to stderr while the
