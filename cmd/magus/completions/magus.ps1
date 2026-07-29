@@ -9,8 +9,8 @@ $__magus_scriptblock = {
     param($wordToComplete, $commandAst, $cursorPosition)
 
     $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail', 'affected',
-                   'insight', 'query', 'explain', 'path', 'graph', 'watch',
-                   'status', 'doctor', 'config', 'server', 'repl', 'completion', 'man',
+                   'insight', 'query', 'explain', 'path', 'refs', 'graph', 'watch',
+                   'status', 'doctor', 'config', 'memory', 'agent', 'server', 'repl', 'completion', 'man',
                    'init', 'self', 'version', 'clean', 'merge-driver', 'buzz', 'help'
     $verbs         = 'ls', 'build', 'test', 'lint', 'format', 'clean', 'generate', 'ci'
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
@@ -21,7 +21,7 @@ $__magus_scriptblock = {
     $selfSubs      = 'update'
     $shells        = 'bash', 'zsh', 'fish', 'powershell'
     $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout',
-                      '--shard', '--n-shards', '--no-flake-retry', '--race', '--step',
+                      '--shard', '--n-shards', '--no-volatility-retry', '--race', '--step',
                       '--no-default-charms'
     $affectedFlags = '--dry-run', '--base', '--stdin', '--null', '--graph', '--upstream',
                       '--depth', '--explain', '--plan', '--max-shards',

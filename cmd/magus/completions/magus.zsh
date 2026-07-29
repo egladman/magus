@@ -26,11 +26,13 @@ _magus() {
                 "query:search the knowledge graph and show a node's neighborhood"
                 'explain:show one knowledge-graph node\: edges, provenance, blast radius'
                 'path:show the shortest path between two knowledge-graph nodes'
+                'refs:list where an ingested code symbol is defined and referenced'
                 'graph:the graphs as objects\: deps, export, stats'
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'status:inspect the concurrency pool of a running parent magus'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
+                'memory:durable cross-session project memory'
                 'server:manage the persistent daemon (start / stop)'
                 'repl:open an interactive Buzz interpreter'
                 'completion:generate shell completion'
@@ -39,6 +41,7 @@ _magus() {
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
                 'clean:remove declared Outputs (regenerable build artifacts)'
+                'agent:install the knowledge-graph agent skills into a repo'
                 'merge-driver:VCS merge driver for generated outputs'
                 'buzz:run a Buzz script (stdlib only; no host bindings)'
                 'help:show this message'
@@ -48,7 +51,7 @@ _magus() {
         args)
             case $words[1] in
                 run)
-                    local -a run_flags=(--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-flake-retry --race --step --no-default-charms)
+                    local -a run_flags=(--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-volatility-retry --race --step --no-default-charms)
                     if [[ $words[CURRENT] == -* ]]; then
                         _describe 'flag' run_flags
                     elif (( CURRENT == 2 )); then

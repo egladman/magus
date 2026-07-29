@@ -15,10 +15,13 @@ function __magus_subcommands
         query        'search the knowledge graph and show a node\'s neighborhood' \
         explain      'show one knowledge-graph node: edges, provenance, blast radius' \
         path         'show the shortest path between two knowledge-graph nodes' \
+        refs         'list where an ingested code symbol is defined and referenced' \
         graph        'the graphs as objects: deps, export, stats' \
         watch        'emit changed file paths (pipe into affected --stdin)' \
         status       'inspect the concurrency pool of a running parent magus' \
         doctor       'validate the workspace' \
+        memory       'durable cross-session project memory' \
+        agent        'install the knowledge-graph agent skills into a repo' \
         config       'view or update magus configuration' \
         server       'manage the persistent daemon (start / stop)' \
         repl         'open an interactive Buzz interpreter' \
