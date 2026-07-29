@@ -11,10 +11,6 @@
 import { relTime, tsMillis, type DashboardState, type LockView } from "../state";
 import { Card, h, type Tile } from "./card";
 
-// STALE_AFTER_MS is when a held lock stops reading as normal work. Well past any honest build, so a
-// busy peer is never flagged; past it, "still building" stops being the likely explanation.
-const STALE_AFTER_MS = 10 * 60 * 1000;
-
 export function locksTile(): Tile {
   const card = new Card("locks", "Workspace locks", {
     term: "Lock",
@@ -43,13 +39,22 @@ export function locksTile(): Tile {
       // The holder's directory is what settles an ambiguous case: a path that no longer
       // exists means the holder outlived its worktree and will never release on its own.
       if (l.dir) detail.push(l.dir);
+      // Surfaced next to the holder because a lock with nobody waiting costs nothing;
+      // the count is what turns "held" into "blocking".
+      if (l.waiters.length) {
+        detail.push(l.waiters.length + (l.waiters.length === 1 ? " waiting" : " waiting"));
+      }
       meta.textContent = detail.join(" - ");
 
       // Marks the row rather than the card: one abandoned holder among several busy ones
       // should stand out without recolouring the whole tile.
       const tip: string[] = [];
       if (l.command) tip.push(l.command);
-      if (l.acquireTime && Date.now() - tsMillis(l.acquireTime) > STALE_AFTER_MS) {
+      // The threshold comes from the daemon, not from a constant here: it was decided
+      // in two places once, and a CLI warning sat beside a dashboard row styled healthy.
+      const staleAfterMs = l.staleAfterSeconds * 1000;
+      const heldMs = l.acquireTime ? Date.now() - tsMillis(l.acquireTime) : 0;
+      if (staleAfterMs > 0 && heldMs > staleAfterMs) {
         li.dataset.stale = "true";
         tip.push("Held long enough that the holder may be abandoned rather than busy.");
       }

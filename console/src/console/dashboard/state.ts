@@ -144,12 +144,22 @@ export interface ServiceView {
 // The value is the holder: an OS file lock carries no identity, and a lock lives
 // exactly as long as its holder, so one held by a process nobody remembers starting
 // blocks every other run silently. Age is what separates the two cases.
+export interface LockWaiterView {
+  pid: number;
+  command: string;
+  waitTime?: Timestamp;
+}
 export interface LockView {
   project: string;
   pid: number;
   command: string;
   dir: string;
   acquireTime?: Timestamp;
+  // Supplied by the daemon so this renderer cannot drift from the CLI's judgement.
+  staleAfterSeconds: number;
+  // Who is stalled behind this holder. A holder alone says who is working; this says
+  // who is paying for it, which is the half a reader of a stuck queue wants.
+  waiters: LockWaiterView[];
 }
 export interface ConfigView {
   defaultCharms: string[];
@@ -288,6 +298,12 @@ export function mapStatus(st: Status): StatusView {
       command: l.command || "",
       dir: l.dir || "",
       acquireTime: l.acquireTime,
+      staleAfterSeconds: l.staleAfterSeconds || 0,
+      waiters: (l.waiters || []).map((w) => ({
+        pid: w.pid || 0,
+        command: w.command || "",
+        waitTime: w.waitTime,
+      })),
     })),
     magusVersion: st.build?.version || "",
     daemonVersion: (pool && pool.daemonVersion) || "",

@@ -270,6 +270,15 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		}
 	}
 
+	// Populated before the format switch, not inside the text branch: an agent reading
+	// -o json is the caller that needs this most, and a flag that silently does nothing
+	// for the machine-readable formats is worse than no flag.
+	if withVersions {
+		for i := range out.Spells {
+			out.Spells[i].Versions = probeSpellVersions(ctx, out.Spells[i].Name, root)
+		}
+	}
+
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
@@ -298,9 +307,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		if t.Opaque {
 			fmt.Printf("    opaque: true\n")
 		}
-		if withVersions {
-			printSpellVersions(ctx, t.Name, root)
-		}
+		printSpellVersions(t.Versions)
 	}
 	return nil
 }
@@ -318,28 +325,48 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 // Never cached. A probe's whole job is to observe what is installed right now, and a
 // cached probe's failure mode is a wrong cache HIT, which trades away the guarantee
 // the probe exists to provide.
-func printSpellVersions(ctx context.Context, name, dir string) {
+func probeSpellVersions(ctx context.Context, name, dir string) []types.SpellVersion {
 	sp, ok := project.DefaultSpellRegistry().Lookup(name)
 	if !ok || !sp.HasVersionProbe() {
-		return
+		return nil
 	}
-	fmt.Printf("    versions (probed just now, never cached):\n")
+	var out []types.SpellVersion
+	// The unnamed primary probe keeps its original spell:version key spelling;
+	// renaming it would rewrite every key in every workspace.
 	if v, err := sp.ProbeVersion(ctx, dir); err != nil {
-		fmt.Printf("      %-16s probe failed: %v\n", name, err)
+		out = append(out, types.SpellVersion{Tool: name, Error: err.Error()})
 	} else if v != "" {
-		fmt.Printf("      %-16s %s\n", name, v)
-		fmt.Printf("      %-16s key: spell:version=%s\n", "", v)
+		out = append(out, types.SpellVersion{Tool: name, Version: v, CacheKey: "spell:version=" + v})
 	}
 	for _, tool := range sp.VersionProbeNames() {
 		v, err := sp.ProbeVersionOf(ctx, tool, dir)
 		switch {
 		case err != nil:
-			fmt.Printf("      %-16s probe failed: %v\n", tool, err)
+			out = append(out, types.SpellVersion{Tool: tool, Error: err.Error()})
 		case v == "":
-			fmt.Printf("      %-16s (no version reported)\n", tool)
+			out = append(out, types.SpellVersion{Tool: tool})
 		default:
-			fmt.Printf("      %-16s %s\n", tool, v)
-			fmt.Printf("      %-16s key: spell:%s:version=%s\n", "", tool, v)
+			out = append(out, types.SpellVersion{Tool: tool, Version: v, CacheKey: "spell:" + tool + ":version=" + v})
+		}
+	}
+	return out
+}
+
+// printSpellVersions renders probe results for the text formats.
+func printSpellVersions(vs []types.SpellVersion) {
+	if len(vs) == 0 {
+		return
+	}
+	fmt.Printf("    versions (probed just now, never cached):\n")
+	for _, v := range vs {
+		switch {
+		case v.Error != "":
+			fmt.Printf("      %-16s probe failed: %s\n", v.Tool, v.Error)
+		case v.Version == "":
+			fmt.Printf("      %-16s (no version reported)\n", v.Tool)
+		default:
+			fmt.Printf("      %-16s %s\n", v.Tool, v.Version)
+			fmt.Printf("      %-16s key: %s\n", "", v.CacheKey)
 		}
 	}
 }

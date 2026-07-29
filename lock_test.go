@@ -359,18 +359,18 @@ func TestOrphanHintEscalates(t *testing.T) {
 	if got := orphanHint(5*time.Second, "pid 1"); got != "" {
 		t.Errorf("orphanHint(5s) = %q, want empty; a short contention must not cry wolf", got)
 	}
-	if got := orphanHint(lockOrphanHint-time.Second, "pid 1"); got != "" {
+	if got := orphanHint(LockStaleAfter-time.Second, "pid 1"); got != "" {
 		t.Errorf("orphanHint(just under threshold) = %q, want empty", got)
 	}
 
-	hint := orphanHint(lockOrphanHint+time.Second, "pid 71557 (magus run serve)")
+	hint := orphanHint(LockStaleAfter+time.Second, "pid 71557 (magus run serve)")
 	for _, want := range []string{"may be abandoned", "pid 71557", "worktree"} {
 		if !strings.Contains(hint, want) {
 			t.Errorf("orphanHint past threshold = %q, want it to contain %q", hint, want)
 		}
 	}
 
-	if got := orphanHint(lockOrphanHint+time.Second, ""); !strings.Contains(got, "the holder") {
+	if got := orphanHint(LockStaleAfter+time.Second, ""); !strings.Contains(got, "the holder") {
 		t.Errorf("orphanHint with unreadable sidecar = %q, want it to escalate without a name", got)
 	}
 }

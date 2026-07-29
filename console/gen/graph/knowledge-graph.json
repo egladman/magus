@@ -19121,7 +19121,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "oute4e7e007",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19165,7 +19167,9 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out7ac3176a",
+        "last_run_ok": "false"
       }
     },
     {
@@ -19208,7 +19212,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outfb820c3b",
+        "last_output_ref": "outa231da0d",
         "last_run_ok": "true"
       }
     },
@@ -19481,7 +19485,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out48089dae",
+        "last_output_ref": "out01fbec3f",
         "last_run_ok": "true"
       }
     },
@@ -19503,7 +19507,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out2c940ea9",
+        "last_output_ref": "oute018142f",
         "last_run_ok": "true"
       }
     },
@@ -19980,7 +19984,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out8f7af199",
+        "last_output_ref": "out7ca7a511",
         "last_run_ok": "true"
       }
     },
@@ -19992,7 +19996,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outcebded2f",
+        "last_output_ref": "oute6c95180",
         "last_run_ok": "true"
       }
     },
@@ -20003,7 +20007,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outfca6821d",
+        "last_output_ref": "out79bfc3aa",
         "last_run_ok": "true"
       }
     },

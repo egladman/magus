@@ -155,6 +155,10 @@ type StatusLock struct {
 	PID     int    `json:"pid,omitempty" yaml:"pid,omitempty"`
 	Command string `json:"command,omitempty" yaml:"command,omitempty"`
 	Dir     string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	// StaleAfterSeconds is the threshold at which this holder should be read as
+	// possibly abandoned rather than busy. Carried on the wire so every renderer
+	// shares one judgement instead of each picking its own.
+	StaleAfterSeconds int `json:"stale_after_seconds,omitempty" yaml:"stale_after_seconds,omitempty"`
 	// Waiters are the processes blocked on this lock right now. Empty is the common
 	// case; a non-empty list is the other half of the picture, because a holder alone
 	// says who is working and a waiter list says who is stalled because of it.

@@ -456,10 +456,14 @@ func (l *projectLocker) describeOwner(projectPath string) string {
 	return desc
 }
 
-// lockOrphanHint is how long a wait runs before the message stops reassuring and
-// starts suggesting the holder may be abandoned. Well past any honest build, so a
-// normal contention never sees it.
-var lockOrphanHint = 2 * time.Minute
+// LockStaleAfter is how long a lock is held, or a wait runs, before "busy" stops
+// being the likely explanation and "abandoned" starts.
+//
+// Exported because it is a JUDGEMENT the whole product has to agree on. It was
+// previously decided twice - two minutes here and ten in the console tile - which put
+// a CLI warning that a holder "may be abandoned" beside a dashboard row still styled
+// as perfectly healthy. One threshold, one place; the console reads it off the wire.
+const LockStaleAfter = 10 * time.Minute
 
 // orphanHint returns the escalated advice for a wait that has gone on too long, or
 // "" while the wait is still plausibly normal.
@@ -469,7 +473,7 @@ var lockOrphanHint = 2 * time.Minute
 // no longer a busy peer but a holder nobody knows is running, and the message says
 // so along with where to look.
 func orphanHint(elapsed time.Duration, owner string) string {
-	if elapsed < lockOrphanHint {
+	if elapsed < LockStaleAfter {
 		return ""
 	}
 	where := "the holder"
@@ -554,7 +558,10 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		if !lockIsHeld(strings.TrimSuffix(path, ".owner")) {
 			return nil
 		}
-		lock := types.StatusLock{Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir}
+		lock := types.StatusLock{
+			Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir,
+			StaleAfterSeconds: int(LockStaleAfter / time.Second),
+		}
 		lock.Waiters = readWaiters(filepath.Dir(path))
 		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
 			lock.AcquireTime = started
