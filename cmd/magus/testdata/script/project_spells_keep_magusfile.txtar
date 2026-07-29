@@ -1,0 +1,48 @@
+# Declaring spells must not disable the project's OWN targets.
+#
+# magus.project's "spells" list used to REPLACE the default binding, and the
+# default was the magusfile spell - the one that dispatches a magusfile's exported
+# targets. So `"spells": [acme]` silently dropped it: `magus run <target>` resolved
+# the name against the bound spells, found no op, treated the miss as a fan-out
+# skip, and reported [pass] with exit 0 having executed nothing.
+#
+# It is the worst shape a failure can take - a green pipeline that did no work -
+# and it is invisible, because dispatch has nothing to complain about. This repo's
+# own proto project (spells: [buf]) had three no-op targets that way, including the
+# ci anchor `magus affected ci` gates on.
+#
+# The magusfile spell is now bound whether or not it is listed: it is not a
+# language adapter you opt into like go or buf, it is what makes the file you are
+# writing runnable at all.
+
+# A target in a project that declares ONLY a tool spell still runs its own body.
+exec magus run check
+exec cat BODY_RAN
+stdout 'yes'
+
+# And still reaches the tool spell's op.
+exists MARKER
+
+# The declared spell stays PRIMARY, so labels and the graph are unchanged: the
+# implicit binding is appended, never prepended.
+exec magus ls
+stdout 'spell: acme'
+
+-- magus.yaml --
+concurrency: 4
+-- magusfile.buzz --
+import "magus";
+import "fs";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme], "targets": {"check": {"skip_cache": true}} });
+export fun check(ctx: magus\Context, args: [str]) > void {
+    fs\writeFile("BODY_RAN", "yes");
+    acme["lint"]();
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "touch", args = ["MARKER"]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
