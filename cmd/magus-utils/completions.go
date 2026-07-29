@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/internal/emit"
+	"github.com/egladman/magus/internal/generate/emit"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/egladman/magus/internal/godecl"
+	"github.com/egladman/magus/internal/generate/godecl"
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in

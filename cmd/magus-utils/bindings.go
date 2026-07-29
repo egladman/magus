@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/host"
-	"github.com/egladman/magus/internal/emit"
+	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/std"
 )
 

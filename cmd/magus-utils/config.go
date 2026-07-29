@@ -14,7 +14,7 @@ import (
 	"text/template"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/emit"
+	"github.com/egladman/magus/internal/generate/emit"
 )
 
 func runConfig(args []string) error {

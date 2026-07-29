@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/emit"
+	"github.com/egladman/magus/internal/generate/emit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )

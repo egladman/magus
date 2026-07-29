@@ -1,7 +1,7 @@
 // Package godecl reads declarations out of Go source, for the generators whose
 // source of truth is a Go file.
 //
-// It is the reading half of the generator pipeline; [github.com/egladman/magus/internal/emit]
+// It is the reading half of the generator pipeline; [github.com/egladman/magus/internal/generate/emit]
 // is the writing half. Only the GENERIC readers live here - a struct's tags, a doc
 // line, a slice-of-struct literal, a file's flag bindings. Domain walkers that know
 // what the declaration MEANS (config's flag/env/yaml derivation, for one) stay beside

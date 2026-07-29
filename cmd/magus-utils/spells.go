@@ -20,7 +20,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/internal/emit"
+	"github.com/egladman/magus/internal/generate/emit"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz"
 )
