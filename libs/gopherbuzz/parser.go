@@ -24,6 +24,10 @@ type parser struct {
 	// it for gopherbuzz's embedded use (REPL/eval/magusfiles), where top-level
 	// statements are the whole point.
 	strict bool
+	// typeTextSkips are half-open token spans that skipType consumed but that
+	// readType must leave out of the annotation text it reconstructs (a function
+	// type's `!>` error set and `*>` yield type). Append-only for the parse.
+	typeTextSkips [][2]int
 }
 
 func newParser(tokens []token.Token) *parser {
@@ -276,12 +280,14 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		return &ast.ExprStmt{Pos: ast.NodePos(expr), Expr: expr}, nil
 	case token.Break:
 		p.advance()
+		label := p.parseLoopTargetLabel()
 		p.optSemicolon()
-		return &ast.BreakStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
+		return &ast.BreakStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Label: label}, nil
 	case token.Continue:
 		p.advance()
+		label := p.parseLoopTargetLabel()
 		p.optSemicolon()
-		return &ast.ContinueStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
+		return &ast.ContinueStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Label: label}, nil
 	case token.Object:
 		return p.parseObjectDecl()
 	case token.Enum:
@@ -476,6 +482,20 @@ func (p *parser) skipType() error {
 				return err
 			}
 		}
+		// A function TYPE carries the same error-set and yield-type suffixes a
+		// declaration does: `fn: fun (v: int) > int !> str` and
+		// `fn: fun () > int *> int?` both appear in parameter position upstream.
+		// Neither is part of the type's identity - a thrown error set and a yield
+		// type never affect assignability - so the span is recorded for readType
+		// to drop rather than folded into the annotation text.
+		for p.check(token.ErrArrow) || p.check(token.YieldArrow) {
+			from := p.pos
+			p.advance()
+			if err := p.skipType(); err != nil {
+				return err
+			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+		}
 		if p.check(token.Question) {
 			p.advance()
 		}
@@ -499,9 +519,23 @@ func (p *parser) readType() (string, error) {
 func (p *parser) joinTokens(from, to int) string {
 	var sb strings.Builder
 	for i := from; i < to; i++ {
+		if p.inTypeTextSkip(i) {
+			continue
+		}
 		sb.WriteString(tokenText(p.tokens[i]))
 	}
 	return sb.String()
+}
+
+// inTypeTextSkip reports whether token i falls in a span skipType consumed but
+// deliberately kept out of the reconstructed annotation text.
+func (p *parser) inTypeTextSkip(i int) bool {
+	for _, span := range p.typeTextSkips {
+		if i >= span[0] && i < span[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // tokenText returns the source text for a single token.
@@ -715,35 +749,43 @@ func (p *parser) parseTryCatch() (*ast.TryStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.eat(token.Catch); err != nil {
-		return nil, err
-	}
-	// Catch-all form `catch { ... }` (upstream Buzz): no binding. The error is
-	// still pushed by the VM, so bind it to a throwaway "_" slot the body ignores.
-	errName := "_"
-	if p.check(token.LParen) {
-		p.advance()
-		nameTok, err := p.eatBindingIdent()
-		if err != nil {
-			return nil, err
-		}
-		errName = nameTok.Val
-		// Skip optional type annotation: catch (e: Type)
-		if p.check(token.Colon) {
+	out := &ast.TryStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body}
+	// Upstream allows several catch clauses, each narrowing on the error's type,
+	// with an untyped one acting as the catch-all. At least one is required.
+	for p.check(token.Catch) {
+		ct := p.advance()
+		clause := ast.CatchClause{Pos: ast.Pos{Line: ct.Line, Col: ct.Col}}
+		// Catch-all form `catch { ... }` (upstream Buzz): no binding. The error is
+		// still pushed by the VM, so bind it to a throwaway "_" slot the body ignores.
+		clause.ErrName = "_"
+		if p.check(token.LParen) {
 			p.advance()
-			if err := p.skipType(); err != nil {
+			nameTok, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			clause.ErrName = nameTok.Val
+			if p.check(token.Colon) {
+				p.advance()
+				if clause.TypeName, err = p.readType(); err != nil {
+					return nil, err
+				}
+			}
+			if _, err := p.eat(token.RParen); err != nil {
 				return nil, err
 			}
 		}
-		if _, err := p.eat(token.RParen); err != nil {
+		catch, err := p.parseBlock()
+		if err != nil {
 			return nil, err
 		}
+		clause.Body = catch
+		out.Catches = append(out.Catches, clause)
 	}
-	catch, err := p.parseBlock()
-	if err != nil {
-		return nil, err
+	if len(out.Catches) == 0 {
+		return nil, fmt.Errorf("buzz: line %d:%d: try requires at least one catch clause", t.Line, t.Col)
 	}
-	return &ast.TryStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body, ErrName: errName, Catch: catch}, nil
+	return out, nil
 }
 
 func (p *parser) parseThrow() (*ast.ThrowStmt, error) {
@@ -788,11 +830,15 @@ func (p *parser) parseWhile() (*ast.WhileStmt, error) {
 	if err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.WhileStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Body: body}, nil
+	return &ast.WhileStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Body: body, Label: label}, nil
 }
 
 func (p *parser) parseForLoop() (*ast.ForStmt, error) {
@@ -839,6 +885,11 @@ func (p *parser) parseForLoop() (*ast.ForStmt, error) {
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
+	out.Label = label
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -1031,12 +1082,42 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
+	out.Label = label
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
 	out.Body = body
 	return out, nil
+}
+
+// parseLoopLabel parses the optional `:name` a loop header may carry between its
+// clause and its body (`while (i < 100) :here { ... }`), which `break name` and
+// `continue name` then target.
+func (p *parser) parseLoopLabel() (string, error) {
+	if !p.check(token.Colon) {
+		return "", nil
+	}
+	p.advance()
+	nameTok, err := p.eatIdent()
+	if err != nil {
+		return "", err
+	}
+	return nameTok.Val, nil
+}
+
+// parseLoopTargetLabel parses the optional loop name after `break`/`continue`.
+// Upstream writes the target bare (`break here;`), without the declaration's
+// colon.
+func (p *parser) parseLoopTargetLabel() string {
+	if !p.check(token.Ident) {
+		return ""
+	}
+	return p.advance().Val
 }
 
 // parseParenCond parses a parenthesized condition: ( expr ).

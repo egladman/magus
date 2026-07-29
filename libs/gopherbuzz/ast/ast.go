@@ -79,11 +79,12 @@ type IfStmt struct {
 	BindName string
 }
 
-// WhileStmt: while (cond) body
+// WhileStmt: while (cond) body, optionally labeled `while (cond) :name body`.
 type WhileStmt struct {
 	Pos
-	Cond Node
-	Body *BlockStmt
+	Cond  Node
+	Body  *BlockStmt
+	Label string // "" when unlabeled
 }
 
 // ForStmt: for (init; cond; post) body. Cond may be nil, and Init/Post may be
@@ -92,10 +93,11 @@ type WhileStmt struct {
 // + 1, j = j - 1)`); they share the loop's scope, so they are not a BlockStmt.
 type ForStmt struct {
 	Pos
-	Init []Node
-	Cond Node
-	Post []Node
-	Body *BlockStmt
+	Init  []Node
+	Cond  Node
+	Post  []Node
+	Body  *BlockStmt
+	Label string // "" when unlabeled
 }
 
 // ForEachStmt: foreach (val in iter) or foreach (key, val in iter)
@@ -105,13 +107,22 @@ type ForEachStmt struct {
 	ValName string
 	Iter    Node
 	Body    *BlockStmt
+	Label   string // "" when unlabeled
 }
 
-// BreakStmt: break;
-type BreakStmt struct{ Pos }
+// BreakStmt: break; or `break label;`, which exits the named enclosing loop
+// rather than the innermost one.
+type BreakStmt struct {
+	Pos
+	Label string // "" targets the innermost loop
+}
 
-// ContinueStmt: continue;
-type ContinueStmt struct{ Pos }
+// ContinueStmt: continue; or `continue label;`, which resumes the named
+// enclosing loop rather than the innermost one.
+type ContinueStmt struct {
+	Pos
+	Label string // "" targets the innermost loop
+}
 
 // FunDecl: fun name(params) rettype { body } — a named function statement/method.
 type FunDecl struct {
@@ -179,7 +190,20 @@ type EnumDecl struct {
 	Values []Node
 }
 
+// OutStmt: out expr; — leaves the enclosing block expression with expr's value.
+type OutStmt struct {
+	Pos
+	Value Node
+}
+
 // ---- expressions ----
+
+// BlockExpr: from { stmts } — a block used as an expression. Its value is the
+// one an `out` statement inside it produces, or null if none runs.
+type BlockExpr struct {
+	Pos
+	Body *BlockStmt
+}
 
 // BinaryExpr: left op right
 type BinaryExpr struct {
@@ -387,12 +411,23 @@ type CatchExpr struct {
 	Default Node
 }
 
-// TryStmt: try { body } catch (name) { handler }
+// TryStmt: try { body } followed by one or more catch clauses.
 type TryStmt struct {
 	Pos
 	Body    *BlockStmt
-	ErrName string // catch binding name
-	Catch   *BlockStmt
+	Catches []CatchClause
+}
+
+// CatchClause is one `catch (name: Type) { ... }` arm. Clauses are tried in
+// source order and the first whose TypeName matches the thrown value runs; an
+// error no clause matches is rethrown to the enclosing handler.
+type CatchClause struct {
+	Pos
+	// ErrName is the binding name, "_" for the bindingless `catch { }` form.
+	ErrName string
+	// TypeName is the clause's declared error type; "" matches any error.
+	TypeName string
+	Body     *BlockStmt
 }
 
 // ThrowStmt: throw expr;

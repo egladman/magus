@@ -14,7 +14,7 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**34 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+**38 of 83** upstream behavior tests pass, measured against `UpstreamRef`
 (`0.5.0-251-ged42f47`) on 2026-07-28.
 
 The baseline when this record started was 12; `is` grammar, typed for-init, and
@@ -22,8 +22,9 @@ the bitwise family, the inferred enum case, char literals plus `as!`, and string
 iteration/subscripting, the iterator protocol, decimal string escapes, ordered
 JSON encoding, static object fields, generics-as-erasure, multi-clause `for`,
 nullable declarations without an initializer, object-literal field punning,
-`> void` arrow bodies, `enum<T>` backing types, optional chaining, and default
-argument values have banked twenty-two since. Measure against the PINNED commit,
+`> void` arrow bodies, `enum<T>` backing types, optional chaining, default
+argument values, `!>`/`*>` inside a function TYPE, multiple typed catch clauses,
+and labeled loops have banked twenty-six since. Measure against the PINNED commit,
 not a local `main` checkout: a newer checkout has files that do not exist at the
 pin, which is how an earlier hand-count reached a wrong 13-of-84.
 
@@ -46,9 +47,9 @@ unwrap `if (x -> y)`, field punning), enums (`enum<str>`/`enum<int>` backing
 types and explicit case values), namespaces and imports, optionals with `??`,
 `as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
 initializer, default argument values, error sets on declarations plus
-`try`/`catch`, fibers with `resolve`, ranges, string interpolation, pattern
-literals, `zdef` FFI, closures, generics as erasure, and the collection/loop
-core (including multi-clause `for`). Two deliberate supersets: the contextual
+`try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
+interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, and
+the collection/loop core (multi-clause `for`, labeled loops). Two deliberate supersets: the contextual
 `test` keyword (below) and named-argument labels.
 
 ### What does not, ranked by upstream tests blocked
@@ -58,14 +59,12 @@ core (including multi-clause `for`). Two deliberate supersets: the contextual
 | Type-value literal `<T>` | 5 | `typeof x == <mut [int]>` |
 | Inferred enum case where a type is declared | 3 | `hash(.Md5, data: s)` |
 | Generic OBJECT declarations `object F::<T>` | 2 | `object Payload::<K, V> { … }` |
-| Labeled loops | 2 | `while (true) :outer { break outer; }` |
-| Multiple/typed `catch` | 2 | `catch (e: str) {} catch (e: Err) {}` |
+| Block expressions `from { … out v; }` | 2 | `final v = from { out "x"; };` |
 | Raw identifiers `@"..."` | 2 | `tuple.@"0"` |
 | Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
-| `!>`/`*>` inside a parameter's function type | 2 | `fn: fun () > int *> int?` |
 | `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
 
-Plus a long tail of single-test gaps (block expressions, selective imports,
+Plus a long tail of single-test gaps (selective imports,
 inline `catch void`, if-expressions, `match`, anonymous object TYPES, nested
 backtick interpolation, assignment as an arrow-lambda body). Two remaining
 differences are deliberate, not pending:

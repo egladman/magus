@@ -171,7 +171,9 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Cond, inFunc, keep)
 	case *ast.TryStmt:
 		collectFuncRefs(v.Body, inFunc, keep)
-		collectFuncRefs(v.Catch, inFunc, keep)
+		for _, cl := range v.Catches {
+			collectFuncRefs(cl.Body, inFunc, keep)
+		}
 	case *ast.ThrowStmt:
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.FunDecl:
@@ -251,6 +253,7 @@ type loopInfo struct {
 	continuePatch  []int
 	continueTarget int
 	isForeach      bool
+	label          string // "" when the loop header declared no `:name`
 }
 
 type localVar struct {
@@ -639,8 +642,38 @@ func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
 	return nil
 }
 
-func (c *compiler) pushLoop(continueTarget int, isForeach bool) {
-	c.loops = append(c.loops, loopInfo{continueTarget: continueTarget, isForeach: isForeach})
+func (c *compiler) pushLoop(continueTarget int, isForeach bool, label string) {
+	c.loops = append(c.loops, loopInfo{continueTarget: continueTarget, isForeach: isForeach, label: label})
+}
+
+// targetLoop resolves the loop a break/continue names: the innermost one for an
+// empty label, else the nearest enclosing loop carrying that label. It returns
+// the loop's index in c.loops so the caller can also see the loops nested inside
+// it, whose iterator state has to come off the stack on the way out.
+func (c *compiler) targetLoop(label string) int {
+	if len(c.loops) == 0 {
+		return -1
+	}
+	if label == "" {
+		return len(c.loops) - 1
+	}
+	for i := len(c.loops) - 1; i >= 0; i-- {
+		if c.loops[i].label == label {
+			return i
+		}
+	}
+	return -1
+}
+
+// popIterStates emits one OpPop per foreach in c.loops[from:to], discarding the
+// iterator state each left on the stack. Jumping out of a foreach without this
+// strands its state and desynchronizes every later stack offset.
+func (c *compiler) popIterStates(from, to int) {
+	for i := from; i < to; i++ {
+		if c.loops[i].isForeach {
+			c.chunk.Emit(vmpackage.OpPop, 0, 0)
+		}
+	}
 }
 
 func (c *compiler) popLoop() loopInfo {
@@ -662,6 +695,15 @@ func (c *compiler) patchBreaks(li loopInfo) {
 	for _, idx := range li.breakPatch {
 		c.chunk.Code[idx].A = end
 	}
+}
+
+// breakOutsideLoop reports a break/continue that names no reachable loop: either
+// there is no enclosing loop at all, or no enclosing loop carries the label.
+func breakOutsideLoop(kw, label string) error {
+	if label == "" {
+		return fmt.Errorf("buzz: %s outside loop", kw)
+	}
+	return fmt.Errorf("buzz: %s %s: no enclosing loop is labeled %q", kw, label, label)
 }
 
 func (c *compiler) compileStmt(n ast.Node) error {
@@ -775,27 +817,30 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		return c.compileForEach(v)
 
 	case *ast.BreakStmt:
-		li := c.currentLoop()
-		if li == nil {
-			return fmt.Errorf("buzz: break outside loop")
+		target := c.targetLoop(v.Label)
+		if target < 0 {
+			return breakOutsideLoop("break", v.Label)
 		}
-		if li.isForeach {
-			c.chunk.Emit(vmpackage.OpPop, 0, 0)
-		}
+		// Leaving the target loop leaves every foreach from here up to and
+		// including it, so each of their iterator states is discarded.
+		c.popIterStates(target, len(c.loops))
 		idx := c.chunk.EmitJump(vmpackage.OpJump)
-		li.breakPatch = append(li.breakPatch, idx)
+		c.loops[target].breakPatch = append(c.loops[target].breakPatch, idx)
 		return nil
 
 	case *ast.ContinueStmt:
-		li := c.currentLoop()
-		if li == nil {
-			return fmt.Errorf("buzz: continue outside loop")
+		target := c.targetLoop(v.Label)
+		if target < 0 {
+			return breakOutsideLoop("continue", v.Label)
 		}
-		if li.continueTarget >= 0 {
-			c.chunk.Emit(vmpackage.OpJump, int32(li.continueTarget), 0)
+		// The target loop is re-entered, not left: only the loops nested inside it
+		// are exited, so its own iterator state stays on the stack.
+		c.popIterStates(target+1, len(c.loops))
+		if t := c.loops[target].continueTarget; t >= 0 {
+			c.chunk.Emit(vmpackage.OpJump, int32(t), 0)
 		} else {
 			idx := c.chunk.EmitJump(vmpackage.OpJump)
-			li.continuePatch = append(li.continuePatch, idx)
+			c.loops[target].continuePatch = append(c.loops[target].continuePatch, idx)
 		}
 		return nil
 
@@ -991,7 +1036,7 @@ func (c *compiler) compileIfLet(v *ast.IfStmt) error {
 
 func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 	top := c.chunk.Current()
-	c.pushLoop(top, false)
+	c.pushLoop(top, false, v.Label)
 	if err := c.compileExpr(v.Cond); err != nil {
 		return err
 	}
@@ -1012,7 +1057,7 @@ func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 
 func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 	top := c.chunk.Current()
-	c.pushLoop(top, false)
+	c.pushLoop(top, false, "")
 	c.enterBlock()
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -1057,14 +1102,46 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Patch TryBegin to point here (the catch handler).
 	c.chunk.PatchJump(tryBeginIdx)
 
-	// Compile the catch body: bind error to ErrName in a slot, then run handler.
+	// The thrown error is on the stack. Park it in a slot of its own so each
+	// clause can type-test it without consuming it, then run the first clause
+	// whose declared type it satisfies.
 	c.enterBlock()
-	slot := c.defineLocal(v.ErrName)
-	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
-	for _, s := range v.Catch.Stmts {
-		if err := c.compileStmt(s); err != nil {
-			return err
+	errSlot := c.defineLocal("<caught>")
+	c.chunk.Emit(vmpackage.OpSetLocal, errSlot, 0)
+
+	var clauseEnds []int
+	for _, cl := range v.Catches {
+		nextClause := -1
+		if cl.TypeName != "" {
+			base, nullable := isTypeShape(cl.TypeName)
+			var nul int32
+			if nullable {
+				nul = 1
+			}
+			c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+			c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			nextClause = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 		}
+		c.enterBlock()
+		c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+		c.chunk.Emit(vmpackage.OpSetLocal, c.defineLocal(cl.ErrName), 0)
+		for _, s := range cl.Body.Stmts {
+			if err := c.compileStmt(s); err != nil {
+				return err
+			}
+		}
+		c.exitBlock()
+		clauseEnds = append(clauseEnds, c.chunk.EmitJump(vmpackage.OpJump))
+		if nextClause >= 0 {
+			c.chunk.PatchJump(nextClause)
+		}
+	}
+	// No clause matched its type: rethrow, so the error reaches an enclosing
+	// handler instead of being swallowed by a try that did not claim it.
+	c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+	c.chunk.Emit(vmpackage.OpThrow, 0, 0)
+	for _, idx := range clauseEnds {
+		c.chunk.PatchJump(idx)
 	}
 	c.exitBlock()
 
@@ -1113,7 +1190,7 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 		}
 		jf = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 	}
-	c.pushLoop(-1, false)
+	c.pushLoop(-1, false, v.Label)
 	c.enterBlock()
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -1157,7 +1234,7 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 	// cross-chunk visible, so slots are correct in both slot and SharedGlobals mode.
 	top := c.chunk.Current()
 	jdone := c.chunk.Emit(vmpackage.OpIterNext, 0, keyB)
-	c.pushLoop(top, true)
+	c.pushLoop(top, true, v.Label)
 	c.enterBlock()
 	// OpIterNext (not done) pushes: [key?,] val (val on top)
 	valSlot := c.defineLocal(v.ValName)

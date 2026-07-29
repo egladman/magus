@@ -109,7 +109,11 @@ func nodeToMap(n ast.Node) any {
 	case *ast.DoStmt:
 		return map[string]any{"kind": "DoStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "cond": nodeToMap(v.Cond)}
 	case *ast.TryStmt:
-		return map[string]any{"kind": "TryStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "errName": v.ErrName, "catch": nodeToMap(v.Catch)}
+		catches := make([]any, len(v.Catches))
+		for i, cl := range v.Catches {
+			catches[i] = map[string]any{"pos": pos(cl.Pos), "errName": cl.ErrName, "typeName": cl.TypeName, "body": nodeToMap(cl.Body)}
+		}
+		return map[string]any{"kind": "TryStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "catches": catches}
 	case *ast.ThrowStmt:
 		return map[string]any{"kind": "ThrowStmt", "pos": pos(v.Pos), "value": nodeToMap(v.Value)}
 	case *ast.YieldExpr:

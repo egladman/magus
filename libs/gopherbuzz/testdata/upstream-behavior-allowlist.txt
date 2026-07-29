@@ -27,8 +27,10 @@ interpolation.buzz
 invoke.buzz
 is.buzz
 iterator.buzz
+jit-dynamic-call.buzz
 jit-hotspot-string-interpolation.buzz
 json.buzz
+labels.buzz
 lambda.buzz
 list-map-properties.buzz
 long-namespace.buzz
@@ -43,5 +45,7 @@ placeholder-nested-call.buzz
 scope.buzz
 str.buzz
 tail-call.buzz
+throw-inside-try.buzz
+try-catch.buzz
 upvalues.buzz
 utf8.buzz
