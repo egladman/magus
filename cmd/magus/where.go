@@ -11,6 +11,48 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 )
 
+// whereMatch is one resolved location. Rel is carried alongside the absolute Path
+// because a caller that resolved a name usually needs it back in workspace-relative
+// form to hand to another magus command, and re-deriving it means knowing the root.
+type whereMatch struct {
+	Path string `json:"path"  yaml:"path"`
+	Rel  string `json:"rel"   yaml:"rel"`
+	Kind string `json:"kind"  yaml:"kind"` // "project" or "file"
+}
+
+// whereOutput is the structured view of a where resolution.
+type whereOutput struct {
+	Workspace string       `json:"workspace" yaml:"workspace"`
+	Count     int          `json:"count"     yaml:"count"`
+	Matches   []whereMatch `json:"matches"   yaml:"matches"`
+}
+
+// emitWhere renders resolved matches. The TEXT form stays deliberately bare - one
+// absolute path per line and nothing else - because its whole purpose is to be
+// substituted straight into another command: cd "$(magus where api)". Only the
+// structured formats carry the labels.
+//
+// where previously ignored -o entirely: every arm printed a bare path, so `-o json`
+// was accepted and silently produced text. It looked covered because
+// where_formats.txtar asserted stdout '\{|/', an alternation that matches a path just
+// as happily as an opening brace, so the test could not fail either way.
+func emitWhere(wsRoot string, matches []whereMatch) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, whereOutput{
+			Workspace: wsRoot, Count: len(matches), Matches: matches,
+		})
+	}
+	for _, m := range matches {
+		fmt.Println(m.Path)
+	}
+	return nil
+}
+
 // whereCmd fuzzy-matches a project and prints its absolute path. On ambiguity, lists candidates and exits 2.
 func whereCmd(ctx context.Context, root string, args []string) error {
 	var printAll bool
@@ -59,7 +101,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if patternCount > 1 {
-		return fmt.Errorf("magus where: conflicting pattern flags — use only one of --filter, --glob, --regex, --literal")
+		return fmt.Errorf("magus where: conflicting pattern flags - use only one of --filter, --glob, --regex, --literal")
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -105,16 +147,20 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 			return errSilent{exitCode: 2}
 		}
 		if printAll {
+			matches := make([]whereMatch, 0, len(files))
 			for _, f := range files {
-				fmt.Println(filepath.Join(ws.Root(), f.Path))
+				matches = append(matches, whereMatch{
+					Path: filepath.Join(ws.Root(), f.Path), Rel: f.Path, Kind: "file",
+				})
 			}
-			return nil
+			return emitWhere(ws.Root(), matches)
 		}
 		if len(files) == 1 || (len(filters) > 0 && files[0].Score > files[1].Score) {
-			fmt.Println(filepath.Join(ws.Root(), files[0].Path))
-			return nil
+			return emitWhere(ws.Root(), []whereMatch{{
+				Path: filepath.Join(ws.Root(), files[0].Path), Rel: files[0].Path, Kind: "file",
+			}})
 		}
-		fmt.Fprintln(os.Stderr, "magus where: ambiguous file match — candidates:")
+		fmt.Fprintln(os.Stderr, "magus where: ambiguous file match - candidates:")
 		for _, f := range files {
 			fmt.Fprintf(os.Stderr, "  %s\n", f.Path)
 		}
@@ -122,20 +168,24 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	if printAll {
+		matches := make([]whereMatch, 0, len(scored))
 		for _, s := range scored {
-			fmt.Println(filepath.Join(ws.Root(), s.P.Path))
+			matches = append(matches, whereMatch{
+				Path: filepath.Join(ws.Root(), s.P.Path), Rel: s.P.Path, Kind: "project",
+			})
 		}
-		return nil
+		return emitWhere(ws.Root(), matches)
 	}
 
 	// Unique top score (or exactly one result): print and exit.
 	if len(scored) == 1 || (len(filters) > 0 && scored[0].Score > scored[1].Score) {
-		fmt.Println(filepath.Join(ws.Root(), scored[0].P.Path))
-		return nil
+		return emitWhere(ws.Root(), []whereMatch{{
+			Path: filepath.Join(ws.Root(), scored[0].P.Path), Rel: scored[0].P.Path, Kind: "project",
+		}})
 	}
 
 	// Ambiguous: list candidates on stderr and exit non-zero.
-	fmt.Fprintln(os.Stderr, "magus where: ambiguous — candidates:")
+	fmt.Fprintln(os.Stderr, "magus where: ambiguous - candidates:")
 	for _, s := range scored {
 		fmt.Fprintf(os.Stderr, "  %s\n", s.P.Path)
 	}

@@ -161,6 +161,34 @@ type errSilent struct{ exitCode int }
 
 func (errSilent) Error() string { return "silent exit" }
 
+// exitUsage is the exit code for a command-line misuse: a missing or unknown
+// subcommand, a wrong argument count, an unrecognized value. It is deliberately
+// distinct from 1:
+//
+//	0  the command did what was asked (an explicit -h/--help included)
+//	1  the command was invoked correctly and the WORK failed
+//	2  the invocation itself was wrong; nothing was attempted
+//
+// 2 matches Go's own flag package (flag.ExitOnError) and the long-standing Unix
+// convention, and it is already what magus returns when a request cannot be carried
+// out as stated (an unresolvable `path` node, an ambiguous `where`, a `tail` with no
+// terminal). Before this was unified, the same "you forgot the subcommand" situation
+// exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
+// and 2 from `self <unknown>` - so nothing scripting magus could branch on it.
+const exitUsage = 2
+
+// errUsage marks a command-line misuse so it exits exitUsage rather than the generic
+// 1. Wrap the message a user needs to fix their invocation; the usage text itself is
+// printed separately by the command, as it always was.
+type errUsage struct{ msg string }
+
+func (e errUsage) Error() string { return e.msg }
+
+// usagef builds an errUsage with a formatted message.
+func usagef(format string, a ...any) error {
+	return errUsage{msg: fmt.Sprintf(format, a...)}
+}
+
 // reportedRunErr reports whether err was already surfaced to the user, per project,
 // by the cache's pretty handler as a "[xx] <project> (error): ..." line — i.e. a
 // spell/run failure during a fan-out. When true the top-level handler should exit

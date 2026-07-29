@@ -45,6 +45,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -106,7 +107,7 @@ func runCLI() int {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "-v", "--version":
-		runVersion(res.subArgs)
+		code = exitCodeOf(runVersion(res.subArgs))
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
@@ -262,6 +263,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	profile := resolveProfile(peekedSub, peekedSubArgs)
 
 	if !profile.needsConfig {
+		// This branch skips the main flag parse entirely, so anything written BEFORE
+		// the subcommand was silently dropped: `magus -o json version` printed text
+		// and exited 0, while `magus version -o json` worked. The top-level usage
+		// advertises global flags as working "before or after the subcommand", so
+		// bind the display flags here to make that true for these profiles too.
+		applyPreSubDisplayFlags(args, peekedSub)
 		return startupResult{
 			rootCtx: rootCtx,
 			sub:     peekedSub,
@@ -840,6 +847,34 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	}()
 }
 
+// applyPreSubDisplayFlags binds the global display flags that appear BEFORE the
+// subcommand, for the profiles whose startup returns before the main flag parse
+// (help, version, buzz - the ones needing no config or workspace).
+//
+// --root and --config are bound to throwaway targets on purpose: they are legal in
+// this position and would otherwise abort the parse at the first one, taking any
+// later -o with them. Parse errors are ignored because this is a best-effort second
+// look at args the real parse never sees; a genuinely bad flag is still reported by
+// the subcommand's own cmdParse.
+func applyPreSubDisplayFlags(args []string, sub string) {
+	pre := args
+	if sub != "" {
+		if i := slices.Index(args, sub); i >= 0 {
+			pre = args[:i]
+		}
+	}
+	if len(pre) == 0 {
+		return
+	}
+	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	bindDisplayFlags(fs)
+	var discardRoot, discardConfig string
+	fs.StringVar(&discardRoot, "root", "", "")
+	fs.StringVar(&discardConfig, "config", "", "")
+	_ = fs.Parse(pre)
+}
+
 func extractRootFlag(args []string) string {
 	for i, a := range args {
 		switch {
@@ -931,6 +966,12 @@ func exitCodeOf(err error) int {
 	var silent errSilent
 	if errors.As(err, &silent) {
 		return silent.exitCode
+	}
+	// A misuse of the command line exits 2, not 1: the work was never attempted.
+	var usage errUsage
+	if errors.As(err, &usage) {
+		slog.Error(err.Error())
+		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
 	// generic error line; the magusfile already logged whatever it wanted to.
