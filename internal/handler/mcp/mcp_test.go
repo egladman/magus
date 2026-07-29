@@ -14,9 +14,9 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	mcplib "github.com/mark3labs/mcp-go/mcp"
 )
 
 // fakeTel records MCP calls for assertions. It embeds the wide Provider
