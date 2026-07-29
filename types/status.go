@@ -61,7 +61,7 @@ type StatusReport struct {
 	// glance whether code symbols reflect current source. Empty when the workspace is
 	// unavailable or no project is symbol-capable.
 	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
-	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (Claude Code,
+	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
 	// the daemon dispatches jobs on. The two listeners share a process in normal

@@ -28,7 +28,7 @@ func configMCPCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "The cli token is a single retrievable secret magus's own commands reuse")
 		fmt.Fprintln(os.Stderr, "(e.g. `graph open --live`). Connector tokens are named, hashed-at-rest, and")
-		fmt.Fprintln(os.Stderr, "expiring; mint one per external client (a Claude connector, an IDE).")
+		fmt.Fprintln(os.Stderr, "expiring; mint one per external client (a hosted connector, an IDE).")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}

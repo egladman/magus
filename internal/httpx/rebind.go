@@ -23,7 +23,7 @@ type AllowedSet struct {
 //
 //   - Host (always present): the parsed hostname must be in allowed.
 //   - Origin (browser-only): if present, the parsed hostname must be in allowed.
-//     Absent Origin is allowed — non-browser MCP clients (CLI, Claude Desktop,
+//     Absent Origin is allowed — non-browser MCP clients (a CLI, a desktop app,
 //     curl) do not send it.
 //
 // Health routes (/livez, /readyz, /healthz) are mounted outside this middleware

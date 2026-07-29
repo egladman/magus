@@ -603,7 +603,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
 	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
 	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
-	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skill into a repo (agent install claude)")
+	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skills into a repo (agent install <dir>)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
 	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
 	fmt.Fprintln(os.Stderr, "  help           show this message")
