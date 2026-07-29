@@ -282,19 +282,37 @@ The practical effect is that magus stays out of the way. It is the same standard
 the tool holds itself to everywhere else - never get between someone and the
 work - extended to the agent doing it.
 
-- `deny`, with a `reason` written for the model: destructive whole-tree VCS
-  operations (`git stash`, `git reset --hard`, `git checkout .`,
-  `git restore .`, `git clean -f`) that permanently destroy uncommitted and
-  untracked work, including a concurrent agent's.
+A command is denied on either of two independent triggers. It cannot be UNDONE,
+or it has an EXACT WORKING EQUIVALENT. The second is not about danger: a raw
+`go test` is harmless and reversible, and it is denied because magus does the
+same thing plus caching, sandboxing, and affected tracking, so the deny costs the
+caller nothing. Where no equivalent exists the rule must only advise - magus has
+no raw-text search, which is why a repo-wide `grep` is explained rather than
+blocked, and why an earlier attempt to deny it had to be reverted.
+
+- `deny`, with a `reason` written for the model:
+  - destructive whole-tree VCS operations (`git stash`, `git reset --hard`,
+    `git checkout .`, `git restore .`, `git clean -f`) that permanently destroy
+    uncommitted and untracked work, including a concurrent agent's. **These rules
+    are git-shaped.** magus also drives Mercurial and Jujutsu, where
+    recoverability differs - jj snapshots the working copy and keeps an operation
+    log, so its nearest equivalents are undoable and would not meet this bar.
+    Their commands are not matched today.
+  - raw language tools (`go test`, `pytest`, `cargo build`, `eslint`, `ruff`,
+    `gofmt -w`, ...). The reason names the escalation ladder: a top-level target,
+    then a single spell op (`magus run go::go-test <project>`), which still runs
+    through magus. Exempt: `go build -o <path>` and `gofmt -l|-d`, which bypass
+    nothing.
+  - staging everything (`git add -A`, `git add .`, `git add -u`). A magus target
+    writes its declared outputs as it runs, so a tree is routinely dirty with
+    generated files you did not edit; sweeping them into a commit about something
+    else is how a focused change becomes unreviewable.
 - `advise`, with `context` to inject while the call proceeds:
-  - `git commit` / `git add` - classify the dirty tree first.
+  - `git commit` / `git add <paths>` - classify the dirty tree first. Deliberate
+    staging is the replacement the rule above points at, so it is never denied.
   - a path-scoped `git checkout -- <paths>` / `git restore` - regenerated output
     is a declared target output; reverting it because you did not hand-edit it is
     what makes CI fail on drift.
-  - raw language tools (`go test`, `pytest`, `cargo build`, `eslint`, `ruff`,
-    `gofmt -w`, ...) - a target covers the work, and the advice names the
-    escalation ladder: a top-level target, then a single spell op
-    (`magus run go::go-test <project>`), which still runs through magus.
   - trimming magus's own output with the shell (`| tail`, `2>&1`) - magus has
     `-s/--silent` and `-o json|name|template`, and `magus query output <ref>`
     for a failing target's full log.
