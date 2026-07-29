@@ -803,7 +803,17 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	}
 	for _, p := range all {
 		step := m.baseStep(p)
-		if matchAnyGlob(step.Outputs, path) {
+		// AllOutputs, not step.Outputs: the cache view is scoped to one target's
+		// project-wide globs, so a file declared only by a per-target ctx.outputs
+		// (the root MAGUS.md) or written in by another project would report as a
+		// hand-editable source. This is the "what lands in this tree" question, the
+		// same one clean and the merge driver ask.
+		declared := p.AllOutputs()
+		outputs := make([]string, 0, len(declared))
+		for _, o := range declared {
+			outputs = append(outputs, joinGlob(p.Path, o))
+		}
+		if matchAnyGlob(outputs, path) {
 			entry.OutputOf = append(entry.OutputOf, p.Path)
 		}
 		if matchAnyGlob(step.Sources, path) {

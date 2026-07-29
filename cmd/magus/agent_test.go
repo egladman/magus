@@ -466,3 +466,19 @@ func TestAgentHookPathMode(t *testing.T) {
 		})
 	}
 }
+
+// TestAdviseMemoryWrite pins the nudge to the two cross-host instruction files
+// and to a capture-not-replication wording: it must name the journal WITHOUT
+// telling the reader not to write the file, since host instructions belong
+// exactly where they are being written.
+func TestAdviseMemoryWrite(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "claude.md", "/repo/nested/AGENTS.md", "  AGENTS.md  "} {
+		advice := adviseMemoryWrite(path)
+		require.NotEmpty(t, advice, "expected a memory advisory for %q", path)
+		assert.Contains(t, advice, "magus memory put", "the advisory must name the command it is routing to")
+	}
+	for _, path := range []string{"", "README.md", "MAGUS.md", "docs/agents.md.tmpl", "agents.mdx"} {
+		assert.Empty(t, adviseMemoryWrite(path), "no advisory belongs on %q", path)
+	}
+}

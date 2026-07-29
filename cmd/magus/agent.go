@@ -281,7 +281,14 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if path, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
-			if context := adviseGeneratedWrite(ctx, path); context != "" {
+			// The generated-output rule is definitive (it reads declared globs), so it
+			// speaks first; the memory nudge is a heuristic on the filename and only
+			// fills the silence it leaves.
+			context := adviseGeneratedWrite(ctx, path)
+			if context == "" {
+				context = adviseMemoryWrite(path)
+			}
+			if context != "" {
 				verdict.Decision = "advise"
 				verdict.Context = context
 			}
@@ -356,6 +363,34 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 		owner = "."
 	}
 	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs skill if not already loaded.", f.Path, owner, owner, f.Path)
+}
+
+// adviseMemoryWrite nudges a magus-domain decision toward `magus memory put`
+// when the write lands in one of the cross-host instruction files, or "" for
+// every other path.
+//
+// CAPTURE, not replication: it does not argue against writing the file. Host
+// instructions belong there. What it says is that a decision ABOUT THE
+// WORKSPACE outlives the file it is being written into - the file is per-host
+// and per-checkout, while a memory entry survives the worktree, the session,
+// and a change of agent host. Naming both destinations is the point; an
+// advisory that only said "do not write here" would be answering a question
+// nobody asked.
+func adviseMemoryWrite(path string) string {
+	// Matched as a bare filename stem, which is the sanctioned form: these name
+	// well-known files on disk rather than branching on which host is running.
+	// The .md check keeps a template or a sibling extension (agents.md.tmpl,
+	// agents.mdx) out of it.
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(path)))
+	if filepath.Ext(base) != ".md" {
+		return ""
+	}
+	switch strings.TrimSuffix(base, ".md") {
+	case "agents", "claude":
+	default:
+		return ""
+	}
+	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-memory skill if not already loaded."
 }
 
 // readGuardCommand resolves the command string from the three input forms:
