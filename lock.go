@@ -132,9 +132,11 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 			return nil, &lockContendedError{Project: projectPath}
 		}
 		l.emitWaiting(projectPath)
+		stopWaiter := l.recordWaiter(projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
 		stopHeartbeat()
+		stopWaiter()
 		if err != nil {
 			return nil, fmt.Errorf("workspace lock: lock %s: %w", projectPath, err)
 		}
@@ -383,6 +385,36 @@ func orphanHint(elapsed time.Duration, owner string) string {
 		" was deleted keeps running and keeps its lock.", elapsed.Round(time.Second), where)
 }
 
+// waiterPath is this process's waiter marker for a project. One file per blocked pid,
+// so several waiters coexist without coordinating.
+func (l *projectLocker) waiterPath(projectPath string) string {
+	return fmt.Sprintf("%s.waiter.%d", l.lockPath(projectPath), os.Getpid())
+}
+
+// recordWaiter marks this process as blocked on a project, and returns the cleanup.
+//
+// Holders were the first half of the picture: they answer "who is working". Waiters
+// are the other half and answer "who is stalled because of it", which is the question
+// asked by whoever is looking at a queue that is not moving. Best-effort, like the
+// owner record, and never load-bearing.
+func (l *projectLocker) recordWaiter(projectPath string) func() {
+	dir, _ := os.Getwd()
+	data, err := codec.Marshal(lockOwner{
+		PID:     os.Getpid(),
+		Command: strings.Join(os.Args, " "),
+		Dir:     dir,
+		Started: time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		return func() {}
+	}
+	path := l.waiterPath(projectPath)
+	if os.WriteFile(path, data, 0o600) != nil {
+		return func() {}
+	}
+	return func() { _ = os.Remove(path) }
+}
+
 // removeOwner clears the sidecar on release so a later reader never attributes a
 // lock to a process that has finished. Best-effort, like the write.
 func (l *projectLocker) removeOwner(projectPath string) {
@@ -425,6 +457,7 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 			project = "."
 		}
 		lock := types.StatusLock{Project: project, PID: o.PID, Command: o.Command, Dir: o.Dir}
+		lock.Waiters = readWaiters(filepath.Dir(path))
 		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
 			lock.AcquireTime = started
 		}
@@ -432,5 +465,36 @@ func HeldLocks(cacheDir string) []types.StatusLock {
 		return nil
 	})
 	slices.SortFunc(out, func(a, b types.StatusLock) int { return strings.Compare(a.Project, b.Project) })
+	return out
+}
+
+// readWaiters collects the waiter markers beside a lock. Best-effort: an unreadable
+// marker is skipped, and a marker whose process died before cleanup can linger, so
+// the list is a snapshot rather than proof.
+func readWaiters(dir string) []types.StatusLockWaiter {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []types.StatusLockWaiter
+	for _, e := range entries {
+		if e.IsDir() || !strings.Contains(e.Name(), "lock.waiter.") {
+			continue
+		}
+		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
+		if rerr != nil {
+			continue
+		}
+		var o lockOwner
+		if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
+			continue
+		}
+		w := types.StatusLockWaiter{PID: o.PID, Command: o.Command, Dir: o.Dir}
+		if started, perr := time.Parse(time.RFC3339, o.Started); perr == nil {
+			w.WaitTime = started
+		}
+		out = append(out, w)
+	}
+	slices.SortFunc(out, func(a, b types.StatusLockWaiter) int { return a.PID - b.PID })
 	return out
 }

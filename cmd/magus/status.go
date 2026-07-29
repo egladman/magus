@@ -861,5 +861,16 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 		if l.Dir != "" {
 			fmt.Fprintln(w, "    in "+l.Dir)
 		}
+		// The other half of a stalled queue: who is blocked behind this holder.
+		for _, wt := range l.Waiters {
+			line := fmt.Sprintf("    waiting: pid %d", wt.PID)
+			if !wt.WaitTime.IsZero() {
+				line += "  " + formatDur(time.Since(wt.WaitTime))
+			}
+			if wt.Command != "" {
+				line += "  " + wt.Command
+			}
+			fmt.Fprintln(w, line)
+		}
 	}
 }

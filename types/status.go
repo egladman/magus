@@ -155,10 +155,23 @@ type StatusLock struct {
 	PID     int    `json:"pid,omitempty" yaml:"pid,omitempty"`
 	Command string `json:"command,omitempty" yaml:"command,omitempty"`
 	Dir     string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	// Waiters are the processes blocked on this lock right now. Empty is the common
+	// case; a non-empty list is the other half of the picture, because a holder alone
+	// says who is working and a waiter list says who is stalled because of it.
+	Waiters []StatusLockWaiter `json:"waiters,omitempty" yaml:"waiters,omitempty"`
 	// AcquireTime is when the holder took it. Age is the signal a human reads: seconds
 	// is a peer, days is something nobody knows is running. Named per AIP-142, which
 	// asks for a _time suffix on a timestamp rather than the _at spelling.
 	AcquireTime time.Time `json:"acquire_time,omitempty" yaml:"acquire_time,omitempty"`
+}
+
+// StatusLockWaiter is one process blocked on a lock, with how long it has been
+// blocked. A waiter is transient by nature, so this is only ever a snapshot.
+type StatusLockWaiter struct {
+	PID      int       `json:"pid,omitempty" yaml:"pid,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	WaitTime time.Time `json:"wait_time,omitempty" yaml:"wait_time,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the

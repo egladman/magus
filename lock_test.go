@@ -422,3 +422,43 @@ func TestHeldLocksReportsHolders(t *testing.T) {
 		t.Errorf("after releasing everything, HeldLocks = %+v; want none", held)
 	}
 }
+
+// TestLockWaitersAreRecorded pins the second half of the picture. A holder answers
+// "who is working"; a waiter answers "who is stalled because of it", which is the
+// question anyone staring at a queue that will not move is actually asking.
+func TestLockWaitersAreRecorded(t *testing.T) {
+	cache := t.TempDir()
+	l := newProjectLocker(cache, false)
+
+	release, err := l.acquire(context.Background(), "web/api")
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer release()
+
+	if held := HeldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+		t.Fatalf("HeldLocks with no contention = %+v; want one holder and no waiters", held)
+	}
+
+	// A waiter marker is written while blocked and cleared when the wait ends, so
+	// record/clear is exercised directly rather than racing a second process.
+	stop := l.recordWaiter("web/api")
+	held := HeldLocks(cache)
+	if len(held) != 1 {
+		t.Fatalf("HeldLocks = %d entries, want 1", len(held))
+	}
+	if len(held[0].Waiters) != 1 {
+		t.Fatalf("waiters = %+v, want exactly one", held[0].Waiters)
+	}
+	if held[0].Waiters[0].PID != os.Getpid() {
+		t.Errorf("waiter pid = %d, want %d", held[0].Waiters[0].PID, os.Getpid())
+	}
+	if held[0].Waiters[0].WaitTime.IsZero() {
+		t.Error("waiter WaitTime is zero; how long a run has been stalled is the point")
+	}
+
+	stop()
+	if held := HeldLocks(cache); len(held) != 1 || len(held[0].Waiters) != 0 {
+		t.Errorf("after the wait ended, waiters = %+v; want none", held[0].Waiters)
+	}
+}
