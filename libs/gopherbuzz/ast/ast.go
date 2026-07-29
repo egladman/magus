@@ -130,7 +130,12 @@ type FunDecl struct {
 	IsExported bool
 	// IsStatic marks an object's `static fun` method: it is called on the type
 	// itself (Foo.make(...)), takes no receiver, and cannot access this.
-	IsStatic    bool
+	IsStatic bool
+	// IsExtern marks a body-less `extern fun name(...) > T;` forward declaration:
+	// the signature is declared here, the implementation comes from the host. It
+	// is how upstream Buzz types its native stdlib (src/lib/*.buzz), and it emits
+	// no code - the name must already be bound at runtime. Body is nil.
+	IsExtern    bool
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated

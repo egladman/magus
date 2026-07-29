@@ -228,6 +228,13 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
 	}
+	// `extern fun name(...) > T;` declares a native function's SIGNATURE with no
+	// body - how upstream types its stdlib (src/lib/*.buzz). Contextual like
+	// `test`: `extern` is a reserved word, so it can never be a binding name, but
+	// it stays an ordinary identifier in every position other than this one.
+	if t.Kind == token.Ident && t.Val == "extern" && p.peekAt(1).Kind == token.Fun {
+		return p.parseExternFunDecl()
+	}
 	// `out expr;` leaves the enclosing block expression. Contextual like `test`:
 	// outside a `from` block `out` stays an ordinary identifier, so the check is
 	// gated on one actually being open.
@@ -1210,11 +1217,36 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
 	}
-	fr, err := p.parseFunRest()
+	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
 	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
+}
+
+// parseExternFunDecl parses `extern fun name(params) > T;` - the signature of a
+// function the HOST implements, with a semicolon where a body would be. It is
+// how upstream Buzz gives its native stdlib types (`export extern fun
+// dump(value: any) > void;`), and the same declaration types magus's host
+// modules: the checker gets a real signature instead of Unknown, and the runtime
+// resolves the name against the binding the host already installed.
+func (p *parser) parseExternFunDecl() (*ast.FunDecl, error) {
+	t := p.advance() // `extern`
+	if _, err := p.eat(token.Fun); err != nil {
+		return nil, err
+	}
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
+	fr, err := p.parseFunRest(true)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -2062,7 +2094,7 @@ func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
 	}
-	fr, err := p.parseFunRest()
+	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
@@ -2082,7 +2114,8 @@ type funRest struct {
 }
 
 // parseFunRest parses the shared tail of a function: (params) rettype *> yieldtype { body }.
-func (p *parser) parseFunRest() (funRest, error) {
+// With extern set the tail ends at a `;` instead of a body, and out.body stays nil.
+func (p *parser) parseFunRest(extern bool) (funRest, error) {
 	var out funRest
 	if _, err := p.eat(token.LParen); err != nil {
 		return funRest{}, err
@@ -2177,6 +2210,14 @@ func (p *parser) parseFunRest() (funRest, error) {
 		if out.yieldAnnot != "void" && !strings.HasSuffix(out.yieldAnnot, "?") {
 			return funRest{}, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, out.yieldAnnot)
 		}
+	}
+	// An extern declaration stops here: the semicolon stands where a body would be,
+	// and the implementation comes from the host rather than from this source.
+	if extern {
+		if _, err := p.eat(token.Semicolon); err != nil {
+			return funRest{}, err
+		}
+		return out, nil
 	}
 	// Expression-body function: `fun f(x: int) > int => expr;` desugars to a
 	// block that returns expr, matching upstream Buzz's arrow-body sugar. It

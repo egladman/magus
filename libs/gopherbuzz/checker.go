@@ -489,6 +489,13 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	// Re-register in current scope (may be a nested function not seen in first pass).
 	c.define(fd.Name, ft, true)
 
+	// An extern declaration IS the signature and nothing else - there is no body to
+	// descend into. Defining the type above is the whole point of it: every call
+	// site now checks against a real signature instead of Unknown.
+	if fd.IsExtern {
+		return
+	}
+
 	savedRet := c.retTyp
 	savedYield := c.yieldTyp
 	c.retTyp = ft.Ret

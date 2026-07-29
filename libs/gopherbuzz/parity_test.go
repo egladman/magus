@@ -874,3 +874,64 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "ok", v.AsString(), "a dot before an identifier is still member access")
 }
+
+// TestParity_ExternFunDeclaresASignature covers `extern fun name(...) > T;`, the
+// body-less forward declaration upstream uses to give its NATIVE stdlib types
+// (src/lib/debug.buzz: `export extern fun dump(value: any) > void;`). Before it,
+// `extern` was a reserved word the parser knew only well enough to refuse as a
+// binding name, so every host-provided function typed as Unknown.
+//
+// It emits no code by design: the implementation is whatever the host already
+// bound to that name, so a declaration must not shadow it with an empty closure.
+func TestParity_ExternFunDeclaresASignature(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(context.Background(), `
+extern fun native(n: int) > str;
+export extern fun exported(value: any) > void;
+
+fun probe() > int { return 1; }`), "a body-less extern declaration parses")
+
+	_, bound := s.Globals()["native"]
+	assert.False(t, bound, "an extern declaration must not bind a value: the host owns the implementation")
+}
+
+// TestParity_ExternReturnTypeIsChecked is the reason the declaration exists. The
+// signature has to reach call sites, or it is decoration: a host call's result
+// must type as its declared return, not as Unknown.
+func TestParity_ExternReturnTypeIsChecked(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+extern fun native(n: int) > str;
+fun probe() > int { return native(1); }`)
+	require.Error(t, err, "the declared return type must reach the call site")
+	assert.Contains(t, err.Error(), "return type mismatch")
+}
+
+// TestParity_ExternRejectsABody pins the shape: `extern` means the
+// implementation is elsewhere, so a body is a contradiction rather than an
+// extra. Catching it at the parser keeps the compiler's "extern emits nothing"
+// rule from silently discarding real code.
+func TestParity_ExternRejectsABody(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+extern fun native(n: int) > str { return "x"; }
+fun probe() > int { return 1; }`)
+	require.Error(t, err, "an extern declaration must not carry a body")
+}
+
+// TestParity_ExternStaysAnOrdinaryIdentifier guards the contextual lookahead:
+// `extern` introduces a declaration only when `fun` follows it. Upstream reserves
+// the word from BINDING positions (so an object field named extern is rightly
+// refused) while leaving the non-binding ones open, and the new lookahead must
+// not narrow that further.
+func TestParity_ExternStaysAnOrdinaryIdentifier(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final m = {"extern": "key"};
+    return m["extern"] ?? "missing";
+}`)
+	assert.Equal(t, "key", v.AsString(), "`extern` is only a keyword directly before `fun`")
+}

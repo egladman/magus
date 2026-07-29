@@ -178,7 +178,10 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.FunDecl:
 		// Entering a function body: everything inside it captures by reference today.
-		collectFuncRefs(v.Body, true, keep)
+		// An extern declaration has none.
+		if v.Body != nil {
+			collectFuncRefs(v.Body, true, keep)
+		}
 	case *ast.FunExpr:
 		collectFuncRefs(v.Body, true, keep)
 	case *ast.ObjectDecl:
@@ -864,6 +867,13 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		return nil
 
 	case *ast.FunDecl:
+		// An extern declaration emits NOTHING: it declares a signature the checker
+		// consumes, and the implementation is whatever the host already bound to
+		// that name. Emitting a closure here would shadow the native function with
+		// an empty one, which is the opposite of the point.
+		if v.IsExtern {
+			return nil
+		}
 		idx, err := c.compileFunChunk(v.Name, v.Doc, v.Params, v.Body.Stmts)
 		if err != nil {
 			return err
