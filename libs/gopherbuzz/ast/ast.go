@@ -86,12 +86,15 @@ type WhileStmt struct {
 	Body *BlockStmt
 }
 
-// ForStmt: for (init; cond; post) body. Init/Cond/Post may be nil.
+// ForStmt: for (init; cond; post) body. Cond may be nil, and Init/Post may be
+// empty. Both clauses are lists because upstream allows several comma-separated
+// declarations and assignments in each (`for (i: int = 0, j: int = 9; ...; i = i
+// + 1, j = j - 1)`); they share the loop's scope, so they are not a BlockStmt.
 type ForStmt struct {
 	Pos
-	Init Node
+	Init []Node
 	Cond Node
-	Post Node
+	Post []Node
 	Body *BlockStmt
 }
 
@@ -120,9 +123,12 @@ type FunDecl struct {
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
-	RetAnnot    string   // return type annotation; "" = unannotated
-	YieldAnnot  string   // yield type annotation after *>; "" = non-fiber function
-	Body        *BlockStmt
+	// ParamDefaults is parallel to Params, with a nil entry for a parameter that
+	// declares no `= expr` default. A call may omit any parameter that has one.
+	ParamDefaults []Node
+	RetAnnot      string // return type annotation; "" = unannotated
+	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
+	Body          *BlockStmt
 	// Doc is the documentation comment block immediately preceding the
 	// declaration (see token.Token.Doc); "" when undocumented. Carried onto the
 	// compiled chunk so host code (spell resolution, magus describe/doctor) can
@@ -159,12 +165,18 @@ type ObjField struct {
 	Default   Node   // nil when no default
 }
 
-// EnumDecl: enum Name { CASE1, CASE2 }
+// EnumDecl: enum Name { CASE1, CASE2 } or enum<str> Name { CASE1 = "a" }.
 type EnumDecl struct {
 	Pos
 	IsExported bool
 	Name       string
 	Cases      []string
+	// Backing names the type of a case's `.value`: "int" (the default, where an
+	// unassigned case takes its ordinal) or "str" (where it takes its own name).
+	Backing string
+	// Values holds each case's explicit `= literal`, parallel to Cases, with a nil
+	// entry where the case has none. Nil entirely when no case assigns a value.
+	Values []Node
 }
 
 // ---- expressions ----
@@ -201,21 +213,26 @@ type CallExpr struct {
 	TypeArg string
 }
 
-// MemberExpr: object.name
+// MemberExpr: object.name. OptionalRecv is set for the graceful-unwrapping form
+// object?.name, which yields null when object is null instead of erroring. When
+// the member is called (object?.name()), the guard covers the call too.
 type MemberExpr struct {
 	Pos
-	Object Node
-	Name   string
+	Object       Node
+	Name         string
+	OptionalRecv bool
 }
 
 // IndexExpr: object[index]. Optional is set for the checked subscript form
 // object[?index], which yields null on an out-of-bounds index instead of an
-// error (Buzz null-safety).
+// error (Buzz null-safety). OptionalRecv is the separate object?[index] form,
+// which yields null when the OBJECT is null.
 type IndexExpr struct {
 	Pos
-	Object   Node
-	Index    Node
-	Optional bool
+	Object       Node
+	Index        Node
+	Optional     bool
+	OptionalRecv bool
 }
 
 // ForceExpr: operand! — force-unwraps an optional, erroring at runtime if the
@@ -236,9 +253,12 @@ type FunExpr struct {
 	Pos
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
-	RetAnnot    string   // return type annotation; "" = unannotated
-	YieldAnnot  string   // yield type annotation after *>; "" = non-fiber function
-	Body        *BlockStmt
+	// ParamDefaults is parallel to Params, with a nil entry for a parameter that
+	// declares no `= expr` default. A call may omit any parameter that has one.
+	ParamDefaults []Node
+	RetAnnot      string // return type annotation; "" = unannotated
+	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
+	Body          *BlockStmt
 }
 
 // MapExpr: {"key": val, ...}. Mut is set for the `mut {…}` form (a mutable map);

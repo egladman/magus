@@ -37,9 +37,13 @@ func Inspect(n Node, fn func(Node) bool) {
 			Inspect(s.Body, fn)
 		}
 	case *ForStmt:
-		Inspect(s.Init, fn)
+		for _, n := range s.Init {
+			Inspect(n, fn)
+		}
 		Inspect(s.Cond, fn)
-		Inspect(s.Post, fn)
+		for _, n := range s.Post {
+			Inspect(n, fn)
+		}
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}

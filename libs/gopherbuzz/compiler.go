@@ -155,9 +155,13 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Cond, inFunc, keep)
 		collectFuncRefs(v.Body, inFunc, keep)
 	case *ast.ForStmt:
-		collectFuncRefs(v.Init, inFunc, keep)
+		for _, n := range v.Init {
+			collectFuncRefs(n, inFunc, keep)
+		}
 		collectFuncRefs(v.Cond, inFunc, keep)
-		collectFuncRefs(v.Post, inFunc, keep)
+		for _, n := range v.Post {
+			collectFuncRefs(n, inFunc, keep)
+		}
 		collectFuncRefs(v.Body, inFunc, keep)
 	case *ast.ForEachStmt:
 		collectFuncRefs(v.Iter, inFunc, keep)
@@ -1095,8 +1099,8 @@ func (c *compiler) compileCatchExpr(v *ast.CatchExpr) error {
 func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 	// outer block scopes the init variable
 	c.enterBlock()
-	if v.Init != nil {
-		if err := c.compileStmt(v.Init); err != nil {
+	for _, init := range v.Init {
+		if err := c.compileStmt(init); err != nil {
 			return err
 		}
 	}
@@ -1123,8 +1127,8 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 	for _, idx := range li.continuePatch {
 		c.chunk.Code[idx].A = target
 	}
-	if v.Post != nil {
-		if err := c.compileStmt(v.Post); err != nil {
+	for _, post := range v.Post {
+		if err := c.compileStmt(post); err != nil {
 			return err
 		}
 	}
@@ -1312,8 +1316,46 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	return nil
 }
 
+// enumCaseValues resolves each case's `.value`. An explicit `= literal` wins;
+// otherwise a str-backed enum takes the case name and any other enum takes the
+// case's ordinal. Only literals are accepted, matching upstream: the values are
+// baked into the enum's constant, so there is no frame to evaluate them in.
+func enumCaseValues(v *ast.EnumDecl) ([]vmpackage.Value, error) {
+	out := make([]vmpackage.Value, len(v.Cases))
+	for i, name := range v.Cases {
+		var explicit ast.Node
+		if i < len(v.Values) {
+			explicit = v.Values[i]
+		}
+		switch lit := explicit.(type) {
+		case nil:
+			if v.Backing == "str" {
+				out[i] = vmpackage.StrValue(name)
+			} else {
+				out[i] = vmpackage.IntValue(int64(i))
+			}
+		case *ast.IntLit:
+			out[i] = vmpackage.IntValue(lit.Val)
+		case *ast.FloatLit:
+			out[i] = vmpackage.FloatValue(lit.Val)
+		case *ast.StringLit:
+			out[i] = vmpackage.StrValue(lit.Val)
+		case *ast.BoolLit:
+			out[i] = vmpackage.BoolValue(lit.Val)
+		default:
+			pos := ast.NodePos(explicit)
+			return nil, fmt.Errorf("buzz: line %d:%d: enum case %s.%s value must be a literal", pos.Line, pos.Col, v.Name, name)
+		}
+	}
+	return out, nil
+}
+
 func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
-	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases))
+	values, err := enumCaseValues(v)
+	if err != nil {
+		return err
+	}
+	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases, values))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 	if c.depth == 0 {
@@ -1391,6 +1433,12 @@ func (c *compiler) compileExpr(n ast.Node) error {
 	case *ast.CallExpr:
 		return c.compileCall(v)
 	case *ast.MemberExpr:
+		if v.OptionalRecv {
+			return c.compileOptionalHop(v.Object, func() error {
+				c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(v.Name), 0)
+				return nil
+			})
+		}
 		if idx, ok := c.thisFieldIndex(v.Object, v.Name); ok {
 			c.chunk.Emit(vmpackage.OpLoadThis, 0, 0)
 			c.chunk.Emit(vmpackage.OpGetField, idx, c.nameConst(v.Name))
@@ -1406,18 +1454,25 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(v.Name), 0)
 		}
 	case *ast.IndexExpr:
-		if err := c.compileExpr(v.Object); err != nil {
-			return err
-		}
-		if err := c.compileExpr(v.Index); err != nil {
-			return err
-		}
 		// A=1 selects the checked subscript (out-of-bounds → null); A=0 errors.
 		var opt int32
 		if v.Optional {
 			opt = 1
 		}
-		c.chunk.Emit(vmpackage.OpGetIndex, opt, 0)
+		emitIndex := func() error {
+			if err := c.compileExpr(v.Index); err != nil {
+				return err
+			}
+			c.chunk.Emit(vmpackage.OpGetIndex, opt, 0)
+			return nil
+		}
+		if v.OptionalRecv {
+			return c.compileOptionalHop(v.Object, emitIndex)
+		}
+		if err := c.compileExpr(v.Object); err != nil {
+			return err
+		}
+		return emitIndex()
 	case *ast.ForceExpr:
 		if err := c.compileExpr(v.Operand); err != nil {
 			return err
@@ -1648,6 +1703,28 @@ func (c *compiler) compileUnary(v *ast.UnaryExpr) error {
 	return nil
 }
 
+// compileOptionalHop compiles the `?.`/`?[` guard: recv is evaluated once, and
+// when it is null the whole hop yields null instead of running. emitHop emits
+// the hop's own opcodes with the (non-null) receiver already on the stack.
+//
+// It reuses OpJumpIfNull, which peeks and - on null - pops and falls through,
+// so no new opcode enters the Exec switch (a new case regresses every benchmark;
+// see the README gotcha).
+func (c *compiler) compileOptionalHop(recv ast.Node, emitHop func() error) error {
+	if err := c.compileExpr(recv); err != nil {
+		return err
+	}
+	notNull := c.chunk.EmitJump(vmpackage.OpJumpIfNull)
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	done := c.chunk.EmitJump(vmpackage.OpJump)
+	c.chunk.PatchJump(notNull)
+	if err := emitHop(); err != nil {
+		return err
+	}
+	c.chunk.PatchJump(done)
+	return nil
+}
+
 func (c *compiler) compileCall(v *ast.CallExpr) error {
 	// Method-call fast path: obj.name(args) compiles to OpInvoke, which resolves
 	// the method on the receiver and enters it with the receiver bound as `this`
@@ -1655,16 +1732,24 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 	// would make). The receiver is pushed once and reused as the call's base; the
 	// VM handler reads the method name from the const pool (A) and arg count (B).
 	if m, ok := v.Callee.(*ast.MemberExpr); ok {
+		emitInvoke := func() error {
+			for _, arg := range v.Args {
+				if err := c.compileExpr(arg); err != nil {
+					return err
+				}
+			}
+			c.chunk.Emit(vmpackage.OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
+			return nil
+		}
+		// `recv?.method(args)`: the guard covers the call, so a null receiver
+		// yields null rather than invoking a method on nothing.
+		if m.OptionalRecv {
+			return c.compileOptionalHop(m.Object, emitInvoke)
+		}
 		if err := c.compileExpr(m.Object); err != nil {
 			return err
 		}
-		for _, arg := range v.Args {
-			if err := c.compileExpr(arg); err != nil {
-				return err
-			}
-		}
-		c.chunk.Emit(vmpackage.OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
-		return nil
+		return emitInvoke()
 	}
 	if err := c.compileExpr(v.Callee); err != nil {
 		return err

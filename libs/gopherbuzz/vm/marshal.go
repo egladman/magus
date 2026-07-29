@@ -50,7 +50,17 @@ import (
 // value) pairs the compiler pushes ahead of the instruction. An older VM reads
 // neither, so it would strand those pairs on the stack and run the rest of the
 // chunk against a misaligned one.
-const BytecodeVersion uint16 = 12
+//
+// v13 widens three node encodings, each of which desynchronizes a reader of the
+// other version from the point of the change onward:
+//   - ForStmt's init and post clauses are u32-counted node lists instead of
+//     single nodes, so a for-loop can carry several comma-separated clauses.
+//   - EnumDecl gains a backing-type string and a node list of case values, and
+//     the enum-def CONSTANT gains a counted run of resolved case values, so
+//     `enum<str>` and `case = 1` reach the VM at all.
+//   - MemberExpr and IndexExpr gain their optional-chaining flags (`a?.b`,
+//     `a?[i]`, and the previously unserialized checked subscript `a[?i]`).
+const BytecodeVersion uint16 = 13
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -286,6 +296,12 @@ func (e *enc) constVal(v Value) error {
 		e.u8(constTagEnumDef)
 		e.str(ed.Name)
 		e.strs(ed.Cases)
+		e.u32(uint32(len(ed.Values)))
+		for _, cv := range ed.Values {
+			if err := e.constVal(cv); err != nil {
+				return err
+			}
+		}
 	case tagObjDecl:
 		e.u8(constTagObjDecl)
 		return e.node(v.asObjDecl())
@@ -404,10 +420,13 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeMemberExpr)
 		e.pos(p)
 		e.str(v.Name)
+		e.boolean(v.OptionalRecv)
 		return e.node(v.Object)
 	case *ast.IndexExpr:
 		e.u8(nodeIndexExpr)
 		e.pos(p)
+		e.boolean(v.Optional)
+		e.boolean(v.OptionalRecv)
 		if err := e.node(v.Object); err != nil {
 			return err
 		}
@@ -534,14 +553,20 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForStmt:
 		e.u8(nodeForStmt)
 		e.pos(p)
-		if err := e.node(v.Init); err != nil {
-			return err
+		e.u32(uint32(len(v.Init)))
+		for _, n := range v.Init {
+			if err := e.node(n); err != nil {
+				return err
+			}
 		}
 		if err := e.node(v.Cond); err != nil {
 			return err
 		}
-		if err := e.node(v.Post); err != nil {
-			return err
+		e.u32(uint32(len(v.Post)))
+		for _, n := range v.Post {
+			if err := e.node(n); err != nil {
+				return err
+			}
 		}
 		return e.node(v.Body)
 	case *ast.ForEachStmt:
@@ -600,6 +625,13 @@ func (e *enc) node(n ast.Node) error {
 		e.pos(p)
 		e.str(v.Name)
 		e.strs(v.Cases)
+		e.str(v.Backing)
+		e.u32(uint32(len(v.Values)))
+		for _, cv := range v.Values {
+			if err := e.node(cv); err != nil {
+				return err
+			}
+		}
 	case *ast.DoStmt:
 		e.u8(nodeDoStmt)
 		e.pos(p)
@@ -765,6 +797,28 @@ func (d *dec) strs() ([]string, error) {
 		}
 	}
 	return ss, nil
+}
+
+// nodeList decodes a u32-counted run of nodes.
+func (d *dec) nodeList() ([]ast.Node, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	if err := d.checkCount(n); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	ns := make([]ast.Node, int(n))
+	for i := range ns {
+		ns[i], err = d.node()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ns, nil
 }
 
 // objFields reads one length-prefixed ObjField block. An ObjectDecl carries two
@@ -970,7 +1024,20 @@ func (d *dec) constVal() (Value, error) {
 		if err != nil {
 			return Null, err
 		}
-		return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases}), nil
+		n, err := d.u32()
+		if err != nil {
+			return Null, err
+		}
+		if err := d.checkCount(n); err != nil {
+			return Null, err
+		}
+		values := make([]Value, int(n))
+		for i := range values {
+			if values[i], err = d.constVal(); err != nil {
+				return Null, err
+			}
+		}
+		return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases, Values: values}), nil
 	case constTagObjDecl:
 		n, err := d.node()
 		if err != nil {
@@ -1097,12 +1164,24 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		optionalRecv, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		obj, err := d.node()
 		if err != nil {
 			return nil, err
 		}
-		return &ast.MemberExpr{Pos: p, Object: obj, Name: name}, nil
+		return &ast.MemberExpr{Pos: p, Object: obj, Name: name, OptionalRecv: optionalRecv}, nil
 	case nodeIndexExpr:
+		optional, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
+		optionalRecv, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		obj, err := d.node()
 		if err != nil {
 			return nil, err
@@ -1111,7 +1190,7 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.IndexExpr{Pos: p, Object: obj, Index: idx}, nil
+		return &ast.IndexExpr{Pos: p, Object: obj, Index: idx, Optional: optional, OptionalRecv: optionalRecv}, nil
 	case nodeFunExpr:
 		params, err := d.strs()
 		if err != nil {
@@ -1337,7 +1416,7 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody}, nil
 	case nodeForStmt:
-		init, err := d.node()
+		init, err := d.nodeList()
 		if err != nil {
 			return nil, err
 		}
@@ -1345,7 +1424,7 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		post, err := d.node()
+		post, err := d.nodeList()
 		if err != nil {
 			return nil, err
 		}
@@ -1460,7 +1539,15 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.EnumDecl{Pos: p, Name: name, Cases: cases}, nil
+		backing, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		values, err := d.nodeList()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.EnumDecl{Pos: p, Name: name, Cases: cases, Backing: backing, Values: values}, nil
 	case nodeDoStmt:
 		body, err := d.node()
 		if err != nil {

@@ -24,7 +24,7 @@ func osModule() vm.Value {
 	m.MapSet("exit", fn("os.exit", osExit))
 	m.MapSet("execute", fn("os.execute", osExecute))
 
-	m.MapSet("SocketProtocol", vm.EnumDefValue("SocketProtocol", []string{"tcp", "udp", "ipc"}))
+	m.MapSet("SocketProtocol", vm.EnumDefValue("SocketProtocol", []string{"tcp", "udp", "ipc"}, nil))
 
 	socketDef := mod()
 	socketDef.MapSet("connect", fn("Socket.connect", socketConnect))

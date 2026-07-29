@@ -13,7 +13,7 @@ import (
 
 func ioModule(sess *buzz.Session) vm.Value {
 	m := mod()
-	m.MapSet("FileMode", vm.EnumDefValue("FileMode", []string{"read", "write", "update"}))
+	m.MapSet("FileMode", vm.EnumDefValue("FileMode", []string{"read", "write", "update"}, nil))
 	fileDef := mod()
 	fileDef.MapSet("open", fn("File.open", fileOpen))
 	m.MapSet("File", fileDef)

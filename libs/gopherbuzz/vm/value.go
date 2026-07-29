@@ -251,14 +251,17 @@ func (o *objDeclPayload) heapKind() valueTag { return tagObjDecl }
 type enumDefObj struct {
 	Name  string
 	Cases []string
+	// Values holds each case's `.value`, parallel to Cases: the ordinal for a
+	// plain enum, the case name for an `enum<str>`, or whatever literal the case
+	// assigned. The compiler resolves all three forms, so the VM only reads.
+	Values []Value
 }
 type enumValObj struct {
 	Enum string
 	Case string
-	// Ordinal is the case's 0-based position in its declaration, exposed as
-	// `.value`. Stored at construction because the value carries only names, and
-	// recovering the position later would mean finding the enum definition again.
-	Ordinal int64
+	// Val is the case's `.value`. Stored at construction because the value carries
+	// only names, and recovering it later would mean finding the definition again.
+	Val Value
 }
 type rangeObj struct{ Lo, Hi int64 }
 
@@ -379,8 +382,16 @@ func ObjDeclValue(decl *ast.ObjectDecl) Value {
 }
 
 // EnumDefValue creates a Buzz enum-definition value (used by the compiler).
-func EnumDefValue(name string, cases []string) Value {
-	return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases})
+// values holds each case's resolved `.value`, parallel to cases; pass nil for a
+// plain enum, whose cases take their ordinals.
+func EnumDefValue(name string, cases []string, values []Value) Value {
+	if values == nil {
+		values = make([]Value, len(cases))
+		for i := range cases {
+			values[i] = IntValue(int64(i))
+		}
+	}
+	return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases, Values: values})
 }
 
 // NullValue returns the Buzz null value (convenience alias for Null).
