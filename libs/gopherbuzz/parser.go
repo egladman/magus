@@ -141,7 +141,9 @@ func (p *parser) eatBindingIdent() (token.Token, error) {
 	if err != nil {
 		return t, err
 	}
-	if reservedIdents[t.Val] {
+	// A free identifier (@"...") carries its spelling in quotes precisely so a
+	// reserved word can be used as a name, so the rule does not apply to it.
+	if !t.Raw && reservedIdents[t.Val] {
 		return t, fmt.Errorf("buzz: line %d:%d: %q is a reserved word and cannot be used as a name", t.Line, t.Col, t.Val)
 	}
 	return t, nil
@@ -420,10 +422,22 @@ func (p *parser) skipType() error {
 				return err
 			}
 		}
-		if p.check(token.Lt) {
+		// A generic instantiation: `Payload::<str, int>` (or the bare `Foo<T>`
+		// spelling). Type arguments are erased, so the identity is the bare name -
+		// the span is recorded for readType to drop, keeping `x is Payload::<str,
+		// int>` a test against `Payload`.
+		if p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt {
+			from := p.pos
+			if _, err := p.skipTypeParams(); err != nil {
+				return err
+			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+		} else if p.check(token.Lt) {
+			from := p.pos
 			if err := p.skipGenericArgs(); err != nil {
 				return err
 			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
 		}
 		if p.check(token.Question) {
 			p.advance()
@@ -1200,6 +1214,13 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	t, _ := p.eat(token.Object)
 	nameTok, err := p.eatBindingIdent()
 	if err != nil {
+		return nil, err
+	}
+	// `object Payload::<K, V>` declares type parameters. They are erased like a
+	// generic function's, so the object's identity stays its bare name and the
+	// parameters only have to parse - a field typed `K` resolves to Unknown,
+	// which is compatible with whatever the instance actually holds.
+	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
 	}
 	if _, err := p.eat(token.LBrace); err != nil {

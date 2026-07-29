@@ -22,6 +22,7 @@ default-arguments.buzz
 discarded-value.buzz
 for.buzz
 foreach.buzz
+free-identifiers.buzz
 if-arrow.buzz
 inferred-var-type.buzz
 interpolation.buzz
@@ -38,6 +39,7 @@ long-namespace.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz
+object-generics.buzz
 objects.buzz
 operators.buzz
 optionals.buzz

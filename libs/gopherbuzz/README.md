@@ -14,7 +14,7 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**40 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+**42 of 83** upstream behavior tests pass, measured against `UpstreamRef`
 (`0.5.0-251-ged42f47`) on 2026-07-28.
 
 The baseline when this record started was 12; `is` grammar, typed for-init, and
@@ -24,7 +24,8 @@ JSON encoding, static object fields, generics-as-erasure, multi-clause `for`,
 nullable declarations without an initializer, object-literal field punning,
 `> void` arrow bodies, `enum<T>` backing types, optional chaining, default
 argument values, `!>`/`*>` inside a function TYPE, multiple typed catch clauses,
-labeled loops, and block expressions have banked twenty-eight since. Measure against the PINNED commit,
+labeled loops, block expressions, free identifiers, and generic object
+declarations have banked thirty since. Measure against the PINNED commit,
 not a local `main` checkout: a newer checkout has files that do not exist at the
 pin, which is how an earlier hand-count reached a wrong 13-of-84.
 
@@ -50,7 +51,8 @@ initializer, default argument values, error sets on declarations plus
 `try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
 interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
-expressions (`from { ... out v; }`). Two deliberate supersets: the contextual
+expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
+generic object declarations. Two deliberate supersets: the contextual
 `test` keyword (below) and named-argument labels.
 
 ### What does not, ranked by upstream tests blocked
@@ -59,8 +61,7 @@ expressions (`from { ... out v; }`). Two deliberate supersets: the contextual
 | --- | ---: | --- |
 | Type-value literal `<T>` | 5 | `typeof x == <mut [int]>` |
 | Inferred enum case where a type is declared | 3 | `hash(.Md5, data: s)` |
-| Generic OBJECT declarations `object F::<T>` | 2 | `object Payload::<K, V> { … }` |
-| Raw identifiers `@"..."` | 2 | `tuple.@"0"` |
+| `match` expressions | 2 | `match (axis) { .up -> 1, .down -> 2 }` |
 | Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
 | `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
 

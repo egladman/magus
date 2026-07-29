@@ -331,6 +331,10 @@ type Token struct {
 	Parts []StringPart // only for InterpStr
 	Line  int
 	Col   int
+	// Raw marks an Ident that was written in the free-identifier form @"...".
+	// Its spelling is whatever the quotes held, so the reserved-word rule that
+	// governs ordinary identifiers does not apply to it.
+	Raw bool
 	// Doc carries the documentation comment block immediately preceding this
 	// token — the contiguous run of // line comments (or a single /* */ block)
 	// on the lines directly above, with no blank line in between. It is "" for
@@ -611,6 +615,23 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
 	case '\\':
 		return simple(Backslash, size), nil
+	case '@':
+		// Free (raw) identifier: @"any text" names a binding, field, or member
+		// whose spelling the ordinary identifier rules would reject - including a
+		// reserved word or a name with punctuation in it.
+		if l.peekByte() == '"' {
+			l.pos++ // '@'
+			l.col++
+			t, err := l.lexString(startLine, startCol)
+			if err != nil {
+				return Token{}, err
+			}
+			if t.Kind != String {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: a free identifier cannot interpolate", startLine, startCol)
+			}
+			return Token{Kind: Ident, Val: t.Val, Raw: true, Line: startLine, Col: startCol}, nil
+		}
+		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
 	}
 
 	if r >= '0' && r <= '9' {
