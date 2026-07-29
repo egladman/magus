@@ -935,3 +935,44 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "key", v.AsString(), "`extern` is only a keyword directly before `fun`")
 }
+
+// TestParity_MapMerge covers `{...} + {...}`, the map counterpart of list
+// concatenation (upstream tests/behavior/composite-assign.buzz). The checker
+// rejected it outright before, so `m += {...}` could not compile.
+func TestParity_MapMerge(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final a = {"one": 1};
+    final b = {"one": 9, "two": 2};
+    final m = a + b;
+    return "{m.size()}/{m["one"] ?? 0}/{a.size()}";
+}`)
+	// Right wins the duplicate key, and the left operand is untouched: `+` is an
+	// expression, so it must copy rather than mutate in place.
+	assert.Equal(t, "2/9/1", v.AsString(), "map merge takes the right operand's value and leaves the left alone")
+}
+
+// TestParity_FloatModulo covers `%` on doubles, which raised "not supported for
+// float operands". Upstream's composite-assign.buzz asserts `4.0 %= 2.0` is 0,
+// so this is fmod, not an integer-only operator.
+func TestParity_FloatModulo(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > double {
+    var b = 4.0;
+    b %= 2.0;
+    return b + (5.5 % 2.0);
+}`)
+	assert.InDelta(t, 1.5, v.AsFloat(), 1e-9, "4.0 % 2.0 is 0.0 and 5.5 % 2.0 is 1.5")
+}
+
+// TestParity_ModuloByZeroReports guards the divisor check added alongside float
+// modulo: math.Mod would return NaN, which would propagate silently instead of
+// reporting where it went wrong.
+func TestParity_ModuloByZeroReports(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `fun probe() > double { return 5.5 % 0.0; }
+final __r = probe();`)
+	require.Error(t, err, "a zero divisor must report, not yield NaN")
+	assert.Contains(t, err.Error(), "modulo by zero")
+}

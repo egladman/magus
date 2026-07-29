@@ -17,6 +17,7 @@ block-expression.buzz
 break-continue.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
+composite-assign.buzz
 dead-branches.buzz
 debug.buzz
 default-arguments.buzz

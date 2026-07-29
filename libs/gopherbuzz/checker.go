@@ -819,6 +819,16 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 		if _, ok := right.(*types.ListType); ok {
 			return right
 		}
+		// Map merge: {K: V} + {K: V} → {K: V}, the map counterpart of list
+		// concatenation (upstream tests/behavior/composite-assign.buzz). The right
+		// operand wins on a duplicate key, which is why the result takes the LEFT
+		// type only when it is a map - a merge cannot widen the key or value type.
+		if _, ok := left.(*types.MapType); ok {
+			return left
+		}
+		if _, ok := right.(*types.MapType); ok {
+			return right
+		}
 		return c.numericResult(v.Pos, left, right)
 	case "-", "*", "%":
 		return c.numericResult(v.Pos, left, right)

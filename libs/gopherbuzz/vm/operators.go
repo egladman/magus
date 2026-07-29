@@ -35,6 +35,23 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 			merged = append(merged, rightList.Items...)
 			return ListValue(merged), nil
 		}
+		// Map merge, the counterpart of list concatenation above. Both operands are
+		// left untouched (a fresh map is built) because `+` is an expression, not a
+		// mutation: `a + b` must not alter a, even though `a += b` reassigns it.
+		// Right wins on a duplicate key, matching upstream and every other merge in
+		// the language.
+		if left.tag() == tagMap && right.tag() == tagMap {
+			leftMap, rightMap := left.asMap(), right.asMap()
+			out := NewMap()
+			merged := out.asMap()
+			for i, k := range leftMap.Keys {
+				merged.set(k, leftMap.Vals[i])
+			}
+			for i, k := range rightMap.Keys {
+				merged.set(k, rightMap.Vals[i])
+			}
+			return out, nil
+		}
 	}
 
 	// Float promotion
@@ -84,7 +101,13 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 		}
 		return FloatValue(a / b), nil
 	case OpMod:
-		return Null, fmt.Errorf("buzz: %% not supported for float operands")
+		// Floating-point remainder (fmod), matching upstream: `4.0 % 2.0` is 0.0.
+		// Guarded like OpDiv above rather than returning math.Mod's NaN, so a zero
+		// divisor reports the same way whichever numeric type it came from.
+		if b == 0 {
+			return Null, fmt.Errorf("buzz: modulo by zero")
+		}
+		return FloatValue(math.Mod(a, b)), nil
 	default:
 		return Null, fmt.Errorf("buzz: unknown arith opcode %d", op)
 	}
@@ -96,10 +119,10 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 // the two asNumeric type switches, and floatArith's opcode switch.
 //
 // ok==false means "not a float-handled op here, fall back to applyBinop": that
-// is OpMod (no float modulo) and float division by zero, both of which must
-// surface arith's exact error. The standalone OpAdd/OpSub/… handlers inline
-// their own single-op float path (the op is statically known there); this helper
-// exists only where the sub-opcode is a runtime value.
+// is OpMod (kept off this hot path; arith computes the fmod) and float division
+// by zero, which must surface arith's exact error. The standalone OpAdd/OpSub/…
+// handlers inline their own single-op float path (the op is statically known
+// there); this helper exists only where the sub-opcode is a runtime value.
 //
 // optimization: collapses the float arithmetic/compare dispatch the fused ops
 //
@@ -138,7 +161,7 @@ func floatBinop(op OpCode, a, b float64) (Value, bool) {
 	case OpNotEqual:
 		return BoolValue(a != b), true
 	}
-	return Null, false // OpMod (no float modulo) → applyBinop reports the error
+	return Null, false // OpMod → applyBinop computes the float remainder
 }
 
 // applyBinop dispatches a fused binary op (OpBinLC) to the same semantics
