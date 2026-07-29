@@ -48,45 +48,96 @@ func chainUsage() {
 	fmt.Fprintln(os.Stderr, "  magus run build -o json --then outputs")
 }
 
-// runChain applies the post---then verbs to the artifacts target produced.
-func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, targets []types.Target, argv []string, returns map[string]any) error {
+// chainPlan is the parsed verb grammar: what to do with the result, decided BEFORE
+// the target runs.
+//
+// It exists because the verbs used to be interpreted after the run, so
+// `magus run build --then bogusverb` built the whole project and only then exited 2
+// on a typo it could have rejected in the first millisecond. Everything here is
+// checkable without a result; the one thing that is not - whether `file <path>`
+// names an artifact the target actually produced - stays in chainFile, where the
+// artifact list exists.
+type chainPlan struct {
+	verb   string // outputs | file | value
+	path   string // file <path>
+	action string // "" | contents | export
+	dst    string // export --path <dst>
+}
+
+// prepareChain parses the post---then verbs. proceed is false when the verbs asked
+// for help, which is answered without running anything.
+func prepareChain(argv []string) (plan chainPlan, proceed bool, err error) {
 	if len(argv) == 0 {
 		chainUsage()
-		return usagef("magus run: --then needs a verb (want outputs, file, or value)")
+		return plan, false, usagef("magus run: --then needs a verb (want outputs, file, or value)")
 	}
-	if argv[0] == "value" {
-		return chainValue(m, opts, targets, returns, argv[1:])
+	rest := argv[1:]
+	plan.verb = argv[0]
+	switch plan.verb {
+	case "-h", "--help", "help":
+		chainUsage()
+		return plan, false, nil
+	case "value":
+		if len(rest) > 0 {
+			chainUsage()
+			return plan, false, usagef("magus run: `value` takes no further verbs, got %q", rest[0])
+		}
+	case "outputs":
+		if len(rest) > 0 {
+			if rest[0] != "export" {
+				chainUsage()
+				return plan, false, usagef("magus run: unknown verb %q after outputs (want export)", rest[0])
+			}
+			plan.action = "export"
+			if plan.dst, err = chainPathFlag(rest[1:], "outputs export"); err != nil {
+				return plan, false, err
+			}
+		}
+	case "file":
+		if len(rest) == 0 {
+			chainUsage()
+			return plan, false, usagef("magus run: `file` needs a path")
+		}
+		plan.path = filepath.ToSlash(rest[0])
+		if len(rest) > 1 {
+			plan.action = rest[1]
+		}
+		switch plan.action {
+		case "", "contents":
+		case "export":
+			if plan.dst, err = chainPathFlag(rest[2:], "file export"); err != nil {
+				return plan, false, err
+			}
+		default:
+			chainUsage()
+			return plan, false, usagef("magus run: unknown verb %q after file (want contents or export)", plan.action)
+		}
+	default:
+		chainUsage()
+		return plan, false, usagef("magus run: unknown --then verb %q (want outputs, file, or value)", plan.verb)
 	}
-	artifacts, err := m.ResolveTargetOutputs(ctx, m.ResolveProjects(targets), target)
+	return plan, true, nil
+}
+
+// runChain applies the parsed verbs to what target produced.
+func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, selection []types.Target, plan chainPlan, returns types.Returns) error {
+	if plan.verb == "value" {
+		return chainValue(m, opts, selection, returns)
+	}
+	artifacts, err := m.ResolveTargetOutputs(ctx, m.ResolveProjects(selection), target)
 	if err != nil {
 		return err
 	}
-
-	switch argv[0] {
-	case "outputs":
-		return chainOutputs(m, opts, artifacts, argv[1:])
-	case "file":
-		return chainFile(m, opts, artifacts, argv[1:])
-	case "-h", "--help", "help":
-		chainUsage()
-		return nil
-	default:
-		chainUsage()
-		return usagef("magus run: unknown --then verb %q (want outputs, file, or value)", argv[0])
+	if plan.verb == "outputs" {
+		return chainOutputs(m, opts, artifacts, plan)
 	}
+	return chainFile(m, opts, artifacts, plan)
 }
 
 // chainOutputs implements `--then outputs [export --path <dir>]`.
-func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, argv []string) error {
-	if len(argv) > 0 {
-		if argv[0] != "export" {
-			chainUsage()
-			return usagef("magus run: unknown verb %q after outputs (want export)", argv[0])
-		}
-		dir, err := chainPathFlag(argv[1:], "outputs export")
-		if err != nil {
-			return err
-		}
+func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
+	if plan.action == "export" {
+		dir := plan.dst
 		for _, a := range artifacts {
 			dst := filepath.Join(dir, filepath.FromSlash(a.Path))
 			if err := copyArtifact(filepath.Join(m.Root(), filepath.FromSlash(a.Path)), dst); err != nil {
@@ -113,12 +164,8 @@ func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetAr
 }
 
 // chainFile implements `--then file <path> [contents | export --path <dst>]`.
-func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, argv []string) error {
-	if len(argv) == 0 {
-		chainUsage()
-		return usagef("magus run: `file` needs a path")
-	}
-	want := filepath.ToSlash(argv[0])
+func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
+	want := plan.path
 	var match *magus.TargetArtifact
 	for i, a := range artifacts {
 		if a.Path == want {
@@ -141,19 +188,7 @@ func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtif
 	}
 	abs := filepath.Join(m.Root(), filepath.FromSlash(match.Path))
 
-	verb := ""
-	if len(argv) > 1 {
-		verb = argv[1]
-	}
-	switch verb {
-	case "":
-		if opts.Format == outputJSON || opts.Format == outputYAML || opts.Format == outputTemplate {
-			return emitFormatted(opts, runArtifact{
-				Path: match.Path, Glob: match.Glob, Role: artifactRoles(m, []magus.TargetArtifact{*match})[match.Path],
-			})
-		}
-		fmt.Println(abs)
-		return nil
+	switch plan.action {
 	case "contents":
 		f, err := os.Open(abs)
 		if err != nil {
@@ -163,18 +198,19 @@ func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtif
 		_, err = io.Copy(os.Stdout, f)
 		return err
 	case "export":
-		dst, err := chainPathFlag(argv[2:], "file export")
-		if err != nil {
+		if err := copyArtifact(abs, plan.dst); err != nil {
 			return err
 		}
-		if err := copyArtifact(abs, dst); err != nil {
-			return err
-		}
-		fmt.Println(dst)
+		fmt.Println(plan.dst)
 		return nil
 	}
-	chainUsage()
-	return usagef("magus run: unknown verb %q after file (want contents or export)", verb)
+	if opts.Format == outputJSON || opts.Format == outputYAML || opts.Format == outputTemplate {
+		return emitFormatted(opts, runArtifact{
+			Path: match.Path, Glob: match.Glob, Role: artifactRoles(m, []magus.TargetArtifact{*match})[match.Path],
+		})
+	}
+	fmt.Println(abs)
+	return nil
 }
 
 // chainPathFlag reads the required --path value for an export verb.
@@ -272,12 +308,8 @@ func copyArtifact(src, dst string) error {
 // -o json gives the same value with its project, which is what a multi-project run
 // needs; the text form deliberately prints the value alone with no label to strip,
 // the same contract `magus where` keeps.
-func chainValue(m *magus.Magus, opts OutputOptions, targets []types.Target, returns map[string]any, argv []string) error {
-	if len(argv) > 0 {
-		chainUsage()
-		return usagef("magus run: `value` takes no further verbs, got %q", argv[0])
-	}
-	projects := m.ResolveProjects(targets)
+func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, returns types.Returns) error {
+	projects := m.ResolveProjects(selection)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

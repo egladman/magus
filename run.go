@@ -502,6 +502,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
 
+	// Every dispatch funnels through here, which is why the return sink is installed
+	// here and not at the CLI: the cache snapshots a target's return value off this
+	// sink, so an entry point without one persists Value: nil into a durable entry.
+	// A caller that wants to READ the values back (the run and affected commands)
+	// installs its own first, and this leaves it alone.
+	ctx = types.EnsureReturnCapture(ctx)
+
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so
 		// effectful host ops (exec, fs writes, network, env) record their intent and
@@ -999,7 +1006,9 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
 		resp, err := s.Invoke(ctx, req)
-		types.CaptureReturn(ctx, p.Path, resp.Data)
+		if err == nil {
+			types.RecordReturn(ctx, p.Path, name, resp.Data)
+		}
 		return err
 	}
 
@@ -1007,7 +1016,13 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
 	resp, err := s.Invoke(ctx, req)
-	types.CaptureReturn(ctx, p.Path, resp.Data)
+	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
+	// snapshotted, so its value has no consumer, and recording it would survive
+	// the retry below: a first attempt that failed after returning a value would
+	// leave that value behind for a second attempt that succeeded returning none.
+	if err == nil {
+		types.RecordReturn(ctx, p.Path, name, resp.Data)
+	}
 	result := "pass"
 	attempts := 1
 	decision := volatility.Decision{}
@@ -1016,7 +1031,9 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 		decision = rt.Decide(p.Path, volatileTarget, affected)
 		if decision.Retry {
 			resp2, err2 := s.Invoke(ctx, req)
-			types.CaptureReturn(ctx, p.Path, resp2.Data)
+			if err2 == nil {
+				types.RecordReturn(ctx, p.Path, name, resp2.Data)
+			}
 			attempts = 2
 			if err2 == nil {
 				result = "volatile"

@@ -45,7 +45,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -268,7 +267,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// and exited 0, while `magus version -o json` worked. The top-level usage
 		// advertises global flags as working "before or after the subcommand", so
 		// bind the display flags here to make that true for these profiles too.
-		applyPreSubDisplayFlags(args, peekedSub)
+		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return startupResult{cleanup: cleanup}, exitUsage
+		}
 		return startupResult{
 			rootCtx: rootCtx,
 			sub:     peekedSub,
@@ -819,18 +821,27 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 //
 // --root and --config are bound to throwaway targets on purpose: they are legal in
 // this position and would otherwise abort the parse at the first one, taking any
-// later -o with them. Parse errors are ignored because this is a best-effort second
-// look at args the real parse never sees; a genuinely bad flag is still reported by
-// the subcommand's own cmdParse.
-func applyPreSubDisplayFlags(args []string, sub string) {
+// later -o with them.
+//
+// The parse error is RETURNED, not swallowed. For these profiles there is no later
+// flag parse to catch it, so ignoring it meant `magus --bogus -o json version`
+// accepted the unknown flag, silently discarded the -o that followed it (Parse
+// stops at the first error), printed text and exited 0 - a misuse reported as
+// success.
+//
+// subArgs, not a search for sub, delimits the pre-subcommand slice: peekSub already
+// resolved where the subcommand is, and slices.Index found its FIRST occurrence, so
+// a flag value equal to the subcommand name (`magus --root version version`)
+// truncated at the value instead.
+func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	pre := args
 	if sub != "" {
-		if i := slices.Index(args, sub); i >= 0 {
-			pre = args[:i]
+		if n := len(args) - len(subArgs) - 1; n >= 0 && n <= len(args) {
+			pre = args[:n]
 		}
 	}
 	if len(pre) == 0 {
-		return
+		return nil
 	}
 	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -838,7 +849,10 @@ func applyPreSubDisplayFlags(args []string, sub string) {
 	var discardRoot, discardConfig string
 	fs.StringVar(&discardRoot, "root", "", "")
 	fs.StringVar(&discardConfig, "config", "", "")
-	_ = fs.Parse(pre)
+	if err := fs.Parse(pre); err != nil {
+		return usagef("magus: %v", err)
+	}
+	return nil
 }
 
 func extractRootFlag(args []string) string {

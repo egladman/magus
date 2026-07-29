@@ -63,6 +63,32 @@ stderr 'file <path> contents'
 ! exec magus run bundle:rw --then
 stderr '--then needs a verb'
 
+# The verbs are parsed BEFORE the target runs. A typo is checkable without a result,
+# so paying for a whole build first and only then exiting 2 is pure waste - on a real
+# `affected ci` chain it is the entire pipeline. Proof: with the artifact removed, a
+# bogus verb leaves it removed.
+rm dist
+rm dist-copy
+rm out
+! exec magus run bundle:rw --then bogus
+! exists dist/app.txt
+
+# Same for a misused sub-verb, which is one level deeper in the grammar.
+! exec magus run bundle:rw --then outputs export
+stderr 'outputs export requires --path'
+! exists dist/app.txt
+
+# "--" outranks "--then". Everything after "--" is the spell's verbatim argv, so a
+# literal --then among those args belongs to the spell - scanning the whole arg slice
+# for the separator first hijacked it, and the run failed as a chain with no verb.
+exec magus run bundle:rw -- --then
+exists dist/app.txt
+
+# The two separators still compose in the documented order: chain verbs first, then
+# the "--" passthrough, which is re-attached to the run's own args.
+exec magus run bundle:rw --then outputs -- --unused
+stdout 'dist/app\.txt'
+
 -- magus.yaml --
 concurrency: 2
 -- magusfile.buzz --

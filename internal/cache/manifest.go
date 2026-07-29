@@ -18,13 +18,13 @@ type Manifest struct {
 	Target      string         `json:"target,omitempty"`
 	Outputs     []OutputRecord `json:"outputs"`
 	CreatedAt   time.Time      `json:"createdAt"`
-	// Value is the target's return value (str or [str]), stored so a cache HIT can
+	// Return is what the target returned (str or [str]), stored so a cache HIT can
 	// replay it. A hit never invokes the target, so without this a target would
 	// print its result on the first run and nothing on the second. Absent for the
 	// `> void` targets that are the overwhelming majority, and absent from every
 	// manifest written before returns existed - which read back as no value, the
 	// same as a void target, so old entries stay valid.
-	Value any `json:"value,omitempty"`
+	Return any `json:"return,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

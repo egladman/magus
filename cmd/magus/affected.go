@@ -30,6 +30,17 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// is exactly where "what did this produce" needs answering.
 	args, chainArgs, chained := splitOnThen(args)
 
+	// Parsed before the run, for the same reason `magus run` does: a typo'd verb must
+	// not cost a full CI pipeline before it is rejected.
+	var chain chainPlan
+	if chained {
+		var proceed bool
+		var chainErr error
+		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
+			return chainErr
+		}
+	}
+
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
@@ -329,11 +340,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 
 	if chained {
-		return runChain(ctx, m, opts, target, targets, chainArgs, readReturns())
+		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns())
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target))
 	}
 	return nil
 }

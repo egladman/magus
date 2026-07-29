@@ -32,6 +32,17 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// leave the chain holding a bare flag.
 	args, chainArgs, chained := splitOnThen(args)
 
+	// Parsed before the run, not after it: a typo'd verb used to build the whole
+	// project and only then exit 2 on something checkable up front.
+	var chain chainPlan
+	if chained {
+		var proceed bool
+		var chainErr error
+		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
+			return chainErr
+		}
+	}
+
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
 	// flags + any project args for cmdParse below.
@@ -286,11 +297,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 
 	if chained {
-		return runChain(ctx, m, opts, targetName, targets, chainArgs, readReturns())
+		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns())
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName))
 	}
 	return nil
 }
@@ -523,10 +534,13 @@ type runOutput struct {
 //
 // A dry run reports no artifacts: nothing executed, so any file matching an output
 // glob is left over from a previous run and reporting it would claim this invocation
-// produced it.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, targets []types.Target, returns map[string]any) error {
+// produced it. It DOES report the return value, because a dry run evaluates the
+// target body under a tracing context - the value is real, and omitting it made
+// `-o json` claim "no return value" for a target that had just produced one, while
+// `--then value` printed it.
+func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns) error {
 	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun}
-	projects := m.ResolveProjects(targets)
+	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
 
 	// Artifacts are resolved once for the whole set, then bucketed by owning
@@ -546,24 +560,24 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		for _, f := range roles.Files {
 			roleOf[f.Path] = f.Role
 		}
-		for _, p := range projects {
-			for _, a := range artifacts {
-				if owner := m.FindOutputProducer(filepath.Join(m.Root(), a.Path)); owner != nil && owner.Path != p.Path {
-					continue
-				}
-				byProject[p.Path] = append(byProject[p.Path], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
-			}
+		// Bucket by the project that DECLARED the glob, in one pass. This used to ask
+		// FindOutputProducer inside the per-project loop, which was O(projects x
+		// artifacts) with a workspace walk per pair and - worse - got the nil case
+		// backwards: an artifact no project's tree claimed failed the
+		// `owner.Path != p.Path` guard for every project, so it was reported N times
+		// in an N-project result. The declaring project is already on the artifact and
+		// cannot come back nil.
+		for _, a := range artifacts {
+			byProject[a.Project] = append(byProject[a.Project], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
 		}
 	}
 
 	for _, p := range projects {
-		entry := runProject{Path: p.Path, Artifacts: byProject[p.Path]}
-		// A dry run executed nothing, so it has no return value and no artifacts to
-		// report; anything on disk is left over from an earlier run.
-		if !out.DryRun {
-			entry.Value = returns[p.Path]
-		}
-		out.Projects = append(out.Projects, entry)
+		out.Projects = append(out.Projects, runProject{
+			Path:      p.Path,
+			Artifacts: byProject[p.Path],
+			Value:     returns[p.Path],
+		})
 	}
 	return emitFormatted(opts, out)
 }

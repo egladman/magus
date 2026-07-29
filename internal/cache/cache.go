@@ -375,7 +375,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// A hit never invokes the target, so re-capture the value the entry
 				// recorded. Without this a target returning a value prints it on the
 				// first run and nothing on the second.
-				types.CaptureReturn(ctx, s.ProjectPath, manifest.Value)
+				types.RecordReturn(ctx, s.ProjectPath, s.Target, manifest.Return)
 				c.hits.Add(1)
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
