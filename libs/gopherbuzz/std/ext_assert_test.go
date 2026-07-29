@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 )
 
 func TestSkipMessage(t *testing.T) {
