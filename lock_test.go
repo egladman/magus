@@ -469,10 +469,6 @@ func TestLockWaitersAreRecorded(t *testing.T) {
 // holder, keeps every lock it took. Peers then wait forever on a holder that is never
 // coming back.
 func TestWatchWorkspaceRootReleasesOnVanish(t *testing.T) {
-	prev := rootWatchdogInterval
-	rootWatchdogInterval = 5 * time.Millisecond
-	t.Cleanup(func() { rootWatchdogInterval = prev })
-
 	root := filepath.Join(t.TempDir(), "tree")
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
@@ -480,7 +476,7 @@ func TestWatchWorkspaceRootReleasesOnVanish(t *testing.T) {
 
 	released := make(chan struct{})
 	var once sync.Once
-	stop := watchWorkspaceRoot(context.Background(), root, func() { once.Do(func() { close(released) }) })
+	stop := watchWorkspaceRoot(context.Background(), root, 5*time.Millisecond, func() { once.Do(func() { close(released) }) })
 	defer stop()
 
 	// While the tree exists, the watchdog must keep its hands off.
@@ -503,13 +499,9 @@ func TestWatchWorkspaceRootReleasesOnVanish(t *testing.T) {
 // TestWatchWorkspaceRootStops pins that stopping is what a normal run does, and that
 // it does not release afterwards.
 func TestWatchWorkspaceRootStops(t *testing.T) {
-	prev := rootWatchdogInterval
-	rootWatchdogInterval = 5 * time.Millisecond
-	t.Cleanup(func() { rootWatchdogInterval = prev })
-
 	root := t.TempDir()
 	var released atomic.Bool
-	stop := watchWorkspaceRoot(context.Background(), root, func() { released.Store(true) })
+	stop := watchWorkspaceRoot(context.Background(), root, 5*time.Millisecond, func() { released.Store(true) })
 	stop()
 	stop() // idempotent: a release path may stop twice
 

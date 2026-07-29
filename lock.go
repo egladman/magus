@@ -50,14 +50,15 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if err != nil {
 		return nil, err
 	}
-	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, release)
+	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, release)
 	return func() { stopWatchdog(); release() }, nil
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
 // still exists. Slow enough to be free, fast enough that a deleted tree does not
-// block peers for long.
-var rootWatchdogInterval = 30 * time.Second
+// block peers for long. A const, and passed in rather than read from package scope,
+// so a test can pick its own cadence without mutating shared state under -race.
+const rootWatchdogInterval = 30 * time.Second
 
 // watchWorkspaceRoot releases the run's locks if the workspace root disappears
 // underneath it, and returns a stop func.
@@ -72,15 +73,15 @@ var rootWatchdogInterval = 30 * time.Second
 // process whose tree is gone is not mutating anything, so continuing to hold is pure
 // harm to peers. Killing the process outright is the caller's decision, not the lock
 // layer's.
-func watchWorkspaceRoot(ctx context.Context, root string, release func()) func() {
-	if root == "" {
+func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, release func()) func() {
+	if root == "" || every <= 0 {
 		return func() {}
 	}
 	done := make(chan struct{})
 	var once sync.Once
 	stop := func() { once.Do(func() { close(done) }) }
 	go func() {
-		t := time.NewTicker(rootWatchdogInterval)
+		t := time.NewTicker(every)
 		defer t.Stop()
 		for {
 			select {
@@ -89,6 +90,14 @@ func watchWorkspaceRoot(ctx context.Context, root string, release func()) func()
 			case <-ctx.Done():
 				return
 			case <-t.C:
+				// A pending tick and a close can be ready together, and select picks
+				// among ready cases at random, so re-check before acting: releasing a
+				// finished run's locks would be worse than a late exit.
+				select {
+				case <-done:
+					return
+				default:
+				}
 				if _, err := os.Stat(root); err == nil {
 					continue
 				}
