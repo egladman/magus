@@ -1,9 +1,9 @@
 // @expect: true
-// buzz declares pi in src/lib/math.buzz as the 14-digit literal 3.1415926535898,
-// not the nearest double to pi. It is LESS precise than Go's math.Pi on purpose:
-// pi is an observable constant, so deg/rad and everything built on them inherit
-// its exact bits. With Go's value, math.deg(2.0) returned 114.59155902616465
-// where buzz returns 114.59155902616439 - a silent difference for a program moved
-// between the two (tests/behavior/math.buzz asserts the literal).
+// DELIBERATE DIVERGENCE, do not "fix" by adopting upstream's constant.
+// buzz declares pi as the 14-digit literal 3.1415926535898; gopherbuzz uses the
+// nearest double instead, because correct arithmetic beats bug-for-bug parity on
+// a numeric constant. This pins the FULL-PRECISION result, so a future change
+// that adopts the truncated literal to make tests/behavior/math.buzz pass fails
+// here instead of silently degrading every trig result.
 import "math";
-final __r = math.deg(2.0) == 114.59155902616439 and math.rad(math.deg(2.0)) == 2;
+final __r = math.deg(2.0) == 114.59155902616465 and math.rad(math.deg(2.0)) == 2;

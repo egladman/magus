@@ -42,7 +42,6 @@ labels.buzz
 lambda.buzz
 list-map-properties.buzz
 long-namespace.buzz
-math.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz

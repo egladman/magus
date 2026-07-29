@@ -8,28 +8,31 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-// upstreamPi is buzz's own pi, declared in src/lib/math.buzz as the 14-digit
-// literal `3.1415926535898` rather than the nearest double to π. It is LESS
-// precise than math.Pi, and that is the point: pi is an observable stdlib
-// constant, so deg/rad and every downstream computation inherit its exact bits.
-// Using Go's math.Pi made `math.deg(2.0)` return 114.59155902616465 where buzz
-// returns 114.59155902616439 - a silent numeric difference for anyone moving a
-// program between the two implementations, which is the divergence the parity
-// suite exists to catch (tests/behavior/math.buzz).
-const upstreamPi = 3.1415926535898
+// DELIBERATE DIVERGENCE from upstream, do not "fix" this.
+//
+// buzz declares pi in src/lib/math.buzz as the 14-digit literal
+// `3.1415926535898`, which is not the nearest double to π. gopherbuzz uses Go's
+// math.Pi instead: correct arithmetic beats bug-for-bug parity on a numeric
+// constant, and adopting the truncated literal would make every trig result in
+// every magusfile measurably worse to satisfy one assertion.
+//
+// The cost is that upstream's tests/behavior/math.buzz cannot pass - it asserts
+// `math.deg(2.0) == 114.59155902616439`, the value the truncated pi produces,
+// where full precision gives 114.59155902616465. That file is intentionally
+// absent from the conformance allowlist; it is not an unimplemented feature.
 
 // mathModule builds the "math" module matching Buzz's math reference:
 // https://buzz-lang.dev/0.5.0/reference/std/math.html
 func mathModule() vm.Value {
 	m := mod()
-	m.MapSet("pi", vm.FloatValue(upstreamPi))
+	m.MapSet("pi", vm.FloatValue(math.Pi))
 	m.MapSet("abs", fn("math.abs", mathAbs))
 	m.MapSet("acos", fn("math.acos", mathUnary("math.acos", math.Acos)))
 	m.MapSet("asin", fn("math.asin", mathUnary("math.asin", math.Asin)))
 	m.MapSet("atan", fn("math.atan", mathUnary("math.atan", math.Atan)))
 	m.MapSet("ceil", fn("math.ceil", mathCeil))
 	m.MapSet("cos", fn("math.cos", mathUnary("math.cos", math.Cos)))
-	m.MapSet("deg", fn("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180.0 / upstreamPi })))
+	m.MapSet("deg", fn("math.deg", mathUnary("math.deg", func(r float64) float64 { return r * 180 / math.Pi })))
 	m.MapSet("exp", fn("math.exp", mathUnary("math.exp", math.Exp)))
 	m.MapSet("floor", fn("math.floor", mathFloor))
 	m.MapSet("log", fn("math.log", mathLog))
@@ -57,7 +60,7 @@ func mathModule() vm.Value {
 		}
 		return b
 	})))
-	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * upstreamPi / 180.0 })))
+	m.MapSet("rad", fn("math.rad", mathUnary("math.rad", func(d float64) float64 { return d * math.Pi / 180 })))
 	m.MapSet("sin", fn("math.sin", mathUnary("math.sin", math.Sin)))
 	m.MapSet("sqrt", fn("math.sqrt", mathUnary("math.sqrt", math.Sqrt)))
 	m.MapSet("tan", fn("math.tan", mathUnary("math.tan", math.Tan)))
