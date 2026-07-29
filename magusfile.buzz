@@ -232,7 +232,8 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void {
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go");
+    ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
+                "cmd/magus/completions/*");
     os\exec("go", ["generate", "./cmd/magus/..."]);
 }
 

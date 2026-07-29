@@ -573,47 +573,13 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	}
 }
 
-var knownSubcommands = []string{
-	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "insight", "query", "explain", "path", "refs", "graph", "watch", "status", "doctor",
-	"config", "memory", "server", "repl", "completion", "man", "init", "self", "version",
-	"clean", "merge-driver", "buzz", "agent",
-	"help",
-}
-
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  ls             list all discovered projects")
-	fmt.Fprintln(os.Stderr, "  describe       define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)")
-	fmt.Fprintln(os.Stderr, "  run            run a target for selected projects")
-	fmt.Fprintln(os.Stderr, "  x              interactive shorthand: pick project + target (TTY only)")
-	fmt.Fprintln(os.Stderr, "  where          print the absolute path of a project (fuzzy match)")
-	fmt.Fprintln(os.Stderr, "  tail           stream the most recent cached log for cwd project")
-	fmt.Fprintln(os.Stderr, "  affected       run a target for VCS-diff affected projects")
-	fmt.Fprintln(os.Stderr, "  query          search the knowledge graph and show a node's neighborhood")
-	fmt.Fprintln(os.Stderr, "  explain        show one knowledge-graph node: its edges, provenance, blast radius")
-	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
-	fmt.Fprintln(os.Stderr, "  refs           list where an ingested code symbol is defined and referenced")
-	fmt.Fprintln(os.Stderr, "  graph          the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)")
-	fmt.Fprintln(os.Stderr, "  insight        VCS-history analytics: hotspots, affinity, ownership, trend, volatility")
-	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
-	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")
-	fmt.Fprintln(os.Stderr, "  clean          remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]")
-	fmt.Fprintln(os.Stderr, "  merge-driver   VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)")
-	fmt.Fprintln(os.Stderr, "  doctor         validate the workspace")
-	fmt.Fprintln(os.Stderr, "  config         view or update magus configuration")
-	fmt.Fprintln(os.Stderr, "  server         manage the persistent daemon (start / stop / status; MCP starts with it)")
-	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
-	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (Buzz stdlib + every magus host module)")
-	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
-	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
-	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
-	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skills into a repo (agent install <dir>)")
-	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
-	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
-	fmt.Fprintln(os.Stderr, "  help           show this message")
+	for _, sc := range subcommands {
+		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
+	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")

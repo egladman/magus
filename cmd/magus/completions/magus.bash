@@ -8,7 +8,9 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local subcommands="ls describe run x where tail affected insight query explain path refs graph watch status doctor config memory server repl completion man init self version clean merge-driver buzz agent help"
+# magus-utils:subcommands:begin
+    local subcommands="ls describe run x where tail affected query explain path refs graph insight watch status clean merge-driver doctor config memory server repl buzz completion man init agent self version help"
+# magus-utils:subcommands:end
     local verbs="ls build test lint format clean generate ci"
     local nouns="spell charm target project workspace module mcp-tool"
     local lenses="hotspots affinity ownership trend report"

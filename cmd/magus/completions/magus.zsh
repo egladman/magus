@@ -14,38 +14,40 @@ _magus() {
     case $state in
         subcommand)
             local -a subcommands
+            # magus-utils:subcommands:begin
             subcommands=(
                 'ls:list all discovered projects'
-                'describe:define a magus concept and list its entities'
+                'describe:define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)'
                 'run:run a target for selected projects'
                 'x:interactive shorthand\: pick project + target (TTY only)'
                 'where:print the absolute path of a project (fuzzy match)'
                 'tail:stream the most recent cached log for cwd project'
                 'affected:run a target for VCS-diff affected projects'
-                'insight:mine VCS history for hotspots, affinity, ownership, trend'
-                "query:search the knowledge graph and show a node's neighborhood"
-                'explain:show one knowledge-graph node\: edges, provenance, blast radius'
+                'query:search the knowledge graph and show a node'\''s neighborhood'
+                'explain:show one knowledge-graph node\: its edges, provenance, blast radius'
                 'path:show the shortest path between two knowledge-graph nodes'
                 'refs:list where an ingested code symbol is defined and referenced'
-                'graph:the graphs as objects\: deps, export, stats'
+                'graph:the graphs as objects\: deps (project DAG), export (knowledge graph), stats (shape)'
+                'insight:VCS-history analytics\: hotspots, affinity, ownership, trend, volatility'
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'status:inspect the concurrency pool of a running parent magus'
+                'clean:remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]'
+                'merge-driver:VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
-                'memory:durable cross-session project memory'
-                'server:manage the persistent daemon (start / stop)'
+                'memory:durable cross-session project memory (list, get, put, delete, verify)'
+                'server:manage the persistent daemon (start / stop / status; MCP starts with it)'
                 'repl:open an interactive Buzz interpreter'
-                'completion:generate shell completion'
-                'man:install embedded man pages'
-                'init:bootstrap a workspace (magus.yaml + magusfile.buzz)'
+                'buzz:run a Buzz script (Buzz stdlib + every magus host module)'
+                'completion:print a shell completion script (bash, zsh, fish)'
+                'man:install the man pages embedded in this binary'
+                'init:bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
+                'agent:install the knowledge-graph agent skills into a repo (agent install <dir>)'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
-                'clean:remove declared Outputs (regenerable build artifacts)'
-                'agent:install the knowledge-graph agent skills into a repo'
-                'merge-driver:VCS merge driver for generated outputs'
-                'buzz:run a Buzz script (stdlib only; no host bindings)'
                 'help:show this message'
             )
+            # magus-utils:subcommands:end
             _describe 'subcommand' subcommands
             ;;
         args)
