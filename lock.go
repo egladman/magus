@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -201,11 +202,17 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 	if p == "" {
 		p = "."
 	}
+	owner := l.describeOwner(projectPath)
 	held := ""
-	if owner := l.describeOwner(projectPath); owner != "" {
+	if owner != "" {
 		held = " (held by " + owner + ")"
 	}
 	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, held)
+	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
+	// line above announces the event and then scrolls away; a run that is blocked
+	// needs the state to stay on screen, because the alternative a reader sees is
+	// silence.
+	slog.Info("lock.waiting", slog.String("project", p), slog.String("holder", owner))
 }
 
 // lockWaitHeartbeat is how often a blocked acquire reprints that it is still waiting.
@@ -276,6 +283,7 @@ func (l *projectLocker) emitResumed(projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(os.Stderr, "magus: lock on project %s released; starting.\n", p)
+	slog.Info("lock.acquired", slog.String("project", p))
 }
 
 // lockOwner is the best-effort record of which process holds a project lock,

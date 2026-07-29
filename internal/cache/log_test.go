@@ -494,6 +494,10 @@ func TestStatusLineRender(t *testing.T) {
 		{"pool only, nothing done yet", statusLine{capacity: 8, running: 3}, "pool 3/8 running"},
 		{"queued work is shown", statusLine{capacity: 8, running: 8, queued: 2}, "pool 8/8 running, 2 queued"},
 		{"a quiet queue is omitted", statusLine{capacity: 4}, "pool 0/4 running"},
+		// A blocked run leads, because the pool counters alone would read as a stall
+		// with no cause. This is the clause that describes doing nothing.
+		{"a blocked run leads with the wait", statusLine{capacity: 8, blocked: "web/api"}, "WAITING on lock: web/api   pool 0/8 running"},
+		{"the holder is named when known", statusLine{capacity: 8, blocked: ".", blockedBy: "pid 71557 (magus run serve)"}, "WAITING on lock: . (held by pid 71557 (magus run serve))   pool 0/8 running"},
 		{
 			"tally appears once work completes",
 			statusLine{capacity: 8, running: 2, passed: 3, cached: 2},

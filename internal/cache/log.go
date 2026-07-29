@@ -79,6 +79,11 @@ type statusLine struct {
 	// start is when the first event arrived, which is close enough to the
 	// run's start for a progress readout and needs no plumbing.
 	start time.Time
+	// blocked names the project this run is waiting on a lock for, and who holds
+	// it. It is the one clause that describes a run doing NOTHING, which is exactly
+	// why it belongs in a region that does not scroll: the log line announcing the
+	// wait scrolls away, and what is left on screen is silence.
+	blocked, blockedBy string
 }
 
 // render composes the status row. Clauses that carry no information are
@@ -86,6 +91,15 @@ type statusLine struct {
 // whole job is to show change.
 func (s statusLine) render(now time.Time) string {
 	var b strings.Builder
+	// Leads, because a blocked run is not making progress and the pool counters
+	// below it would otherwise read as a stall with no explanation.
+	if s.blocked != "" {
+		fmt.Fprintf(&b, "WAITING on lock: %s", s.blocked)
+		if s.blockedBy != "" {
+			fmt.Fprintf(&b, " (held by %s)", s.blockedBy)
+		}
+		b.WriteString("   ")
+	}
 	fmt.Fprintf(&b, "pool %d/%d running", s.running, s.capacity)
 	if s.queued > 0 {
 		fmt.Fprintf(&b, ", %d queued", s.queued)
@@ -231,6 +245,17 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	remote := remoteSuffix(recordDur(r, "remote_ns"), dur)
 
 	switch r.Message {
+	case "lock.waiting":
+		// State, not a failure: the run is correctly queued behind a peer. It is
+		// pinned rather than logged-and-forgotten because the wait is unbounded.
+		h.status.blocked = recordStr(r, "project")
+		h.status.blockedBy = recordStr(r, "holder")
+		h.paintStatus()
+		return h.err
+	case "lock.acquired":
+		h.status.blocked, h.status.blockedBy = "", ""
+		h.paintStatus()
+		return h.err
 	case "cache.hit":
 		// Cached: passed without running. Dimmed green so a cache hit reads as
 		// low-signal next to work that actually ran. Cache state lives in the parens,
