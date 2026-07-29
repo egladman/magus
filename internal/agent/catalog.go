@@ -21,7 +21,7 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 18
+const SkillVersion = 19
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -384,7 +384,11 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
-			out = append(out, c.gradeStamp("AGENTS.md", "magus agent install --agents-md", string(section)))
+			// install-agents-md is a SUBCOMMAND, not a flag on install. The old string
+			// named a flag that does not parse, so the one thing a stale stamp is
+			// supposed to give you - the command that fixes it - failed three times
+			// before the real name turned up in `magus agent install -h`.
+			out = append(out, c.gradeStamp("AGENTS.md", "magus agent install-agents-md", string(section)))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })

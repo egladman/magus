@@ -253,7 +253,13 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 // camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
 // JSON name.
 type ProjectEntry struct {
-	Path      string   `json:"path"                yaml:"path"`
+	Path string `json:"path"                yaml:"path"`
+	// Name is the project's DECLARED name (magus.project's "name" key), empty when
+	// it declares none. Carried on the boundary because a consumer rendering a
+	// human label has to prefer it over the directory basename - without it,
+	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
+	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
+	Name      string   `json:"name,omitempty"      yaml:"name,omitempty"`
 	Dir       string   `json:"dir"                 yaml:"dir"`
 	Spell     string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
 	Spells    []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
@@ -267,6 +273,7 @@ type ProjectEntry struct {
 func (p ProjectEntry) ToMap() map[string]any {
 	return map[string]any{
 		"path":      p.Path,
+		"name":      p.Name,
 		"dir":       p.Dir,
 		"spell":     p.Spell,
 		"spells":    p.Spells,

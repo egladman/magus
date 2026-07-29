@@ -202,7 +202,9 @@ func printAgentInstallNextSteps(written []string) {
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
-	interactive.Emit(os.Stderr, "the skills point at MAGUS.md's routing table:  magus describe graph -o markdown")
+	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
+	// verbs instead, because a generated index is only true as of its last run.
+	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs - magus describe targets, magus ls)")
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
@@ -451,6 +453,18 @@ type bashGuardVerdict struct {
 	Context string
 }
 
+// cmdPos anchors a pattern to a COMMAND position: the start of the line, or just
+// after a shell separator. Without it a pattern matches its own name appearing as
+// text, which only became load-bearing once these verdicts turned into denials -
+// `go test` and `git add -A` show up constantly in test data, documentation, and
+// commit messages, where `git reset --hard` almost never did. Writing the guard's
+// own test file through a shell heredoc was itself denied before this existed.
+//
+// Deliberately NOT applied to the whole-tree VCS patterns: those deny work that
+// cannot be recovered, so a rare false positive there is the safe direction, and
+// `cd /repo && git stash` must keep matching however it is reached.
+const cmdPos = `(?:^|[;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
+
 // The guard patterns. [^&|;]* keeps a flag search inside one segment of a
 // compound command, so `git reset && tool --hard-mode` does not false-positive.
 var (
@@ -461,6 +475,9 @@ var (
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
 	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
 	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
+	// `git add -A` / `git add .` / `git add --all` / `git add -u`: stage-everything
+	// forms. Split out from guardStageRe because these DENY - see evaluateBashGuard.
+	guardStageAllRe = regexp.MustCompile(cmdPos + `git\s+add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))`)
 	// Push, NOT commit. Committing in a half-finished state is ordinary and
 	// sometimes necessary; a gate there would fire constantly and be tuned out.
 	// Publishing is where the work stops being yours alone, so that is where the
@@ -484,7 +501,11 @@ var (
 	//                       dev-loop build, not a target's build artifact.
 	//   gofmt -l / -d       lists or diffs; only -w rewrites the tree.
 	guardRawToolExemptRe = regexp.MustCompile(`\bgo\s+build\b[^&|;]*\s-o\s|\bgofmt\s+-[ld]\b`)
-	guardRawToolRe       = regexp.MustCompile(`\bgo\s+(test|build|vet|generate)\b|\bgofmt\b|\bgoimports\b|\bgolangci-lint\b|\bmockery\b|\bbuf\s+(generate|lint|breaking)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bbiome\b|\bvitest\b|\bjest\b|\bpytest\b|\bruff\b|\bblack\b|\bmypy\b|\btsc\b|\bcargo\s+(test|build|check|clippy|fmt)\b|\brustfmt\b`)
+	// Anchored at cmdPos, so a tool NAME appearing as text is not a match. This
+	// only became load-bearing when the verdict turned into a deny: these names
+	// occur constantly in test data, docs, and commit messages, and an unanchored
+	// deny blocked writing this very file through a shell heredoc.
+	guardRawToolRe = regexp.MustCompile(cmdPos + `(?:go\s+(test|build|vet|generate)\b|gofmt\b|goimports\b|golangci-lint\b|mockery\b|buf\s+(generate|lint|breaking)\b|npm\s+(test|run|exec)\b|npx\s|pnpm\b|yarn\b|eslint\b|prettier\b|biome\b|vitest\b|jest\b|pytest\b|ruff\b|black\b|mypy\b|tsc\b|cargo\s+(test|build|check|clippy|fmt)\b|rustfmt\b)`)
 	// `cd <dir> && magus ...`: magus is CWD-relative, so this is the shape of
 	// running the right command against the wrong project. Every magus command
 	// that acts on a project takes it as an explicit argument, so the cd is
@@ -526,8 +547,15 @@ const (
 	// `go test ./... -run TestX`. That looked broken until the cache keyed extra
 	// args - the run replayed a cached success, so the arg never executed and the
 	// feature appeared missing.
-	runGuardContext = "magus workspace: run this through magus, not the raw tool - a raw tool bypasses the cache, the sandbox, and affected tracking. Escalate only as far as you actually need:\n" +
-		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - MAGUS.md lists every target\n" +
+	// DENIED, not advised: every tool matched here has an exact magus equivalent,
+	// so the deny costs nothing. It WAS an advisory, and an advisory loses to a
+	// trained reflex - `go test ./...` is muscle memory in a way `git reset --hard`
+	// never is. Measured: a long session with this advisory firing on every raw `go`
+	// call changed behaviour zero times, and left the Go build cache poisoned
+	// (uninstrumented raw runs against magus's coverage-instrumented ones) into a
+	// link-time fingerprint mismatch that took a full `go clean -cache` to clear.
+	runGuardContext = "this has an exact equivalent in magus, so it is DENIED rather than explained - not because it is dangerous, but because the replacement does strictly more (cache, sandbox, affected tracking) and costs you nothing. Escalate only as far as you actually need:\n" +
+		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - `magus describe targets` lists every target, `-o name` for just the names\n" +
 		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
 		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
 		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded."
@@ -571,6 +599,15 @@ const (
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// flags are the actionable part, and a weaker model needs the exact spelling.
+	// denyStageAll routes to deliberate staging. `git add -A` is the single command
+	// most likely to turn a focused change into an unreviewable one: it sweeps every
+	// regenerated output and every unrelated formatting fix a target just wrote into
+	// a commit about something else. Measured: one such call put 69 files - a whole
+	// regenerated docs site plus five untouched source files - into a commit about
+	// four collection methods.
+	denyStageAll = "staging everything has an exact equivalent in magus workspaces, so this is denied rather than explained: stage the paths you changed, `git add <path> ...`, then confirm with `git diff --cached --stat` BEFORE committing.\n" +
+		"A magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit - `git add -A` commits them alongside your change with no signal that it happened. Classify first: `magus describe file $(git diff --name-only)` marks each path output (generated - commit it WITH the source change that caused it) or source (yours to review). Load the magus-vcs skill if not already loaded."
+
 	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading."
 )
 
@@ -578,9 +615,26 @@ func denyWholeTree(op string) string {
 	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs skill."
 }
 
-// evaluateBashGuard applies the guard rules in severity order: destructive
-// whole-tree git operations deny; staging/committing and raw language tools
-// proceed with an injected reminder.
+// evaluateBashGuard applies the guard rules in severity order.
+//
+// magus denies what cannot be UNDONE, or what has an EXACT WORKING EQUIVALENT.
+// Everything else it explains. The two triggers are independent, and the second
+// is the one this comment exists to justify: a raw `go test` is harmless and
+// reversible, so it fails the first test entirely. It is denied because the
+// replacement is complete, which makes the deny free.
+//
+// That distinction is what the reverted repo-wide-search deny got wrong. Denying
+// grep was not a mistake because grep is safe; it was a mistake because magus has
+// no raw-text search to route to, so the deny removed a capability. Where the
+// equivalent exists and works, a deny costs nothing - and an advisory costs
+// everything, because a trained reflex reads straight past it. Measured, not
+// assumed: a session that had this advisory fire on every raw `go` invocation
+// changed its behaviour zero times, and left a poisoned Go build cache
+// (uninstrumented raw runs against magus's coverage-instrumented ones) that
+// surfaced as a link-time fingerprint mismatch.
+//
+// A deny is only legitimate once the replacement it names actually works. Do not
+// add one here without checking that path end to end.
 func evaluateBashGuard(command string) bashGuardVerdict {
 	switch {
 	case guardStashRe.MatchString(command) && !guardStashSafeRe.MatchString(command):
@@ -595,6 +649,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyWholeTree("git clean")}
 	case guardPushRe.MatchString(command):
 		return bashGuardVerdict{Context: pushGuardContext}
+	case guardStageAllRe.MatchString(command):
+		return bashGuardVerdict{Deny: denyStageAll}
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext}
 	case guardScopedRevertRe.MatchString(command):
@@ -602,7 +658,7 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardRawToolExemptRe.MatchString(command):
 		return bashGuardVerdict{}
 	case guardRawToolRe.MatchString(command):
-		return bashGuardVerdict{Context: runGuardContext}
+		return bashGuardVerdict{Deny: runGuardContext}
 	case guardMagusPipeRe.MatchString(command), guardMagusRedirRe.MatchString(command):
 		return bashGuardVerdict{Context: outputGuardContext}
 	case guardCdMagusRe.MatchString(command):

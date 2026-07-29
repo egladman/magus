@@ -576,6 +576,7 @@ func (m *Magus) DescribeProjects() types.ProjectsOutput {
 	for _, p := range all {
 		entries = append(entries, types.ProjectEntry{
 			Path:      p.Path,
+			Name:      p.Name,
 			Dir:       p.Dir,
 			Spell:     p.Spell,
 			Spells:    p.Spells,

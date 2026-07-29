@@ -32,9 +32,11 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    language tool. When you shell out, silence it (`-s`, next section) so a
    passing run costs a few lines, not a scroll of progress.
 2. Always reach for a top-level target first: `build`, `test`, `lint`, `format`,
-   `generate`, or a custom target from the catalog. `MAGUS.md` (committed at the
-   workspace root) lists every target per project; `magus_describe`
-   (kind=targets) classifies each as canonical, spell, or custom.
+   `generate`, or a custom target from the catalog. `magus describe targets`
+   lists every target (`-o name` for bare names) and classifies each as
+   canonical, spell, or custom; `magus_describe` (kind=targets) is the MCP
+   equivalent. Ask the workspace rather than reading `MAGUS.md`: that file is a
+   generated index for humans, true only as of its last regeneration.
 3. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
@@ -158,5 +160,7 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 
 ## Fetching current behavior
 
-Flags and target sets differ per workspace and magus version. Trust `MAGUS.md`,
-`magus describe target <name>`, and `magus <verb> -h` over anything remembered.
+Flags and target sets differ per workspace and magus version. Trust
+`magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
+over anything remembered - and over `MAGUS.md`, which is generated output that
+lags the tree between regenerations.

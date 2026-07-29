@@ -8,7 +8,7 @@ magus's own behavior, so read them rather than guessing.
 
 Two places serve the same pages:
 
-- In the magus repo (MAGUS.md at the root, a `docs/` tree): read `docs/<name>.md`
+- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): read `docs/<name>.md`
   directly. This is where the skill is dogfooded, so prefer it here.
 - Published: the deployed site at `https://eli.gladman.cc/magus/`. Every page is
   also emitted as raw Markdown at `<page-url>index.md` for clean fetching.
@@ -65,6 +65,8 @@ siblings - do not re-search for each one.
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
-(never edit it - change the source and regenerate). MAGUS.md is the routing
-index. The knowledge graph also carries every page as a `doc` node, so
-`magus query "kind:doc"` (see the magus-query skill) lists them from the graph.
+(never edit it - change the source and regenerate). MAGUS.md is a routing index
+generated for HUMAN readers, so do not answer from it: it is true only as of the
+last regeneration, and every fact in it has a live command. The knowledge graph
+carries every page as a `doc` node, so `magus query "kind:doc"` (see the
+magus-query skill) lists them from the graph.

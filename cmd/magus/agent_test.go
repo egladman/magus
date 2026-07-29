@@ -268,31 +268,52 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// moment the work stops being yours alone.
 		{command: "git push origin HEAD", context: "magus affected ci"},
 		{command: "git push --force-with-lease", context: "magus affected ci"},
-		{command: "git add -A", context: "magus-vcs"},
-		// The advisory names an explicit ladder: top-level target, then a single
-		// spell op which still runs through magus. The old text ended with "if no
-		// target covers this work, proceed", which read as permission to reach
-		// straight for the raw binary.
-		{command: "go test ./...", context: "<spell>::<op>"},
-		{command: "npm test", context: "magus-run"},
-		{command: "npx prettier --check .", context: "magus-run"},
-		{command: "pytest tests/", context: "magus-run"},
-		{command: "cargo build --release", context: "magus-run"},
-		{command: "gofmt -w x.go", context: "magus-run"},
+		// Stage-everything DENIES: `git add <path>` is an exact equivalent, so the
+		// deny costs nothing, and one such call swept 69 files (a regenerated docs
+		// site plus five untouched sources) into a commit about four methods.
+		{command: "git add -A", deny: true},
+		{command: "git add --all", deny: true},
+		{command: "git add .", deny: true},
+		{command: "git add -u", deny: true},
+		// Deliberate staging is still only advised - that IS the replacement.
+		{command: "git add cmd/magus/agent.go", context: "magus-vcs"},
+		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs"},
+		// Raw language tools DENY. Not because they are dangerous - they are not -
+		// but because magus does the same thing and more, so the deny is free. As an
+		// advisory this fired on every raw `go` call in a long session and changed
+		// behaviour zero times; the deny message still carries the full ladder.
+		{command: "go test ./...", deny: true},
+		{command: "npm test", deny: true},
+		{command: "npx prettier --check .", deny: true},
+		{command: "pytest tests/", deny: true},
+		{command: "cargo build --release", deny: true},
+		{command: "gofmt -w x.go", deny: true},
+		// Anchored to a COMMAND position, so the pattern appearing as TEXT is not a
+		// match. This matters far more now these deny: `go test` and `git add -A`
+		// turn up constantly in test data, docs, and commit messages, where
+		// `git reset --hard` almost never did. Without anchoring, writing this very
+		// test file through a shell heredoc was itself denied.
+		{command: "echo 'run go test ./... to check'"},
+		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs"},
+		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
+		// Still caught in every real command position.
+		{command: "cd /repo && go test ./...", deny: true},
+		{command: "make lint; pytest tests/", deny: true},
+		{command: "go build ./... | tee log", deny: true},
 		// Exempt: these bypass nothing, so advising on them is pure noise.
 		{command: "go build -o /tmp/magus ./cmd/magus"},
 		{command: "gofmt -l ./libs"},
 		{command: "gofmt -d x.go"},
 		// The rule set is language-agnostic on purpose: magus workspaces are not
 		// Go-only, and a guard that only knows Go is useless in a Rust or JS repo.
-		{command: "ruff check .", context: "magus-run"},
-		{command: "mypy .", context: "magus-run"},
-		{command: "rustfmt src/main.rs", context: "magus-run"},
-		{command: "vitest run", context: "magus-run"},
-		{command: "buf lint", context: "magus-run"},
-		{command: "golangci-lint run", context: "magus-run"},
-		{command: "buf generate", context: "magus-run"},
-		{command: "mockery", context: "magus-run"},
+		{command: "ruff check .", deny: true},
+		{command: "mypy .", deny: true},
+		{command: "rustfmt src/main.rs", deny: true},
+		{command: "vitest run", deny: true},
+		{command: "buf lint", deny: true},
+		{command: "golangci-lint run", deny: true},
+		{command: "buf generate", deny: true},
+		{command: "mockery", deny: true},
 		// Trimming magus's own output with the shell: magus has output flags, and
 		// a pipe discards exactly what the agent then has to guess at.
 		{command: "magus affected ci 2>&1 | tail -30", context: "--silent"},

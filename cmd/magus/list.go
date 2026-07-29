@@ -12,7 +12,12 @@ import (
 // listProject is the structured view of a project emitted under -o
 // json|yaml. Empty slices/strings are omitted to keep the payload tight.
 type listProject struct {
-	Path      string   `json:"path"                yaml:"path"`
+	Path string `json:"path"                yaml:"path"`
+	// Name is the DECLARED project name (magus.project's "name"), empty when the
+	// project declares none. Without it the human label fell back to the checkout
+	// directory, so `magus ls` printed a worktree's directory name where MAGUS.md,
+	// generated from the same workspace, printed the declared one.
+	Name      string   `json:"name,omitempty"      yaml:"name,omitempty"`
 	Dir       string   `json:"dir"                 yaml:"dir"`
 	Spell     string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
@@ -61,6 +66,7 @@ func ls(ctx context.Context, root string, args []string) error {
 	for _, p := range projects {
 		out.Projects = append(out.Projects, listProject{
 			Path:      p.Path,
+			Name:      p.Name,
 			Dir:       p.Dir,
 			Spell:     p.Spell,
 			Sources:   p.Sources,
@@ -84,7 +90,7 @@ func ls(ctx context.Context, root string, args []string) error {
 	// text and wide share the human-readable layout.
 	fmt.Printf("workspace: %s (%d projects)\n\n", out.Workspace, out.Count)
 	for _, p := range out.Projects {
-		fmt.Printf("project: %s\n", types.ProjectLabel(p.Path, p.Dir))
+		fmt.Printf("project: %s\n", types.ProjectDisplayName(p.Path, p.Name, p.Dir))
 		fmt.Printf("  dir:  %s\n", p.Dir)
 		if p.Spell != "" {
 			fmt.Printf("  spell: %s\n", p.Spell)

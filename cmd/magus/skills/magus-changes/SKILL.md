@@ -5,7 +5,10 @@ brief. The output is a decision aid, not a chronological commit dump.
 
 ## Gather evidence
 
-1. Read `MAGUS.md` for the project map and target vocabulary.
+1. Get the project map and target vocabulary from the workspace: `magus ls`
+   for projects, `magus describe targets` for the target vocabulary. Do not
+   read `MAGUS.md` for this - it is a generated index for human readers, and
+   a history brief that describes stale structure is worse than none.
 2. Establish the requested time boundary. On Git, inspect merge commits first:
 
    ```sh

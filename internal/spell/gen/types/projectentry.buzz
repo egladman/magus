@@ -5,6 +5,7 @@
 
 export object ProjectEntry {
     path: str = "",
+    name: str = "",
     dir: str = "",
     spell: str = "",
     spells: [str] = [],
