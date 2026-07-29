@@ -21,6 +21,17 @@ type SpellEntry struct {
 	// node so `magus query language:go` reaches the adapter alongside that language's
 	// files and symbols.
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	// VersionProbe reports whether the spell declares a toolchain-version command
+	// (mgs_getVersionCommand). Its OUTPUT is mixed into every cache key for the
+	// project (run.go's toolVersionsByProject), making it one of the few cache
+	// inputs that is not a file - so "why did this key change" is unanswerable from
+	// the spell inventory without it. Reported as a bool rather than the argv
+	// because the argv survives only inside the probe closure; the descriptor keeps
+	// it, and `magus describe spell <name>` docs render it from there.
+	//
+	// Its absence is not cosmetic: with every spell reporting identically whether or
+	// not it probed, the inventory reads as though none of them do.
+	VersionProbe bool `json:"version_probe,omitempty" yaml:"version_probe,omitempty"`
 	// TargetDocs maps a target name to its handler's doc comment, where one
 	// exists. Populated only for workspace-local Buzz spells (built-in docs are
 	// not serialized in bytecode).

@@ -44,15 +44,16 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 			}
 		}
 		entries = append(entries, types.SpellEntry{
-			Name:       p.Name(),
-			Sources:    p.Sources(),
-			Outputs:    p.Outputs(),
-			Claims:     p.Claims(),
-			Targets:    p.Targets(),
-			Opaque:     p.Opaque(),
-			Language:   p.Language(),
-			TargetDocs: docs,
-			OpCommands: opCommands,
+			Name:         p.Name(),
+			Sources:      p.Sources(),
+			Outputs:      p.Outputs(),
+			Claims:       p.Claims(),
+			Targets:      p.Targets(),
+			Opaque:       p.Opaque(),
+			Language:     p.Language(),
+			VersionProbe: p.HasVersionProbe(),
+			TargetDocs:   docs,
+			OpCommands:   opCommands,
 		})
 	}
 	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
