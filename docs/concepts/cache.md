@@ -244,17 +244,23 @@ PATH, a formatter from a version manager - which is precisely the set nothing el
 would catch.
 
 **Where the declaration lives is the whole point.** Most build systems can express
-this - you can usually hash a tool version into a key if you set it up. But that
-puts the burden on every developer wiring up every project, and correctness then
-depends on each of them remembering, in every repository, forever. One person
-skips it and their project silently caches across toolchains. That is a strange
-place to draw the line: the build tool knows which binary it is about to run, and
-is better positioned to notice than the person configuring it.
+this - Nx, for instance, makes tool-version tracking technically possible through
+executors, but shifts the burden entirely to developers to implement it
+consistently. Correctness then depends on each of them remembering, in every
+project, in every repository. One person skips it and that project silently caches
+across toolchains, and the failure surfaces somewhere else entirely.
 
-In magus the declaration lives on the **spell** - written once by whoever adapts
-the tool, inherited by every project that binds it. A project gets correct tool
-invalidation by saying `spells: [go]`, not by remembering to wire up a probe.
-Discipline is spent once, in the adapter, instead of repeatedly in every consumer.
+magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
+target touched - the probe is a declaration someone wrote by hand, and
+`mgs_getVersionCommand` is as explicit as it looks. What differs is its
+**location**: it sits on the SPELL, the adapter that already knows it drives
+`golangci-lint`, rather than being restated by every project that uses one. A
+project binding `spells: [go]` inherits that declaration the same way it inherits
+the spell's sources and ops.
+
+So the trade is not magic against discipline. It is declaring a fact once, where
+it is true, instead of once per consumer - the same reason a spell declares its
+`needs` globs rather than each project re-listing `**/*.go`.
 
 Set `MAGUS_CACHE_TOOL_VERSION=off` to drop probes from keys, or `=workspace` to
 probe once per workspace instead of per project.
