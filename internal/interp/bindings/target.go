@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -267,6 +268,13 @@ func dispatchBuzzDeps(callCtx context.Context, targets map[string]vm.Callable, n
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.
 	callCtx = service.WithSupervision(callCtx)
+	// `--` args belong to the target the USER named, not to whatever that target
+	// pulls in. They ride the context, and runBuzzCommand hands them to any op that
+	// declared no explicit args, so without this every dependency got them too:
+	// `magus run test <p> -- -run TestX` reached the format dependency, and gofmt
+	// tried to lstat "-run" and "TestX" as paths. That made the documented way to
+	// narrow a run unusable on any target with a ctx.needs, which is most of them.
+	callCtx = project.WithExtraArgs(callCtx, nil)
 	names = dedupStrings(names)
 	if src := interp.SourceFromContext(callCtx); src != nil {
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
