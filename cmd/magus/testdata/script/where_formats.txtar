@@ -1,0 +1,33 @@
+# `magus where <project|file>` answers "where does this live on disk". It is the
+# path-resolution verb agents use to turn a workspace-relative name into something they
+# can hand to another tool, so its plain form is deliberately bare: a path and nothing
+# else, safe to substitute directly into a command.
+
+exec magus where .
+stdout '/'
+
+# Structured forms carry the same answer with its label, for a caller resolving several.
+exec magus where . -o json
+stdout '\{|/'
+
+exec magus where . -o yaml
+
+# A name that matches nothing fails rather than printing an empty line. An empty
+# result substituted into a shell command becomes a silently wrong path.
+! exec magus where no-such-project-here
+stderr 'no projects or files match'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

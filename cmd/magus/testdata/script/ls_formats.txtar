@@ -1,0 +1,47 @@
+# `magus ls` is the workspace inventory: every discovered project, its directory, its
+# bound spell, and the globs it claims. It is the first command an agent runs to learn
+# what a workspace contains, so every format it advertises has to carry the same facts.
+
+exec magus ls
+stdout 'workspace:'
+stdout '1 projects'
+stdout 'acme'
+
+# json is the reference the other structured formats are read against.
+exec magus ls -o json
+stdout '"workspace"'
+stdout '"count": 1'
+stdout '"projects"'
+stdout '"spell": "acme"'
+
+exec magus ls -o yaml
+stdout 'workspace:'
+stdout 'projects:'
+stdout 'spell: acme'
+
+# jsonl emits one project per line, so a consumer can stream rather than buffer.
+exec magus ls -o jsonl
+stdout '"path"'
+
+# name is the pipeable form: bare project paths, nothing else. The root project is ".".
+exec magus ls -o name
+stdout '^\.$'
+
+# template binds by json tag, the same names -o json prints.
+exec magus ls -o 'template={{range .projects}}{{.spell}}{{end}}'
+stdout 'acme'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

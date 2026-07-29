@@ -1,0 +1,40 @@
+# `magus explain <node>` is the single-node view of the knowledge graph: the node's own
+# data, its incoming and outgoing edges with the provenance of each, and how many nodes
+# reach it. It is the "why is this here" verb, so its structured forms must carry the
+# provenance - an edge without it is an assertion a reader cannot check.
+
+exec magus explain lint
+stdout 'op:acme:lint'
+
+exec magus explain lint -o json
+stdout '"schema_version"'
+stdout '"node"'
+stdout '"id": "op:acme:lint"'
+stdout '"kind": "op"'
+
+exec magus explain lint -o yaml
+stdout 'node:'
+stdout 'id: op:acme:lint'
+
+exec magus explain lint -o 'template={{.node.id}}'
+stdout 'op:acme:lint'
+
+# An unknown node fails rather than returning an empty result: a graph query that
+# silently finds nothing reads as "no relationships" instead of "wrong name".
+! exec magus explain no-such-node-here
+stderr 'no-such-node-here'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

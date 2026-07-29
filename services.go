@@ -8,8 +8,8 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
-	"github.com/egladman/magus/internal/serviceident"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,7 +46,7 @@ func (m *Magus) newServiceSession(ctx context.Context) *service.Session {
 // near-duplicates emits nothing, so the warning stays a real signal.
 func (m *Magus) warnNearDuplicateServices(seeds []*types.Project, charms []string) {
 	clusters := serviceaudit.NearDuplicates(m.reachableProjects(seeds), charms)
-	msg := serviceident.FormatWarning(clusters)
+	msg := identity.FormatWarning(clusters)
 	if msg == "" {
 		return
 	}
