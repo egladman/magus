@@ -40,6 +40,7 @@ func chainUsage() {
 	fmt.Fprintln(os.Stderr, "  file <path>                      print one artifact's absolute path")
 	fmt.Fprintln(os.Stderr, "  file <path> contents             write its bytes to stdout")
 	fmt.Fprintln(os.Stderr, "  file <path> export --path <dst>  copy it to <dst>")
+	fmt.Fprintln(os.Stderr, "  value                            print what the target returned")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "<path> is workspace-relative, as printed by `outputs`.")
 	fmt.Fprintln(os.Stderr, "")
@@ -48,10 +49,13 @@ func chainUsage() {
 }
 
 // runChain applies the post---then verbs to the artifacts target produced.
-func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, targets []types.Target, argv []string) error {
+func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, targets []types.Target, argv []string, returns map[string]any) error {
 	if len(argv) == 0 {
 		chainUsage()
-		return usagef("magus run: --then needs a verb (want outputs or file)")
+		return usagef("magus run: --then needs a verb (want outputs, file, or value)")
+	}
+	if argv[0] == "value" {
+		return chainValue(m, opts, targets, returns, argv[1:])
 	}
 	artifacts, err := m.ResolveTargetOutputs(ctx, m.ResolveProjects(targets), target)
 	if err != nil {
@@ -68,7 +72,7 @@ func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target st
 		return nil
 	default:
 		chainUsage()
-		return usagef("magus run: unknown --then verb %q (want outputs or file)", argv[0])
+		return usagef("magus run: unknown --then verb %q (want outputs, file, or value)", argv[0])
 	}
 }
 
@@ -230,4 +234,54 @@ func copyArtifact(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// chainValue implements `--then value`: print what the target returned.
+//
+// This is the bare-scalar form, for substitution straight into another command:
+//
+//	VER=$(magus run describe --then value)
+//
+// -o json gives the same value with its project, which is what a multi-project run
+// needs; the text form deliberately prints the value alone with no label to strip,
+// the same contract `magus where` keeps.
+func chainValue(m *magus.Magus, opts OutputOptions, targets []types.Target, returns map[string]any, argv []string) error {
+	if len(argv) > 0 {
+		chainUsage()
+		return usagef("magus run: `value` takes no further verbs, got %q", argv[0])
+	}
+	projects := m.ResolveProjects(targets)
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		out := make([]runProject, 0, len(projects))
+		for _, p := range projects {
+			out = append(out, runProject{Path: p.Path, Value: returns[p.Path]})
+		}
+		return emitFormatted(opts, out)
+	}
+
+	// A target that returned nothing is not an error - `> void` is the default and
+	// almost every target is one - but printing an empty line would look like a
+	// value. Say which target was silent instead.
+	printed := false
+	for _, p := range projects {
+		v, ok := returns[p.Path]
+		if !ok {
+			continue
+		}
+		printed = true
+		switch tv := v.(type) {
+		case []string:
+			for _, item := range tv {
+				fmt.Println(item)
+			}
+		default:
+			fmt.Println(tv)
+		}
+	}
+	if !printed {
+		return usagef("magus run: this target returned nothing (it is `> void`), so there is no value to print")
+	}
+	return nil
 }

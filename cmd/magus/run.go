@@ -286,7 +286,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 
 	if chained {
-		return runChain(ctx, m, opts, targetName, targets, chainArgs)
+		return runChain(ctx, m, opts, targetName, targets, chainArgs, readReturns())
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:

@@ -42,6 +42,27 @@ stdout '"value": "v1.2.3"'
 exec magus run listy -o json
 stdout '"alpha"'
 
+# `--then value` is the bare-scalar form, for substitution straight into another
+# command: VER=$(magus run describe --then value). No label, nothing to strip - the
+# same contract `magus where` keeps for a path.
+exec magus run describe --then value
+stdout '^v1\.2\.3$'
+
+# A [str] comes back one per line, so it pipes. This is also the REPLAYED value: the
+# script already ran listy above, so this is a cache hit, and a hit round-trips
+# through the manifest's JSON where a []string arrives back as []any. Untreated it
+# rendered as "[alpha beta]" on the replay and one-per-line on the fresh run, which
+# defeats storing it at all - a hit is meant to be indistinguishable from a miss.
+exec magus run listy --then value
+stdout '^alpha$'
+stdout '^beta$'
+! stdout '\[alpha beta\]'
+
+# A void target is not an error to RUN, but asking for a value it never produced is a
+# usage error - printing an empty line would look like the value was the empty string.
+! exec magus run voidy --then value
+stderr 'returned nothing'
+
 # A map is refused, and the message names the type it got AND the set it accepts, so
 # the fix is in the error rather than in the docs.
 ! exec magus run mappy

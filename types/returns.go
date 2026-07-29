@@ -47,7 +47,31 @@ func CaptureReturn(ctx context.Context, projectPath string, v any) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.vals[projectPath] = v
+	r.vals[projectPath] = normalizeReturn(v)
+}
+
+// normalizeReturn restores the Go type a fresh run produces, for a value that came
+// back through the cache manifest.
+//
+// A [str] return is a []string on the run that executed the target, but the same
+// value replayed from a cache HIT has been through JSON and arrives as []any. Left
+// alone, the two runs render differently - the text form printed "[alpha beta]" for
+// the replay where the fresh run printed one item per line - which defeats the point
+// of storing it, since a hit is supposed to be indistinguishable from a miss.
+func normalizeReturn(v any) any {
+	items, ok := v.([]any)
+	if !ok {
+		return v
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		s, ok := it.(string)
+		if !ok {
+			return v // not the [str] shape; hand it back untouched
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // CapturedReturn reads back what projectPath recorded, for the cache to store
