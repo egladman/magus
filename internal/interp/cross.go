@@ -94,6 +94,9 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 		}
 	}
 	slog.DebugContext(ctx, "interp: cross-project dispatch", "dir", dir, "target", target)
+	// Mark before running: the parent's audit diffs after its body returns, and by then
+	// this child has already written its own outputs.
+	types.ActiveDispatchFromContext(ctx).Mark(dir)
 	e := &crossEntry{done: make(chan struct{})}
 	c.m[key] = e
 	c.mu.Unlock()

@@ -39,9 +39,13 @@ func TestWorkspaceContextHelpers(t *testing.T) {
 	ctx := WithWorkspace(context.Background(), repo)
 	assert.Same(t, repo, WorkspaceFromContext(ctx))
 
-	dispatch := map[string]struct{}{"api": {}, "web": {}}
+	dispatch := &ActiveDispatch{}
+	dispatch.Mark("api")
+	dispatch.Mark("web")
 	ctx = WithActiveDispatch(context.Background(), dispatch)
-	assert.Equal(t, dispatch, ActiveDispatchFromContext(ctx))
+	assert.Same(t, dispatch, ActiveDispatchFromContext(ctx))
+	assert.True(t, ActiveDispatchFromContext(ctx).Has("api"))
+	assert.False(t, ActiveDispatchFromContext(ctx).Has("absent"))
 
 	obs := NoopObserver{}
 	ctx = ContextWithGraphObserver(context.Background(), obs)

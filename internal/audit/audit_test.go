@@ -142,10 +142,10 @@ func TestBeginSkipsActiveDispatchDescendant(t *testing.T) {
 	child := &types.Project{Path: "api/docs", Dir: filepath.Join(tmp, "api", "docs")}
 	ws := &fakeWS{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
-	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{
-		"api":      {},
-		"api/docs": {}, // descendant is also being dispatched — skip it
-	})
+	dispatch := &types.ActiveDispatch{}
+	dispatch.Mark("api")
+	dispatch.Mark("api/docs") // descendant is also being dispatched — skip it
+	ctx = types.WithActiveDispatch(ctx, dispatch)
 	a := Begin(ctx, parent, true)
 	assert.Nil(t, a, "Begin should skip when the only descendant is in active dispatch")
 }
@@ -164,7 +164,9 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 	ws := &fakeWS{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	// Active dispatch holds only the parent — child writes here are violations.
-	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
+	onlyParent := &types.ActiveDispatch{}
+	onlyParent.Mark("api")
+	ctx = types.WithActiveDispatch(ctx, onlyParent)
 
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a, "Begin returned nil; expected an audit")
@@ -193,7 +195,7 @@ func TestFinishSilentOnNoChanges(t *testing.T) {
 	child := &types.Project{Path: "api/docs", Dir: childDir}
 	ws := &fakeWS{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
-	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
+	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
 	a := Begin(ctx, parent, true)
 	assert.NoError(t, a.Finish(ctx, "format"), "expected no boundary failure when descendant tree unchanged")
@@ -241,7 +243,7 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	leaf := &types.Project{Path: "api/docs/v2", Dir: leafDir}
 	ws := &fakeWS{projects: []*types.Project{parent, inner, leaf}}
 	ctx := types.WithWorkspace(context.Background(), ws)
-	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
+	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a, "Begin returned nil")
@@ -273,7 +275,7 @@ func TestReportCapsLargeFileLists(t *testing.T) {
 	child := &types.Project{Path: "api/docs", Dir: childDir}
 	ws := &fakeWS{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
-	ctx = types.WithActiveDispatch(ctx, map[string]struct{}{"api": {}})
+	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
 	a := Begin(ctx, parent, true)
 	t2 := time.Unix(1_700_000_100, 0)
@@ -363,4 +365,36 @@ func BenchmarkSnapshotAndDiff(b *testing.B) {
 			b.Fatal("expected at least one change")
 		}
 	}
+}
+
+// TestMarkedMidRunIsNotAViolation covers the ordering the descendant audit lives or
+// dies by: a project reached through a cross-project dependency is marked WHILE the
+// parent's body runs, which is after descendantsOf has already chosen what to watch.
+// Excluding only at Begin meant the mark always arrived too late, and the child's own
+// output was reported as the parent writing across a boundary - which is what made
+// `magus run build .` fail on a tree where nothing was wrong.
+func TestMarkedMidRunIsNotAViolation(t *testing.T) {
+	tmp := t.TempDir()
+	parentDir := filepath.Join(tmp, "api")
+	childDir := filepath.Join(parentDir, "docs")
+	require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+	parent := &types.Project{Path: "api", Dir: parentDir}
+	child := &types.Project{Path: "api/docs", Dir: childDir}
+	ws := &fakeWS{projects: []*types.Project{parent, child}}
+
+	dispatch := &types.ActiveDispatch{}
+	ctx := types.WithWorkspace(context.Background(), ws)
+	ctx = types.WithActiveDispatch(ctx, dispatch)
+
+	// Begin BEFORE the child is known to be dispatching - the real ordering.
+	a := Begin(ctx, parent, true)
+	require.NotNil(t, a, "Begin returned nil; expected an audit")
+
+	// The child runs its own target mid-body and writes its own output.
+	dispatch.Mark("api/docs")
+	require.NoError(t, os.WriteFile(filepath.Join(childDir, "MAGUS.md"), []byte("generated"), 0o644))
+
+	assert.NoError(t, a.Finish(ctx, "build"),
+		"a descendant that ran its own target mid-run owns its writes; the parent must not be blamed")
 }

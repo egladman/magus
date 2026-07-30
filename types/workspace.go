@@ -98,15 +98,54 @@ func WorkspaceFromContext(ctx context.Context) WorkspaceRepository {
 
 type activeDispatchKey struct{}
 
-// WithActiveDispatch returns a context carrying the set of project paths in the current dispatch.
-func WithActiveDispatch(ctx context.Context, projects map[string]struct{}) context.Context {
-	return context.WithValue(ctx, activeDispatchKey{}, projects)
+// ActiveDispatch records which projects are running a target of their OWN during this
+// run, so the descendant-write audit can tell a child's writes from a parent reaching
+// across a boundary.
+//
+// It is filled as dispatch happens rather than derived from declarations, because the
+// dependency that reaches a descendant is often not on the target being audited: the
+// root's build needs go-build, and go-build is what needs the nested project. Only the
+// live dispatch sees the whole chain. Entries are project dirs, which is what the
+// dispatcher knows and what the audit already carries per descendant.
+type ActiveDispatch struct {
+	mu sync.Mutex
+	m  map[string]struct{}
 }
 
-// ActiveDispatchFromContext returns the active-dispatch set, or nil.
-func ActiveDispatchFromContext(ctx context.Context) map[string]struct{} {
-	m, _ := ctx.Value(activeDispatchKey{}).(map[string]struct{})
-	return m
+// Mark records dir as running its own target. Safe for concurrent use: cross-project
+// dependencies dispatch in parallel.
+func (a *ActiveDispatch) Mark(dir string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.m == nil {
+		a.m = map[string]struct{}{}
+	}
+	a.m[dir] = struct{}{}
+}
+
+// Has reports whether dir was marked.
+func (a *ActiveDispatch) Has(dir string) bool {
+	if a == nil {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, ok := a.m[dir]
+	return ok
+}
+
+// WithActiveDispatch installs a shared ActiveDispatch for one run.
+func WithActiveDispatch(ctx context.Context, a *ActiveDispatch) context.Context {
+	return context.WithValue(ctx, activeDispatchKey{}, a)
+}
+
+// ActiveDispatchFromContext returns the run's ActiveDispatch, or nil.
+func ActiveDispatchFromContext(ctx context.Context) *ActiveDispatch {
+	a, _ := ctx.Value(activeDispatchKey{}).(*ActiveDispatch)
+	return a
 }
 
 type graphObserverKey struct{}

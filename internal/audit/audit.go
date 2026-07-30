@@ -102,7 +102,7 @@ func (a *Audit) Finish(ctx context.Context, target string) error {
 	return report(ctx, a.project, target, a.descs, changes)
 }
 
-func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active map[string]struct{}) []descendant {
+func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active *types.ActiveDispatch) []descendant {
 	isRoot := parent.Path == "" || parent.Path == "."
 	prefix := parent.Path + "/"
 	all := ws.All()
@@ -114,7 +114,7 @@ func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active map[s
 		if !isRoot && !strings.HasPrefix(p.Path, prefix) {
 			continue
 		}
-		if _, dispatching := active[p.Path]; dispatching {
+		if active.Has(p.Path) || active.Has(p.Dir) {
 			continue
 		}
 		out = append(out, descendant{path: p.Path, dir: p.Dir})
@@ -267,6 +267,16 @@ func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 // reportCap bounds each reported path list.
 const reportCap = 50
 
+// dirOf returns the on-disk dir recorded for a descendant path.
+func dirOf(descs []descendant, path string) (string, bool) {
+	for _, d := range descs {
+		if d.path == path {
+			return d.dir, true
+		}
+	}
+	return "", false
+}
+
 // report buckets changes by descendant project and returns actionable failures.
 func report(ctx context.Context, p *types.Project, target string, descs []descendant, changes []change) error {
 	by := make(map[string]*changeBucket, len(descs))
@@ -313,9 +323,20 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 	if project == "" {
 		project = "."
 	}
+	// Re-check the dispatch set HERE, not at Begin. descendantsOf runs before the
+	// target body, so a project reached through a cross-project dependency has not been
+	// marked yet - by the time its writes appear it is running a target of its own, and
+	// those writes are its business. Checking only up front blamed the parent for them.
+	active := types.ActiveDispatchFromContext(ctx)
 	errs := make([]error, 0, len(descPaths))
 	for _, desc := range descPaths {
 		b := by[desc]
+		if active.Has(desc) {
+			continue
+		}
+		if d, ok := dirOf(descs, desc); ok && active.Has(d) {
+			continue
+		}
 		summary := changeSummary(b)
 		message := fmt.Sprintf("project %q target %q wrote into descendant project %q: %s\nfix: move this work to %q or exclude that path from the parent target", project, target, desc, summary, desc)
 		types.EmitDiagnostic(ctx, types.DiagnosticEvent{

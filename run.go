@@ -699,7 +699,20 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = types.WithWorkspace(ctx, m)
-	ctx = types.WithActiveDispatch(ctx, active)
+	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
+	// as cross-project dependencies run. Selection alone was not enough: `magus run
+	// build .` selects only the root, so a nested project reached through a dependency
+	// was still treated as foreign and its own writes blamed on the root.
+	activeDispatch := &types.ActiveDispatch{}
+	for path := range active {
+		activeDispatch.Mark(path)
+	}
+	for path := range active {
+		if pr := byPath[path]; pr != nil {
+			activeDispatch.Mark(pr.Dir)
+		}
+	}
+	ctx = types.WithActiveDispatch(ctx, activeDispatch)
 	ctx = types.WithCharms(ctx, opts.Charms)
 	norm := opts.Normalizer
 	if norm == nil {

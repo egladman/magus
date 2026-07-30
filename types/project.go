@@ -145,6 +145,11 @@ type Project struct {
 	// TargetExecOverrides are per-target ctx.withEnv / ctx.withCwd overrides, in
 	// declaration order, folded into the cache key. See TargetGraphNode.ExecOverrides.
 	TargetExecOverrides map[string][]string
+	// TargetCrossDeps are the cross-project targets each target depends on, declared
+	// via a project import (<alias>.<target>). The descendant-write audit reads them:
+	// when a parent target depends on a target INSIDE a descendant project, the writes
+	// that descendant makes are its own, not the parent reaching across a boundary.
+	TargetCrossDeps map[string][]CrossTargetRef
 	// TargetEnvAllow are per-target ctx.env declarations: env var NAMES whose process
 	// values fold into the cache key. See TargetGraphNode.EnvAllow.
 	TargetEnvAllow map[string][]string

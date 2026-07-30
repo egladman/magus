@@ -391,6 +391,16 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
 					}
 				}
+				if len(n.CrossDependencies) > 0 {
+					if p.TargetCrossDeps == nil {
+						p.TargetCrossDeps = map[string][]types.CrossTargetRef{}
+					}
+					for _, ref := range n.CrossDependencies {
+						if !slices.Contains(p.TargetCrossDeps[n.Name], ref) {
+							p.TargetCrossDeps[n.Name] = append(p.TargetCrossDeps[n.Name], ref)
+						}
+					}
+				}
 				if len(n.EnvAllow) > 0 {
 					if p.TargetEnvAllow == nil {
 						p.TargetEnvAllow = map[string][]string{}
