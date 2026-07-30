@@ -181,24 +181,24 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// entries land first (in arg order), cross entries after, matching
 							// the fold order buildStep produced before the two were unified.
 							for _, g := range globs {
-								node.Inputs = appendUniqRef(node.Inputs, types.InputRef{Glob: g})
+								node.Inputs = appendUniq(node.Inputs, types.InputRef{Glob: g})
 							}
 							// A cross-project file input counts as recognized (so it does NOT
 							// trip DynamicIO); a computed rel is not recognized and trips it.
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Inputs = appendUniqRef(node.Inputs, ref)
+									node.Inputs = appendUniq(node.Inputs, ref)
 								}
 							}
 						case "outputs":
 							for _, g := range globs {
-								node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Glob: g})
+								node.Outputs = appendUniq(node.Outputs, types.OutputRef{Glob: g})
 							}
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
+									node.Outputs = appendUniq(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
 						case "withCwd":
@@ -238,12 +238,12 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							}
 						case "updates":
 							for _, g := range globs {
-								node.Updates = appendUniqUpdRef(node.Updates, types.UpdateRef{Glob: g})
+								node.Updates = appendUniq(node.Updates, types.UpdateRef{Glob: g})
 							}
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Updates = appendUniqUpdRef(node.Updates, types.UpdateRef{Project: ref.Project, Glob: ref.Glob})
+									node.Updates = appendUniq(node.Updates, types.UpdateRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
 						}
@@ -444,30 +444,8 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// appendUniqRef appends ref unless an equal one is already present (InputRef is a
-// comparable value), the []InputRef counterpart of appendUniq for input dedup.
-func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
-	if slices.Contains(s, ref) {
-		return s
-	}
-	return append(s, ref)
-}
 
-// appendUniqOutRef is appendUniqRef for outputs; OutputRef is likewise comparable.
-func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRef {
-	if slices.Contains(s, ref) {
-		return s
-	}
-	return append(s, ref)
-}
 
-// appendUniqUpdRef is appendUniqOutRef for ctx.updates refs.
-func appendUniqUpdRef(s []types.UpdateRef, ref types.UpdateRef) []types.UpdateRef {
-	if slices.Contains(s, ref) {
-		return s
-	}
-	return append(s, ref)
-}
 
 // charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
 // It matches both receivers a target can read a charm through - the magus.has_charm
@@ -675,12 +653,6 @@ func targetPatternRe(pattern string) *regexp.Regexp {
 	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
 }
 
-func appendUniq(s []string, v string) []string {
-	if slices.Contains(s, v) {
-		return s
-	}
-	return append(s, v)
-}
 
 // lastPathSegment returns the text after the final '/', or the whole string if
 // none — the default alias for an `import "project/<path>"` (basename of the path).
@@ -689,4 +661,14 @@ func lastPathSegment(p string) string {
 		return p[i+1:]
 	}
 	return p
+}
+
+// appendUniq appends v to s unless it is already present, keeping declaration order.
+// One generic replaces the four near-identical copies this file grew - one per element
+// type - which differed only in their signatures.
+func appendUniq[T comparable](s []T, v T) []T {
+	if slices.Contains(s, v) {
+		return s
+	}
+	return append(s, v)
 }

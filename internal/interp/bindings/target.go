@@ -402,18 +402,15 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 		}
 		return e
 	}
-	c.MapSet("withEnv", directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsMap() {
-			return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
+	// The base context's derivation pair IS the empty derivation's, so take it from
+	// execCtx rather than writing the two closures (and their two error strings) a
+	// second time. Only those keys are copied: the rest of an Exec is the refusal to
+	// declare, which the base context must not inherit.
+	for _, k := range []string{"withEnv", "withCwd"} {
+		if v, ok := execCtx(vm.Null, vm.Null).MapGet(k); ok {
+			c.MapSet(k, v)
 		}
-		return execCtx(args[0], vm.Null), nil
-	}))
-	c.MapSet("withCwd", directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
-		}
-		return execCtx(vm.Null, args[0]), nil
-	}))
+	}
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))
 	c.MapSet("outputs", directVal(obs, "ctx.outputs", footprintDecl))
