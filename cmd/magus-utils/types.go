@@ -37,6 +37,17 @@ var registry = map[string]reflect.Type{
 	// magus.affected and magus.graph, the in-process verbs beside ls.
 	"Affected": reflect.TypeOf(types.AffectedResult{}),
 	"Graph":    reflect.TypeOf(types.GraphView{}),
+	// The TARGET graph (the targets inside each project), distinct from Graph above,
+	// which is the project-level DAG. Backs magus.targets(). The nested entries are
+	// registered too because a generated mirror names them in its field types, and a
+	// module that references an undefined object does not type-check.
+	"TargetSpellUse":     reflect.TypeOf(types.TargetSpellUse{}),
+	"CrossTargetRef":     reflect.TypeOf(types.CrossTargetRef{}),
+	"InputRef":           reflect.TypeOf(types.InputRef{}),
+	"OutputRef":          reflect.TypeOf(types.OutputRef{}),
+	"TargetGraphNode":    reflect.TypeOf(types.TargetGraphNode{}),
+	"TargetGraphProject": reflect.TypeOf(types.TargetGraphProject{}),
+	"TargetGraph":        reflect.TypeOf(types.TargetGraphOutput{}),
 	// magus.modules / magus.module. Field and method entries precede the module
 	// entry that lists them.
 	"ModuleFieldEntry":  reflect.TypeOf(types.ModuleFieldEntry{}),

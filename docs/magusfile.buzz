@@ -1,4 +1,5 @@
 import "magus";
+import "magus/target";
 // Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -188,7 +189,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(content_generate);
     ctx.needs(md_generate);
     ctx.needs(changelog_generate);
-    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT);
+    // magus.targets() is the typed target graph (annotated for compile-checked field
+    // access). Fetched HERE because only the magusfile imports the host magus module;
+    // the SSG receives it as data.
+    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT, magus\targets() as target\TargetGraph);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can

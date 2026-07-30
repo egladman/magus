@@ -133,6 +133,37 @@ var AffectedSource string
 //go:embed gen/types/graph.buzz
 var GraphSource string
 
+// The magus.targets() result: every project's TARGET graph. The nested entries
+// precede their parents, because each parent's fields name them.
+//
+//go:generate go run ../../cmd/magus-utils types -type TargetSpellUse -out gen/types/targetspelluse.buzz
+//go:embed gen/types/targetspelluse.buzz
+var TargetSpellUseSource string
+
+//go:generate go run ../../cmd/magus-utils types -type CrossTargetRef -out gen/types/crosstargetref.buzz
+//go:embed gen/types/crosstargetref.buzz
+var CrossTargetRefSource string
+
+//go:generate go run ../../cmd/magus-utils types -type InputRef -out gen/types/inputref.buzz
+//go:embed gen/types/inputref.buzz
+var InputRefSource string
+
+//go:generate go run ../../cmd/magus-utils types -type OutputRef -out gen/types/outputref.buzz
+//go:embed gen/types/outputref.buzz
+var OutputRefSource string
+
+//go:generate go run ../../cmd/magus-utils types -type TargetGraphNode -out gen/types/targetgraphnode.buzz
+//go:embed gen/types/targetgraphnode.buzz
+var TargetGraphNodeSource string
+
+//go:generate go run ../../cmd/magus-utils types -type TargetGraphProject -out gen/types/targetgraphproject.buzz
+//go:embed gen/types/targetgraphproject.buzz
+var TargetGraphProjectSource string
+
+//go:generate go run ../../cmd/magus-utils types -type TargetGraph -out gen/types/targetgraph.buzz
+//go:embed gen/types/targetgraph.buzz
+var TargetGraphSource string
+
 // ModuleFieldEntry and ModuleMethodEntry must precede Module (its fields/methods
 // are lists of them).
 //

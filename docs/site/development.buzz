@@ -3,6 +3,7 @@
 // or renderDevelopmentPageRaw (pre-rendered HTML).
 namespace development;
 
+import "magus/target" as _;
 import "markdown";
 import "fs";
 import "io";
@@ -68,37 +69,116 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
 }
 
 
-// renderDevelopment writes the /development/ section: one themed page per project
-// rendering its committed MAGUS.md (the target catalog + run-order graph), plus a
-// /development/ landing linking to them. Retired /development/projects/ URLs redirect
-// to the flattened locations. Projects are site.root plus any immediate subdir with a
-// MAGUS.md; fs.list is sorted, so the set and order are byte-stable for the drift
-// gate. MAGUS.md stays committed (offline + agent read paths); this renders the same
-// source for the online reader, where Mermaid graphs and theming beat a raw file view.
-export fun renderDevelopment(site: Site) > void {
-    var projects: [{str: str}] = mut [<{str: str}>];
-    if (os\execute(["test", "-f", site.root + "/MAGUS.md"]) == 0) {
-        projects.append(mut {"name": "magus", "path": site.root + "/MAGUS.md"});
+// slugifyProject turns a workspace-relative project path into one URL segment:
+// "libs/gopherbuzz" -> "libs-gopherbuzz". Nested projects are the reason this exists --
+// the previous shallow scan never produced a path with a separator in it.
+fun slugifyProject(name: str) > str {
+    return name.replace("/", "-");
+}
+
+// projectCatalog renders one project's target catalog as Markdown from the TYPED graph
+// (TargetGraphProject) rather than by capturing `describe graph -o markdown` from
+// a subprocess. Building it here means the page is assembled from the same in-process
+// data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field
+// access on every node.
+//
+// A Mermaid block draws the run order from each node's declared dependencies, so the
+// arrows are the real ctx.needs edges and not a hand-maintained picture.
+fun projectCatalog(proj: TargetGraphProject) > str {
+    // Every list below is read through `?? []`. The annotation gives compile-checked
+    // field NAMES, but the value arrives as the host's map and the Go structs tag their
+    // optional fields `omitempty`, so an absent one is missing entirely rather than an
+    // empty list - and the mirror's defaults are not materialized by an identity cast.
+    var buf = "";
+    final nodes = proj.nodes ?? [];
+    final cycle = proj.cycle ?? [];
+    final dependsOn = proj.dependsOn ?? [];
+    if (nodes.len() == 0) {
+        // A project on a non-Buzz engine has no statically extractable targets yet.
+        return "No statically extractable targets: this project runs on the `"
+            + (proj.engine ?? "unknown") + "` engine.\n";
     }
-    foreach (name in fs\list(site.root)) {
-        if (name.startsWith(".") == false and isDirectory(site.root + "/" + name)) {
-            if (os\execute(["test", "-f", site.root + "/" + name + "/MAGUS.md"]) == 0) {
-                projects.append(mut {"name": name, "path": site.root + "/" + name + "/MAGUS.md"});
-            }
+    if (cycle.len() > 0) {
+        buf = buf + "> **Cycle detected:** " + cycle.join(" -> ") + "\n\n";
+    }
+    if (dependsOn.len() > 0) {
+        buf = buf + "Depends on " + dependsOn.join(", ") + ".\n\n";
+    }
+
+    buf = buf + "| target | depends on | drives |\n| --- | --- | --- |\n";
+    foreach (n in nodes) {
+        var drives = "";
+        foreach (use in n.spells ?? []) {
+            if (drives != "") { drives = drives + ", "; }
+            drives = drives + use.spell;
+        }
+        if (drives == "") { drives = "-"; }
+        var deps = "-";
+        final nd = n.dependencies ?? [];
+        if (nd.len() > 0) { deps = "`" + nd.join("`, `") + "`"; }
+        buf = buf + "| `" + n.name + "` | " + deps + " | " + drives + " |\n";
+    }
+
+    // Per-target detail: the doc comment is the authored description, so it carries the
+    // intent a table cannot.
+    buf = buf + "\n";
+    foreach (n in nodes) {
+        final doc = n.doc ?? "";
+        if (doc != "") {
+            buf = buf + "### `" + n.name + "`\n\n" + doc + "\n\n";
         }
     }
+
+    // Run order. Only emitted when there is at least one edge - a flat list of
+    // unconnected boxes tells a reader nothing.
+    var edges = "";
+    foreach (n in nodes) {
+        foreach (d in n.dependencies ?? []) {
+            edges = edges + "    " + d + " --> " + n.name + "\n";
+        }
+    }
+    if (edges != "") {
+        buf = buf + "## Run order\n\n```mermaid\ngraph LR\n" + edges + "```\n";
+    }
+    return buf;
+}
+
+// renderDevelopment writes the /development/ section: one themed page per project
+// rendering its target catalog and run-order graph, plus a /development/ landing
+// linking to them and showing how the projects depend on each other. Retired
+// /development/projects/ URLs redirect to the flattened locations.
+//
+// The project set comes from magus itself (magus.ls, annotated `> target\Projects` for
+// compile-checked field access), NOT from scanning the filesystem for MAGUS.md files.
+// The scan it replaced looked only at site.root and its immediate subdirectories, so it
+// found 2 of this workspace's 9 projects: the three under libs/ sit one level too deep,
+// and console, proto, cmd/magus/starter and the agent-hook templates have no committed
+// MAGUS.md at all. A workspace is exactly the set magus discovered, so asking magus is
+// both correct and stable -- ls returns projects in sorted path order, which keeps the
+// generated output byte-stable for the drift gate.
+//
+// Each page renders `describe graph -o markdown` for that project, which is the same
+// generator that writes a committed MAGUS.md. Projects that keep one therefore render
+// identical content (the drift gate holds them equal), and the four with none are no
+// longer invisible. MAGUS.md stays committed for the offline and agent read paths.
+export fun renderDevelopment(site: Site) > void {
+    // The cast is where the typing lands: every field read below is compile-checked
+    // against the generated mirror of types.TargetGraphOutput.
+    final graph = site.targets as TargetGraph;
+    final projects = graph.projects;
     if (projects.len() == 0) { return; }
 
     foreach (proj in projects) {
-        final f = io\File.open(proj["path"], io\FileMode.read);
-        final md = f.readAll();
-        f.close();
-        final name = proj["name"];
+        // The root project's path is "."; give it the workspace's own name so the URL
+        // and card read as "magus" rather than a bare dot.
+        final name = if (proj.path == ".") "magus" else proj.path;
+        final slug = slugifyProject(name);
+        final md = projectCatalog(proj);
         renderDevelopmentPage(name + " targets",
             "Target catalog and run-order graph for the " + name + " project, generated from its magusfile.",
-            md, "development/" + name + "/", "development/" + name + "/_index.md", site);
+            md, "development/" + slug + "/", "development/" + slug + "/_index.md", site);
         // Redirect the old nested URL to the flattened one so inbound links survive.
-        site.collectAlias("development/projects/" + name, "development/" + name + "/");
+        site.collectAlias("development/projects/" + slug, "development/" + slug + "/");
     }
 
     // Project cards (Related-card look), one per project. Raw HTML with
@@ -106,11 +186,19 @@ export fun renderDevelopment(site: Site) > void {
     // the /development/ landing; the old projects-index URL redirects here.
     var projectCards = "";
     foreach (proj in projects) {
-        final name = proj["name"];
+        final name = if (proj.path == ".") "magus" else proj.path;
+        // The card subtitle carries the project's real shape - which toolchains it
+        // binds - so a reader can tell a Go library from the docs site without
+        // opening it. Falls back to the generic line for a project with no spells.
+        var desc = "target catalog and run-order graph";
+        final n = proj.nodes ?? [];
+        if (n.len() > 0) {
+            desc = "{n.len()} targets";
+        }
         projectCards = projectCards
-            + "        <a class=\"related-card\" href=\"" + name + "/\">"
+            + "        <a class=\"related-card\" href=\"" + slugifyProject(name) + "/\">"
             + "<span class=\"related-card-title\">" + escapeAttr(name) + "</span>"
-            + "<span class=\"related-card-desc\">target catalog and dependency graph</span></a>\n";
+            + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n";
     }
     site.collectAlias("development/projects", "development/");
 
