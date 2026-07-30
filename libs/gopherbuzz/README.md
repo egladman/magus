@@ -7,30 +7,62 @@ language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
 
 It implements a **subset** of the language. The goal is 100% compatibility; the
 running record of how far along that is lives in [Upstream parity](#upstream-parity),
-and is enforced by a test rather than asserted by this file.
+and is enforced by a test rather than asserted by this file. If you are evaluating
+gopherbuzz as a Buzz implementation, read [Where the skeletons
+are](#where-the-skeletons-are) before the feature list -- it names every place this VM
+answers differently from upstream, or accepts source upstream refuses.
 
 - Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
 - Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
 
 ## Upstream parity
 
-**67 of 83** upstream behavior tests pass, measured against `UpstreamRef`
-(`0.5.0-251-ged42f47`) on 2026-07-30. The baseline when this record started was 12.
+Measured against `UpstreamRef` (`0.5.0-251-ged42f47`) on 2026-07-30. Upstream ships
+six test directories; three are measurable here, and all three numbers are below
+rather than only the flattering one.
+
+| upstream suite | files | gopherbuzz | what it asks |
+| --- | ---: | ---: | --- |
+| `tests/behavior/` | 83 | **67 pass** | does correct source produce the right answer? |
+| `tests/compile_errors/` | 77 | **26 rejected** | does gopherbuzz REJECT what upstream rejects? |
+| `tests/fuzzed/` | 644 | **0 panics** | can malformed input crash the front end? |
+| `tests/bench/` | 11 | not run | upstream's benchmarks (ours are in [`benchmarks/`](benchmarks/)) |
+| `tests/manual/` | 9 | not run | interactive |
+| `tests/utils/` | 10 | n/a | helper modules the behavior tests import |
+
+**The compile-error row is the uncomfortable one and the most important.** 51 of those
+77 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
+is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
+you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
+the behavior row -- a permissive checker is the failure mode a subset does not warn you
+about. The largest cluster is `match`, which has no exhaustiveness, duplicate-condition
+or overlapping-range analysis at all (8 files); the rest is spread across type-mismatch,
+mutability, shadowing and terminal-flow checks.
+
+The fuzz corpus is upstream's checked-in AFL output, not hand-written tests: the
+filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
+the signal that crashed the target and `op_flip1`/`op_arith8` is the mutation applied.
+The contents are real Buzz programs with a byte corrupted -- `mnssage:` for `message:`,
+or invalid UTF-8 spliced mid-token. Passing means the front end REPORTS an error rather
+than crashing on them; note the scope, since it is measured over parse, check and
+compile and not over execution, and upstream blacklists an entry or two of its own.
+
+The behavior baseline when this record started was 12 of 83.
 
 Measure against the PINNED commit, not a local `main` checkout: a newer checkout
 has files that do not exist at the pin, which is how an earlier hand-count reached
 a wrong 13-of-84.
 
-The number is produced by running every file in upstream's `tests/behavior/`
-through this VM. Nothing is copied into this repo: `magus run conformance
-libs/gopherbuzz` fetches `buzz-language/buzz` at the pinned sha into a cache
-directory and runs the suite against it, so the record is reproducible and always
-measured against the ref this VM claims to track.
+Nothing is copied into this repo. `magus run conformance libs/gopherbuzz` fetches
+`buzz-language/buzz` at the pinned sha into a cache directory and runs all three
+suites against it, so every number here is reproducible against the ref this VM
+claims to track.
 
-`testdata/upstream-behavior-allowlist.txt` is the enforced source of truth. The
-test fails in **both** directions: an allowlisted test that regresses, and a
-non-allowlisted test that starts passing without being recorded. Parity can
-therefore only go up, and closing a gap forces the gain to be banked.
+Both allowlists -- `testdata/upstream-behavior-allowlist.txt` and
+`testdata/upstream-compile-errors-allowlist.txt` -- are the enforced source of truth,
+and each fails in **both** directions: a listed test that regresses, and an unlisted
+test that starts passing without being recorded. Parity can therefore only go up, and
+closing a gap forces the gain to be banked rather than quietly enjoyed.
 
 ### What works
 
@@ -77,6 +109,11 @@ program using `typeof` from ever being a built-in spell. [Bytecode
 version](#bytecode-version) records what each format bump changed and why an older
 VM must reject a newer blob.
 
+Read that list as "the shape parses and runs", not as "matches upstream in every
+detail". Several entries carry a caveat recorded under [Where the skeletons
+are](#where-the-skeletons-are) -- `as` coerces rather than asserts, `match` does no
+exhaustiveness analysis, protocol conformance is unverified, and generics are erased.
+
 ### What does not
 
 Seven of the sixteen remaining failures are open gaps, each with a known cause:
@@ -110,11 +147,63 @@ rather than a backlog:
 - **`std\toUd`** returns Zig-specific userdata, which this embedding has no
   representation for.
 
-One known divergence is ours rather than a missing feature: a compound assign
-(`x op= v`) desugars to `x = x op v` sharing the target node, so the target is
-evaluated twice. `f().n += 1` calls `f()` twice where upstream calls it once.
-Harmless for the plain-variable and field cases that make up ordinary use, wrong
-for a call or any other side-effecting target.
+### Where the skeletons are
+
+These are ours, not missing features: places gopherbuzz answers differently from
+upstream, or answers where upstream would refuse. They are listed because a subset you
+can measure is more useful than a subset you have to discover. Each is a real,
+reproducible difference at the pinned ref.
+
+**Silently different answers.** The dangerous class -- these do not error.
+
+- **`str.len()` counts RUNES; upstream documents byte length** ("Returns the byte
+  length of the string"). Any non-ASCII or binary string measures short here: a 16-byte
+  MD5 digest reports 15. Every rune-indexed string method inherits the question.
+- **A bare `as` COERCES instead of asserting.** `3.9 as int` is 3 here; upstream's `as`
+  is a statically checked cast, not a conversion. Only `as?` was fixed to be a real type
+  test. gopherbuzz's own testdata depends on the coercion, which is why it still stands.
+- **A compound assign evaluates its target twice.** `x op= v` desugars to `x = x op v`
+  sharing the target node, so `f().n += 1` calls `f()` twice. Harmless for the plain
+  variable and field cases; wrong for any side-effecting target.
+- **A stored map key shadows a same-named builtin method.** `rec.map` reads the field,
+  not `map.map`. Deliberate -- an anonymous object literal is represented as a map, and
+  upstream's anonymous objects have fields and no methods -- but it is a language-wide
+  flip driven by one representation choice.
+- **A backtick string interpolates, and an unparseable `{...}` stays literal.** Upstream
+  interpolates too, but would reject the malformed case; here it silently becomes text.
+  That leniency is load-bearing (it is what lets a Mustache template and a `zdef` block
+  live in a raw string), and it means a regex quantifier written `` `[0-9]{3}` `` becomes
+  `[0-9]3` with no diagnostic.
+
+**Checks that are recorded but not enforced.** Declared and then trusted.
+
+- **`obj{...}` annotations are erased in the checker**, so an annotated discard
+  (`_: obj{ nope: str } = ...`) asserts nothing statically. The RUNTIME test
+  (`x is obj{...}`) does check field presence, so the two disagree.
+- **Protocol conformance is declared, never verified.** `object<Drawable> Foo {}`
+  type-checks with none of `Drawable`'s methods. `Compat` consults the declaration only.
+- **`match` has no exhaustiveness, duplicate-condition or overlapping-range analysis** --
+  the 8-file cluster in the compile-error row above.
+- **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
+  cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
+  instead. This is the one "cannot accommodate" above that is really a design choice.
+
+**Narrower gaps.** Known, bounded, and unlikely to bite most programs.
+
+- A selective import (`import a, b from "..."`) is honored for host modules but not yet
+  for source or file modules, which bind every export.
+- Top-level placeholder hoisting made a forward reference from top-level code a bare
+  runtime error instead of a positioned diagnostic.
+
+**Costs the design imposes.** Not correctness, but you should know before adopting.
+
+- A local a closure captures is boxed, and boxing is keyed on the NAME via an
+  over-approximating scan. An unrelated shadowing name inside a nested closure therefore
+  boxes the outer local too, which costs the superinstruction fast paths and de-JITs the
+  chunk: measured ~30% on a hot loop that differs only in an inner parameter's name.
+- Each boxed local allocates into a grow-only, never-freed global heap in the default
+  NaN-boxed build, so a captured local declared inside a loop pins one entry per
+  iteration: measured 2.7x RSS over 2M iterations.
 
 A test is often blocked by more than one gap, so closing a single entry does not
 always flip a file green. The allowlist reports real progress; the table only

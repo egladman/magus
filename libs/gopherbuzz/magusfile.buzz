@@ -139,6 +139,11 @@ export fun conformance(ctx: magus\Context, args: [str]) > void {
 
     magus\info("running upstream conformance against {cache_dir} @ {pinned}");
     os\withEnv({"GOPHERBUZZ_UPSTREAM_DIR": cache_dir}, fun() > void {
-        os\exec("go", ["test", "-run", "TestUpstreamConformance", "-v", "."], ".", {});
+        // All three measurable suites, not just behavior: compile_errors asks whether
+        // gopherbuzz REJECTS what upstream rejects, and the fuzz corpus whether the
+        // front end can be crashed. Measuring behavior alone overstates parity.
+        os\exec("go", ["test", "-count=1", "-run",
+            "TestUpstreamConformance|TestUpstreamCompileErrors|TestUpstreamFuzzCorpusDoesNotPanic",
+            "-v", "."], ".", {});
     });
 }
