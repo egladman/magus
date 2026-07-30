@@ -150,6 +150,49 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  completions:
+    name: shell completions
+    needs: [preflight]
+    # Not folded into the ci target: it needs a docker daemon, and a gate that
+    # silently skips when one is missing is how a broken completion recipe ships.
+    # Path-gated because the pwsh image is ~1GB - pulling it for a change that
+    # cannot affect a completion script buys nothing.
+    if: needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # The path gate below diffs against the base commit, which a shallow
+          # checkout would not have; without this it always fails open and gates nothing.
+          fetch-depth: 0
+      - name: Did the shipped shell change?
+        id: changed
+        run: |
+          set -euo pipefail
+          base='${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}'
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"   # no usable base: do not silently skip
+            exit 0
+          fi
+          if git diff --name-only "$base" HEAD |
+              grep -qE '^(cmd/magus/completions/|hack/completion-checks/)'; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup-magus
+        if: steps.changed.outputs.run == 'true'
+        with:
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
+
+      - name: Exercise each completion script in its shell's official image
+        if: steps.changed.outputs.run == 'true'
+        run: magus run completion-test .
+
   merge-history:
     name: merge run history
     needs: [preflight, ci]
