@@ -49,11 +49,17 @@ generic object declarations, inline ifs, and `catch void`. Three deliberate supe
 
 ### One superset worth naming: serialized bytecode
 
-Upstream has no compile-to-file step at all -- its subcommands are `run`, `test`,
-`check`, `fmt` and the REPL, and nothing in its tree writes or reads a bytecode
-artifact. gopherbuzz does: [`Chunk.Marshal`](vm/marshal.go) emits a portable `.bo`
-blob that `UnmarshalChunk` runs without re-parsing or re-compiling, with source
-positions split into a companion `.bdb`.
+Upstream compiles to bytecode -- it is a bytecode VM, JITed through MIR -- but it has
+no way to PERSIST that bytecode. Its subcommands are `test`, `check`, `fetch`,
+`format`, `help`, `init` and `version` (running a script is the default path), none of
+which emits an artifact, and `Chunk.zig` builds a chunk in memory with no reader or
+writer beside it. Upstream's `serialize` is the `buzz:serialize` JSON module, a
+different thing entirely: it turns a runtime VALUE into text.
+
+gopherbuzz adds the persistence: [`Chunk.Marshal`](vm/marshal.go) emits a portable
+`.bo` blob that `UnmarshalChunk` runs without re-parsing or re-compiling, with source
+positions split into a companion `.bdb`. The distinction is narrow but it is the whole
+superset -- compiling to bytecode is upstream behaviour, writing it to a file is not.
 
 This is the ordinary shape for a bytecode VM rather than an invention -- CPython's
 `.pyc`, the JVM's `.class`, `luac` and Lua's `string.dump`, and Erlang's `.beam` are
