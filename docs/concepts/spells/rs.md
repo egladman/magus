@@ -14,14 +14,15 @@ The `rs` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand 
 
 ## Passing arguments to ops
 
-Every op is invoked as `rs["<op>"](opts?)`, where the optional options map accepts these keys - all optional, each appended to or shaping the forked command:
+Every op is invoked as `rs["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `rs["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108) |
-| `cwd` | `str` | Working directory the command runs in. Defaults to the project directory. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105) |
-| `env` | `{str: str}` | Environment variables set for the process, on top of the inherited environment. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `rs["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L179) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L183) |
+
+
+Working directory and environment are NOT options: they ride the context, as `rs["<op>"](ctx.withCwd("sub"))` and `rs["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -40,7 +41,7 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-build"]();
+    rs["cargo-build"](ctx);
 }
 ```
 
@@ -59,7 +60,7 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-clean"]();
+    rs["cargo-clean"](ctx);
 }
 ```
 
@@ -78,7 +79,7 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun clippy(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-clippy"]();
+    rs["cargo-clippy"](ctx);
 }
 ```
 
@@ -119,7 +120,7 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-fmt"]();
+    rs["cargo-fmt"](ctx);
 }
 ```
 
@@ -138,7 +139,7 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-test"]();
+    rs["cargo-test"](ctx);
 }
 ```
 

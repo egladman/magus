@@ -5,5 +5,5 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-build"]();
+    rs["cargo-build"](ctx);
 }

@@ -233,7 +233,7 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 
 	_, err := Open(context.Background(), root)
 	require.Error(t, err, "Open must reject a computed magus.inputs argument")
-	assert.Contains(t, err.Error(), "string-literal", "error should explain the literal requirement")
+	assert.Contains(t, err.Error(), "literal arguments", "error should explain the literal requirement")
 	assert.Contains(t, err.Error(), "build", "error should name the offending target")
 }
 

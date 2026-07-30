@@ -323,6 +323,12 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []strin
 	return matched
 }
 
+// ctxMarker identifies a value as a magus.Context, base or derived. An op call needs
+// to tell a leading context from a leading opts table, and with a map-based value model
+// and no protocol conformance in gopherbuzz on this base there is no type to ask. Not
+// part of the authored surface; it disappears when the context becomes a real type.
+const ctxMarker = "__magus_context"
+
 // buildTargetContext assembles the shared magus.Context value every target receives
 // as its first argument. Its methods are the injected, per-target form of what used to
 // be global magus.* declarations: `ctx.needs(format)` binds on the context the function
@@ -348,9 +354,69 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	c.MapSet("glob", directVal(obs, "ctx.glob", buildBuzzGlob(targets, exports)))
 	// inputs/outputs are declarations read statically by describe.Extract; at run time
 	// they do nothing.
+	c.MapSet(ctxMarker, vm.BoolValue(true))
+	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
+	// carrying overrides for the op calls made with it -
+	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
+	//
+	// Named for WHAT DIFFERS, not for the act of making it, following context.WithValue /
+	// WithCancel / WithTimeout: at a call site you want to read the change. (Go's docs
+	// call the result a "derived context"; the API never says derive, and neither should
+	// this.) Temporal's workflow.WithActivityOptions(ctx, ao) is the same shape - a
+	// derived context carrying options for the calls made with it - and its
+	// workflow.Context / context.Context split is the same separation magus\Exec makes.
+	//
+	// magus\Exec deliberately carries no declaration methods, so
+	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing. That is
+	// the guarantee a checked type would give once gopherbuzz has protocol conformance;
+	// until then the names are bound to an explaining error.
+	var execCtx func(env, cwd vm.Value) vm.Value
+	execCtx = func(env, cwd vm.Value) vm.Value {
+		e := vm.NewMap()
+		e.MapSet(ctxMarker, vm.BoolValue(true))
+		if !env.IsNull() {
+			e.MapSet("env", env)
+		}
+		if !cwd.IsNull() {
+			e.MapSet("cwd", cwd)
+		}
+		// Chainable: ctx.withEnv({...}).withCwd(".."). Each returns a fresh Exec, so a
+		// derivation hoisted into a variable is never mutated by a later one.
+		e.MapSet("withEnv", directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsMap() {
+				return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
+			}
+			return execCtx(args[0], cwd), nil
+		}))
+		e.MapSet("withCwd", directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsStr() {
+				return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
+			}
+			return execCtx(env, args[0]), nil
+		}))
+		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "has_charm"} {
+			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+				return vm.Null, fmt.Errorf(
+					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
+			}))
+		}
+		return e
+	}
+	// The base context's derivation pair IS the empty derivation's, so take it from
+	// execCtx rather than writing the two closures (and their two error strings) a
+	// second time. Only those keys are copied: the rest of an Exec is the refusal to
+	// declare, which the base context must not inherit.
+	for _, k := range []string{"withEnv", "withCwd"} {
+		if v, ok := execCtx(vm.Null, vm.Null).MapGet(k); ok {
+			c.MapSet(k, v)
+		}
+	}
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))
 	c.MapSet("outputs", directVal(obs, "ctx.outputs", footprintDecl))
+	// updates is outputs' counterpart for a file the target EDITS rather than produces,
+	// so magus never deletes it and never replays it from a snapshot. See types.UpdateRef.
+	c.MapSet("updates", directVal(obs, "ctx.updates", footprintDecl))
 	c.MapSet("has_charm", directVal(obs, "ctx.has_charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
 	}))

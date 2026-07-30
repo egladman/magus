@@ -500,3 +500,64 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		})
 	}
 }
+
+// TestCleanSkipsUpdates is the regression for the incident that motivated
+// ctx.updates: `magus clean docs` deleted docs/concepts/spells.md, 355 lines of
+// hand-written prose carrying a 13-line generated table between markers, because the
+// whole file was declared in ctx.outputs. A file magus only EDITS is not magus's to
+// delete - regeneration rewrites the marked region, not the prose around it.
+func TestCleanSkipsUpdates(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("gen/**");
+    ctx.updates("concepts/spells.md");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	produced := filepath.Join(root, "gen", "types.pb.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(produced), 0o755))
+	require.NoError(t, os.WriteFile(produced, []byte("generated"), 0o644))
+
+	edited := filepath.Join(root, "concepts", "spells.md")
+	const prose = "# Spells\n\nAuthored prose.\n\n<!-- BEGIN SPELL LIST -->\n<!-- END SPELL LIST -->\n"
+	require.NoError(t, os.MkdirAll(filepath.Dir(edited), 0o755))
+	require.NoError(t, os.WriteFile(edited, []byte(prose), 0o644))
+
+	_, err = m.CleanOutputs(context.Background(), m.All(), false)
+	require.NoError(t, err, "CleanOutputs")
+
+	_, statErr := os.Stat(produced)
+	assert.True(t, os.IsNotExist(statErr), "a declared output should still be deleted")
+
+	got, readErr := os.ReadFile(edited)
+	require.NoError(t, readErr, "ctx.updates file must survive clean")
+	assert.Equal(t, prose, string(got), "ctx.updates file must survive clean byte for byte")
+}
+
+// TestUpdatesFoldIntoSourcesNotOutputs pins the asymmetry that makes ctx.updates
+// worth having over ctx.outputs: the file lands in the cache key (so editing the
+// authored prose invalidates the target that maintains the generated region) and
+// stays out of the output set (so it is never snapshotted, replayed, or cleaned).
+func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.updates("concepts/spells.md");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.All()[0]
+	require.Equal(t, []types.UpdateRef{{Project: ".", Glob: "concepts/spells.md"}},
+		p.TargetUpdates["generate"], "ctx.updates should resolve to the declaring project")
+	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
+		"an update must never reach AllOutputs - that is the set clean deletes and the cache snapshots")
+}

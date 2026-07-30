@@ -11,6 +11,41 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- Agent skill version 19. `magus-architecture` now surveys for what is too THIN to
+  justify a boundary, not only what is too big. Every existing lens (god nodes,
+  hotspots, affinity, ownership) detects something central, hot, or heavily coupled;
+  none detect over-abstraction, which is the more common failure early on. The skill
+  names the cost no metric records: in Go every package boundary forces an export, so
+  splitting files into packages to organize them widens the public surface you were
+  trying to keep small. It flags three shapes - imported only from inside its own
+  subtree, one importer with nothing encapsulated, single file with a single exported
+  symbol - and says explicitly that SIZE is not one of them, because a small package
+  that hides four helpers behind one function is earning its keep.
+
+  Known gap this does not close: the graph has no `package` kind, so it cannot answer
+  "who imports this Go package" directly. Its finest structural rung is `project`
+  (a magusfile-bearing directory) and the next is `file`; Go's unit of encapsulation
+  sits between them and is unmodelled. Minting `package` with `imports` edges would
+  make the first shape above a one-line query instead of a manual read.
+
+- `ctx.updates(...)`, a third per-target footprint declaration beside `ctx.inputs` and
+  `ctx.outputs`, for a file a target EDITS rather than produces: a hand-written page with
+  a generated region between markers, a manifest a tool rewrites in place. magus never
+  deletes an update (`magus clean` skips it) and never replays one from a cache snapshot,
+  because the bytes it produced are only part of the file. It folds into the cache key
+  like an input, so editing the prose around a generated region invalidates the target
+  that maintains that region - which declaring the file an output could not do, since an
+  output is excluded from its own source hash. It infers no ordering edge in either
+  direction; declare `ctx.needs` if you need one.
+
+  This closes a real data-loss path. `docs/concepts/spells.md` and
+  `docs/concepts/knowledge.md` are 355- and 570-line hand-written pages carrying a small
+  generated region, and both were declared in `ctx.outputs`: `magus clean docs` deleted
+  them whole, and the next `content-generate` died with `inject spell list: open
+  concepts/spells.md: no such file or directory`. Only git made that recoverable. Both
+  are now declared with `ctx.updates`. `magus clean`'s help no longer describes what it
+  removes as "regenerable build artifacts" either - that was the declaration's claim, not
+  something clean verified.
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
   contributor with `authored` edges to the files they touched, so `explain author:<name>`
   shows what someone maintains and it can be set against a file's declared CODEOWNERS owner

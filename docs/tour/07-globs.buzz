@@ -13,9 +13,9 @@ import "magus/spell/buf";
 magus\project({ "spells": [go, buf] });
 
 // One target per generator, all sharing the -generate suffix.
-export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](); }
-export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](); }
-export fun sql_generate(ctx: magus\Context, args: [str])   > void { go["go-generate"](); }
+export fun proto_generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](ctx); }
+export fun mock_generate(ctx: magus\Context, args: [str])  > void { go["go-generate"](ctx); }
+export fun sql_generate(ctx: magus\Context, args: [str])   > void { go["go-generate"](ctx); }
 
 // The umbrella: magus.glob collects every current AND future *-generate target as
 // handles, and magus.needs depends on them. glob("name") with no wildcard is
@@ -31,7 +31,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // (its generate and its lint), and nothing else - the handles say exactly which.
 // Either way needs only ever takes handles: a function, or the handles glob
 // resolves a pattern to.
-export fun proto_lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](); }
+export fun proto_lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
 export fun proto_all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(proto_generate, proto_lint);
 }

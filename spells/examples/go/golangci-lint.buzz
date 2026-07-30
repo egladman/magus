@@ -6,5 +6,5 @@ import "magus/spell/go";
 magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    go["golangci-lint"]();
+    go["golangci-lint"](ctx);
 }

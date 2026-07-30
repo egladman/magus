@@ -42,7 +42,7 @@ scope.
   magusfile:
 
   ```buzz
-  export fun build(ctx: magus\Context, _a: [str]) > void { go["go-build"](); }
+  export fun build(ctx: magus\Context, _a: [str]) > void { go["go-build"](ctx); }
   ```
 
 - **Dependency handle.** `ctx.needs(x)` takes a target FUNCTION handle in the

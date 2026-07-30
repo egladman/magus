@@ -5,5 +5,5 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun clippy(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-clippy"]();
+    rs["cargo-clippy"](ctx);
 }

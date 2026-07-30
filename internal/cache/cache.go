@@ -89,7 +89,11 @@ type Step struct {
 	// two ignore sets that yield the same files hash identically.
 	IgnoreDirs []string
 	EnvAllow   []string // env var names whose values contribute to the key
-	Outputs    []string // globs snapshotted into cache and replayed on hit
+	// ExecOverrides are per-op ctx.withEnv / ctx.withCwd execution overrides ("env:K=V", "cwd:V"), extracted
+	// statically. Unlike EnvAllow, which names env vars whose PROCESS value is read, a
+	// derived override's value lives in the magusfile, so it is hashed directly.
+	ExecOverrides []string
+	Outputs       []string // globs snapshotted into cache and replayed on hit
 	// RequiredOutputs is the subset of Outputs that must each match at least one file,
 	// rather than the whole set merely matching something. It carries the globs another
 	// project's build order depends on (a cross-project output), where producing nothing

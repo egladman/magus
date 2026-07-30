@@ -294,7 +294,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					}
 				}
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.inputs/outputs/updates/withEnv/withCwd take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final e = ctx.withEnv(...); e.withCwd(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -370,6 +370,53 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						}
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
 					}
+				}
+				if len(n.ExecOverrides) > 0 {
+					if p.TargetExecOverrides == nil {
+						p.TargetExecOverrides = map[string][]string{}
+					}
+					// Append-with-dedup like the three sibling loops, not assign. A project
+					// can load several sources (magusfile.buzz plus magusfiles/*.buzz), and
+					// assigning meant the last source's overrides silently replaced an
+					// earlier source's - dropping them from the key rather than merging.
+					for _, o := range n.ExecOverrides {
+						if !slices.Contains(p.TargetExecOverrides[n.Name], o) {
+							p.TargetExecOverrides[n.Name] = append(p.TargetExecOverrides[n.Name], o)
+						}
+					}
+				}
+				for _, ref := range n.Updates {
+					owner := ref.Project
+					if owner == "" {
+						owner = p.Path // same-project update: owned by this project
+					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+						owner = r
+					} else {
+						continue // unresolvable cross ref: drop, as on the input side
+					}
+					if p.TargetUpdates == nil {
+						p.TargetUpdates = map[string][]types.UpdateRef{}
+					}
+					// Same hygiene the outputs loop applies, and for a live reason: an
+					// update folds into step.Sources, which is glob-expanded exactly as
+					// outputs are, and an escaping pattern there once made magus clean
+					// abort the WHOLE workspace (doublestar rejects it mid-loop).
+					if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
+						return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
+							"%s: target %q: ctx.updates glob %q must be relative to %q and must not contain ..",
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
+					}
+					resolved := types.UpdateRef{Project: owner, Glob: ref.Glob}
+					if !slices.Contains(p.TargetUpdates[n.Name], resolved) {
+						p.TargetUpdates[n.Name] = append(p.TargetUpdates[n.Name], resolved)
+					}
+					// No ordering edge either way, unlike inputs and outputs. Both of those
+					// infer one from ownership - "I read you, so I run after" and "I write
+					// your tree, so you run after me" - and neither inference holds for a
+					// file magus does not own: the target rewrites one region of a file
+					// whose other regions someone else authored, which says nothing about
+					// build order. A target that needs ordering declares ctx.needs, where a
+					// reader can see it.
 				}
 			}
 		}

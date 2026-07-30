@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/internal/proc/run"
 	ispell "github.com/egladman/magus/internal/spell"
@@ -52,7 +54,21 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
 // so spell.<target>(opts?) forks the target.
 func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		opts := spellOptsFromBuzz(args, 0)
+		// The leading magus.Context is REQUIRED, not optional. Optional would overload
+		// argument one on TYPE - f(), f(ctx), f({args:...}), f(ctx, {args:...}) - which
+		// reads fine to the author and badly to everyone else. One shape always, and a
+		// grep that finds every op invocation.
+		base, consumed := ctxOverridesFromBuzz(args, 0)
+		if consumed == 0 {
+			return vm.Null, fmt.Errorf(
+				"%s: pass the target's context as the first argument, %s(ctx); override env or cwd for one call with ctx.withEnv({...}) / ctx.withCwd(\"..\")",
+				target, target)
+		}
+		opts, err := spellOptsFromBuzz(args, consumed)
+		if err != nil {
+			return vm.Null, fmt.Errorf("%s: %w", target, err)
+		}
+		opts.cwd, opts.env = base.cwd, base.env
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -93,34 +109,81 @@ func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (r
 	return runCommand(ctx, tgt, opts)
 }
 
-// spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options
-// table at args[idx], the Buzz analogue of spellOptsFromLua. opts.hasArgs
-// reports whether an "args" key was present, so callers know to fall back to
-// project.ExtraArgs when it was not.
-func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts) {
+// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// reports how many arguments it consumed, so the caller can parse opts from the next
+// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// consumes nothing.
+//
+// Charms are deliberately NOT readable here. They are run-level - what makes "what did
+// this run do" answerable from the invocation alone - and a per-op override would move
+// that reasoning from global to local.
+// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// reports how many arguments it consumed, so the caller can parse opts from the next
+// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// consumes nothing.
+//
+// Charms are deliberately NOT readable here. They are run-level - what makes "what did
+// this run do" answerable from the invocation alone - and a per-op override would move
+// that reasoning from global to local.
+// optsHint renders ", {...}" when the call already passed an options table, so the
+// error shows the author their own call with ctx inserted rather than a generic form.
+func optsHint(args []vm.Value) string {
+	if len(args) > 0 && args[0].IsMap() {
+		return ", {...}"
+	}
+	return ""
+}
+
+func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
 	if idx >= len(args) || !args[idx].IsMap() {
-		return opts
+		return opts, 0
+	}
+	if m, ok := args[idx].MapGet(ctxMarker); !ok || !m.IsBool() || !m.AsBool() {
+		return opts, 0
+	}
+	c := args[idx]
+	if cv, ok := c.MapGet("cwd"); ok && cv.IsStr() {
+		opts.cwd = cv.AsString()
+	}
+	if ev, ok := c.MapGet("env"); ok && ev.IsMap() {
+		opts.env = map[string]string{}
+		for _, k := range ev.MapKeys() {
+			if v, ok := ev.MapGet(k); ok && v.IsStr() {
+				opts.env[k] = v.AsString()
+			}
+		}
+	}
+	return opts, 1
+}
+
+// spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options table at
+// args[idx]. opts.hasArgs reports whether an "args" key was present, so callers know to
+// fall back to project.ExtraArgs when it was not.
+func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
+	if idx >= len(args) || !args[idx].IsMap() {
+		return opts, nil
 	}
 	o := args[idx]
-	if cv, ok := o.MapGet("cwd"); ok && cv.IsStr() {
-		opts.cwd = cv.AsString()
+	// cwd and env are REJECTED here, not read. They are execution context, and the
+	// context is the only channel that reaches the cache key: set through the opts
+	// table they changed what the tool did while the key said otherwise, and they won
+	// over the derived value that WAS in the key. Two doors, one of them unchecked.
+	for _, k := range []string{"cwd", "env"} {
+		if _, has := o.MapGet(k); has {
+			return opts, fmt.Errorf("%q belongs on the context, not the options table: use ctx.with%s%s(...) so it reaches the cache key",
+				k, strings.ToUpper(k[:1]), k[1:])
+		}
 	}
 	if av, ok := o.MapGet("args"); ok {
 		opts.args = buzzValToStringSlice(av)
 		opts.hasArgs = true
 	}
-	if ev, ok := o.MapGet("env"); ok && ev.IsMap() {
-		opts.env = map[string]string{}
-		for _, k := range ev.MapKeys() {
-			if v, ok := ev.MapGet(k); ok {
-				opts.env[k] = v.AsString()
-			}
-		}
-	}
 	if sv, ok := o.MapGet("stdin"); ok && sv.IsStr() {
 		opts.stdin = sv.AsString()
 	}
-	return opts
+	return opts, nil
 }
 
 // targetsToBuzzMap marshals resolved targets back to the nested ops map shape

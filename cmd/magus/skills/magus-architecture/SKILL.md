@@ -22,6 +22,41 @@ ground. Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.
 
+## Then survey the opposite: what is too THIN to justify a boundary
+
+Every lens above finds something too big, too central, or too churned. None find
+the inverse, and over-abstraction is the more common failure in a young codebase.
+Ask it explicitly, because nothing prompts it for you:
+
+<!-- why -->A boundary is not free. In Go every package boundary FORCES an export:
+a helper that would be lowercase inside one package must be capitalized to cross
+into another. So splitting files into packages to "organize" them WIDENS the
+public surface you were trying to keep small, and each new export is a name you
+must justify, document, and keep stable. The cost is paid per boundary, and no
+churn or coupling metric records it.<!-- /why --><!-- terse -->A boundary is not free: in
+Go, splitting a package forces exports, widening the surface you meant to shrink.
+No churn or coupling metric records that cost.<!-- /terse -->
+
+The shapes worth flagging, in rough order of how clearly they are wrong:
+
+| Shape | Why it is suspect |
+|---|---|
+| Imported only from inside its own subtree | It is a parent's implementation, not a boundary |
+| Exactly one importer, and no encapsulation behind it | A file in the wrong place |
+| Single file, single exported symbol | The package name is a second name for one function |
+
+Note the third column that is NOT there: size. Small is not the same as needless.
+Check what a package HIDES before proposing a merge - one exported function over
+four unexported helpers is real encapsulation at any line count, and two importers
+in different trees means merging makes one depend on the other.
+
+`magus graph stats` reports orphans (zero importers), which is adjacent but not
+the same question: the expensive cases have one importer, not none.
+
+WRONG: proposing a merge because a package is under N lines.
+CORRECT: proposing a merge because its importers all live inside its own parent,
+and nothing it exports would need to be exported once merged.
+
 ## Sizing a specific refactor
 
 1. Blast radius of a node: `magus explain <node>` shows its edges and how many

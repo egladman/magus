@@ -121,7 +121,7 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 // must not be edited by hand. generate calls this; the drift gate catches any manual
 // edit to a released section on the next render.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
-    go["go-run"]({"args": ["../cmd/magus-utils", "generate-changelog",
+    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "generate-changelog",
         "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"]});
 }
 
@@ -137,12 +137,21 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
 // artifact owned by the root magusfile (man-generate). generate depends on this and
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "concepts/spells.md", "reference/manpage/*.md", "concepts/knowledge.md");
-    go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
-    go["go-run"]({"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
-    go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
-    go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
-    go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
+    ctx.outputs("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md");
+    // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
+    // (355 and 570 lines) carrying a small generated region between HTML markers, which
+    // magus-spelldocs and magus-examples replace in place and hard-error on if the
+    // markers are missing. Declared as outputs they were deletable - `magus clean docs`
+    // removed spells.md whole, and the next content-generate died with
+    // "inject spell list: open concepts/spells.md: no such file or directory" - and they
+    // were excluded from the source hash, so editing the prose around a generated region
+    // invalidated nothing. ctx.updates fixes both halves.
+    ctx.updates("concepts/spells.md", "concepts/knowledge.md");
+    go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm

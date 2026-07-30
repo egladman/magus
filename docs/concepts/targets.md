@@ -195,7 +195,7 @@ before lookup, wherever that input enters.
 Given a magusfile declaring:
 
 ```buzz
-export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 ```
 
 all four of these resolve to the **one** registered target `go-build`, and thus

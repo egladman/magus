@@ -7,7 +7,7 @@
 // of wiring a cosign-specific CI action:
 //
 //   import "magus/spell/cosign" as cosign
-//   cosign["cosign-sign"]({"args": ["ghcr.io/egladman/magus@" + digest]})
+//   cosign["cosign-sign"](ctx, {"args": ["ghcr.io/egladman/magus@" + digest]})
 //
 // It claims no source globs: cosign acts on a registry reference, not the working
 // tree, so it is imported and invoked explicitly rather than auto-bound to a

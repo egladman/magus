@@ -154,6 +154,15 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// collected, so len(globs) < len(args) means the call had a computed
 					// argument - flag DynamicIO so the load path can reject it (a computed
 					// glob is invisible to this static read).
+					// A declaration member called on something OTHER than the target's ctx - an
+					// aliased derivation (final e = ctx.withEnv(...); e.withCwd(..)), or a context
+					// parameter named something other than ctx - is invisible to this static read.
+					// Dropping it silently under-declares the cache key, so it is rejected at load
+					// exactly as a computed glob is.
+					if me, isMember := e.Callee.(*ast.MemberExpr); isMember && !me.Namespaced &&
+						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
+						node.DynamicIO = true
+					}
 					if kind, globs, ok := ioCall(e); ok {
 						// Record the callee (ctx.inputs) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
@@ -172,24 +181,69 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// entries land first (in arg order), cross entries after, matching
 							// the fold order buildStep produced before the two were unified.
 							for _, g := range globs {
-								node.Inputs = appendUniqRef(node.Inputs, types.InputRef{Glob: g})
+								node.Inputs = appendUniq(node.Inputs, types.InputRef{Glob: g})
 							}
 							// A cross-project file input counts as recognized (so it does NOT
 							// trip DynamicIO); a computed rel is not recognized and trips it.
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Inputs = appendUniqRef(node.Inputs, ref)
+									node.Inputs = appendUniq(node.Inputs, ref)
 								}
 							}
 						case "outputs":
 							for _, g := range globs {
-								node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Glob: g})
+								node.Outputs = appendUniq(node.Outputs, types.OutputRef{Glob: g})
 							}
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
+									node.Outputs = appendUniq(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
+								}
+							}
+						case "withCwd":
+							// Iterate the globs ioCall already collected rather than
+							// re-walking Args: recognized is seeded from len(globs), so
+							// counting the same literals again pushed it past len(Args) and
+							// left the DynamicIO guard dead for this kind - a computed second
+							// argument would have passed silently, under-declaring the key
+							// the guard exists to protect.
+							for _, g := range globs {
+								node.ExecOverrides = appendUniq(node.ExecOverrides, "cwd:"+g)
+							}
+						case "withEnv":
+							// Canonicalized onto the node so buildStep can fold it into the
+							// CACHE KEY. Read statically because the key is computed before the
+							// body runs, so a purely runtime override could never reach it; a
+							// non-literal trips DynamicIO exactly as a computed glob does.
+							for _, a := range e.Args {
+								m, ok := a.(*ast.MapExpr)
+								if !ok {
+									// ctx.withEnv("K=V"): ioCall already counted the bare
+									// literal, so without this the call looked fully
+									// attributed and contributed nothing to the key.
+									node.DynamicIO = true
+									continue
+								}
+								recognized++
+								for j, ekn := range m.Keys {
+									ekl, kok := ekn.(*ast.StringLit)
+									evl, vok := m.Values[j].(*ast.StringLit)
+									if !kok || !vok {
+										node.DynamicIO = true
+										continue
+									}
+									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
+								}
+							}
+						case "updates":
+							for _, g := range globs {
+								node.Updates = appendUniq(node.Updates, types.UpdateRef{Glob: g})
+							}
+							for _, a := range e.Args {
+								if ref, ok := crossFileArg(a, projectAliases); ok {
+									recognized++
+									node.Updates = appendUniq(node.Updates, types.UpdateRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
 						}
@@ -272,7 +326,7 @@ func UnreachedIO(source string) []IORef {
 		}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || (me.Name != "inputs" && me.Name != "outputs") {
+			if !ok || !ctxDeclNames[me.Name] {
 				return true
 			}
 			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
@@ -306,6 +360,33 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 	return ok && id.Name == "ctx"
 }
 
+// ctxDeclNames is the ctx declaration surface in one place: the static reader, the
+// not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
+// leave one of the three behind.
+var ctxDeclNames = map[string]bool{
+	"inputs": true, "outputs": true, "updates": true, "withEnv": true, "withCwd": true,
+}
+
+// ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
+// derivation - ctx.withEnv({...}).withCwd("..") - is recognized as well as a direct
+// call. Without walking the spine only the first link is seen, and the rest of the
+// chain silently under-declares the cache key: the precise stale-hit risk these
+// overrides exist to close.
+func ctxRooted(n ast.Node) bool {
+	for {
+		switch v := n.(type) {
+		case *ast.IdentExpr:
+			return v.Name == "ctx"
+		case *ast.CallExpr:
+			n = v.Callee
+		case *ast.MemberExpr:
+			n = v.Object
+		default:
+			return false
+		}
+	}
+}
+
 // ioCall recognizes a ctx.inputs(...) / ctx.outputs(...) call and returns its
 // kind ("inputs"/"outputs") and the string-literal glob arguments. ok is false for any
 // other call. Only string literals are collected; the caller detects a non-literal
@@ -316,13 +397,10 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	if !ok {
 		return "", nil, false
 	}
-	switch me.Name {
-	case "inputs", "outputs":
-	default:
+	if !ctxDeclNames[me.Name] {
 		return "", nil, false
 	}
-	id, ok := me.Object.(*ast.IdentExpr)
-	if !ok || id.Name != "ctx" {
+	if !ctxRooted(me.Object) {
 		return "", nil, false
 	}
 	for _, a := range e.Args {
@@ -366,22 +444,8 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// appendUniqRef appends ref unless an equal one is already present (InputRef is a
-// comparable value), the []InputRef counterpart of appendUniq for input dedup.
-func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
-	if slices.Contains(s, ref) {
-		return s
-	}
-	return append(s, ref)
-}
 
-// appendUniqOutRef is appendUniqRef for outputs; OutputRef is likewise comparable.
-func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRef {
-	if slices.Contains(s, ref) {
-		return s
-	}
-	return append(s, ref)
-}
+
 
 // charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
 // It matches both receivers a target can read a charm through - the magus.has_charm
@@ -589,12 +653,6 @@ func targetPatternRe(pattern string) *regexp.Regexp {
 	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
 }
 
-func appendUniq(s []string, v string) []string {
-	if slices.Contains(s, v) {
-		return s
-	}
-	return append(s, v)
-}
 
 // lastPathSegment returns the text after the final '/', or the whole string if
 // none — the default alias for an `import "project/<path>"` (basename of the path).
@@ -603,4 +661,14 @@ func lastPathSegment(p string) string {
 		return p[i+1:]
 	}
 	return p
+}
+
+// appendUniq appends v to s unless it is already present, keeping declaration order.
+// One generic replaces the four near-identical copies this file grew - one per element
+// type - which differed only in their signatures.
+func appendUniq[T comparable](s []T, v T) []T {
+	if slices.Contains(s, v) {
+		return s
+	}
+	return append(s, v)
 }

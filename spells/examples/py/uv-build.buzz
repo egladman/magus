@@ -5,5 +5,5 @@ import "magus/spell/py";
 magus\project({ "spells": [py] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    py["uv-build"]();
+    py["uv-build"](ctx);
 }

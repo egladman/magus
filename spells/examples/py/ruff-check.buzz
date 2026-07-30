@@ -5,5 +5,5 @@ import "magus/spell/py";
 magus\project({ "spells": [py] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    py["ruff-check"]();
+    py["ruff-check"](ctx);
 }

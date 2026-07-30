@@ -93,7 +93,7 @@ fun ld_flags() > str {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz\build);
-    go["go-build"]({
+    go["go-build"](ctx, {
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
@@ -107,7 +107,7 @@ final IMAGE = "ghcr.io/egladman/magus";
 fun image_tag() > str { return "magus:" + commit(); }
 
 // Builds one image variant; publish => multi-arch --push + cosign-sign, else single-arch --load.
-fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publish: bool) > void {
+fun build_variant(ctx: magus\Context, dockerfile: str, platforms: str, tags: [str], meta: str, publish: bool) > void {
     var args = mut ["-f", dockerfile,
         "--build-arg", "VERSION=" + version(),
         "--build-arg", "COMMIT=" + commit(),
@@ -121,11 +121,11 @@ fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publi
         args.append("--load");
     }
     args.append(".");
-    docker["docker-buildx"]({"cwd": ".", "args": args});
+    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
 
     if (publish) {
         final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
-        cosign["cosign-sign"]({"args": [IMAGE + "@" + digest]});
+        cosign["cosign-sign"](ctx, {"args": [IMAGE + "@" + digest]});
     }
 }
 
@@ -135,14 +135,14 @@ fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publi
 // default-cgo/opt-in-static convention as release_build() in this file.
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("cd")) {
-        build_variant("Dockerfile.static", "linux/amd64,linux/arm64",
+        build_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
             [IMAGE + ":" + version(), IMAGE + ":latest"], "static-meta.json", true);
-        build_variant("Dockerfile", "linux/amd64",
+        build_variant(ctx, "Dockerfile", "linux/amd64",
             [IMAGE + ":" + version() + "-cgo", IMAGE + ":latest-cgo"], "cgo-meta.json", true);
     } else if (ctx.has_charm("static")) {
-        build_variant("Dockerfile.static", "linux/amd64", [image_tag()], "", false);
+        build_variant(ctx, "Dockerfile.static", "linux/amd64", [image_tag()], "", false);
     } else {
-        build_variant("Dockerfile", "linux/amd64", [image_tag()], "", false);
+        build_variant(ctx, "Dockerfile", "linux/amd64", [image_tag()], "", false);
     }
 }
 
@@ -278,7 +278,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target.
 // release-build's cgo and static (charm) modes both call this, differing only in
 // CGO_ENABLED and the asset suffix.
-fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void {
+fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
     fs\makeDirectory("dist");
     final v = version();
     var binary = "magus";
@@ -306,7 +306,7 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
         env["CGO_ENABLED"] = "0";
     }
 
-    go["go-build"]({
+    go["go-build"](ctx, {
         "env": env,
         "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs\join(stage, binary), "./cmd/magus"],
     });
@@ -353,9 +353,9 @@ export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
     ctx.outputs("dist/*");
     final p = release_target_platform(goos, goarch);
     if (ctx.has_charm("static")) {
-        build_release_variant(p[0], p[1], false, "-static");
+        build_release_variant(ctx, p[0], p[1], false, "-static");
     } else {
-        build_release_variant(p[0], p[1], true, "");
+        build_release_variant(ctx, p[0], p[1], true, "");
     }
 }
 
@@ -397,7 +397,7 @@ fun total_coverage(func_out: str) > str {
 export fun test(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
     ctx.needs(format);
-    go["go-test"]({"env": {"GOEXPERIMENT": "jsonv2"}, "args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
+    go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
@@ -411,12 +411,12 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 // Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
 export fun buzz_check(ctx: magus\Context, args: [str]) > void {
-    buzz["buzz-check"]({"cwd": "cmd/magus/starter/spells"});
+    buzz["buzz-check"](ctx.withCwd("cmd/magus/starter/spells"));
 }
 
 // Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).
 export fun buzz_run(ctx: magus\Context, args: [str]) > void {
-    buzz["magus-buzz"]({"cwd": "cmd/magus/starter/spells"});
+    buzz["magus-buzz"](ctx.withCwd("cmd/magus/starter/spells"));
 }
 
 // Gates the build on workspace health by running `magus doctor`.
@@ -438,17 +438,17 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     os\exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]);
-    go["go-vet"]();
+    go["go-vet"](ctx);
     os\withEnv({"GOEXPERIMENT": "jsonv2"}, fun() > void {
         os\exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
     });
-    md.markdownlint();
+    md.markdownlint(ctx);
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
 // TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
 // to format markdown.
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {

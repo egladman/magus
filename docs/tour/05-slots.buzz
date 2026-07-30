@@ -31,12 +31,12 @@ magus\project({
 
 // A cheap check. It stays at the default of one slot; several like it run at once.
 export fun go_lint(ctx: magus\Context, args: [str]) > void {
-    go["go-vet"]();
+    go["go-vet"](ctx);
 }
 
 // The greedy one: reserve 4 slots AND tell eslint to actually use 4 threads.
 export fun js_lint(ctx: magus\Context, args: [str]) > void {
-    ts["eslint"]({"args": ["--concurrency=" + LINT_SLOTS]});
+    ts["eslint"](ctx, {"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
 // lint fans out to both. The scheduler runs the 1-slot check alongside other

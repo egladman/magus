@@ -359,8 +359,8 @@ func (r *runner) checkCacheYield() Check {
 	details = append(details,
 		"a target that never replays usually declares a footprint wider than it reads, so unrelated edits keep changing its key")
 	return Check{
-		Name:    name,
-		Status:  StatusFail,
+		Name:   name,
+		Status: StatusFail,
 		Message: fmt.Sprintf("[%s] %d target(s) executed repeatedly and never replayed from cache",
 			types.TargetNeverReplays, len(stalled)),
 		Details: details,
