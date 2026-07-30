@@ -83,8 +83,13 @@ import (
 // Both halves need the guard: an older VM has no case for the opcode and would abort
 // mid-chunk with "unknown opcode" after earlier side effects already ran, and it has
 // no decoder for the node tag, which desynchronizes the reader from that point on.
-// It sits beside Anon, ahead of the entry count, so the same desync applies.
-const BytecodeVersion uint16 = 19
+//
+// v20 adds OpNewCell/OpGetLocalCell/OpSetLocalCell, and changes what OpGetUpvalue
+// and OpSetUpvalue mean: every upvalue is now a *cellObj holding the variable, so a
+// closure captures by reference. An older VM has no case for the three new opcodes
+// and would abort mid-chunk, and would read a v20 upvalue as if the cell itself were
+// the value. A newer VM reading v19 bytecode would deref a raw value as a cell.
+const BytecodeVersion uint16 = 20
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)

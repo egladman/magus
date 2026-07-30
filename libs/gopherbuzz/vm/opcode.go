@@ -37,8 +37,19 @@ const (
 	// Upvalue access (B2): variables captured from outer function scopes.
 	// A = index into current closure's Upvals slice.
 	// optimization: O(1) array access vs env chain walk.
-	OpGetUpvalue // push frame.fun.Upvals[A]
-	OpSetUpvalue // frame.fun.Upvals[A] = pop
+	OpGetUpvalue // push frame.fun.Upvals[A]  (always a cell; pushes its contents)
+	OpSetUpvalue // frame.fun.Upvals[A] cell = pop
+
+	// Captured-local access. A slot a nested closure captures holds a *cellObj for
+	// the whole life of the frame (OpNewCell seeds it in the prologue), so the frame
+	// and the closure read and write ONE location. The compiler knows which slots
+	// those are before it emits anything (see capturedNames), which is why these are
+	// distinct opcodes rather than a tag test on the hot OpGetLocal path -- and why
+	// FusePeephole never fuses them into the OpBinLC/OpBinLL fast paths, which would
+	// read the slot as a plain value.
+	OpNewCell      // stack[frame.base+A] = cell(stack[frame.base+A])
+	OpGetLocalCell // push cell(stack[frame.base+A]).v
+	OpSetLocalCell // cell(stack[frame.base+A]).v = pop
 
 	// Receiver access: pushes the current frame's bound receiver (`this`).
 	// optimization: `this` lives in frame.this (set by OpCall from fn.This), not in

@@ -60,6 +60,7 @@ const (
 	tagPat                // obj: *patObj
 	tagUD                 // obj: *udObj (foreign FFI pointer; heap-boxed to carry the full 64-bit address)
 	tagType               // obj: *typeObj (a type used as a value: `<[str]>`, `typeof x`)
+	tagCell               // obj: *cellObj (the shared box behind a captured local)
 )
 
 // Value is defined in value_unsafe.go / value_safe.go (build-tag-selected),
@@ -314,11 +315,23 @@ type iterStateObj struct {
 	idx      int
 }
 
-func (*strObj) heapKind() valueTag       { return tagStr }
-func (*listObj) heapKind() valueTag      { return tagList }
-func (*mapObj) heapKind() valueTag       { return tagMap }
-func (*funObj) heapKind() valueTag       { return tagFun }
-func (*directObj) heapKind() valueTag    { return tagDirect }
+func (*strObj) heapKind() valueTag    { return tagStr }
+func (*listObj) heapKind() valueTag   { return tagList }
+func (*mapObj) heapKind() valueTag    { return tagMap }
+func (*funObj) heapKind() valueTag    { return tagFun }
+func (*directObj) heapKind() valueTag { return tagDirect }
+
+// cellObj is the shared box behind a local that a closure captured. Upstream Buzz
+// closures capture by REFERENCE: a closure assigning to an enclosing local updates
+// the one variable, not a private copy. gopherbuzz used to copy the Value into the
+// closure's Upvals, which silently answered wrong (`sum` stayed 0 after `add(5)`).
+// A captured slot now holds a cell for the whole life of its frame, and every
+// access -- from the owning frame and from the closure -- goes through it, so there
+// is a single storage location and no open/close upvalue bookkeeping.
+type cellObj struct{ v Value }
+
+func (*cellObj) heapKind() valueTag { return tagCell }
+
 func (*objectInst) heapKind() valueTag   { return tagObject }
 func (*objectDefObj) heapKind() valueTag { return tagObjectDef }
 func (*enumDefObj) heapKind() valueTag   { return tagEnumDef }

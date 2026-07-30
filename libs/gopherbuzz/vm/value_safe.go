@@ -105,6 +105,7 @@ func (v Value) asIterState() *iterStateObj { return objAs[*iterStateObj](v, "ite
 func (v Value) asRange() *rangeObj         { return objAs[*rangeObj](v, "range") }
 func (v Value) asFib() *fibObj             { return objAs[*fibObj](v, "fib") }
 func (v Value) asPat() *patObj             { return objAs[*patObj](v, "pat") }
+func (v Value) asCell() *cellObj           { return objAs[*cellObj](v, "cell") }
 func (v Value) asType() *typeObj           { return objAs[*typeObj](v, "type") }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
@@ -126,6 +127,7 @@ func (vm *VM) asIterState(v Value) *iterStateObj { return v.asIterState() }
 func (vm *VM) asRange(v Value) *rangeObj         { return v.asRange() }
 func (vm *VM) asFib(v Value) *fibObj             { return v.asFib() }
 func (vm *VM) asPat(v Value) *patObj             { return v.asPat() }
+func (vm *VM) asCell(v Value) *cellObj           { return v.asCell() }
 func (vm *VM) asObjDecl(v Value) *ast.ObjectDecl { return v.asObjDecl() }
 
 // VM-context allocators — zero-cost wrappers in M2 (delegate to package-level

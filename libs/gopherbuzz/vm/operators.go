@@ -384,12 +384,18 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		return Null, nil
 	case tagMap:
 		m := vm.asMap(obj)
-		// Map builtin methods take priority over stored keys with the same name.
-		if bm := mapMethod(vm, obj, name); bm != Null {
-			return bm, nil
-		}
+		// A STORED KEY wins over a builtin of the same name. gopherbuzz represents an
+		// anonymous object literal as a map, and upstream's anonymous objects have
+		// fields and no methods at all -- so for the record-shaped maps that access
+		// `.field` on, the field is the only sensible answer. The priority used to be
+		// the other way, which meant adding any builtin could silently shadow a field:
+		// `obj{ map: {K: V} }` stopped reading its `map` field the moment map.map
+		// existed. A name the map does not hold still resolves to the builtin.
 		if v, ok := m.get(name); ok {
 			return v, nil
+		}
+		if bm := mapMethod(vm, obj, name); bm != Null {
+			return bm, nil
 		}
 		return Null, nil
 	case tagStr:
@@ -663,14 +669,18 @@ func listMethod(vm *VM, list Value, name string) Value {
 				return Null, fmt.Errorf("list.sort: requires a comparator callback")
 			}
 			cb := args[0]
-			cp := make([]Value, len(lo.Items))
-			copy(cp, lo.Items)
+			// Upstream sorts IN PLACE and returns the list ("Sorts the list in place with
+			// the comparison callback and returns the list"), so its own tests discard the
+			// result and inspect the receiver. Sorting a copy left the receiver untouched.
+			if !lo.Mut {
+				return Null, errImmutable("list")
+			}
 			var sortErr error
-			sort.SliceStable(cp, func(i, j int) bool {
+			sort.SliceStable(lo.Items, func(i, j int) bool {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{cp[i], cp[j]})
+				v, err := callValue(vm, ctx, cb, []Value{lo.Items[i], lo.Items[j]})
 				if err != nil {
 					sortErr = err
 					return false
@@ -680,7 +690,7 @@ func listMethod(vm *VM, list Value, name string) Value {
 			if sortErr != nil {
 				return Null, sortErr
 			}
-			return ListValue(cp), nil
+			return list, nil
 		})
 	case "reverse":
 		return DirectValue("list.reverse", func(_ context.Context, _ []Value) (Value, error) {
@@ -807,6 +817,35 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			}
 			return Null, nil
 		})
+	case "map":
+		// Upstream: "Returns a map made from applying the callback to each key-value
+		// pair." The callback yields the new entry as a record with `key` and `value`
+		// members, which an anonymous `.{ key = ..., value = ... }` literal builds - so
+		// the result may arrive as a map or, when it resolved to a named object, as an
+		// instance. Both are read through getMember.
+		return DirectValue("map.map", func(ctx context.Context, args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Null, fmt.Errorf("map.map: requires a callback function")
+			}
+			cb := args[0]
+			out := NewMap()
+			for i, k := range mp.Keys {
+				entry, err := callValue(vm, ctx, cb, []Value{StrValue(k), mp.Vals[i]})
+				if err != nil {
+					return Null, err
+				}
+				newKey, err := getMember(vm, entry, "key")
+				if err != nil {
+					return Null, fmt.Errorf("map.map: the callback must return a record with a `key` member: %w", err)
+				}
+				newVal, err := getMember(vm, entry, "value")
+				if err != nil {
+					return Null, fmt.Errorf("map.map: the callback must return a record with a `value` member: %w", err)
+				}
+				out.MapSet(newKey.String(), newVal)
+			}
+			return out, nil
+		})
 	case "filter":
 		return DirectValue("map.filter", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
@@ -918,11 +957,18 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			if sortErr != nil {
 				return Null, sortErr
 			}
-			out := NewMap()
-			for _, p := range pairs {
-				out.MapSet(p.k, p.v)
+			// Upstream "sorts the map key order IN PLACE ... and returns the map", so its
+			// tests discard the result and iterate the receiver. Building a fresh map left
+			// the receiver in its original order. Keys/Vals/keyVals stay index-parallel and
+			// the key->index hash is rebuilt, which is mapObj's invariant.
+			for i, pr := range pairs {
+				mp.Keys[i], mp.Vals[i] = pr.k, pr.v
+				mp.keyVals[i] = StrValue(pr.k)
+				if mp.M != nil {
+					mp.M[pr.k] = int32(i)
+				}
 			}
-			return out, nil
+			return m, nil
 		})
 	}
 	return Null

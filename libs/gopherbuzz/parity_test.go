@@ -788,16 +788,15 @@ fun probe() > int {
     add(5);
     return sum;
 }`)
-	// NOTE: 0, not 5. Closures capture upvalues by VALUE, so the assignment
-	// updates the closure's copy and never reaches sum. This pins the current
-	// (divergent) behaviour so that fixing capture is a deliberate, visible
-	// change rather than a silent one; see the README's divergence note.
-	assert.Equal(t, int64(0), v.AsInt(), "the body parses and runs; the write does not escape the closure")
+	// 5: closures capture by REFERENCE, as upstream does, so the assignment reaches
+	// the enclosing sum. This pinned 0 while capture was by value.
+	assert.Equal(t, int64(5), v.AsInt(), "the body parses and runs, and the write reaches the enclosing local")
 }
 
-func TestParity_ClosureUpvaluesAreCapturedByValue(t *testing.T) {
-	// Documented divergence from upstream, pinned so a fix has to update this
-	// test on purpose. Upstream captures by reference and would answer 5.
+func TestParity_ClosureUpvaluesAreCapturedByReference(t *testing.T) {
+	// Matches upstream: a captured local is one shared cell, not a per-closure copy,
+	// so a closure assigning to it updates the variable itself. This asserted 0 while
+	// gopherbuzz captured by value.
 	v := evalParity(t, `
 fun probe() > int {
     var sum = 0;
@@ -805,7 +804,7 @@ fun probe() > int {
     add(5);
     return sum;
 }`)
-	assert.Equal(t, int64(0), v.AsInt(), "a closure mutating an enclosing local does not affect it")
+	assert.Equal(t, int64(5), v.AsInt(), "a closure mutating an enclosing local updates that local")
 }
 
 func TestParity_AnonymousObjectLiteralBecomesTheExpectedObject(t *testing.T) {

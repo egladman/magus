@@ -33,6 +33,7 @@ foreach.buzz
 forward-method-placeholders.buzz
 free-identifiers.buzz
 fs.buzz
+functional.buzz
 generics.buzz
 if-arrow.buzz
 import-lib.buzz

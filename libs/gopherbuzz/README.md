@@ -14,7 +14,7 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**64 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+**67 of 83** upstream behavior tests pass, measured against `UpstreamRef`
 (`0.5.0-251-ged42f47`) on 2026-07-30. The baseline when this record started was 12.
 
 Measure against the PINNED commit, not a local `main` checkout: a newer checkout
@@ -48,12 +48,10 @@ generic object declarations, inline ifs, and `catch void`. Two deliberate supers
 
 ### What does not
 
-Ten of the nineteen remaining failures are open gaps, each with a known cause:
+Seven of the sixteen remaining failures are open gaps, each with a known cause:
 
 | Gap | Blocks | Cause |
 | --- | ---: | --- |
-| Host modules are untyped in the checker | `crypto`, `io` | An inferred enum case in an argument (`hash(.Md5, ...)`) has no declared parameter type to resolve against, because a host module's members carry no signatures. Upstream declares its native stdlib as typed `extern fun`. |
-| Upvalues captured by value | `functional` | See the divergence note below. |
 | Buffer's binary API | `buffer` | Missing `writeInt`/`readInt` (upstream's `Integer` is an **i48**, so six bytes), `writeDouble`/`readDouble`, `writeBoolean`/`readBoolean`, and `empty`; `write`/`read` also take and return a `str` upstream where gopherbuzz uses `[int]`. |
 | Object-keyed maps | `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key. |
 | Tuple types | `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal. |
@@ -81,18 +79,7 @@ rather than a backlog:
 - **`std\toUd`** returns Zig-specific userdata, which this embedding has no
   representation for.
 
-Two known divergences are ours rather than missing features. The first is the
-more dangerous, because it answers rather than errors: **closures capture
-upvalues by VALUE**, a snapshot taken when the closure is created, so a closure
-that assigns to an enclosing local updates only its own copy. `var sum = 0;
-final add = fun (n: int) > void { sum = sum + n; }; add(5);` leaves `sum` at 0
-where upstream leaves it at 5. This is what blocks `functional.buzz`, whose
-`forEach` tests accumulate into an enclosing variable. Fixing it means boxing
-upvalues into cells rather than copying Values, which is a VM change, not a
-parser one. `parity_test.go` pins the current behaviour so a fix has to be
-deliberate.
-
-The second: a compound assign
+One known divergence is ours rather than a missing feature: a compound assign
 (`x op= v`) desugars to `x = x op v` sharing the target node, so the target is
 evaluated twice. `f().n += 1` calls `f()` twice where upstream calls it once.
 Harmless for the plain-variable and field cases that make up ordinary use, wrong

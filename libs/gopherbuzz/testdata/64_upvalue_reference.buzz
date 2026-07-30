@@ -1,0 +1,32 @@
+// @expect: 5:9:2
+// Closures capture by REFERENCE, as upstream does: a captured local is one shared
+// cell, so a closure that assigns to it updates the variable itself. This used to
+// answer 0 for `sum` -- the closure mutated a private copy, which ANSWERED WRONG
+// rather than erroring. Living in testdata also round-trips OpNewCell /
+// OpGetLocalCell / OpSetLocalCell through the bytecode codec.
+fun accumulate() > int {
+    var sum = 0;
+    final add = fun (n: int) > void { sum = sum + n; };
+    add(5);
+    return sum;
+}
+
+// A captured PARAMETER keeps its argument: the cell is seeded with whatever the
+// slot already held.
+fun fromParam(start: int) > int {
+    final bump = fun () > void { start = start + 4; };
+    bump();
+    return start;
+}
+
+// Two closures over the same local share one cell, so the writer is visible to the
+// reader.
+fun shared() > int {
+    var n = 0;
+    final set = fun () > void { n = 2; };
+    final get = fun () > int => n;
+    set();
+    return get();
+}
+
+final __r = "{accumulate()}:{fromParam(5)}:{shared()}";

@@ -55,6 +55,10 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	c := newCompiler(nil, "<main>", nil)
 	c.useSlots = !opts.SharedGlobals
 	c.debugLines = opts.DebugLines
+	// Top-level slots can be captured too (a closure defined at top level closing over
+	// a top-level `var`), and every upvalue must be a cell, so the same pre-pass runs
+	// here. topLevelKeepEnv IS this scan; it is reused rather than duplicated.
+	c.capturedLocals = topLevelKeepEnv(prog)
 	if opts.SharedGlobals {
 		c.initModuleScope(prog) // per-module Env keys for private globals
 	}
@@ -192,6 +196,18 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		}
 	case *ast.FunExpr:
 		collectFuncRefs(v.Body, true, keep)
+	case *ast.TestDecl:
+		// A test block compiles to its own function chunk, so a name it uses from the
+		// enclosing scope is captured exactly as a function body's would be.
+		collectFuncRefs(v.Body, true, keep)
+	case *ast.ForceExpr:
+		collectFuncRefs(v.Operand, inFunc, keep)
+	case *ast.TypeOfExpr:
+		collectFuncRefs(v.Operand, inFunc, keep)
+	case *ast.BlockExpr:
+		collectFuncRefs(v.Body, inFunc, keep)
+	case *ast.OutStmt:
+		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.ObjectDecl:
 		for i := range v.Fields {
 			collectFuncRefs(v.Fields[i].Default, inFunc, keep)
@@ -435,10 +451,19 @@ type upvalRef struct {
 }
 
 type compiler struct {
-	chunk     *vmpackage.Chunk
-	parent    *compiler
-	typeDecls map[string]*ast.ObjectDecl
-	loops     []loopInfo
+	chunk  *vmpackage.Chunk
+	parent *compiler
+	// capturedLocals is the over-approximated set of this function's local NAMES that
+	// a nested closure may reference, computed before the body is compiled (see
+	// topLevelKeepEnv, which is the same scan). cellSlots is the slot form, filled in
+	// by defineLocal. A slot in it is boxed: it holds a *cellObj and every access goes
+	// through OpGetLocalCell/OpSetLocalCell, so the frame and the closure share one
+	// location. Knowing this UP FRONT is what keeps the fast paths sound -- the
+	// peephole never sees an OpGetLocal for a boxed slot to fuse into OpBinLC/OpBinLL.
+	capturedLocals map[string]bool
+	cellSlots      map[int32]bool
+	typeDecls      map[string]*ast.ObjectDecl
+	loops          []loopInfo
 	// blockExprs is a stack, one entry per `from { ... }` currently being
 	// compiled, holding the jump indexes each `out` inside it emitted. They are
 	// patched to the block's end once its body is done.
@@ -511,6 +536,16 @@ func (c *compiler) defineLocal(name string) int32 {
 	slot := c.nextSlot
 	c.nextSlot++
 	c.locals = append(c.locals, localVar{name: name, depth: c.depth, slot: slot})
+	// Box the slot the moment it exists, so every later access compiles to the cell
+	// form and a capturing closure shares this exact cell. A captured PARAMETER keeps
+	// its argument because OpNewCell boxes whatever the slot already holds.
+	if c.capturedLocals[name] {
+		if c.cellSlots == nil {
+			c.cellSlots = map[int32]bool{}
+		}
+		c.cellSlots[slot] = true
+		c.chunk.Emit(vmpackage.OpNewCell, slot, 0)
+	}
 	if c.debugLines {
 		// Slots are never reused (nextSlot only grows), so localNames[slot] is a
 		// stable name→slot record for the lifetime of the chunk.
@@ -520,6 +555,24 @@ func (c *compiler) defineLocal(name string) int32 {
 		c.chunk.LocalNames[slot] = name
 	}
 	return slot
+}
+
+// emitGetLocal and emitSetLocal are the ONLY way a local is read or written, so a
+// captured slot can never be touched as a plain value.
+func (c *compiler) emitGetLocal(slot, styp int32) {
+	if c.cellSlots[slot] {
+		c.chunk.Emit(vmpackage.OpGetLocalCell, slot, 0)
+		return
+	}
+	c.chunk.Emit(vmpackage.OpGetLocal, slot, styp)
+}
+
+func (c *compiler) emitSetLocal(slot int32) {
+	if c.cellSlots[slot] {
+		c.chunk.Emit(vmpackage.OpSetLocalCell, slot, 0)
+		return
+	}
+	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
 }
 
 func (c *compiler) resolveLocal(name string) int32 {
@@ -765,7 +818,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 					c.setSlotObjFields(slot, fields)
 				}
 			}
-			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
+			c.emitSetLocal(slot)
 		} else {
 			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 			if v.IsExported {
@@ -889,7 +942,7 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 		if c.useSlots || c.depth > 0 {
 			slot := c.defineLocal(v.Name)
-			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
+			c.emitSetLocal(slot)
 		} else {
 			c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 			if v.IsExported {
@@ -959,7 +1012,7 @@ func (c *compiler) compileAssign(v *ast.AssignStmt) error {
 				c.chunk.Emit(vmpackage.OpCheckType, checkCode(st), 0)
 			}
 			c.clearSlotObjFields(slot)
-			c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
+			c.emitSetLocal(slot)
 			return nil
 		}
 		if c.useSlots {
@@ -1058,7 +1111,7 @@ func (c *compiler) compileIfLet(v *ast.IfStmt) error {
 	c.chunk.PatchJump(jThen)                          // Then starts here
 	c.enterBlock()
 	slot := c.defineLocal(v.BindName)
-	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0) // bind name = opt (pops the value)
+	c.emitSetLocal(slot) // bind name = opt (pops the value)
 	for _, s := range v.Then.Stmts {
 		if err := c.compileStmt(s); err != nil {
 			return err
@@ -1169,7 +1222,7 @@ func (c *compiler) compileMatchExpr(v *ast.MatchExpr) error {
 	c.enterBlock()
 	// An empty name is unreachable from source, so nothing can resolve to the temp.
 	slot := c.defineLocal("")
-	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
+	c.emitSetLocal(slot)
 
 	var done []int
 	for _, br := range v.Branches {
@@ -1183,7 +1236,7 @@ func (c *compiler) compileMatchExpr(v *ast.MatchExpr) error {
 		}
 		var hit []int
 		for _, cond := range br.Conds {
-			c.chunk.Emit(vmpackage.OpGetLocal, slot, 0)
+			c.emitGetLocal(slot, 0)
 			if err := c.compileExpr(cond); err != nil {
 				return err
 			}
@@ -1253,7 +1306,7 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// whose declared type it satisfies.
 	c.enterBlock()
 	errSlot := c.defineLocal("<caught>")
-	c.chunk.Emit(vmpackage.OpSetLocal, errSlot, 0)
+	c.emitSetLocal(errSlot)
 
 	var clauseEnds []int
 	for _, cl := range v.Catches {
@@ -1264,13 +1317,13 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 			if nullable {
 				nul = 1
 			}
-			c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+			c.emitGetLocal(errSlot, 0)
 			c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
 			nextClause = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 		}
 		c.enterBlock()
-		c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
-		c.chunk.Emit(vmpackage.OpSetLocal, c.defineLocal(cl.ErrName), 0)
+		c.emitGetLocal(errSlot, 0)
+		c.emitSetLocal(c.defineLocal(cl.ErrName))
 		for _, s := range cl.Body.Stmts {
 			if err := c.compileStmt(s); err != nil {
 				return err
@@ -1284,7 +1337,7 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	}
 	// No clause matched its type: rethrow, so the error reaches an enclosing
 	// handler instead of being swallowed by a try that did not claim it.
-	c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+	c.emitGetLocal(errSlot, 0)
 	c.chunk.Emit(vmpackage.OpThrow, 0, 0)
 	for _, idx := range clauseEnds {
 		c.chunk.PatchJump(idx)
@@ -1384,10 +1437,10 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 	c.enterBlock()
 	// OpIterNext (not done) pushes: [key?,] val (val on top)
 	valSlot := c.defineLocal(v.ValName)
-	c.chunk.Emit(vmpackage.OpSetLocal, valSlot, 0)
+	c.emitSetLocal(valSlot)
 	if v.KeyName != "" {
 		keySlot := c.defineLocal(v.KeyName)
-		c.chunk.Emit(vmpackage.OpSetLocal, keySlot, 0)
+		c.emitSetLocal(keySlot)
 	}
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -1450,6 +1503,13 @@ func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts 
 	}
 	for k, v := range c.typeDecls {
 		fc.typeDecls[k] = v
+	}
+	// Which of this function's locals a nested closure may capture, computed BEFORE
+	// any of the body is emitted. topLevelKeepEnv is the same scan (every name used
+	// inside a nested function body), applied here to one function's statements.
+	fc.capturedLocals = map[string]bool{}
+	for _, st := range stmts {
+		collectFuncRefs(st, false, fc.capturedLocals)
 	}
 	// pre-assign param slots 0..numParams-1
 	for _, p := range params {
@@ -1645,7 +1705,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			// Limitation: valid only for slot-based locals — upvalues, globals,
 			// params, call/member/index results stay sUnknown (B=0). Sound because
 			// OpCheckType is emitted wherever an any-typed value enters a typed slot.
-			c.chunk.Emit(vmpackage.OpGetLocal, slot, int32(c.slotType(slot)))
+			c.emitGetLocal(slot, int32(c.slotType(slot)))
 			return nil
 		}
 		if c.useSlots {

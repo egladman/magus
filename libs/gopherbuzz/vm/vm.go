@@ -472,11 +472,24 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpSetLocal:
 			vm.stack[f.base+int(ins.A)] = vm.pop()
 
+		case OpNewCell:
+			// Boxes the slot in place, keeping whatever it already holds -- which is how a
+			// captured PARAMETER keeps its argument.
+			vm.stack[f.base+int(ins.A)] = heapValue(tagCell, &cellObj{v: vget(vm.stack, f.base+int(ins.A))})
+
+		case OpGetLocalCell:
+			vm.push(vm.asCell(vget(vm.stack, f.base+int(ins.A))).v)
+
+		case OpSetLocalCell:
+			vm.asCell(vm.stack[f.base+int(ins.A)]).v = vm.pop()
+
 		case OpGetUpvalue:
-			vm.push(vget(f.fun.Upvals, int(ins.A)))
+			// Every upvalue is a cell: a captured local is boxed by its owning frame's
+			// prologue, and a capture-of-a-capture propagates that same cell.
+			vm.push(vm.asCell(vget(f.fun.Upvals, int(ins.A))).v)
 
 		case OpSetUpvalue:
-			f.fun.Upvals[ins.A] = vm.pop()
+			vm.asCell(f.fun.Upvals[ins.A]).v = vm.pop()
 
 		case OpLoadThis:
 			vm.push(f.this)

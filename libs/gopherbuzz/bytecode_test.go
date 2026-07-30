@@ -1463,14 +1463,14 @@ func TestSlotTopLevelClosureCapture(t *testing.T) {
 fun getx() > int { return x; }
 return getx();`, CompileOptions{}), 10)
 
-	// Snapshot semantics: mutating x after the closure is built does not change
-	// what the closure returns (by-value upvalue). In SharedGlobals mode the
-	// same source would observe the live global instead — that divergence is
-	// the intended difference between the two models.
+	// LIVE capture: a captured slot is one shared cell, so a write after the closure
+	// is built is visible through it. This asserted 1 (a by-value snapshot) until
+	// upvalues were boxed, which also removed the slot-vs-SharedGlobals divergence -
+	// both models now observe the live variable.
 	wantInt(t, runProg(t, `var x = 1;
 fun getx() > int { return x; }
 x = 2;
-return getx();`, CompileOptions{}), 1)
+return getx();`, CompileOptions{}), 2)
 }
 
 // testConformanceMeta holds the directives parsed from a conformance fixture.
