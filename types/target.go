@@ -186,3 +186,17 @@ func (r ExecResult) ToMap() map[string]any {
 		"ok":     r.OK,
 	}
 }
+
+// MagusfileTarget is the CacheRepository for a magusfile's exported targets.
+type MagusfileTarget struct{}
+
+// CacheKey implements CacheRepository. A magusfile body is Buzz, not a command, so there
+// is no argv to serialize; its text already reaches the key through the magusfile's own
+// Sources entry, leaving the entry point as what distinguishes build from go-build in
+// one file.
+func (MagusfileTarget) CacheKey(target string) []string {
+	if target == "" {
+		return nil
+	}
+	return []string{"magusfile-target:" + target}
+}

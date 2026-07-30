@@ -71,3 +71,16 @@ type WorkspaceRepository interface {
 	AffectedComputer
 	Describer
 }
+
+
+// CacheRepository is implemented by each kind of work a target dispatches to: a spell's
+// op and a magusfile's exported target. Both answer the same question - what will
+// actually run - so the cache asks it once, through one method, instead of guessing from
+// the target name. A name is only a label: two names over identical work can never share
+// an entry, and one name over two bodies hashes as though they were the same thing.
+type CacheRepository interface {
+	// CacheKey returns the lines identifying the work this runs for target, in a stable
+	// order (argument order is meaning, so nothing sorts them). Nil adds nothing to the
+	// key, which is not the same as adding an empty line.
+	CacheKey(target string) []string
+}

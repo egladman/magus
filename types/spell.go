@@ -121,6 +121,23 @@ func (s *Spell) RenderCommand(target string, charms []string) (cmd string, args 
 	return s.renderCmd(target, charms)
 }
 
+// CacheKey implements CacheRepository: a spell op is identified by the command it runs.
+// Charms apply first, because a charm changes the argv and so changes the work. When the
+// argv is computed in-VM and not statically knowable, the op names itself instead -
+// weaker than the argv, never wrong.
+func (s *Spell) CacheKey(target string) []string {
+	cmd, args, ok, err := s.RenderCommand(target, nil)
+	if err != nil || !ok {
+		return []string{"op:" + s.name + ":" + target}
+	}
+	key := make([]string, 0, len(args)+2)
+	key = append(key, "op:"+s.name+":"+target, "bin:"+cmd)
+	for _, a := range args {
+		key = append(key, "arg:"+a)
+	}
+	return key
+}
+
 // ExplainCommand returns the charm-application trace for a static preview: step 0
 // is the base command (no charms), and each later step is the command after one
 // more active charm's patch, in the deterministic order magus applies them. ok is
