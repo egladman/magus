@@ -14,29 +14,18 @@ and is enforced by a test rather than asserted by this file.
 
 ## Upstream parity
 
-**48 of 83** upstream behavior tests pass, measured against `UpstreamRef`
-(`0.5.0-251-ged42f47`) on 2026-07-28.
+**64 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+(`0.5.0-251-ged42f47`) on 2026-07-30. The baseline when this record started was 12.
 
-The baseline when this record started was 12; `is` grammar, typed for-init, and
-the bitwise family, the inferred enum case, char literals plus `as!`, and string
-iteration/subscripting, the iterator protocol, decimal string escapes, ordered
-JSON encoding, static object fields, generics-as-erasure, multi-clause `for`,
-nullable declarations without an initializer, object-literal field punning,
-`> void` arrow bodies, `enum<T>` backing types, optional chaining, default
-argument values, `!>`/`*>` inside a function TYPE, multiple typed catch clauses,
-labeled loops, block expressions, free identifiers, and generic object
-declarations, inline ifs, `catch void`, and contextual typing for inferred enum
-cases, range precedence, the range methods, and anonymous object literals that
-resolve to their expected object have banked thirty-six since. Measure against the PINNED commit,
-not a local `main` checkout: a newer checkout has files that do not exist at the
-pin, which is how an earlier hand-count reached a wrong 13-of-84.
+Measure against the PINNED commit, not a local `main` checkout: a newer checkout
+has files that do not exist at the pin, which is how an earlier hand-count reached
+a wrong 13-of-84.
 
-That number is the honest headline, and it is lower than this file used to imply.
-It is produced by running every file in upstream's `tests/behavior/` through this
-VM. Nothing is copied into this repo: `magus run conformance gopherbuzz` fetches
-`buzz-language/buzz` at the pinned sha into a cache directory and runs the suite
-against it, so the record is reproducible and always measured against the ref this
-VM claims to track.
+The number is produced by running every file in upstream's `tests/behavior/`
+through this VM. Nothing is copied into this repo: `magus run conformance
+libs/gopherbuzz` fetches `buzz-language/buzz` at the pinned sha into a cache
+directory and runs the suite against it, so the record is reproducible and always
+measured against the ref this VM claims to track.
 
 `testdata/upstream-behavior-allowlist.txt` is the enforced source of truth. The
 test fails in **both** directions: an allowlisted test that regresses, and a
@@ -57,32 +46,31 @@ expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
 generic object declarations, inline ifs, and `catch void`. Two deliberate supersets: the contextual
 `test` keyword (below) and named-argument labels.
 
-### What does not, ranked by upstream tests blocked
+### What does not
 
-| Gap | Blocks | Example |
+Ten of the nineteen remaining failures are open gaps, each with a known cause:
+
+| Gap | Blocks | Cause |
 | --- | ---: | --- |
-| Type-value literal `<T>` | 5 | `typeof x == <mut [int]>` |
-| Inferred enum case in an UNTYPED position | 2 | `io\File.open(p, mode: .read)` |
-| `match` expressions | 2 | `match (axis) { .up -> 1, .down -> 2 }` |
-| Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
-| `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
+| Host modules are untyped in the checker | `crypto`, `io` | An inferred enum case in an argument (`hash(.Md5, ...)`) has no declared parameter type to resolve against, because a host module's members carry no signatures. Upstream declares its native stdlib as typed `extern fun`. |
+| Upvalues captured by value | `functional` | See the divergence note below. |
+| Buffer's binary API | `buffer` | Missing `writeInt`/`readInt` (upstream's `Integer` is an **i48**, so six bytes), `writeDouble`/`readDouble`, `writeBoolean`/`readBoolean`, and `empty`; `write`/`read` also take and return a `str` upstream where gopherbuzz uses `[int]`. |
+| Object-keyed maps | `protocols` | `mapObj` is keyed by `string` throughout, and a map literal stores a bare identifier key as its literal name rather than evaluating it. Upstream allows any value as a key. |
+| Tuple types | `tuples` | `obj{ :str, :str }` (positional fields) and the matching `.{ a, b }` literal. |
+| `typeof` and mutability | `clone-mutability-methods` | `cloneMutable()` has to retype to `<mut [int]>`; mutability is a property no runtime value carries. |
+| Namespaces sharing a leading segment | `common-namespace` | Two imports whose namespaces share a first part must both bind under it. |
+| Namespaced imported object types | `import-export` | `testing\PrefixMe{}` does not resolve the type through the import. |
+| Circular imports | `mutual-import` | Two modules importing each other. |
 
-`typeof` is STATIC, which is the trap in that first row. Upstream compares type
-DEFS, not runtime values: `final list = []` gives `<[any]>` while `final slist:
-[str] = []` gives `<[str]>` - the same empty list at runtime, two different
-answers - and `immutableList.cloneMutable()` gives `<mut [int]>`, where
-mutability is a property no runtime value carries. So `typeof x` cannot be a
-runtime probe of the value; the compiler has to emit a constant built from the
-CHECKER's inferred type for the operand, which makes this a checker feature with
-a parser and VM surface rather than a VM one. Upstream parses `<T>` as a prefix
-handler on `Less` (Parser.zig `typeExpression`) and `typeof` as a prefix at
-Unary precedence (`typeOfExpression`).
+The other nine cannot be accommodated here, which is a property of the embedding
+rather than a backlog:
 
-Plus a long tail of single-test gaps (selective imports, anonymous object
-TYPES, tuples, nested backtick interpolation, assignment as an arrow-lambda
-body, `as`-binding in an if condition). Two remaining
-differences are deliberate, not pending:
-
+- **A compiled native library.** `ffi`, `extern-library`, `c-buzz-api` and
+  `types-as-value` all `zdef` against `tests/utils/libforeign`, and `os` shells out
+  to upstream's own `./zig-out/bin/buzz`. All five need upstream built with Zig.
+- **Reified generics.** `testing` calls `assertOfType::<int>` and
+  `assertThrows::<str>`; gopherbuzz erases type parameters, so a type argument is
+  not a runtime value. gopherbuzz's own `testing` module takes a type NAME instead.
 - **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
   constant of 57.295779513082195; the correctly-rounded f64 value is
   57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
@@ -90,6 +78,8 @@ differences are deliberate, not pending:
 - **GC collector callbacks** depend on Buzz's own collector running at points a Go
   program does not control. Upstream's test asserts a collector ran after dropping a
   reference; Go's GC gives no such guarantee.
+- **`std\toUd`** returns Zig-specific userdata, which this embedding has no
+  representation for.
 
 Two known divergences are ours rather than missing features. The first is the
 more dangerous, because it answers rather than errors: **closures capture
@@ -109,10 +99,10 @@ Harmless for the plain-variable and field cases that make up ordinary use, wrong
 for a call or any other side-effecting target.
 
 A test is often blocked by more than one gap, so closing a single entry does not
-always flip a file green. The allowlist reports real progress; this table only
-explains it. Widening the `is` type grammar is the worked example: it unblocked
-`is.buzz`, while `maps.buzz` and `mutual-import.buzz` stayed red behind other
-gaps even though their `is` usage now parses.
+always flip a file green. The allowlist reports real progress; the table only
+explains it. `types-as-value.buzz` is the worked example: adding `protocol`
+declarations and exempting `zdef` from argument labeling both moved it forward, and
+it stays red because it also needs a native library this embedding cannot build.
 
 ## Performance
 
