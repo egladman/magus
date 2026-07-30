@@ -1,0 +1,41 @@
+// @expect: two:middle:hit:blk
+// Covers `match` in both forms and each comparison rule it dispatches on: an
+// inferred enum case resolved from the subject, a range condition (containment,
+// not equality), a pattern condition against a string (regex, not equality), and
+// a statement-form arm whose body is a block. Living in testdata also round-trips
+// every one of them through the bytecode codec (TestBytecodeRoundTrip), which is
+// what covers the MatchExpr encoder and decoder.
+enum Kind { one, two }
+
+fun label(k: Kind) > str {
+    return match (k) {
+        .one -> "one",
+        .two -> "two",
+    };
+}
+
+final band = match (7) {
+    0..5 -> "low",
+    5..10 -> "middle",
+    else -> "high",
+};
+
+final rx = match ("hello joe") {
+    $"hello [a-z]+" -> "hit",
+    else -> "miss",
+};
+
+var blk = "unset";
+match (2) {
+    1 -> {
+        blk = "one";
+    },
+    2 -> {
+        blk = "blk";
+    },
+    else -> {
+        blk = "other";
+    },
+}
+
+final __r = "{label(Kind.two)}:{band}:{rx}:{blk}";
