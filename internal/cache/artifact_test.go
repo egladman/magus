@@ -23,7 +23,7 @@ func writeEntry(t *testing.T, c *Cache, project, target, path, body string, at t
 		// The cache key must be unique PER ENTRY, not per content: three runs that
 		// produced identical bytes are three entries. Deriving it from the blob alone
 		// made them overwrite one another, so the fixture collapsed the history before
-		// ArtifactHistory could be asked to.
+		// ListArtifacts could be asked to.
 		Hash:      fmt.Sprintf("%s-%s-%d", blob[:16], target, at.UnixNano()),
 		Target:    target,
 		CreatedAt: at,
@@ -53,16 +53,16 @@ func testCacheDir(t *testing.T) *Cache {
 	return c
 }
 
-// TestArtifactHistoryNewestFirst pins the order, which is the whole readability of
+// TestListArtifactsNewestFirst pins the order, which is the whole readability of
 // the output: a reader asking what changed wants the most recent change first.
-func TestArtifactHistoryNewestFirst(t *testing.T) {
+func TestListArtifactsNewestFirst(t *testing.T) {
 	c := testCacheDir(t)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", base)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v2", base.Add(time.Hour))
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v3", base.Add(2*time.Hour))
 
-	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
+	got, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	assert.True(t, got[0].CreatedAt.After(got[1].CreatedAt), "newest first")
@@ -71,13 +71,13 @@ func TestArtifactHistoryNewestFirst(t *testing.T) {
 	assert.Equal(t, "build", got[0].Target)
 }
 
-// TestArtifactHistoryCollapsesIdenticalContent is the behaviour that makes the output
+// TestListArtifactsCollapsesIdenticalContent is the behaviour that makes the output
 // worth reading. A target that ran twenty times and produced the same bytes changed
 // the artifact once; listing twenty rows buries the one change the reader came for.
 //
 // The surviving row is the OLDEST of each identical run, because the question is
 // when content first appeared, not when it was last re-confirmed.
-func TestArtifactHistoryCollapsesIdenticalContent(t *testing.T) {
+func TestListArtifactsCollapsesIdenticalContent(t *testing.T) {
 	c := testCacheDir(t)
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", base)
@@ -85,41 +85,41 @@ func TestArtifactHistoryCollapsesIdenticalContent(t *testing.T) {
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", base.Add(2*time.Hour))
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v2", base.Add(3*time.Hour))
 
-	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
+	got, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 2, "three identical v1 entries collapse to one")
 	assert.Equal(t, int64(2), got[0].Output.Size)
 	assert.Equal(t, base, got[1].CreatedAt, "the kept v1 row is the earliest, not the latest")
 }
 
-// TestArtifactHistoryScopesToPathAndProject: a manifest lists every output of a run,
+// TestListArtifactsScopesToPathAndProject: a manifest lists every output of a run,
 // and a store holds every project. Both filters have to hold or history would report
 // a sibling artifact's changes as this one's.
-func TestArtifactHistoryScopesToPathAndProject(t *testing.T) {
+func TestListArtifactsScopesToPathAndProject(t *testing.T) {
 	c := testCacheDir(t)
 	now := time.Now().UTC()
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "a1", now)
 	writeEntry(t, c, "pkg/a", "build", "dist/other", "o1", now)
 	writeEntry(t, c, "pkg/b", "build", "dist/app", "b1", now)
 
-	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
+	got, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, int64(2), got[0].Output.Size)
 
-	_, err = c.ArtifactHistory(context.Background(), "pkg/zzz", "dist/app")
+	_, err = c.ListArtifacts(context.Background(), "pkg/zzz", "dist/app")
 	require.Error(t, err, "an unknown project is not an empty history")
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
-// TestArtifactHistoryEmptyForUnknownPath separates "this project has no such
+// TestListArtifactsEmptyForUnknownPath separates "this project has no such
 // artifact" from "this project was never built", which the caller renders
 // differently.
-func TestArtifactHistoryEmptyForUnknownPath(t *testing.T) {
+func TestListArtifactsEmptyForUnknownPath(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", time.Now().UTC())
 
-	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/nope")
+	got, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/nope")
 	require.NoError(t, err, "a built project with no such output is not an error")
 	assert.Empty(t, got)
 }
@@ -130,7 +130,7 @@ func TestArtifactHistoryEmptyForUnknownPath(t *testing.T) {
 func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "hello", time.Now().UTC())
-	versions, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
+	versions, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 
@@ -155,7 +155,7 @@ func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 func TestMaterializeArtifactReportsEviction(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "hello", time.Now().UTC())
-	versions, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
+	versions, err := c.ListArtifacts(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 

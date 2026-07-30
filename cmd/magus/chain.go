@@ -438,7 +438,7 @@ type artifactVersion struct {
 // the VCS is a poor witness for. A generated artifact's git history tells you when
 // someone committed a regeneration; this tells you when the bytes changed.
 func chainFileHistory(ctx context.Context, m *magus.Magus, opts OutputOptions, projectPath, wsPath string) error {
-	versions, err := m.ArtifactHistory(ctx, projectPath, wsPath)
+	versions, err := m.ListArtifacts(ctx, projectPath, wsPath)
 	if err != nil {
 		return err
 	}
@@ -474,7 +474,7 @@ func chainFileHistory(ctx context.Context, m *magus.Magus, opts OutputOptions, p
 // rule that keeps a graph renderer out of magus applies here for the same reason: a
 // built-in differ would be a worse version of a tool the user has already chosen.
 func chainFileDiff(ctx context.Context, m *magus.Magus, projectPath, wsPath, workingCopy string) error {
-	versions, err := m.ArtifactHistory(ctx, projectPath, wsPath)
+	versions, err := m.ListArtifacts(ctx, projectPath, wsPath)
 	if err != nil {
 		return err
 	}

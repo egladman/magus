@@ -46,7 +46,7 @@ func (v ArtifactVersion) ShortBlob() string {
 // is the most misleading answer available.
 var ErrArtifactMissing = errors.New("cache: artifact content not in store")
 
-// ArtifactHistory returns every cached version of wsPath, newest first.
+// ListArtifacts returns every cached version of wsPath, newest first.
 //
 // wsPath is WORKSPACE-relative, matching how snapshot recorded it and what
 // TargetArtifact.Path carries; it is not relative to projectPath.
@@ -54,7 +54,7 @@ var ErrArtifactMissing = errors.New("cache: artifact content not in store")
 // Consecutive versions with identical content collapse to one, keeping the earliest
 // of each run: a target that ran twenty times producing the same bytes changed the
 // artifact once, and the question is when content first appeared.
-func (c *Cache) ArtifactHistory(ctx context.Context, projectPath, wsPath string) ([]ArtifactVersion, error) {
+func (c *Cache) ListArtifacts(ctx context.Context, projectPath, wsPath string) ([]ArtifactVersion, error) {
 	manifests, err := c.projectManifests(ctx, projectPath)
 	if err != nil {
 		return nil, err
