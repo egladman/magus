@@ -244,6 +244,27 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		p.peekAt(1).Kind == token.Ident && p.peekAt(2).Kind == token.LBrace {
 		return p.parseProtocolDecl()
 	}
+	// `_: T = expr` is an ANNOTATED discard: upstream uses it to assert that a value
+	// matches a type without binding it (anonymous-objects.buzz checks a structural
+	// `obj{ ... }` type this way). Parsing it as an ordinary declaration named `_` makes
+	// the checker perform exactly that compatibility check; nothing reads the binding.
+	if t.Kind == token.Ident && t.Val == "_" && !t.Raw && p.peekAt(1).Kind == token.Colon {
+		p.advance() // `_`
+		p.advance() // ':'
+		annot, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Assign); err != nil {
+			return nil, err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.optSemicolon()
+		return &ast.DeclStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: "_", TypeAnnot: annot, Value: val}, nil
+	}
 	// A statement-position `match (`: the same node the expression form produces,
 	// wrapped so its value is discarded. Contextual for the same reason as above.
 	if t.Kind == token.Ident && t.Val == "match" && !t.Raw && p.peekAt(1).Kind == token.LParen {

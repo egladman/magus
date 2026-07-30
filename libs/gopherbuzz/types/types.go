@@ -122,6 +122,14 @@ func ParseAnnot(s string) Type {
 	if s == "" {
 		return Any
 	}
+	// `obj{ name: str, age: int }` is an anonymous STRUCTURAL object type. This checker
+	// models named types only, so there is nothing to compare a value against: parsing
+	// it to a type named "obj" made every use a mismatch (an anonymous literal infers as
+	// a map). Unknown is the tracking-failure sentinel -- compatible with everything --
+	// which keeps the annotation legal without asserting a shape that cannot be checked.
+	if strings.HasPrefix(strings.TrimPrefix(s, "mut "), "obj{") {
+		return Unknown
+	}
 	ap := &annotParser{s: s}
 	t := ap.parse()
 	if t == nil {

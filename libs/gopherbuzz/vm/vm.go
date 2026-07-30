@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -2237,6 +2238,31 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return v.tag() == tagRange
 	case "pat":
 		return v.tag() == tagPat
+	}
+	// `obj{a,b}` is an anonymous STRUCTURAL type, reduced to its field names by
+	// isTypeShape. It holds when the value carries every one of them -- for a map (what
+	// an anonymous `.{ ... }` literal builds) or a named object that happens to have
+	// them. Field types are erased, so presence is the whole check.
+	if fields, ok := strings.CutPrefix(typeName, "obj{"); ok {
+		fields = strings.TrimSuffix(fields, "}")
+		if fields == "" {
+			return v.tag() == tagMap || v.tag() == tagObject
+		}
+		for _, name := range strings.Split(fields, ",") {
+			switch v.tag() {
+			case tagMap:
+				if _, has := vm.asMap(v).get(name); !has {
+					return false
+				}
+			case tagObject:
+				if vm.asObject(v).Def.fieldIndex(name) < 0 {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		return true
 	}
 	if v.tag() == tagObject {
 		return vm.asObject(v).Def.Name == typeName

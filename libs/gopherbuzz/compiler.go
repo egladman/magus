@@ -2091,6 +2091,44 @@ func isTypeShape(annot string) (base string, nullable bool) {
 		s, nullable = strings.TrimSpace(t), true
 	}
 	switch {
+	case strings.HasPrefix(s, "obj{"):
+		// An anonymous object type is STRUCTURAL, so `x is obj{ name: str, age: int }`
+		// asks whether x carries those fields. Types are erased at runtime, so the check
+		// is field PRESENCE. The names are extracted here, once, into `obj{name,age}` --
+		// OpIs runs in the hot dispatch switch and must not re-parse an annotation per
+		// evaluation (the same reason the other shapes reduce here).
+		inner := strings.TrimSuffix(strings.TrimPrefix(s, "obj{"), "}")
+		var names []string
+		depth := 0
+		field := ""
+		flush := func() {
+			if name, _, found := strings.Cut(field, ":"); found {
+				if name = strings.TrimSpace(name); name != "" {
+					names = append(names, name)
+				}
+			}
+			field = ""
+		}
+		for i := 0; i < len(inner); i++ {
+			switch c := inner[i]; c {
+			case '[', '{', '<', '(':
+				depth++
+				field += string(c)
+			case ']', '}', '>', ')':
+				depth--
+				field += string(c)
+			case ',':
+				if depth == 0 {
+					flush()
+					continue
+				}
+				field += string(c)
+			default:
+				field += string(c)
+			}
+		}
+		flush()
+		return "obj{" + strings.Join(names, ",") + "}", nullable
 	case strings.HasPrefix(s, "["):
 		return "list", nullable
 	case strings.HasPrefix(s, "{"):

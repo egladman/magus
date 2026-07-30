@@ -11,6 +11,7 @@
 #   GOPHERBUZZ_UPSTREAM_DIR=~/Repos/buzz go test ./libs/gopherbuzz/ -run TestUpstreamConformance -v
 # then add newly-passing files (never remove a line without confirming a
 # real regression).
+anonymous-objects.buzz
 any.buzz
 basic-types.buzz
 bitwise.buzz
