@@ -2184,6 +2184,22 @@ func (p *parser) parseArgList(statementForm bool) ([]ast.Node, []string, error) 
 	var names []string
 	sawName := false
 	for !p.check(token.RParen) && !p.check(token.EOF) {
+		// A zdef declaration block is a backtick string full of braces (`extern struct {
+		// id: c_int }`), which the lexer necessarily splits as an interpolation. Upstream
+		// never interpolates one -- zdefStatement hands the raw token to its FFI parser --
+		// so take the verbatim text here instead of sub-parsing braces that were never
+		// expressions. Only reachable for a zdef callee, so an ordinary call's raw string
+		// still interpolates.
+		if statementForm && p.check(token.InterpStr) && p.peek().Val != "" {
+			t := p.advance()
+			args = append(args, &ast.StringLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: t.Val})
+			names = append(names, "")
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+			continue
+		}
 		name := ""
 		// `ident :` is a label, but `ident ::` opens a generic call argument
 		// (count::<int>(...)), so the second colon has to be excluded or every

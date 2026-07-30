@@ -1,10 +1,17 @@
 // @expect: true
-// Backtick raw strings — upstream Buzz's multiline form, used above all for
-// zdef declaration blocks: no escapes, no interpolation, newlines literal.
+// Backtick raw strings — upstream Buzz's multiline form, used above all for zdef
+// declaration blocks: newlines are literal and nothing is unescaped, with one
+// exception. A raw string DOES interpolate (upstream's multiline-strings test
+// relies on it), so \{ and \} are the way to write a literal brace. This fixture
+// previously asserted that a bare {...} stayed literal, which upstream rejects as
+// a malformed interpolation.
 final decl = `
     fn add(a: c_int) c_int;
-    {braces stay literal}
+    \{braces stay literal\}
 `;
+final n = 3;
+final interpolated = `sum={n + 12}`;
 final __r = decl.indexOf("fn add") != null
     and decl.indexOf("\{braces stay literal\}") != null
-    and decl.indexOf("\n") != null;
+    and decl.indexOf("\n") != null
+    and interpolated == "sum=15";

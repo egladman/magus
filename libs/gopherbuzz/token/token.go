@@ -812,52 +812,80 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
 }
 
-// lexRawString scans a backtick-quoted raw string — upstream Buzz's
-// multiline string form, used above all for zdef declaration blocks. No
-// escapes, no interpolation: every byte up to the closing backtick is
-// literal, newlines included.
+// lexRawString scans a backtick-quoted raw string — upstream Buzz's multiline
+// string form, used above all for zdef declaration blocks. Every byte up to the
+// closing backtick is literal, newlines included; the two exceptions are the \{
+// escape and `{ ... }` interpolation, whose text is left verbatim in the value for
+// the parser to split later.
 func (l *lexer) lexRawString(line, col int) (Token, error) {
 	l.pos++ // opening `
 	l.col++
-	start := l.pos
+	// Structured exactly like lexString: literal runs accumulate into lit, an
+	// interpolation is captured whole by captureInterpExpr, and the token is a plain
+	// String only when no interpolation appeared. Scanning for the closing backtick
+	// without doing this left `{3 + 12}` in the value as literal text.
+	var parts []StringPart
 	var lit strings.Builder
-	escaped := false
+	hasExpr := false
+	start := l.pos
+	flushLit := func() {
+		if lit.Len() > 0 {
+			parts = append(parts, StringPart{Text: lit.String()})
+			lit.Reset()
+		}
+	}
 	for l.pos < len(l.src) {
 		c := l.src[l.pos]
-		if c == '`' {
-			val := l.src[start:l.pos]
-			if escaped {
-				val = lit.String()
-			}
-			l.pos++
-			l.col++
-			return Token{Kind: String, Val: val, Line: line, Col: col}, nil
-		}
-		// A raw string still interpolates, so it needs a way to write a literal
-		// brace; upstream spells that \{. Nothing else is unescaped here - that is
-		// what "raw" means, and a regex or Windows path inside one must survive
-		// intact. The builder is only populated once an escape is actually seen, so
-		// the common case still slices the source directly.
+		// A raw string needs a way to write a literal brace, since it interpolates;
+		// upstream spells that \{. Nothing else is unescaped - that is what "raw" means,
+		// and a regex or Windows path inside one must survive intact. Handled before the
+		// switch so an escaped brace never opens an interpolation.
 		if c == '\\' && l.pos+1 < len(l.src) && (l.src[l.pos+1] == '{' || l.src[l.pos+1] == '}') {
-			if !escaped {
-				lit.WriteString(l.src[start:l.pos])
-				escaped = true
-			}
 			lit.WriteByte(l.src[l.pos+1])
 			l.pos += 2
 			l.col += 2
 			continue
 		}
-		if escaped {
-			lit.WriteByte(c)
-		}
-		if c == '\n' {
+		switch c {
+		case '`':
+			raw := l.src[start:l.pos]
+			l.pos++
+			l.col++
+			flushLit()
+			if !hasExpr {
+				s := ""
+				if len(parts) == 1 {
+					s = parts[0].Text
+				}
+				return Token{Kind: String, Val: s, Line: line, Col: col}, nil
+			}
+			// Val carries the text EXACTLY as written, interpolation delimiters included,
+			// alongside the split Parts. A zdef declaration block is a raw string full of
+			// braces (`extern struct { id: c_int }`) and upstream never interpolates it:
+			// zdefStatement hands the raw token to its FFI parser rather than to the string
+			// parser. Keeping both lets the value path interpolate while zdef reads the
+			// block verbatim (see foldStringConcat).
+			return Token{Kind: InterpStr, Val: raw, Parts: parts, Line: line, Col: col}, nil
+		case '{':
+			hasExpr = true
+			flushLit()
+			l.pos++
+			l.col++
+			expr, err := l.captureInterpExpr(line, col)
+			if err != nil {
+				return Token{}, err
+			}
+			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+		case '\n':
 			l.line++
 			l.col = 1
-		} else {
+			lit.WriteByte(c)
+			l.pos++
+		default:
+			lit.WriteByte(c)
+			l.pos++
 			l.col++
 		}
-		l.pos++
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated raw string at line %d:%d", line, col)
 }
@@ -932,8 +960,12 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 				return sb.String(), nil
 			}
 			sb.WriteRune(r)
-		case '"':
-			// Copy nested string verbatim so its braces aren't miscounted.
+		case '"', '`':
+			// Copy a nested string verbatim so its braces aren't miscounted. A BACKTICK
+			// string counts here too: an interpolation may hold a raw string, and its
+			// braces (or an unbalanced one in a zdef block) would otherwise close the
+			// interpolation early.
+			delim := r
 			sb.WriteRune(r)
 			l.pos += size
 			l.col += size
@@ -941,7 +973,12 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
 				sb.WriteRune(r2)
 				l.pos += s2
-				l.col += s2
+				if r2 == '\n' {
+					l.line++
+					l.col = 1
+				} else {
+					l.col += s2
+				}
 				if r2 == '\\' && l.pos < len(l.src) {
 					r3, s3 := utf8.DecodeRuneInString(l.src[l.pos:])
 					sb.WriteRune(r3)
@@ -949,7 +986,7 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 					l.col += s3
 					continue
 				}
-				if r2 == '"' {
+				if r2 == delim {
 					break
 				}
 			}

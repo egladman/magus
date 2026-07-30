@@ -52,6 +52,7 @@ lists.buzz
 long-namespace.buzz
 maps.buzz
 match.buzz
+multiline-strings.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz
