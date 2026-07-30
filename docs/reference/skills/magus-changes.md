@@ -1,14 +1,14 @@
 ---
 title: magus-changes
-description: "Summarize what merged, changed, or landed recently in a magus workspace."
+description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-changes]
-skill_full_bytes: 2671
-skill_simple_bytes: 2446
+skill_full_bytes: 5179
+skill_simple_bytes: 4449
 ---
 
 # magus-changes
 
-Summarize what merged, changed, or landed recently in a magus workspace. Use for questions such as "what's been merged lately?", "what features landed recently?", "catch me up since last week", or "what changed in this monorepo?" Ground each conclusion in VCS history plus magus project and knowledge-graph evidence; do not infer features from commit subjects alone.
+Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for "what's been merged lately?", "catch me up since last week", "add this to the CHANGELOG", and "what exactly did this branch change?" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.
 
 Install it, rather than copying from this page:
 
@@ -97,6 +97,58 @@ Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
 new command, target, diagnostic, or workflow.
+
+## Write a CHANGELOG entry
+
+A brief is for a person catching up; a changelog entry is a durable record. When
+the ask is "add this to the changelog", match the file's existing shape - Keep a
+Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
+
+```markdown
+### Added
+
+- <What a user can now do, in one sentence.> <Why it is the right shape, or what it
+  replaces.> Set `<config.key>` (env `MAGUS_<CONFIG_KEY>`) to <what the toggle does>;
+  <default>.
+```
+
+Rules for an entry, all checkable:
+
+- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+  diagnostic code, the target. A reader upgrades by searching for those strings.
+- Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
+  `Removed`, `Fixed`, `Security`. Do not invent one.
+- Write behaviour, not implementation. "The graph indexes the build I/O layer" is an
+  entry; "refactored the extractor" is not.
+- One entry per user-visible change, not per commit. Squash a fix-up into the entry
+  for the thing it fixed up.
+- `CHANGELOG.md` is a SOURCE file, not generated - confirm with
+  `magus describe file CHANGELOG.md` if unsure, and edit it directly.
+
+## Answer a granular diff question
+
+When the ask narrows to "what exactly changed in X", stay on magus surfaces: they
+classify and relate, where a raw diff only shows text.
+
+| question | command |
+| --- | --- |
+| what did this change do to the domain's shape | `magus graph diff --rev <base> -o markdown` |
+| is this changed file source or generated output | `magus describe file <paths...>` |
+| which projects does the change reach | `magus affected --impact` |
+| why is THIS project in the affected set | `magus affected --explain <project>` |
+| what does one node's neighborhood look like now | `magus explain <node>` |
+| where is this symbol defined and used | `magus refs <symbol>` |
+| what did a target actually output | `magus query output <ref>` |
+
+`magus graph diff` is the one to reach for first on a branch review: it reports the
+nodes and edges added, removed, or changed, which is blast radius as data rather
+than a file list to interpret. Pair it with `magus describe file` so a diff of 300
+paths collapses to the handful that are declared sources.
+
+Raw VCS commands stay available for what only the VCS knows - who committed, when,
+in which merge - and the table above covers everything about what the change MEANS.
+Reaching for `git diff` to answer "what does this affect" is the mistake this skill
+exists to prevent.
 ```
 
 ## Short form (`--simple`)
@@ -178,6 +230,52 @@ Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
 new command, target, diagnostic, or workflow.
+
+## Write a CHANGELOG entry
+
+ When
+the ask is "add this to the changelog", match the file's existing shape - Keep a
+Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
+
+```markdown
+### Added
+
+- <What a user can now do, in one sentence.> <Why it is the right shape, or what it
+  replaces.> Set `<config.key>` (env `MAGUS_<CONFIG_KEY>`) to <what the toggle does>;
+  <default>.
+```
+
+Rules for an entry, all checkable:
+
+- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+  diagnostic code, the target.
+- Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
+  `Removed`, `Fixed`, `Security`. Do not invent one.
+- Write behaviour, not implementation.
+- One entry per user-visible change, not per commit. Squash a fix-up into the entry
+  for the thing it fixed up.
+- `CHANGELOG.md` is a SOURCE file, not generated - confirm with
+  `magus describe file CHANGELOG.md` if unsure, and edit it directly.
+
+## Answer a granular diff question
+
+When the ask narrows to "what exactly changed in X", stay on magus surfaces.
+
+| question | command |
+| --- | --- |
+| what did this change do to the domain's shape | `magus graph diff --rev <base> -o markdown` |
+| is this changed file source or generated output | `magus describe file <paths...>` |
+| which projects does the change reach | `magus affected --impact` |
+| why is THIS project in the affected set | `magus affected --explain <project>` |
+| what does one node's neighborhood look like now | `magus explain <node>` |
+| where is this symbol defined and used | `magus refs <symbol>` |
+| what did a target actually output | `magus query output <ref>` |
+
+`magus graph diff` is the one to reach for first on a branch review. Pair it with `magus describe file` so a diff of 300
+paths collapses to the handful that are declared sources.
+
+Raw VCS commands stay available for what only the VCS knows - who committed, when,
+in which merge - and the table above covers everything about what the change MEANS.
 ```
 
 </details>

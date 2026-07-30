@@ -11,6 +11,29 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- `magus agent install --simple` installs a shorter permutation of every agent skill: the
+  imperative steps with the rationale withheld, for a capable model that infers the why and
+  would rather spend the context on the task. Both permutations are hand-authored from ONE
+  source body (an author brackets the withheld spans), so they cannot describe different
+  behaviour and they share one content digest - `magus graph verify` reports staleness the
+  same way whichever is installed, and the file's stamp records `skill-variant`. Across the
+  eight skills the short form is 14% smaller. The docs site now reproduces every skill in
+  both forms with a size comparison (`reference/skills/`), generated from the embedded
+  bodies so it cannot drift from what install writes.
+- The `magus-changes` skill now serves three outputs rather than one: the evidence-backed
+  brief it already wrote, a `CHANGELOG.md` entry in this file's existing Keep a Changelog
+  shape, and per-question granular diff commands - all answered through magus surfaces
+  (`graph diff`, `describe file`, `affected --impact/--explain`) rather than a raw diff.
+- Shell completion now offers the target names this workspace actually declares, read from
+  `magus describe targets`, instead of eight names baked into each script; zsh and fish also
+  show each target's kind (canonical, or the spell providing it). Falls back to the built-in
+  set outside a workspace, where `describe` cannot answer.
+- `magus repl` gained a line editor: arrow-key history, line editing, and Tab completion
+  drawn from magus's own surfaces - meta commands, the session's user globals, host modules
+  and their methods (`fs.writeF<TAB>`), and the workspace's targets and projects. A piped
+  session is unchanged. It also pins a one-row status footer showing the active language,
+  the working directory, and the parser's continuation depth.
+
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
   contributor with `authored` edges to the files they touched, so `explain author:<name>`
   shows what someone maintains and it can be set against a file's declared CODEOWNERS owner
