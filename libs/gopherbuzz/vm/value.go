@@ -155,7 +155,7 @@ type funObj struct {
 	Params []string
 	Chunk  *Chunk
 	Env    *Env    // definition-time env for globals/closures
-	Upvals []Value // captured upvalues (snapshot at closure creation)
+	Upvals []Value // captured cells; each entry is a *cellObj shared with the defining frame
 	This   Value   // non-null for bound methods; zero Value = unbound
 }
 type directObj struct {

@@ -793,6 +793,29 @@ fun probe() > int {
 	assert.Equal(t, int64(5), v.AsInt(), "the body parses and runs, and the write reaches the enclosing local")
 }
 
+// TestParity_MatchCompoundTypeCondition pins that a match arm whose condition is a
+// COMPOUND type value actually matches. A type value carries the canonical spelling
+// ("[str]"), while the runtime type test compares against the reduced shape ("list"),
+// so passing the canonical name straight through made every such arm silently dead:
+// the arm fell to `else` even where the equivalent `is` answered true. Upstream's own
+// match.buzz only exercises simple arms (`<int>`, `<str>`, a named object), all of
+// which reduce to themselves, so it cannot catch this.
+//
+// testdata/65_regressions.buzz covers the same ground through the bytecode codec now
+// that a type-value constant serializes (v21); this keeps a direct, readable assertion
+// on the reduction itself.
+func TestParity_MatchCompoundTypeCondition(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final xs = [ "a", "b" ];
+    final byList = match (xs) { <[str]> -> "L", else -> "none" };
+    final byMap = match ({ "k": 1 }) { <{str: int}> -> "M", else -> "none" };
+    final mismatch = match (xs) { <{str: int}> -> "M", else -> "none" };
+    return "{byList}{byMap}{mismatch}";
+}`)
+	assert.Equal(t, "LMnone", v.String(), "compound type arms match, and a wrong shape still falls to else")
+}
+
 func TestParity_ClosureUpvaluesAreCapturedByReference(t *testing.T) {
 	// Matches upstream: a captured local is one shared cell, not a per-closure copy,
 	// so a closure assigning to it updates the variable itself. This asserted 0 while

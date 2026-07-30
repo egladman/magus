@@ -2,7 +2,6 @@ package buzz
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -1312,7 +1311,7 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	for _, cl := range v.Catches {
 		nextClause := -1
 		if cl.TypeName != "" {
-			base, nullable := isTypeShape(cl.TypeName)
+			base, nullable := vmpackage.TypeShape(cl.TypeName)
 			var nul int32
 			if nullable {
 				nul = 1
@@ -1860,7 +1859,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// dispatched from the I-cache-bound Exec switch where per-execution string
 		// work is exactly what the hot path cannot afford. B carries nullability so
 		// the VM spends one branch instead of a scan.
-		base, nullable := isTypeShape(v.TypeName)
+		base, nullable := vmpackage.TypeShape(v.TypeName)
 		var nul int32
 		if nullable {
 			nul = 1
@@ -1879,7 +1878,7 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// (a `mut ns\Name` annotation has to match a def's bare name); the coercing
 		// bare-`as` path is unaffected, since every name it does not recognise as a
 		// primitive returns the value untouched either way.
-		base, _ := isTypeShape(v.TypeName)
+		base, _ := vmpackage.TypeShape(v.TypeName)
 		c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
 	case *ast.MatchExpr:
 		return c.compileMatchExpr(v)
@@ -2140,79 +2139,6 @@ func mutFlag(mut bool) int32 {
 		return vmpackage.InstrMutBit
 	}
 	return 0
-}
-
-// isTypeShape reduces a source type annotation to the base name vm.buzzIsType
-// compares against, plus whether the annotation admits null. It runs at compile
-// time so OpIs stays a constant compare at runtime.
-//
-// Only the OUTER shape survives, because that is all a runtime tag can answer:
-// `[int]` and `[str]` are both a list to a value that carries no element type.
-// Element types are the checker's business, and it has the full annotation.
-func isTypeShape(annot string) (base string, nullable bool) {
-	s := strings.TrimSpace(annot)
-	s = strings.TrimPrefix(s, "mut ")
-	s = strings.TrimSpace(s)
-	if t := strings.TrimSuffix(s, "?"); t != s {
-		s, nullable = strings.TrimSpace(t), true
-	}
-	switch {
-	case strings.HasPrefix(s, "obj{"):
-		// An anonymous object type is STRUCTURAL, so `x is obj{ name: str, age: int }`
-		// asks whether x carries those fields. Types are erased at runtime, so the check
-		// is field PRESENCE. The names are extracted here, once, into `obj{name,age}` --
-		// OpIs runs in the hot dispatch switch and must not re-parse an annotation per
-		// evaluation (the same reason the other shapes reduce here).
-		inner := strings.TrimSuffix(strings.TrimPrefix(s, "obj{"), "}")
-		var names []string
-		depth := 0
-		field := ""
-		flush := func() {
-			if name, _, found := strings.Cut(field, ":"); found {
-				if name = strings.TrimSpace(name); name != "" {
-					names = append(names, name)
-				}
-			}
-			field = ""
-		}
-		for i := 0; i < len(inner); i++ {
-			switch c := inner[i]; c {
-			case '[', '{', '<', '(':
-				depth++
-				field += string(c)
-			case ']', '}', '>', ')':
-				depth--
-				field += string(c)
-			case ',':
-				if depth == 0 {
-					flush()
-					continue
-				}
-				field += string(c)
-			default:
-				field += string(c)
-			}
-		}
-		flush()
-		return "obj{" + strings.Join(names, ",") + "}", nullable
-	case strings.HasPrefix(s, "["):
-		return "list", nullable
-	case strings.HasPrefix(s, "{"):
-		return "map", nullable
-	case s == "fun" || strings.HasPrefix(s, "fun ") || strings.HasPrefix(s, "fun("):
-		// Function types carry no runtime signature, so every arity and return
-		// type collapses to "is it callable".
-		return "fun", nullable
-	}
-	if s := s[strings.LastIndex(s, `\`)+1:]; s != "" {
-		// Namespace-qualified names (a\Hello) match on the declared name, which is
-		// what an object or enum definition stores.
-		if i := strings.IndexByte(s, '<'); i >= 0 {
-			return s[:i], nullable // generic instantiation matches its base type
-		}
-		return s, nullable
-	}
-	return s, nullable
 }
 
 // typeConstName picks the spelling a type constant carries. The checker fills in

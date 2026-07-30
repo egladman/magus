@@ -22,18 +22,22 @@ import (
 //   bits 62-51 : qnanMask bits (always set for tagged values)
 //   bits 50-48 : coarse kind (3 bits)
 //   bits 47- 0 : payload (48 bits)
-//     for heap refs: bits 47-44 = fine heap kind (4 bits), bits 43-0 = table index (44 bits)
+//     for heap refs: bits 47-43 = fine heap kind (5 bits), bits 42-0 = table index (43 bits)
 //     for int/bool/null: full 48 bits used as the immediate payload
 //
 // Coarse kinds:
 //   0 nanboxNull — null             (payload unused)
 //   1 nanboxBool — bool             (payload: 0=false, 1=true)
 //   2 nanboxInt  — int48            (payload: 48-bit signed integer)
-//   3 nanboxHeap — heap ref         (bits 47-44: fine kind → valueTag; bits 43-0: gHeapArr index)
+//   3 nanboxHeap — heap ref         (bits 47-43: fine kind → valueTag; bits 42-0: gHeapArr index)
 //   4 nanboxNaN  — canonical NaN float (num() returns a standard quiet-NaN bit pattern)
 //   5-7          — reserved
 //
-// Heap fine kinds offset from tagStr (4): fine 0=tagStr, 1=tagList, …, 12=tagFib.
+// Heap fine kinds offset from tagStr (4): fine 0=tagStr, 1=tagList, …. The field is 5
+// bits because there are now 17 heap kinds: a 4-bit field held exactly 16, and the
+// 17th (tagCell) silently overflowed into the coarse field, decoding every cell as a
+// tagStr. heapFineFits below is the build-time guard against a repeat; the bit came
+// from the index, which still addresses 8 trillion entries.
 //
 // int48 range: ±2^47 ≈ ±140 trillion — sufficient for magus scripting.
 //
@@ -44,9 +48,10 @@ import (
 const (
 	qnanMask    = uint64(0x7FF8_0000_0000_0000)
 	payMask48   = uint64(0x0000_FFFF_FFFF_FFFF) // bits 47-0: 48-bit payload
-	idxMask44   = uint64(0x0000_0FFF_FFFF_FFFF) // bits 43-0: 44-bit heap index
+	idxMaskHeap = uint64(0x0000_07FF_FFFF_FFFF) // bits 42-0: 43-bit heap index
 	coarseShift = 48
-	fineShift   = 44
+	fineShift   = 43
+	fineMask    = uint64(0x1F) // bits 47-43: 5-bit fine heap kind
 
 	nanboxNull = uint64(0)
 	nanboxBool = uint64(1)
@@ -77,7 +82,7 @@ func (v Value) tag() valueTag {
 	case nanboxInt:
 		return tagInt
 	case nanboxHeap:
-		fine := (u >> fineShift) & 0xF
+		fine := (u >> fineShift) & fineMask
 		return valueTag(fine + uint64(tagStr))
 	default: // nanboxNaN and reserved → float
 		return tagFloat
@@ -179,10 +184,18 @@ func gHeapGet(idx uint64) heapVal {
 	return (*gHeapPtr.Load())[idx]
 }
 
+// heapFineFits fails to COMPILE if a new heap valueTag outgrows the fine field. The
+// constant is negative -- and so illegal for an unsigned type -- exactly when
+// tagCell-tagStr exceeds fineMask. tagCell is the last heap tag; keep it last, or
+// point this at whatever the new last one is. Without this guard the overflow is
+// silent: the excess bit lands in the coarse field and the value decodes as a
+// different kind entirely, which is how tagCell shipped decoding as tagStr.
+const heapFineFits = uint64(fineMask) - uint64(tagCell-tagStr)
+
 // encodeHeap packs a valueTag and global heap index into a NaN-box heap-ref Value.
 func encodeHeap(t valueTag, idx uint64) Value {
 	fine := uint64(t - tagStr) // tagStr (4) is the base of heap tags; fine kind 0=str, ...
-	return Value(qnanMask | (nanboxHeap << coarseShift) | (fine << fineShift) | (idx & idxMask44))
+	return Value(qnanMask | (nanboxHeap << coarseShift) | (fine << fineShift) | (idx & idxMaskHeap))
 }
 
 // heapValue interns ptr into the global heap table and returns the NaN-box Value.
@@ -216,7 +229,7 @@ func sameObj(a, b Value) bool {
 
 // value-level asX accessors: look up the global heap table.
 
-func nanboxObj(v Value) heapVal            { return gHeapGet(uint64(v) & idxMask44) }
+func nanboxObj(v Value) heapVal            { return gHeapGet(uint64(v) & idxMaskHeap) }
 func (v Value) asStr() *strObj             { return nanboxObj(v).(*strObj) }
 func (v Value) asUD() *udObj               { return nanboxObj(v).(*udObj) }
 func (v Value) asList() *listObj           { return nanboxObj(v).(*listObj) }

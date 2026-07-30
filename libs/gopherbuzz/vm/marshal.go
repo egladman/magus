@@ -84,12 +84,17 @@ import (
 // mid-chunk with "unknown opcode" after earlier side effects already ran, and it has
 // no decoder for the node tag, which desynchronizes the reader from that point on.
 //
+// v21 serializes a type-value constant (`<T>`, `typeof x`) as its canonical spelling.
+// Nothing could marshal one before -- Marshal failed outright -- so no v20 blob can
+// contain the new const tag; the guard matters in the other direction, since a v20 VM
+// has no case for tag 8 and would reject the const it cannot read.
+//
 // v20 adds OpNewCell/OpGetLocalCell/OpSetLocalCell, and changes what OpGetUpvalue
 // and OpSetUpvalue mean: every upvalue is now a *cellObj holding the variable, so a
 // closure captures by reference. An older VM has no case for the three new opcodes
 // and would abort mid-chunk, and would read a v20 upvalue as if the cell itself were
 // the value. A newer VM reading v19 bytecode would deref a raw value as a cell.
-const BytecodeVersion uint16 = 20
+const BytecodeVersion uint16 = 21
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -302,6 +307,7 @@ const (
 	constTagEnumDef = 5
 	constTagObjDecl = 6
 	constTagPat     = 7
+	constTagType    = 8
 )
 
 func (e *enc) constVal(v Value) error {
@@ -337,6 +343,13 @@ func (e *enc) constVal(v Value) error {
 	case tagPat:
 		e.u8(constTagPat)
 		e.str(v.asPat().src)
+	case tagType:
+		// A type VALUE is fully described by its canonical spelling (see typeval.go),
+		// so it serializes as that one string. Without this, any program using `<T>` or
+		// `typeof` could not be marshalled at all -- which also barred it from being a
+		// built-in spell, since those ship as prebuilt .bo bytecode.
+		e.u8(constTagType)
+		e.str(v.TypeName())
 	default:
 		return fmt.Errorf("buzz: marshal: cannot serialize constant of kind %s", v.buzzKind())
 	}
@@ -1139,6 +1152,12 @@ func (d *dec) constVal() (Value, error) {
 			return Null, err
 		}
 		return PatValue(s)
+	case constTagType:
+		s, err := d.str()
+		if err != nil {
+			return Null, err
+		}
+		return TypeValue(s), nil
 	default:
 		return Null, fmt.Errorf("unknown const tag %d", tag)
 	}

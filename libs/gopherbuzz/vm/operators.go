@@ -675,12 +675,20 @@ func listMethod(vm *VM, list Value, name string) Value {
 			if !lo.Mut {
 				return Null, errImmutable("list")
 			}
+			// Sort a SNAPSHOT and write the result back, rather than sorting lo.Items in
+			// place: the comparator re-enters the VM, so it can append to or truncate the
+			// same list and reallocate the backing array under sort.SliceStable, which
+			// holds the pre-call slice header. That turned guest code into an
+			// index-out-of-range "internal error". Writing back preserves the in-place
+			// contract upstream documents ("sorts the list in place ... returns the list").
+			snapshot := make([]Value, len(lo.Items))
+			copy(snapshot, lo.Items)
 			var sortErr error
-			sort.SliceStable(lo.Items, func(i, j int) bool {
+			sort.SliceStable(snapshot, func(i, j int) bool {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{lo.Items[i], lo.Items[j]})
+				v, err := callValue(vm, ctx, cb, []Value{snapshot[i], snapshot[j]})
 				if err != nil {
 					sortErr = err
 					return false
@@ -690,6 +698,9 @@ func listMethod(vm *VM, list Value, name string) Value {
 			if sortErr != nil {
 				return Null, sortErr
 			}
+			// Only as many elements as the list still has: a comparator that shrank it
+			// must not resurrect the dropped tail.
+			copy(lo.Items, snapshot[:min(len(lo.Items), len(snapshot))])
 			return list, nil
 		})
 	case "reverse":
@@ -834,13 +845,13 @@ func mapMethod(vm *VM, m Value, name string) Value {
 				if err != nil {
 					return Null, err
 				}
-				newKey, err := getMember(vm, entry, "key")
-				if err != nil {
-					return Null, fmt.Errorf("map.map: the callback must return a record with a `key` member: %w", err)
-				}
-				newVal, err := getMember(vm, entry, "value")
-				if err != nil {
-					return Null, fmt.Errorf("map.map: the callback must return a record with a `value` member: %w", err)
+				// PRESENCE, not err: getMember answers (Null, nil) for a member a map does
+				// not hold, so testing err let a callback returning the wrong shape through
+				// and collapsed every entry onto the stringified null key.
+				newKey, _ := getMember(vm, entry, "key")
+				newVal, _ := getMember(vm, entry, "value")
+				if newKey.tag() == tagNull {
+					return Null, fmt.Errorf("map.map: the callback must return a record with a `key` member, got %s", entry.buzzKind())
 				}
 				out.MapSet(newKey.String(), newVal)
 			}
@@ -932,6 +943,10 @@ func mapMethod(vm *VM, m Value, name string) Value {
 		return DirectValue("map.sort", func(ctx context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("map.sort: requires a comparator callback")
+			}
+			// Reorders the receiver, so it needs the same mutability gate list.sort has.
+			if !mp.Mut {
+				return Null, errImmutable("map")
 			}
 			cb := args[0]
 			type pair struct {

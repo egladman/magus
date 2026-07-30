@@ -43,7 +43,7 @@ const (
 	// Captured-local access. A slot a nested closure captures holds a *cellObj for
 	// the whole life of the frame (OpNewCell seeds it in the prologue), so the frame
 	// and the closure read and write ONE location. The compiler knows which slots
-	// those are before it emits anything (see capturedNames), which is why these are
+	// those are before it emits anything (see compiler.capturedLocals), which is why these are
 	// distinct opcodes rather than a tag test on the hot OpGetLocal path -- and why
 	// FusePeephole never fuses them into the OpBinLC/OpBinLL fast paths, which would
 	// read the slot as a plain value.

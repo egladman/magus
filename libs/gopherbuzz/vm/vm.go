@@ -914,7 +914,15 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				for i, info := range fc.UpvalInfos {
 					if info.IsLocal {
 						upvals[i] = vm.stack[f.base+int(info.Index)]
-					} else if f.fun != nil {
+					} else if f.fun == nil {
+						// A transitive capture with no enclosing closure to take it from. Only the
+						// top-level frame has f.fun == nil, and the top-level compiler never records
+						// an upvalue (resolveUpvalue bails when parent == nil), so this is
+						// unreachable. Leaving the slot as the zero Value would put a NON-CELL in
+						// Upvals, which OpGetUpvalue derefs unconditionally - a wild read under
+						// buzz_unsafe. Fail loudly instead of corrupting.
+						return Null, fmt.Errorf("buzz: internal error: transitive upvalue %d captured from a frame with no closure", i)
+					} else {
 						upvals[i] = f.fun.Upvals[info.Index]
 					}
 				}
@@ -2286,6 +2294,16 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 	return false
 }
 
+// derefCell unwraps a captured variable's box, leaving any other value untouched.
+// The debugger surfaces slots and upvalues that the compiler may have boxed, and a
+// raw cell is an implementation detail no caller should ever see.
+func derefCell(v Value) Value {
+	if v.tag() == tagCell {
+		return v.asCell().v
+	}
+	return v
+}
+
 // matchTest reports whether a match arm whose condition is cond is selected for
 // subject. It mirrors the four special cases upstream's codegen emits before
 // falling back to equality (Codegen.zig generateMatch):
@@ -2326,13 +2344,20 @@ func (vm *VM) matchTest(subject, cond Value) (bool, error) {
 		return m != nil, err
 
 	case cond.tag() == tagType && subject.tag() != tagType:
-		return vm.buzzIsType(subject, cond.TypeName()), nil
+		// TypeShape first: a type value carries the CANONICAL spelling ("[str]",
+		// "{str: int}"), while buzzIsType compares against the reduced shape the
+		// compiler normally hands it. Passing the canonical name straight through made
+		// every compound arm silently dead -- `match (x) { <[str]> -> ... }` fell to
+		// else even when `x is [str]` was true.
+		base, _ := TypeShape(cond.TypeName())
+		return vm.buzzIsType(subject, base), nil
 
 	case subject.tag() == tagType && cond.tag() != tagType:
 		// The mirror of the case above (upstream's matchTypeIsValue): when the SUBJECT
 		// is a type, an ordinary condition asks whether that condition inhabits it, so
 		// `match (<str>) { "hello" -> ... }` selects the string arm.
-		return vm.buzzIsType(cond, subject.TypeName()), nil
+		base, _ := TypeShape(subject.TypeName())
+		return vm.buzzIsType(cond, base), nil
 	}
 	return valuesEqual(subject, cond), nil
 }
@@ -2443,7 +2468,10 @@ func (vm *VM) DebugLocals(level int) map[string]Value {
 		if si < 0 || si >= len(vm.stack) {
 			continue
 		}
-		out[name] = vm.stack[si]
+		// A captured local holds a cell, not the value. Show the variable the user
+		// wrote; handing back the box makes the debugger print an internal type (and,
+		// with a tag-dispatched read, panic on it).
+		out[name] = derefCell(vm.stack[si])
 	}
 	return out
 }
@@ -2464,7 +2492,8 @@ func (vm *VM) DebugUpvalues(level int) map[string]Value {
 		if name == "" || i >= len(f.fun.Upvals) {
 			continue
 		}
-		out[name] = f.fun.Upvals[i]
+		// Every upvalue is a cell (see cellObj); show its contents.
+		out[name] = derefCell(f.fun.Upvals[i])
 	}
 	return out
 }

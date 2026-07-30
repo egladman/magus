@@ -125,7 +125,7 @@ func BoolValue(b bool) Value {
 type heapVal interface {
 	*strObj | *listObj | *mapObj | *funObj | *directObj | *udObj | *objectInst |
 		*objectDefObj | *enumDefObj | *enumValObj | *iterStateObj | *rangeObj |
-		*fibObj | *patObj | *typeObj | *objDeclPayload
+		*fibObj | *patObj | *typeObj | *objDeclPayload | *cellObj
 }
 
 // heapValue builds a heap Value: it pairs tag with ptr, converting the typed
