@@ -57,6 +57,13 @@ var Modules = []buzz.Module{
 	{Name: "assert", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("assert", assertSource)},
 	{Name: "suite", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("suite", suiteSource)},
 	{Name: "testing", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("testing", testingSource)},
+	// Upstream's module is NAMED "test" even though its file is testing.buzz
+	// (static_headers.zig: `Header{ .name = "test", .path = "testing.buzz" }`), so
+	// upstream source reaches it as `import "buzz:test"`. The same source is bound
+	// under both spellings: "test" is what upstream programs write, and "testing" is
+	// the name gopherbuzz already published. Importing both in one program would exec
+	// the source twice, which no caller has reason to do.
+	{Name: "test", Labels: []string{buzz.LabelUpstream}, Bind: source("test", testingSource)},
 }
 
 // synthetic returns a Bind that installs a synthetic (host-value) module built by

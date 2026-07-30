@@ -35,10 +35,10 @@ fun paint(text: str, code: int) > str {
     return e + "[{code}m" + text + e + "[0m";
 }
 
-fun dim(text: str) => paint(text, 2);
-fun red(text: str) => paint(text, 31);
-fun green(text: str) => paint(text, 32);
-fun yellow(text: str) => paint(text, 33);
+fun dim(text: str) => paint(text, code: 2);
+fun red(text: str) => paint(text, code: 31);
+fun green(text: str) => paint(text, code: 32);
+fun yellow(text: str) => paint(text, code: 33);
 
 /// A grouped assertion runner with lifecycle hooks. Construct with init(); each
 /// hook is optional (pass null). summary() reports and exits non-zero on failure.
@@ -105,17 +105,17 @@ export object Tester {
 
     /// @return count of failed assertions
     fun failedAsserts() > int {
-        return this.tally(this.asserts, false);
+        return this.tally(this.asserts, want: false);
     }
 
     /// @return count of failed cases
     fun failedTests() > int {
-        return this.tally(this.tests, false);
+        return this.tally(this.tests, want: false);
     }
 
     /// @return count of passed cases
     fun succeededTests() > int {
-        return this.tally(this.tests, true);
+        return this.tally(this.tests, want: true);
     }
 
     /// Runs one case: beforeEach, the body, then afterEach. The case passes when
@@ -177,17 +177,17 @@ export object Tester {
     /// @param detail Detail printed on failure
     /// @param message The assertion label
     mut fun assert(condition: bool, detail: str, message: str?) > void {
-        this.record(condition, detail, message: message);
+        this.record(condition, detail: detail, message: message);
     }
 
     /// Soft-asserts actual == expected.
     mut fun assertEqual(actual: any, expected: any, message: str?) > void {
-        this.record(actual == expected, "want `{expected}`, got `{actual}`", message: message);
+        this.record(actual == expected, detail: "want `{expected}`, got `{actual}`", message: message);
     }
 
     /// Soft-asserts actual != expected.
     mut fun assertNotEqual(actual: any, expected: any, message: str?) > void {
-        this.record(actual != expected, "both were `{actual}`", message: message);
+        this.record(actual != expected, detail: "both were `{actual}`", message: message);
     }
 
     /// Soft-asserts every element of values is equal.
@@ -199,7 +199,7 @@ export object Tester {
                 break;
             }
         }
-        this.record(allEqual, "elements are not all equal", message: message);
+        this.record(allEqual, detail: "elements are not all equal", message: message);
     }
 
     /// Soft-asserts adjacent elements of values differ.
@@ -211,7 +211,7 @@ export object Tester {
                 break;
             }
         }
-        this.record(allDistinct, "adjacent elements are equal", message: message);
+        this.record(allDistinct, detail: "adjacent elements are equal", message: message);
     }
 
     /// Soft-asserts value's runtime type name equals typeName ("int", "str",
@@ -222,7 +222,7 @@ export object Tester {
     /// @param message The assertion label
     mut fun assertOfType(value: any, typeName: str, message: str?) > void {
         final actual = assertcore\typeName(value);
-        this.record(actual == typeName, "want type `{typeName}`, got `{actual}`", message: message);
+        this.record(actual == typeName, detail: "want type `{typeName}`, got `{actual}`", message: message);
     }
 
     /// Soft-asserts fn raises. The error's type is not examined (gopherbuzz erases
@@ -236,7 +236,7 @@ export object Tester {
         } catch (err: any) {
             raised = true;
         }
-        this.record(raised, "function did not raise", message: message);
+        this.record(raised, detail: "function did not raise", message: message);
     }
 
     /// Soft-asserts fn does not raise.
@@ -249,6 +249,6 @@ export object Tester {
         } catch (err: any) {
             raised = true;
         }
-        this.record(!raised, "function raised", message: message);
+        this.record(!raised, detail: "function raised", message: message);
     }
 }
