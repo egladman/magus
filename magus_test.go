@@ -911,3 +911,40 @@ func TestCollapseOnSuccessIgnoresLevel(t *testing.T) {
 		})
 	}
 }
+
+// TestForEachSpell_MagusfileShadowsSpellOp pins the precedence rule. This repo exports
+// go_build from its magusfile while the go spell provides an op that normalizes to the
+// same name, and before the rule BOTH ran: the bare op compiled the module with no -o,
+// no ldflags and no trimpath, then the magusfile did the real build. The waste was
+// invisible because neither run failed.
+func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
+	t.Parallel()
+
+	var ran []string
+	newSpell := func(name string, targets ...string) *types.Spell {
+		return types.NewSpell(name,
+			types.WithTargets(targets...),
+			types.WithInvoker(func(_ context.Context, _ types.InvokeRequest) (any, error) {
+				ran = append(ran, name)
+				return nil, nil
+			}))
+	}
+
+	p := &types.Project{
+		Path:             ".",
+		MagusfileTargets: []string{"go-build"},
+		Exclusive:        true, // deterministic order for the assertion
+	}
+	p.ResolvedSpells = []*types.Spell{
+		newSpell("go", "go-build"),
+		newSpell(types.MagusfileSpellName),
+	}
+
+	require.NoError(t, forEachSpell(context.Background(), p, "go-build",
+		func(ctx context.Context, s *types.Spell) error {
+			_, err := s.Invoke(ctx, types.InvokeRequest{Dir: ".", Target: "go-build"})
+			return err
+		}))
+	assert.Equal(t, []string{types.MagusfileSpellName}, ran,
+		"the magusfile target must run alone; the shadowed spell op must not also run")
+}

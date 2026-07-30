@@ -187,6 +187,11 @@ func (r ExecResult) ToMap() map[string]any {
 	}
 }
 
+// MagusfileSpellName is the spell a project's own magusfile is bound as. It is matched
+// by name because that spell is a single global instance standing in for every
+// project's magusfile - see Project.MagusfileTargets for why it cannot answer for one.
+const MagusfileSpellName = "magusfile"
+
 // MagusfileTarget is the CacheRepository for a magusfile's exported targets.
 type MagusfileTarget struct{}
 

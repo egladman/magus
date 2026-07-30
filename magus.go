@@ -782,6 +782,30 @@ func TargetLabel(targets []types.Target, source string) string {
 	}
 }
 
+// magusfileOverride returns the index of the magusfile spell when this project's
+// magusfile exports target AND some other spell also provides it, else -1. Only a
+// genuine collision overrides: a magusfile target no spell claims needs no precedence,
+// and neither does a spell op the magusfile never mentions.
+func magusfileOverride(p *types.Project, spells []*types.Spell, target string) int {
+	if !slices.Contains(p.MagusfileTargets, target) {
+		return -1
+	}
+	idx, contested := -1, false
+	for i, s := range spells {
+		if s.Name() == types.MagusfileSpellName {
+			idx = i
+			continue
+		}
+		if slices.Contains(s.Targets(), target) {
+			contested = true
+		}
+	}
+	if idx >= 0 && contested {
+		return idx
+	}
+	return -1
+}
+
 // forEachSpell runs fn against every spell on p. Spells run in parallel unless
 // p.Exclusive is set; all run to completion so one failure does not mask others.
 // When the context carries a [cache.Limiter] and the caller holds a slot, the
@@ -799,6 +823,21 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 			pctx = types.WithEffectiveClaims(ctx, effective)
 		}
 		return fn(pctx, s)
+	}
+	// A magusfile target SHADOWS a spell op of the same name and runs alone. Without
+	// this both ran: this repo exports go_build while the go spell provides an op
+	// normalizing to the same name, so `magus run go-build` compiled the module twice -
+	// once bare from the spell, once stamped from the magusfile - and the bare one was
+	// waste, built with no -o, no ldflags, no trimpath. The magusfile is the workspace's
+	// own definition, so it decides what the name means there.
+	//
+	// Dispatched by INDEX rather than by narrowing the slice: EffectiveClaims is
+	// positional, so a filtered slice would hand a spell another spell's claims.
+	if only := magusfileOverride(p, spells, target); only >= 0 {
+		if err := dispatch(ctx, only, spells[only]); err != nil {
+			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: spells[only].Name(), Err: err}}}
+		}
+		return nil
 	}
 	if len(spells) == 1 {
 		if err := dispatch(ctx, 0, spells[0]); err != nil {

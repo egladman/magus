@@ -145,6 +145,12 @@ type Project struct {
 	// TargetExecOverrides are per-target ctx.withEnv / ctx.withCwd overrides, in
 	// declaration order, folded into the cache key. See TargetGraphNode.ExecOverrides.
 	TargetExecOverrides map[string][]string
+	// MagusfileTargets are the target names this project's magusfile exports, normalized.
+	// They live here rather than on the magusfile spell because that spell is ONE global
+	// instance shared by every project, so it cannot know what any particular magusfile
+	// declares - which is why its Targets() is empty and why nothing could previously ask
+	// whether a magusfile shadows a spell op of the same name.
+	MagusfileTargets []string
 	// TargetCrossDeps are the cross-project targets each target depends on, declared
 	// via a project import (<alias>.<target>). The descendant-write audit reads them:
 	// when a parent target depends on a target INSIDE a descendant project, the writes
