@@ -32,7 +32,7 @@ var Semver = Module{
 			Name:    "parse",
 			Doc:     "Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.",
 			Args:    []Arg{{Name: "v", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "SemverVersion"}},
 			Impl:    SemverParse,
 		},
 	},

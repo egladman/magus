@@ -50,9 +50,19 @@ func returnSuffix(m std.Method) string {
 	}
 	rets := make([]string, len(m.Returns))
 	for i, r := range m.Returns {
-		if r.Name != "" {
+		switch {
+		case r.Name != "":
 			rets[i] = r.Name
-		} else {
+		case r.Record != "":
+			// Name the record rather than the map it marshals to. "map[string]any"
+			// tells a magusfile author nothing they can act on; "ExecResult" is the
+			// annotation that turns field access into a checked expression, and it is
+			// the only reason to know the name at all. The descriptor already carries
+			// the list form ("[Commit]") when the Impl returns a slice, so this needs
+			// no reflection - which matters because this package IS linked into the
+			// binary, unlike the generator that fills the field in.
+			rets[i] = r.Record
+		default:
 			rets[i] = r.Type.GoType()
 		}
 	}

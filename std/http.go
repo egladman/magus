@@ -53,7 +53,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
 			Impl:    HTTPGet,
 		},
 		{
@@ -65,7 +65,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
 			Impl:    HTTPPost,
 		},
 		{
@@ -78,7 +78,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
 			Impl:    HTTPRequest,
 		},
 		{

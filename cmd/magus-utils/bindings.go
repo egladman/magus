@@ -52,6 +52,13 @@ func runBindings(args []string) error {
 	if *lang != "buzz" {
 		return fmt.Errorf("unknown lang %q (have: buzz)", *lang)
 	}
+
+	// Checked across EVERY module, not just the one being generated: the
+	// declarations are one table, and a per-module check would report a mismatch
+	// only when that module happened to be the regenerate target.
+	if err := checkRecordDecls(std.All()); err != nil {
+		return err
+	}
 	out, err := emitBuzz(m)
 	if err != nil {
 		return fmt.Errorf("emit: %w", err)
@@ -302,6 +309,65 @@ func returnConv(tag std.TypeTag, goType reflect.Type, src string) string {
 	default:
 		return buzzValConv(tag, src)
 	}
+}
+
+// recordName returns the Buzz object a return marshals to, or "" for a scalar.
+// It reads the Impl's reflected type, which is the same signal returnConv uses to
+// pick ToMap marshalling, so the two can never disagree about what a record is.
+func recordName(goType reflect.Type) string {
+	switch {
+	case goType.Implements(fielderType):
+		return goType.Name()
+	case goType.Kind() == reflect.Slice && goType.Elem().Implements(fielderType):
+		// Bracketed, so the descriptor states the shape as a magusfile annotation
+		// spells it and no consumer has to reflect to recover the list-ness.
+		return "[" + goType.Elem().Name() + "]"
+	}
+	return ""
+}
+
+// checkRecordDecls verifies every method's declared Ret.Record against the Impl's
+// actual return type, and returns one error naming every disagreement.
+//
+// This is what licenses stating the record name in the descriptor at all. The name
+// is already derivable by reflection, so a hand-written copy is only safe while
+// something proves the copy right - otherwise it is a second source of truth that
+// drifts silently, and a wrong record name is worse than none: it tells an author to
+// annotate `> FileInfo` on a call that returns ExecResult, and the checker then
+// rejects correct code.
+//
+// Codegen is the right place to fail. It runs on every `magus run generate`, it
+// already has the reflection in hand, and a build-time error costs a developer one
+// message where a runtime one costs a user a confusing load failure.
+func checkRecordDecls(mods []std.Module) error {
+	var problems []string
+	for _, mod := range mods {
+		for _, meth := range mod.Methods {
+			if len(meth.Returns) != 1 || meth.Impl == nil {
+				continue
+			}
+			want := recordName(reflect.TypeOf(meth.Impl).Out(0))
+			got := meth.Returns[0].Record
+			if want == got {
+				continue
+			}
+			switch {
+			case want == "":
+				problems = append(problems, fmt.Sprintf("%s\\%s: declares Record %q but its Impl returns a scalar",
+					mod.Name, meth.Name, got))
+			case got == "":
+				problems = append(problems, fmt.Sprintf("%s\\%s: Impl returns record %s; add Record: %q to its Ret",
+					mod.Name, meth.Name, want, want))
+			default:
+				problems = append(problems, fmt.Sprintf("%s\\%s: declares Record %q but its Impl returns %s",
+					mod.Name, meth.Name, got, want))
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("record return declarations disagree with their Impls:\n  %s", strings.Join(problems, "\n  "))
+	}
+	return nil
 }
 
 // buzzValConv returns the Go expression that converts src (of the given

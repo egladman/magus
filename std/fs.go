@@ -125,7 +125,7 @@ var Fs = Module{
 			Name:    "stat",
 			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "FileInfo"}},
 			Impl:    FsStat,
 		},
 		{
