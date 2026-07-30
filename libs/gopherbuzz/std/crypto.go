@@ -6,7 +6,6 @@ import (
 	"crypto/sha1" //nolint:gosec
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/hex"
 	"fmt"
 	"hash"
 	"strings"
@@ -15,9 +14,11 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-// cryptoModule builds the "crypto" module matching Buzz's crypto reference:
-// https://buzz-lang.dev/0.5.0/reference/std/crypto.html
-func cryptoModule() vm.Value {
+// cryptoCoreModule is the native layer under the buzz-authored `crypto` module
+// (crypto.buzz), the same split assertcore/assert use. Only the digest lives here;
+// the enum and the typed `hash` wrapper are declared in Buzz so the checker can see
+// a real signature and resolve an inferred enum case in an argument.
+func cryptoCoreModule() vm.Value {
 	m := mod()
 	m.MapSet("HashAlgorithm", vm.EnumDefValue("HashAlgorithm", []string{
 		"Md5",
@@ -26,7 +27,8 @@ func cryptoModule() vm.Value {
 		"Sha256",
 		"Sha384",
 		"Sha512",
-		"Sha512256",
+		"Sha512_224",
+		"Sha512_256",
 		"Sha512T256",
 		"Sha3224",
 		"Sha3256",
@@ -69,7 +71,9 @@ func cryptoHash(_ context.Context, args []vm.Value) (vm.Value, error) {
 		h = sha512.New384()
 	case "Sha512":
 		h = sha512.New()
-	case "Sha512256":
+	case "Sha512_224":
+		h = sha512.New512_224()
+	case "Sha512_256":
 		h = sha512.New512_256()
 	case "Sha512T256":
 		h = sha512.New512_256() // SHA-512/256
@@ -85,5 +89,7 @@ func cryptoHash(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("crypto.hash: unknown HashAlgorithm case %q", algoCase)
 	}
 	h.Write(data)
-	return vm.StrValue(hex.EncodeToString(h.Sum(nil))), nil
+	// RAW digest bytes, not hex: upstream's `hash` returns the bytes as a str and its
+	// tests hex-encode with `.hex()`. Returning hex here made that call double-encode.
+	return vm.StrValue(string(h.Sum(nil))), nil
 }

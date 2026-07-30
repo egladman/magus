@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -788,16 +789,38 @@ fun probe() > int {
     add(5);
     return sum;
 }`)
-	// NOTE: 0, not 5. Closures capture upvalues by VALUE, so the assignment
-	// updates the closure's copy and never reaches sum. This pins the current
-	// (divergent) behaviour so that fixing capture is a deliberate, visible
-	// change rather than a silent one; see the README's divergence note.
-	assert.Equal(t, int64(0), v.AsInt(), "the body parses and runs; the write does not escape the closure")
+	// 5: closures capture by REFERENCE, as upstream does, so the assignment reaches
+	// the enclosing sum. This pinned 0 while capture was by value.
+	assert.Equal(t, int64(5), v.AsInt(), "the body parses and runs, and the write reaches the enclosing local")
 }
 
-func TestParity_ClosureUpvaluesAreCapturedByValue(t *testing.T) {
-	// Documented divergence from upstream, pinned so a fix has to update this
-	// test on purpose. Upstream captures by reference and would answer 5.
+// TestParity_MatchCompoundTypeCondition pins that a match arm whose condition is a
+// COMPOUND type value actually matches. A type value carries the canonical spelling
+// ("[str]"), while the runtime type test compares against the reduced shape ("list"),
+// so passing the canonical name straight through made every such arm silently dead:
+// the arm fell to `else` even where the equivalent `is` answered true. Upstream's own
+// match.buzz only exercises simple arms (`<int>`, `<str>`, a named object), all of
+// which reduce to themselves, so it cannot catch this.
+//
+// testdata/65_regressions.buzz covers the same ground through the bytecode codec now
+// that a type-value constant serializes (v21); this keeps a direct, readable assertion
+// on the reduction itself.
+func TestParity_MatchCompoundTypeCondition(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final xs = [ "a", "b" ];
+    final byList = match (xs) { <[str]> -> "L", else -> "none" };
+    final byMap = match ({ "k": 1 }) { <{str: int}> -> "M", else -> "none" };
+    final mismatch = match (xs) { <{str: int}> -> "M", else -> "none" };
+    return "{byList}{byMap}{mismatch}";
+}`)
+	assert.Equal(t, "LMnone", v.String(), "compound type arms match, and a wrong shape still falls to else")
+}
+
+func TestParity_ClosureUpvaluesAreCapturedByReference(t *testing.T) {
+	// Matches upstream: a captured local is one shared cell, not a per-closure copy,
+	// so a closure assigning to it updates the variable itself. This asserted 0 while
+	// gopherbuzz captured by value.
 	v := evalParity(t, `
 fun probe() > int {
     var sum = 0;
@@ -805,7 +828,7 @@ fun probe() > int {
     add(5);
     return sum;
 }`)
-	assert.Equal(t, int64(0), v.AsInt(), "a closure mutating an enclosing local does not affect it")
+	assert.Equal(t, int64(5), v.AsInt(), "a closure mutating an enclosing local updates that local")
 }
 
 func TestParity_AnonymousObjectLiteralBecomesTheExpectedObject(t *testing.T) {
@@ -1099,4 +1122,491 @@ fun probe() > bool {
     return l.remove(12) == null and l.len() == 3 and l.remove(1) == "b";
 }`)
 	assert.True(t, v.AsBool(), "an out-of-range remove yields null and changes nothing")
+}
+
+// ── Features this branch added ───────────────────────────────────────────────
+//
+// Everything below is covered by the upstream behavior suite too, but that suite is
+// opt-in (magusfile.buzz keeps `conformance` out of `ci`, since it needs a foreign
+// checkout and the network). Without these, protocols, match, the boxed-upvalue
+// capture, the typed host modules and the raw-string rules would ship with no gate
+// that a plain `go test` runs -- which is how parseProtocolDecl reached 0% coverage.
+
+// evalWithStd is evalParity with the bundled stdlib registered, for the features that
+// reach a host module (crypto, io, fs). The plain helper deliberately wires nothing.
+func evalWithStd(t *testing.T, src string) vm.Value {
+	t.Helper()
+	ctx := context.Background()
+	s := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = s.Close() })
+	buzzstd.Register(s)
+	require.NoError(t, s.Exec(ctx, src), "Exec")
+	probe, ok := s.Globals()["probe"]
+	require.True(t, ok, "source must declare a zero-argument probe()")
+	v, err := s.CallValue(ctx, probe, nil)
+	require.NoError(t, err, "probe()")
+	return v
+}
+
+func TestParity_ProtocolDeclarationAndConformance(t *testing.T) {
+	v := evalParity(t, `
+protocol Nameable {
+    mut fun rename(name: str) > void;
+}
+
+protocol Sized {
+    fun size() > int;
+}
+
+object<Nameable, Sized> Pet {
+    name: str,
+
+    mut fun rename(name: str) > void {
+        this.name = name;
+    }
+
+    fun size() > int => 4;
+}
+
+fun probe() > str {
+    final bandit = mut Pet{ name = "bandit" };
+    // A protocol-typed binding accepts a declared conformer, and dispatch on it is
+    // ordinary dynamic dispatch on the object actually there.
+    var named: Nameable = bandit;
+    named.rename("Chili");
+    final sized: [Sized] = [ bandit ];
+    return "{bandit.name}:{sized[0].size()}";
+}`)
+	assert.Equal(t, "Chili:4", v.AsString(), "a protocol declares signatures; the object supplies them")
+}
+
+func TestParity_ProtocolRejectsUndeclaredConformer(t *testing.T) {
+	// Conformance is DECLARED, not structural: an object with a matching method set
+	// that never named the protocol is not assignable to it.
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+protocol Nameable {
+    fun rename(name: str) > void;
+}
+
+object Impostor {
+    fun rename(name: str) > void {}
+}
+
+fun probe() > bool {
+    final x: Nameable = Impostor{};
+    return true;
+}`)
+	require.Error(t, err, "structural match alone must not satisfy a protocol")
+}
+
+func TestParity_MatchStatementAndExpressionForms(t *testing.T) {
+	v := evalParity(t, `
+fun classify(n: int) > str {
+    return match (n) {
+        1, 2 -> "low",
+        3 -> "three",
+        else -> "high",
+    };
+}
+
+fun probe() > str {
+    // Statement form with block bodies; sibling arms get their own scopes.
+    var tag = "unset";
+    match (2) {
+        1 -> {
+            final local = "one";
+            tag = local;
+        },
+        2 -> {
+            final local = "two";
+            tag = local;
+        },
+        else -> {
+            tag = "other";
+        },
+    }
+    return "{classify(1)}/{classify(2)}/{classify(3)}/{classify(9)}/{tag}";
+}`)
+	assert.Equal(t, "low/low/three/high/two", v.AsString(),
+		"a multi-condition arm matches any of its conditions; a block body runs its statements")
+}
+
+func TestParity_MatchComparisonRules(t *testing.T) {
+	// Upstream picks the comparison from the operand kinds rather than always using
+	// ==: a range tests containment, a pattern against a string tests a regex match
+	// (both directions), and a type value tests `is`.
+	cases := []struct{ name, src, want string }{
+		{"range contains an int", `match (7) { 0..5 -> "low", 5..10 -> "mid", else -> "high" }`, "mid"},
+		{"range contains a double", `match (3.14) { 0..3 -> "low", 3..4 -> "mid", else -> "high" }`, "mid"},
+		{"pattern condition against a string", `match ("hello joe") { $"hello [a-z]+" -> "rx", else -> "no" }`, "rx"},
+		{"string condition against a pattern", `match ($"hello [a-z]+") { "hello joe" -> "rx", else -> "no" }`, "rx"},
+		{"type condition tests is", `match ("s") { <int> -> "i", <str> -> "s", else -> "no" }`, "s"},
+		{"type subject tests the condition", `match (<str>) { "hello" -> "inhabits", else -> "no" }`, "inhabits"},
+		{"equality is the fallback", `match (true) { true -> "yes", false -> "no" }`, "yes"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, "fun probe() > str { return "+tc.src+"; }")
+			assert.Equal(t, tc.want, v.AsString(), "the rule is chosen by the operand kinds")
+		})
+	}
+}
+
+func TestParity_MatchInfersEnumCaseFromSubject(t *testing.T) {
+	v := evalParity(t, `
+enum Axis { up, down }
+
+fun probe() > str {
+    final a = Axis.down;
+    // A bare case as a CONDITION resolves against the subject's type; a bare case as
+    // a branch VALUE resolves against the match's expected type.
+    final byCase = match (a) { .up -> "u", .down -> "d" };
+    final asValue: Axis? = match (1) { 1 -> .up, else -> null };
+    return "{byCase}{asValue == Axis.up}";
+}`)
+	assert.Equal(t, "dtrue", v.AsString(), "both positions resolve without naming the enum")
+}
+
+func TestParity_MatchYieldsNullWhenNoArmMatches(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final r = match (99) { 1 -> "one", 2 -> "two" };
+    return r == null;
+}`)
+	assert.True(t, v.AsBool(), "falling off the last arm with no else yields null")
+}
+
+func TestParity_MatchEvaluatesSubjectOnce(t *testing.T) {
+	// The subject goes into a temp, so a side-effecting subject must not re-run per
+	// arm -- otherwise an iterator or counter advances once per condition tested.
+	v := evalParity(t, `
+var calls = 0;
+
+fun bump() > int {
+    calls = calls + 1;
+    return 3;
+}
+
+fun probe() > int {
+    _ = match (bump()) { 1 -> "a", 2 -> "b", 3 -> "c", else -> "d" };
+    return calls;
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "the subject is evaluated once, not once per arm")
+}
+
+func TestParity_ClosureCaptureIsShared(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want int64
+	}{
+		{"writer visible to reader", `
+    var n = 0;
+    final set = fun () > void { n = 2; };
+    final get = fun () > int => n;
+    set();
+    return get();`, 2},
+		{"captured parameter keeps its argument then mutates", `
+    return bumped(5);`, 9},
+		{"transitive capture through a frame that never names it", `
+    return outer();`, 7},
+		{"capture inside a match arm", `
+    var hit = 0;
+    match (1) { 1 -> { final f = fun () > void { hit = 7; }; f(); }, else -> {} }
+    return hit;`, 7},
+		{"capture inside a catch body", `
+    var seen = 0;
+    try {
+        throw "x";
+    } catch (e: str) {
+        final f = fun () > void { seen = 4; };
+        f();
+    }
+    return seen;`, 4},
+		{"foreach body captures the loop variable", `
+    var last = 0;
+    final fns = mut [];
+    foreach (i in [1, 2, 3]) {
+        _ = fns.append(fun () > void { last = i; });
+    }
+    fns[0]();
+    return last;`, 1},
+	}
+	const decls = `
+fun bumped(start: int) > int {
+    final f = fun () > void { start = start + 4; };
+    f();
+    return start;
+}
+
+fun outer() > int {
+    var target = 0;
+    final middle = fun () > void {
+        final inner = fun () > void { target = 7; };
+        inner();
+    };
+    middle();
+    return target;
+}
+`
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, decls+"\nfun probe() > int {"+tc.src+"\n}")
+			assert.Equal(t, tc.want, v.AsInt(), "a captured local is one shared cell")
+		})
+	}
+}
+
+func TestParity_RawStringRules(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"interpolates an expression", "`sum={1 + 2}`", "sum=3"},
+		{"escaped brace stays literal", "`\\{literal\\}`", "{literal}"},
+		{"mustache survives as literal text", "`{{name}}`", "{{name}}"},
+		{"nested raw string inside an interpolation", "`outer {`inner`} end`", "outer inner end"},
+		{"newlines are literal", "`a\nb`", "a\nb"},
+		{"regex classes pass through", "`[0-9]+`", "[0-9]+"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			v := evalParity(t, "fun probe() > str { return "+tc.src+"; }")
+			assert.Equal(t, tc.want, v.AsString(), "a raw string interpolates but unescapes only \\{ and \\}")
+		})
+	}
+}
+
+func TestParity_ZdefBlockIsNotInterpolated(t *testing.T) {
+	// A zdef declaration block is a raw string full of Zig braces. Upstream reads it
+	// from the raw token and never interpolates it; the two positional arguments are
+	// also exempt from the strict argument-labeling rule.
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+zdef(
+    "tests/utils/libforeign",
+    `+"`"+`
+        const Data = extern struct {
+            msg: [*:0]const u8,
+            id: i32,
+        };
+    `+"`"+`
+);
+
+fun probe() > bool => true;`)
+	// The library cannot be opened in a test environment; what matters is that the
+	// block PARSED (braces intact, no labeling error) rather than how dlopen fared.
+	if err != nil {
+		assert.NotContains(t, err.Error(), "must be labeled", "zdef args are exempt from labeling")
+		assert.NotContains(t, err.Error(), "interpolation", "a zdef block is never interpolated")
+	}
+}
+
+func TestParity_TypedCollectionLiteralsResolveTheirElements(t *testing.T) {
+	v := evalParity(t, `
+enum Locale { fr, en, it }
+
+fun probe() > bool {
+    // The annotation is a hint, not an element: list[0] is the first VALUE after it.
+    final list = [ <Locale>, .it, .fr ];
+    final map = { <str: Locale>, "it": .it };
+    return list[0] == Locale.it and list[1] == Locale.fr and map["it"] == Locale.it;
+}`)
+	assert.True(t, v.AsBool(), "an explicit element type resolves a bare enum case inside the literal")
+}
+
+func TestParity_AnnotatedDiscardAndAsBinding(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    // An annotated discard asserts a shape without binding.
+    _: obj{ name: str } = .{ name = "joe" };
+    // `+"`"+`as name: Type`+"`"+` binds the cast value only when the cast succeeds.
+    final anything: any = "hello";
+    var hit = "none";
+    if (anything as s: str) {
+        hit = s;
+    }
+    var missed = "none";
+    if (anything as n: int) {
+        missed = "int";
+    }
+    return "{hit}/{missed}";
+}`)
+	assert.Equal(t, "hello/none", v.AsString(), "the branch is taken only when the cast holds")
+}
+
+func TestParity_CheckedOptionalCastDoesNotCoerce(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final n: any = 12;
+    // as? is a type TEST, not a conversion: an int is not a str.
+    return (n as? int) == 12 and (n as? str) == null;
+}`)
+	assert.True(t, v.AsBool(), "as? yields null on a type mismatch instead of stringifying")
+}
+
+func TestParity_StructuralAnonymousObjectTest(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final x = .{ f = "a", g = 1 };
+    return (x is obj{ f: str })
+        and (x is obj{ f: str, g: int })
+        and !(x is obj{ f: str, missing: int })
+        // A function-typed member contains a bare `+"`"+`>`+"`"+` that must not be read as a
+        // bracket closer, or the fields after it are dropped and this answers true.
+        and !(x is obj{ f: fun () > str, missing: int });
+}`)
+	assert.True(t, v.AsBool(), "the structural test checks every named field")
+}
+
+func TestParity_TypeValuesAndTypeof(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    // typeof is STATIC: it reports the checker's inferred type, so an annotated
+    // empty list and a bare one disagree even though both are empty at run time.
+    final bare = [];
+    final typed: [str] = [];
+    return typeof 3 == <int>
+        and typeof "s" == <str>
+        and typeof bare == <[any]>
+        and typeof typed == <[str]>
+        and <int> != <str>;
+}`)
+	assert.True(t, v.AsBool(), "a type value compares by canonical spelling")
+}
+
+func TestParity_SelectiveAndFlatImports(t *testing.T) {
+	// A selective import binds exactly the named members, unprefixed; a flat `as _`
+	// binds all of them. Both are checked AND executed: the checker must see the
+	// signatures or an inferred enum case in an argument cannot resolve.
+	v := evalWithStd(t, `
+import print, assert from "buzz:std";
+import "buzz:crypto" as _;
+
+fun probe() > str {
+    assert(true, message: "selective import binds the named member");
+    return hash(.Md5, data: "abc").hex();
+}`)
+	assert.Equal(t, "900150983cd24fb0d6963f7d28e17f72", v.AsString(),
+		"the flat import binds hash and HashAlgorithm, and the signature resolves .Md5")
+}
+
+func TestParity_HostModuleSignaturesResolveInferredEnumCases(t *testing.T) {
+	// The io module's typed declaration is what lets `mode: .write` resolve; a host
+	// value alone carries no parameter types.
+	v := evalWithStd(t, `
+import "buzz:std";
+import "buzz:io";
+import "buzz:fs";
+
+fun probe() > str {
+    final f = io\File.open("./parity_probe.txt", mode: .write);
+    f.write("hi");
+    f.close();
+    final r = io\File.open("./parity_probe.txt", mode: .read);
+    final got = r.readAll();
+    r.close();
+    fs\deleteFile("./parity_probe.txt");
+    return "{got}:{fs\exists("./parity_probe.txt")}";
+}`)
+	assert.Equal(t, "hi:false", v.AsString(), "File.open resolves .write/.read, and deleteFile removes it")
+}
+
+func TestParity_FsDeleteDistinguishesFilesFromDirectories(t *testing.T) {
+	// deleteFile and deleteDirectory are upstream's two narrow deletes; each refuses
+	// the wrong kind of path rather than acting like the broader `delete`.
+	v := evalWithStd(t, `
+import "buzz:fs";
+
+fun probe() > str {
+    fs\makeDirectory("./parity_dir");
+    // deleteFile must refuse a directory, so it is still there afterwards. An fs call
+    // returns null on success too, so existence is the signal, not the return value.
+    _ = fs\deleteFile("./parity_dir") catch null;
+    final survived = fs\exists("./parity_dir");
+    fs\deleteDirectory("./parity_dir");
+    return "{survived}:{fs\exists("./parity_dir")}";
+}`)
+	assert.Equal(t, "true:false", v.AsString(), "deleteFile refuses a directory; deleteDirectory removes it")
+}
+
+func TestParity_MapAndListFunctionalMethods(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    // sort reorders the RECEIVER in place and returns it.
+    final l = mut [ 3, 1, 2 ];
+    _ = l.sort(fun (a: int, b: int) => a < b);
+    final m = mut { "b": 2, "a": 1 };
+    _ = m.sort(fun (x: str, y: str) => x < y);
+    // map builds a new map from {key, value} records.
+    final inverted = { "a": 1 }.map(fun (k: str, v: int) => .{ key = "{v}", value = k });
+    return "{l[0]}{l[1]}{l[2]}:{m.keys()[0]}:{inverted["1"]}";
+}`)
+	assert.Equal(t, "123:a:a", v.AsString(), "sort is in place; map rebuilds from records")
+}
+
+func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final l = [ 2, 1 ];
+    final m = { "b": 2, "a": 1 };
+    // sort returns the receiver on success, so a null here means it refused.
+    final listRefused = (l.sort(fun (a: int, b: int) => a < b) catch null) == null;
+    final mapRefused = (m.sort(fun (x: str, y: str) => x < y) catch null) == null;
+    return listRefused and mapRefused and l[0] == 2 and m.keys()[0] == "b";
+}`)
+	assert.True(t, v.AsBool(), "an in-place reorder needs a mut receiver, for maps as well as lists")
+}
+
+func TestParity_StoredMapKeyWinsOverBuiltinMethod(t *testing.T) {
+	// An anonymous object literal is represented as a map, so a field whose name
+	// collides with a map builtin must still read as the field.
+	v := evalParity(t, `
+fun probe() > bool {
+    final rec = .{ map = "field", keys = "also a field" };
+    return rec.map == "field" and rec.keys == "also a field";
+}`)
+	assert.True(t, v.AsBool(), "a stored key shadows the same-named builtin")
+}
+
+func TestParity_CryptoHashAlgorithms(t *testing.T) {
+	// One case per HashAlgorithm the enum declares, so the native switch cannot lose
+	// or mis-wire an arm silently. Digests are the published test vectors for "abc".
+	cases := []struct{ algo, want string }{
+		{"Md5", "900150983cd24fb0d6963f7d28e17f72"},
+		{"Sha1", "a9993e364706816aba3e25717850c26c9cd0d89d"},
+		{"Sha224", "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"},
+		{"Sha256", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+		{"Sha384", "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"},
+		{"Sha512", "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"},
+		{"Sha3256", "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"},
+		{"Sha3512", "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.algo, func(t *testing.T) {
+			v := evalWithStd(t, `
+import "buzz:crypto";
+
+fun probe() > str {
+    return crypto\hash(crypto\HashAlgorithm.`+tc.algo+`, data: "abc").hex();
+}`)
+			assert.Equal(t, tc.want, v.AsString(), "the digest matches the published vector")
+		})
+	}
+}
+
+func TestParity_CryptoHashReturnsRawBytes(t *testing.T) {
+	// Upstream returns the raw digest and leaves rendering to `.hex()`. Returning hex
+	// directly made upstream's own `hash(...).hex()` double-encode.
+	v := evalWithStd(t, `
+import "buzz:crypto";
+
+fun probe() > bool {
+    final raw = crypto\hash(crypto\HashAlgorithm.Md5, data: "abc");
+    // The digest is NOT already hex (the regression this guards), and renders to 32
+    // characters. Deliberately not asserting a raw BYTE count: str.len() counts runes,
+    // so a binary digest measures shorter than its 16 bytes.
+    return raw != raw.hex() and raw.hex().len() == 32;
+}`)
+	assert.True(t, v.AsBool(), "hash returns the digest itself; .hex() renders it as 32 characters")
 }

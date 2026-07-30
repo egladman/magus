@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
@@ -471,11 +472,24 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpSetLocal:
 			vm.stack[f.base+int(ins.A)] = vm.pop()
 
+		case OpNewCell:
+			// Boxes the slot in place, keeping whatever it already holds -- which is how a
+			// captured PARAMETER keeps its argument.
+			vm.stack[f.base+int(ins.A)] = heapValue(tagCell, &cellObj{v: vget(vm.stack, f.base+int(ins.A))})
+
+		case OpGetLocalCell:
+			vm.push(vm.asCell(vget(vm.stack, f.base+int(ins.A))).v)
+
+		case OpSetLocalCell:
+			vm.asCell(vm.stack[f.base+int(ins.A)]).v = vm.pop()
+
 		case OpGetUpvalue:
-			vm.push(vget(f.fun.Upvals, int(ins.A)))
+			// Every upvalue is a cell: a captured local is boxed by its owning frame's
+			// prologue, and a capture-of-a-capture propagates that same cell.
+			vm.push(vm.asCell(vget(f.fun.Upvals, int(ins.A))).v)
 
 		case OpSetUpvalue:
-			f.fun.Upvals[ins.A] = vm.pop()
+			vm.asCell(f.fun.Upvals[ins.A]).v = vm.pop()
 
 		case OpLoadThis:
 			vm.push(f.this)
@@ -900,7 +914,15 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				for i, info := range fc.UpvalInfos {
 					if info.IsLocal {
 						upvals[i] = vm.stack[f.base+int(info.Index)]
-					} else if f.fun != nil {
+					} else if f.fun == nil {
+						// A transitive capture with no enclosing closure to take it from. Only the
+						// top-level frame has f.fun == nil, and the top-level compiler never records
+						// an upvalue (resolveUpvalue bails when parent == nil), so this is
+						// unreachable. Leaving the slot as the zero Value would put a NON-CELL in
+						// Upvals, which OpGetUpvalue derefs unconditionally - a wild read under
+						// buzz_unsafe. Fail loudly instead of corrupting.
+						return Null, fmt.Errorf("buzz: internal error: transitive upvalue %d captured from a frame with no closure", i)
+					} else {
 						upvals[i] = f.fun.Upvals[info.Index]
 					}
 				}
@@ -1329,15 +1351,33 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// stripped the "?" and reduced the name, so this stays a flag test.
 			vm.push(BoolValue((ins.B == 1 && val.tag() == tagNull) || vm.buzzIsType(val, name)))
 
+		case OpMatchTest:
+			cond := vm.pop()
+			subject := vm.pop()
+			hit, err := vm.matchTest(subject, cond)
+			if err != nil {
+				return Null, err
+			}
+			vm.push(BoolValue(hit))
+
 		case OpAs:
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
+			if ins.B == 1 {
+				// `as?` is upstream's CHECKED cast, not a conversion: it yields the value
+				// when it already inhabits the type and null when it does not. Routing it
+				// through buzzCast instead made `12 as? str` answer "12" rather than null,
+				// because that helper coerces. Bare `as` below keeps coercing, which is a
+				// gopherbuzz divergence its own testdata relies on (3.9 as int == 3).
+				if vm.buzzIsType(val, name) {
+					vm.push(val)
+				} else {
+					vm.push(Null)
+				}
+				break
+			}
 			result, err := vm.buzzCast(val, name)
 			if err != nil {
-				if ins.B == 1 { // `as?`: a type mismatch yields null instead of erroring
-					vm.push(Null)
-					break
-				}
 				return Null, err
 			}
 			vm.push(result)
@@ -2220,6 +2260,31 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 	case "pat":
 		return v.tag() == tagPat
 	}
+	// `obj{a,b}` is an anonymous STRUCTURAL type, reduced to its field names by
+	// isTypeShape. It holds when the value carries every one of them -- for a map (what
+	// an anonymous `.{ ... }` literal builds) or a named object that happens to have
+	// them. Field types are erased, so presence is the whole check.
+	if fields, ok := strings.CutPrefix(typeName, "obj{"); ok {
+		fields = strings.TrimSuffix(fields, "}")
+		if fields == "" {
+			return v.tag() == tagMap || v.tag() == tagObject
+		}
+		for _, name := range strings.Split(fields, ",") {
+			switch v.tag() {
+			case tagMap:
+				if _, has := vm.asMap(v).get(name); !has {
+					return false
+				}
+			case tagObject:
+				if vm.asObject(v).Def.fieldIndex(name) < 0 {
+					return false
+				}
+			default:
+				return false
+			}
+		}
+		return true
+	}
 	if v.tag() == tagObject {
 		return vm.asObject(v).Def.Name == typeName
 	}
@@ -2227,6 +2292,74 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return vm.asEnumVal(v).Enum == typeName
 	}
 	return false
+}
+
+// derefCell unwraps a captured variable's box, leaving any other value untouched.
+// The debugger surfaces slots and upvalues that the compiler may have boxed, and a
+// raw cell is an implementation detail no caller should ever see.
+func derefCell(v Value) Value {
+	if v.tag() == tagCell {
+		return v.asCell().v
+	}
+	return v
+}
+
+// matchTest reports whether a match arm whose condition is cond is selected for
+// subject. It mirrors the four special cases upstream's codegen emits before
+// falling back to equality (Codegen.zig generateMatch):
+//
+//   - a RANGE condition against a number tests containment
+//   - a PATTERN condition against a string, and a STRING condition against a
+//     pattern, test a regex match (upstream calls pat.matchAgainst and compares the
+//     result to null, in both directions)
+//   - a TYPE condition against a non-type value tests `is`
+//   - anything else compares with ==
+//
+// Upstream selects the comparison STATICALLY from the checker's types; gopherbuzz
+// selects it here from the runtime tags. The two agree on every case the rules
+// name, and dispatching dynamically is what lets an `any`-typed subject still take
+// the `is` path (match.buzz's "match any").
+func (vm *VM) matchTest(subject, cond Value) (bool, error) {
+	switch {
+	case cond.tag() == tagRange && (subject.tag() == tagInt || subject.tag() == tagFloat):
+		// Half-open, matching rng.contains. Done here rather than through that method
+		// because it rejects a non-int, and upstream matches a double against a range.
+		ro := vm.asRange(cond)
+		n := float64(subject.AsInt())
+		if subject.tag() == tagFloat {
+			n = subject.AsFloat()
+		}
+		lo, hi := float64(ro.Lo), float64(ro.Hi)
+		if hi < lo {
+			return n <= lo && n > hi, nil
+		}
+		return n >= lo && n < hi, nil
+
+	case cond.tag() == tagPat && subject.tag() == tagStr:
+		m, err := vm.asPat(cond).re.FindStringMatch(subject.AsString())
+		return m != nil, err
+
+	case cond.tag() == tagStr && subject.tag() == tagPat:
+		m, err := vm.asPat(subject).re.FindStringMatch(cond.AsString())
+		return m != nil, err
+
+	case cond.tag() == tagType && subject.tag() != tagType:
+		// TypeShape first: a type value carries the CANONICAL spelling ("[str]",
+		// "{str: int}"), while buzzIsType compares against the reduced shape the
+		// compiler normally hands it. Passing the canonical name straight through made
+		// every compound arm silently dead -- `match (x) { <[str]> -> ... }` fell to
+		// else even when `x is [str]` was true.
+		base, _ := TypeShape(cond.TypeName())
+		return vm.buzzIsType(subject, base), nil
+
+	case subject.tag() == tagType && cond.tag() != tagType:
+		// The mirror of the case above (upstream's matchTypeIsValue): when the SUBJECT
+		// is a type, an ordinary condition asks whether that condition inhabits it, so
+		// `match (<str>) { "hello" -> ... }` selects the string arm.
+		base, _ := TypeShape(subject.TypeName())
+		return vm.buzzIsType(cond, base), nil
+	}
+	return valuesEqual(subject, cond), nil
 }
 
 // buzzCast coerces v to the named type.
@@ -2335,7 +2468,10 @@ func (vm *VM) DebugLocals(level int) map[string]Value {
 		if si < 0 || si >= len(vm.stack) {
 			continue
 		}
-		out[name] = vm.stack[si]
+		// A captured local holds a cell, not the value. Show the variable the user
+		// wrote; handing back the box makes the debugger print an internal type (and,
+		// with a tag-dispatched read, panic on it).
+		out[name] = derefCell(vm.stack[si])
 	}
 	return out
 }
@@ -2356,7 +2492,8 @@ func (vm *VM) DebugUpvalues(level int) map[string]Value {
 		if name == "" || i >= len(f.fun.Upvals) {
 			continue
 		}
-		out[name] = f.fun.Upvals[i]
+		// Every upvalue is a cell (see cellObj); show its contents.
+		out[name] = derefCell(f.fun.Upvals[i])
 	}
 	return out
 }

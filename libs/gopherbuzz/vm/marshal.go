@@ -78,8 +78,23 @@ import (
 // the two versions disagree about where the count starts.
 //
 // v18 adds MapExpr's ObjectName, the object a resolved anonymous literal builds.
-// It sits beside Anon, ahead of the entry count, so the same desync applies.
-const BytecodeVersion uint16 = 18
+//
+// v19 adds the OpMatchTest opcode and the MatchExpr node tag for `match (v) { ... }`.
+// Both halves need the guard: an older VM has no case for the opcode and would abort
+// mid-chunk with "unknown opcode" after earlier side effects already ran, and it has
+// no decoder for the node tag, which desynchronizes the reader from that point on.
+//
+// v21 serializes a type-value constant (`<T>`, `typeof x`) as its canonical spelling.
+// Nothing could marshal one before -- Marshal failed outright -- so no v20 blob can
+// contain the new const tag; the guard matters in the other direction, since a v20 VM
+// has no case for tag 8 and would reject the const it cannot read.
+//
+// v20 adds OpNewCell/OpGetLocalCell/OpSetLocalCell, and changes what OpGetUpvalue
+// and OpSetUpvalue mean: every upvalue is now a *cellObj holding the variable, so a
+// closure captures by reference. An older VM has no case for the three new opcodes
+// and would abort mid-chunk, and would read a v20 upvalue as if the cell itself were
+// the value. A newer VM reading v19 bytecode would deref a raw value as a cell.
+const BytecodeVersion uint16 = 21
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -292,6 +307,7 @@ const (
 	constTagEnumDef = 5
 	constTagObjDecl = 6
 	constTagPat     = 7
+	constTagType    = 8
 )
 
 func (e *enc) constVal(v Value) error {
@@ -327,6 +343,13 @@ func (e *enc) constVal(v Value) error {
 	case tagPat:
 		e.u8(constTagPat)
 		e.str(v.asPat().src)
+	case tagType:
+		// A type VALUE is fully described by its canonical spelling (see typeval.go),
+		// so it serializes as that one string. Without this, any program using `<T>` or
+		// `typeof` could not be marshalled at all -- which also barred it from being a
+		// built-in spell, since those ship as prebuilt .bo bytecode.
+		e.u8(constTagType)
+		e.str(v.TypeName())
 	default:
 		return fmt.Errorf("buzz: marshal: cannot serialize constant of kind %s", v.buzzKind())
 	}
@@ -381,6 +404,7 @@ const (
 	nodeOutStmt      = 43
 	nodeBlockExpr    = 44
 	nodeIfExpr       = 45
+	nodeMatchExpr    = 46
 )
 
 func (e *enc) node(n ast.Node) error {
@@ -728,6 +752,26 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeResolveExpr)
 		e.pos(p)
 		return e.node(v.Fiber)
+	case *ast.MatchExpr:
+		e.u8(nodeMatchExpr)
+		e.pos(p)
+		if err := e.node(v.Subject); err != nil {
+			return err
+		}
+		e.u32(uint32(len(v.Branches)))
+		for _, br := range v.Branches {
+			// A zero condition count IS the `else` arm; nothing else distinguishes it.
+			e.u32(uint32(len(br.Conds)))
+			for _, cond := range br.Conds {
+				if err := e.node(cond); err != nil {
+					return err
+				}
+			}
+			if err := e.node(br.Body); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		return fmt.Errorf("buzz: marshal: unknown AST node type %T", n)
 	}
@@ -1108,6 +1152,12 @@ func (d *dec) constVal() (Value, error) {
 			return Null, err
 		}
 		return PatValue(s)
+	case constTagType:
+		s, err := d.str()
+		if err != nil {
+			return Null, err
+		}
+		return TypeValue(s), nil
 	default:
 		return Null, fmt.Errorf("unknown const tag %d", tag)
 	}
@@ -1271,6 +1321,45 @@ func (d *dec) node() (ast.Node, error) {
 			return nil, fmt.Errorf("FunExpr body: expected *ast.BlockStmt, got %T", body)
 		}
 		return &ast.FunExpr{Pos: p, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: blockBody}, nil
+	case nodeMatchExpr:
+		subject, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		n, err := d.u32()
+		if err != nil {
+			return nil, err
+		}
+		if err := d.checkCount(n); err != nil {
+			return nil, err
+		}
+		branches := make([]ast.MatchBranch, int(n))
+		for i := range branches {
+			cn, err := d.u32()
+			if err != nil {
+				return nil, err
+			}
+			if err := d.checkCount(cn); err != nil {
+				return nil, err
+			}
+			// nil rather than a zero-length slice, so the `else` arm decodes back to the
+			// empty-Conds form the compiler tests for.
+			var conds []ast.Node
+			if cn > 0 {
+				conds = make([]ast.Node, int(cn))
+				for j := range conds {
+					if conds[j], err = d.node(); err != nil {
+						return nil, err
+					}
+				}
+			}
+			body, err := d.node()
+			if err != nil {
+				return nil, err
+			}
+			branches[i] = ast.MatchBranch{Conds: conds, Body: body}
+		}
+		return &ast.MatchExpr{Pos: p, Subject: subject, Branches: branches}, nil
 	case nodeMapExpr:
 		anon, err := d.boolean()
 		if err != nil {

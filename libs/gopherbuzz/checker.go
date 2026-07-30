@@ -44,6 +44,12 @@ type checker struct {
 	// declarations. collectTopLevel uses this to build a typed namespace ObjectType
 	// for the import so qualified access (e.g. state\wm()) resolves precisely.
 	moduleFuncs map[string][]*ast.FunDecl
+	// moduleTypes holds each imported module's exported object/enum declarations,
+	// so a namespace object can carry them as fields (`io\File`, `io\FileMode`).
+	moduleTypes map[string][]ast.Node
+	// enumNS maps an enum's bare name to the namespace it is reachable through, for
+	// a module imported without flattening. See ast.EnumCaseExpr.EnumNS.
+	enumNS map[string]string
 	// private names are visible in a flat-imported module's runtime Env but hidden
 	// from this file by exports-only import visibility; referencing one yields an
 	// "export it" hint rather than a bare "undefined". See session.importPrivate.
@@ -55,10 +61,11 @@ type checker struct {
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, private map[string]bool) []typeError {
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, private map[string]bool) []typeError {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
+		moduleTypes: moduleTypes,
 		private:     private,
 	}
 	c.pushScope()
@@ -139,11 +146,28 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 	for _, s := range prog.Stmts {
 		switch v := s.(type) {
 		case *ast.ImportStmt:
-			if v.Alias == "_" {
-				break // flat import: nothing bound under a name
-			}
-			parts := strings.Split(v.Path, "/")
+			// The module's lookup name is the path's last segment with the `buzz:` stdlib
+			// scheme stripped, which is the same bare name resolveImport binds under.
+			parts := strings.Split(strings.TrimPrefix(v.Path, "buzz:"), "/")
 			name := parts[len(parts)-1]
+			if v.Alias == "_" || len(v.Only) > 0 {
+				// A flat or selective import binds members UNPREFIXED, so their signatures
+				// have to be defined under their bare names. The session already splats the
+				// values into the env, so without this the names resolve but carry no
+				// parameter types - and an inferred enum case in an argument (`hash(.Md5,
+				// ...)`) has nothing to resolve against.
+				wanted := map[string]bool{}
+				for _, n := range v.Only {
+					wanted[n] = true
+				}
+				for _, fd := range c.moduleFuncs[name] {
+					if len(wanted) > 0 && !wanted[fd.Name] {
+						continue
+					}
+					c.define(fd.Name, c.funDeclType(fd), true)
+				}
+				break
+			}
 			if v.Alias != "" {
 				name = v.Alias
 			}
@@ -151,10 +175,29 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// typed namespace object so qualified access (e.g. state\wm()) resolves
 			// to the declared return type instead of any. This lets the checker
 			// propagate types through cross-module calls and enforce E28 correctly.
-			if fds, ok := c.moduleFuncs[name]; ok && len(fds) > 0 {
+			fds := c.moduleFuncs[name]
+			decls := c.moduleTypes[name]
+			if len(fds) > 0 || len(decls) > 0 {
 				nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
 				for _, fd := range fds {
 					nt.Fields[fd.Name] = c.funDeclType(fd)
+				}
+				// An exported TYPE is reachable through the namespace too, as the type value
+				// itself, so `io\File.open(...)` resolves the same static method a bare
+				// `File.open(...)` does - and `io\FileMode.read` the same case.
+				for _, d := range decls {
+					switch v := d.(type) {
+					case *ast.ObjectDecl:
+						nt.Fields[v.Name] = c.buildObjectType(v)
+					case *ast.EnumDecl:
+						nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases}
+						// The enum's VALUE lives behind the namespace, so a resolved case has to
+						// compile to `ns\Enum.case` rather than the bare name the checker uses.
+						if c.enumNS == nil {
+							c.enumNS = map[string]string{}
+						}
+						c.enumNS[v.Name] = name
+					}
 				}
 				c.define(name, nt, false)
 			} else {
@@ -164,6 +207,24 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			}
 		case *ast.FunDecl:
 			c.define(v.Name, c.funDeclType(v), true)
+		case *ast.DeclStmt:
+			// Hoist top-level variables so a body may reference one declared LATER in
+			// the file -- what upstream calls a placeholder. `test` blocks and function
+			// bodies only run after the whole file has executed, so a forward reference
+			// from inside one is resolved by the time it matters; refusing it statically
+			// is what blocked upstream source that puts its `final` after the tests.
+			//
+			// Only the annotation is trusted here. Inferring the initializer would mean
+			// evaluating expressions whose own dependencies are not collected yet, so an
+			// unannotated placeholder stays Unknown (the tracking-failure sentinel, which
+			// suppresses member-access errors rather than asserting a wrong type). Either
+			// way checkDecl re-defines the name with its precise type when the
+			// declaration itself is reached, so only earlier references see this entry.
+			typ := types.Type(types.Unknown)
+			if v.TypeAnnot != "" {
+				typ = c.resolveAnnot(v.TypeAnnot)
+			}
+			c.define(v.Name, typ, v.IsConst)
 		case *ast.ObjectDecl:
 			c.registerTypeDecls([]ast.Node{v})
 		case *ast.EnumDecl:
@@ -206,7 +267,10 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 }
 
 func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
-	ot := &types.ObjectType{Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}}
+	ot := &types.ObjectType{
+		Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{},
+		IsProtocol: v.IsProtocol, Conforms: v.Conforms,
+	}
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = types.ParseAnnot(f.TypeAnnot)
 	}
@@ -386,15 +450,18 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 		if e, found := c.lookup(id.Name); found && e.isConst {
 			c.errorf(id.Pos, "cannot assign to final %q", id.Name)
 		} else if found {
-			rhs := c.infer(v.Value)
+			// The variable's type is the expected type for the value, so `assigned = .en`
+			// resolves against the declaration.
+			rhs := c.inferExpected(v.Value, e.typ)
 			if !types.Compat(rhs, e.typ) {
 				c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
 			}
 			return
 		}
 	}
-	c.infer(v.Target)
-	c.infer(v.Value)
+	// A member or index target: its own type is likewise the expected type for the
+	// value (`mutableList[0] = .it` resolves through the list's element type).
+	c.inferExpected(v.Value, c.infer(v.Target))
 }
 
 func (c *checker) checkReturn(v *ast.ReturnStmt) {
@@ -405,7 +472,10 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 		c.errorf(v.Pos, "void function cannot return a value")
 		return
 	}
-	ret := c.infer(v.Value)
+	// The declared return type is the expected type for the returned expression, so
+	// a value that needs a hint can resolve against it -- `fun f() > Locale { return
+	// .it; }` has nothing else to say which enum `.it` names.
+	ret := c.inferExpected(v.Value, c.retTyp)
 	// Skip return type check for fiber functions (fib<V,R> annotations or *> syntax):
 	// the declared return type in these cases represents the fiber value type, not
 	// the checked function return type.
@@ -528,6 +598,12 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 }
 
 func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
+	if v.IsProtocol {
+		// Nothing to check inside a protocol: its members are signatures, already
+		// recorded as the type's method set by registerTypeDecls. Walking them as
+		// method declarations would look for bodies that by definition do not exist.
+		return
+	}
 	ot, _ := c.types[v.Name].(*types.ObjectType)
 	if ot == nil {
 		ot = c.buildObjectType(v)
@@ -722,6 +798,38 @@ func (c *checker) infer(n ast.Node) types.Type {
 		c.infer(v.Lo)
 		c.infer(v.Hi)
 		return types.Rng
+	case *ast.MatchExpr:
+		// The subject's type is the expected type for every condition, which is what
+		// lets a bare enum case appear as one (`match (locale) { .fr -> ... }`), and
+		// the match's own expected type flows into each body, so a branch value can
+		// resolve the same way (`final l: Locale? = match (n) { 1 -> .fr, ... }`).
+		subjTyp := c.infer(v.Subject)
+		want := c.wantType()
+		var result types.Type
+		for _, br := range v.Branches {
+			for _, cond := range br.Conds {
+				c.inferExpected(cond, subjTyp)
+			}
+			// A `-> { ... }` body is a block of STATEMENTS, not an expression: check it in
+			// its own scope (sibling arms must not see each other's locals) and treat it
+			// as yielding null, which is what the compiler pushes for it.
+			bodyTyp := types.Type(types.Null)
+			if blk, isBlock := br.Body.(*ast.BlockStmt); isBlock {
+				c.checkBlock(blk)
+			} else {
+				bodyTyp = c.inferExpected(br.Body, want)
+			}
+			// The first branch that yields something other than null names the match's
+			// type. Optionals are erased in this checker, so a `-> null` arm only makes
+			// the result nullable, which is not tracked separately.
+			if result == nil && bodyTyp != types.Null {
+				result = bodyTyp
+			}
+		}
+		if result == nil {
+			return types.Unknown
+		}
+		return result
 	case *ast.EnumCaseExpr:
 		et := enumOf(c.wantType())
 		if et == nil {
@@ -735,6 +843,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// Record the resolution for the compiler: it emits the same access as an
 		// explicit Enum.case, and this is the only point at which the enum is known.
 		v.Enum = et.Name
+		v.EnumNS = c.enumNS[et.Name]
 		return et
 	case *ast.IsExpr:
 		c.infer(v.Expr)
@@ -743,13 +852,16 @@ func (c *checker) infer(n ast.Node) types.Type {
 		c.infer(v.Expr)
 		return c.resolveAnnot(v.TypeName)
 	case *ast.CatchExpr:
-		// `expr catch default` evaluates to expr's success type; infer the default
-		// too so type errors inside it still surface.
+		// `expr catch default` evaluates to expr's success type, which is therefore also
+		// the expected type for the default -- the two are alternatives for one value,
+		// so a default that needs a hint resolves against it (`failLocale() catch .en`).
 		t := c.infer(v.Expr)
-		c.infer(v.Default)
+		c.inferExpected(v.Default, t)
 		return t
 	case *ast.YieldExpr:
-		vt := c.infer(v.Value)
+		// The declared yield type is the expected type for the yielded value, the same
+		// way a return propagates its own -- `*> Locale?` is what resolves `yield .en`.
+		vt := c.inferExpected(v.Value, c.yieldTyp)
 		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
 		}
@@ -761,7 +873,15 @@ func (c *checker) infer(n ast.Node) types.Type {
 		} else {
 			v.Call.ArgNames = nil
 		}
-		for _, a := range v.Call.Args {
+		// A fiber wraps an ordinary call, so its arguments get their parameter types the
+		// same way a direct call's do (inferCall). Inferring them bare left an anonymous
+		// `.{ ... }` argument as a map, so `&f(.{ points = 8 })` produced something
+		// whose methods did not exist.
+		for i, a := range v.Call.Args {
+			if ft, ok := calleeTyp.(*types.FuncType); ok && i < len(ft.Params) {
+				c.inferExpected(a, c.resolveType(ft.Params[i]))
+				continue
+			}
 			c.infer(a)
 		}
 		ft, ok := calleeTyp.(*types.FuncType)
@@ -812,12 +932,22 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 	// resolve. Inferring one side first costs nothing: an operand that cannot use a
 	// hint ignores it. Only the enum-case shorthand reads it today, and comparing
 	// against a bare case is the shape upstream uses most.
-	left := c.infer(v.Left)
-	right := c.inferExpected(v.Right, left)
-	if left == types.Unknown {
-		// The left side may itself have been the shorthand, with the right naming the
-		// enum; re-infer it now that there is something to resolve against.
+	var left, right types.Type
+	if _, leftIsCase := v.Left.(*ast.EnumCaseExpr); leftIsCase {
+		// A bare case on the LEFT has to wait for the right side to name its enum.
+		// Inferring left-first here would REPORT "cannot infer which enum" before any
+		// hint existed, and the re-infer below cannot retract an emitted error -- which
+		// is what made the reversed comparison `.fr == Locale.fr` fail.
+		right = c.infer(v.Right)
 		left = c.inferExpected(v.Left, right)
+	} else {
+		left = c.infer(v.Left)
+		right = c.inferExpected(v.Right, left)
+		if left == types.Unknown {
+			// The left side may itself have been the shorthand, with the right naming the
+			// enum; re-infer it now that there is something to resolve against.
+			left = c.inferExpected(v.Left, right)
+		}
 	}
 	switch v.Op {
 	case "+":
@@ -934,7 +1064,12 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// that cannot name its own type (`.one`, and anything else that reads the
 		// expected type) resolves from the signature.
 		if ok && i < len(ft.Params) {
-			c.inferExpected(a, ft.Params[i])
+			// resolveType, not the param as-is: a signature's annotations are parsed by
+			// types.ParseAnnot, which knows the primitives but not this checker's named
+			// types, so `task: FiberTask` arrives as a NamedType. An anonymous `.{ ... }`
+			// argument looks for an OBJECT in its expected type and would find none, and
+			// so stay a plain map whose methods then do not exist.
+			c.inferExpected(a, c.resolveType(ft.Params[i]))
 			continue
 		}
 		c.infer(a)
@@ -1195,6 +1330,18 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		v.ObjectName = ot.Name
 		return ot
 	}
+	// An explicit `{<K: V>, ...}` annotation on the literal itself decides its type
+	// and is the expected type for the entries, the map counterpart of a list's
+	// ElemType above. It takes precedence over any expected type from the use site,
+	// because the literal said what it is.
+	if v.ValType != "" || v.KeyType != "" {
+		keyTyp, valTyp := c.resolveAnnot(v.KeyType), c.resolveAnnot(v.ValType)
+		for i := range v.Keys {
+			c.inferExpected(v.Keys[i], keyTyp)
+			c.inferExpected(v.Values[i], valTyp)
+		}
+		return &types.MapType{Key: keyTyp, Val: valTyp}
+	}
 	// An annotated map literal passes its declared element types down, so a
 	// nested `.{ ... }` value knows which object it is filling in.
 	if want, ok := c.wantType().(*types.MapType); ok {
@@ -1221,10 +1368,18 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
-	if len(v.Items) == 0 {
-		if v.ElemType != "" {
-			return &types.ListType{Elem: c.resolveAnnot(v.ElemType)}
+	// An explicit `[<T>, ...]` element type is an annotation, so it both decides the
+	// list's type and is the expected type for every element. Propagating it is what
+	// lets an element that needs a hint resolve -- an inferred enum case has no other
+	// way to learn which enum `.it` names.
+	if v.ElemType != "" {
+		elemTyp := c.resolveAnnot(v.ElemType)
+		for _, item := range v.Items {
+			c.inferExpected(item, elemTyp)
 		}
+		return &types.ListType{Elem: elemTyp}
+	}
+	if len(v.Items) == 0 {
 		return &types.ListType{Elem: types.Any}
 	}
 	elemTyp := c.infer(v.Items[0])
@@ -1246,12 +1401,24 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		return types.Any
 	}
 	for i, key := range v.Keys {
-		if _, exists := ot.Fields[key]; !exists {
+		ft, exists := ot.Fields[key]
+		if !exists {
 			c.errorf(v.Pos, "object %s has no field %q", v.TypeName, key)
 		}
-		if i < len(v.Values) {
-			c.infer(v.Values[i])
+		if i >= len(v.Values) {
+			continue
 		}
+		if !exists {
+			c.infer(v.Values[i])
+			continue
+		}
+		// The field's declared type is the expected type for its value, so a value that
+		// needs a hint resolves (`HasLocalField{ locale = .en }`). resolveType, not ft
+		// as-is: buildObjectType fills Fields via types.ParseAnnot, which knows the
+		// primitives but not this checker's named types, so an enum field arrives as a
+		// NamedType the case could never resolve against -- the same reason the
+		// anonymous `.{ ... }` path in inferMapExpr resolves it.
+		c.inferExpected(v.Values[i], c.resolveType(ft))
 	}
 	return ot
 }

@@ -60,6 +60,7 @@ const (
 	tagPat                // obj: *patObj
 	tagUD                 // obj: *udObj (foreign FFI pointer; heap-boxed to carry the full 64-bit address)
 	tagType               // obj: *typeObj (a type used as a value: `<[str]>`, `typeof x`)
+	tagCell               // obj: *cellObj (the shared box behind a captured local)
 )
 
 // Value is defined in value_unsafe.go / value_safe.go (build-tag-selected),
@@ -154,7 +155,7 @@ type funObj struct {
 	Params []string
 	Chunk  *Chunk
 	Env    *Env    // definition-time env for globals/closures
-	Upvals []Value // captured upvalues (snapshot at closure creation)
+	Upvals []Value // captured cells; each entry is a *cellObj shared with the defining frame
 	This   Value   // non-null for bound methods; zero Value = unbound
 }
 type directObj struct {
@@ -314,11 +315,23 @@ type iterStateObj struct {
 	idx      int
 }
 
-func (*strObj) heapKind() valueTag       { return tagStr }
-func (*listObj) heapKind() valueTag      { return tagList }
-func (*mapObj) heapKind() valueTag       { return tagMap }
-func (*funObj) heapKind() valueTag       { return tagFun }
-func (*directObj) heapKind() valueTag    { return tagDirect }
+func (*strObj) heapKind() valueTag    { return tagStr }
+func (*listObj) heapKind() valueTag   { return tagList }
+func (*mapObj) heapKind() valueTag    { return tagMap }
+func (*funObj) heapKind() valueTag    { return tagFun }
+func (*directObj) heapKind() valueTag { return tagDirect }
+
+// cellObj is the shared box behind a local that a closure captured. Upstream Buzz
+// closures capture by REFERENCE: a closure assigning to an enclosing local updates
+// the one variable, not a private copy. gopherbuzz used to copy the Value into the
+// closure's Upvals, which silently answered wrong (`sum` stayed 0 after `add(5)`).
+// A captured slot now holds a cell for the whole life of its frame, and every
+// access -- from the owning frame and from the closure -- goes through it, so there
+// is a single storage location and no open/close upvalue bookkeeping.
+type cellObj struct{ v Value }
+
+func (*cellObj) heapKind() valueTag { return tagCell }
+
 func (*objectInst) heapKind() valueTag   { return tagObject }
 func (*objectDefObj) heapKind() valueTag { return tagObjectDef }
 func (*enumDefObj) heapKind() valueTag   { return tagEnumDef }
@@ -693,6 +706,11 @@ func valuesEqual(a, b Value) bool {
 		// is fully described by its two operands.
 		ar, br := a.asRange(), b.asRange()
 		return ar.Lo == br.Lo && ar.Hi == br.Hi
+	case tagPat:
+		// Structural for the same reason as tagType above: upstream compares pattern
+		// SOURCES, so two separately compiled `$"hello [a-z]+"` literals are equal. The
+		// compiled matcher is derived from the source, so the source is the identity.
+		return a.asPat().src == b.asPat().src
 	case tagUD:
 		return a.AsUD() == b.AsUD() // foreign pointers compare by address
 	default:

@@ -223,3 +223,156 @@ func skipIfUpstreamRefMismatch(t *testing.T, dir string) {
 			dir, head, buzz.UpstreamRef, pinned, pinned)
 	}
 }
+
+// ── The other upstream suites ────────────────────────────────────────────────
+//
+// tests/behavior above is one of six directories upstream ships. Measuring only it
+// overstates parity, because it asks a single question: does correct source produce
+// the right answer? Two more are measurable here and are measured below, so the
+// README can state a number instead of an impression:
+//
+//   compile_errors/ — 77 programs upstream REJECTS. gopherbuzz accepting one is a
+//                     soundness gap: malformed source that compiles clean.
+//   fuzzed/         — 644 malformed inputs that must not crash the front end.
+//
+// The remaining three are deliberately not run: bench/ is upstream's benchmarks (see
+// benchmarks/ for gopherbuzz's own), manual/ is interactive, and utils/ holds helper
+// modules the behavior tests import rather than tests of its own.
+
+const compileErrorsAllowlistPath = "testdata/upstream-compile-errors-allowlist.txt"
+
+// TestUpstreamCompileErrors checks, against the same monotonic-allowlist contract as
+// TestUpstreamConformance, which programs upstream rejects that gopherbuzz also
+// rejects. Upstream's runner takes the file's first line as the expected message and
+// requires compilation to fail; this asserts the weaker, still meaningful property
+// that it fails at all, since the two implementations word diagnostics differently.
+//
+// The allowlist may only GROW: a listed file that starts compiling clean is a
+// regression (gopherbuzz got laxer), and an unlisted file that starts failing is
+// progress that has to be recorded.
+func TestUpstreamCompileErrors(t *testing.T) {
+	dir, ok := upstreamCheckoutDir()
+	if !ok {
+		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")
+	}
+	skipIfUpstreamRefMismatch(t, dir)
+
+	errDir := filepath.Join(dir, "tests", "compile_errors")
+	files, err := filepath.Glob(filepath.Join(errDir, "*.buzz"))
+	if err != nil {
+		t.Fatalf("glob %s: %v", errDir, err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no .buzz files found in %s", errDir)
+	}
+	sort.Strings(files)
+
+	allowed, err := loadAllowlist(compileErrorsAllowlistPath)
+	if err != nil {
+		t.Fatalf("load allowlist: %v", err)
+	}
+	t.Chdir(dir)
+
+	seen := make(map[string]bool, len(files))
+	var regressions, improvements []string
+	for _, path := range files {
+		name := filepath.Base(path)
+		seen[name] = true
+		rejected := upstreamRejects(t, path, dir)
+		switch {
+		case allowed[name] && !rejected:
+			regressions = append(regressions, name+": now compiles clean; it must still be rejected")
+		case !allowed[name] && rejected:
+			improvements = append(improvements, name)
+		}
+	}
+	for name := range allowed {
+		if !seen[name] {
+			regressions = append(regressions, name+": allowlisted but not found in "+errDir)
+		}
+	}
+	if len(regressions) > 0 {
+		sort.Strings(regressions)
+		t.Errorf("compile-error parity regressed for %d file(s):\n%s", len(regressions), strings.Join(regressions, "\n"))
+	}
+	if len(improvements) > 0 {
+		sort.Strings(improvements)
+		t.Errorf("%d file(s) are now correctly rejected that are not in %s - add them there to record the improvement:\n%s",
+			len(improvements), compileErrorsAllowlistPath, strings.Join(improvements, "\n"))
+	}
+}
+
+// upstreamRejects reports whether compiling path fails. A panic counts as rejection
+// for the allowlist's purpose but is reported separately by the fuzz test, which is
+// where "must not crash" belongs.
+func upstreamRejects(t *testing.T, path, root string) (rejected bool) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			rejected = true
+		}
+	}()
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx)
+	defer func() { _ = sess.Close() }()
+	// Several of these import a helper from tests/utils, so both directories have to
+	// resolve or the failure would be the import rather than the error under test.
+	sess.SetIncludeDirs([]string{filepath.Dir(path), filepath.Join(root, "tests", "utils")})
+	buzzstd.Register(sess)
+	return sess.Exec(ctx, string(src)) != nil
+}
+
+// TestUpstreamFuzzCorpusDoesNotPanic runs upstream's fuzz corpus through the front end
+// and requires that none of it panics. A compile error is the expected outcome for
+// malformed input; a panic is a crash, and in the unsafe build a panic is the polite
+// version of what a bad assumption does.
+//
+// The corpus is upstream's checked-in AFL output -- real programs with a byte corrupted,
+// named by the mutation that produced them. SCOPE: this covers parse, check and compile
+// only, deliberately not execution. Executing arbitrary fuzzed source invites a
+// non-terminating loop, and the front end is where malformed input is supposed to be
+// caught. The README states the same limit rather than implying the corpus is run.
+func TestUpstreamFuzzCorpusDoesNotPanic(t *testing.T) {
+	dir, ok := upstreamCheckoutDir()
+	if !ok {
+		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")
+	}
+	skipIfUpstreamRefMismatch(t, dir)
+
+	files, err := filepath.Glob(filepath.Join(dir, "tests", "fuzzed", "*.buzz"))
+	if err != nil {
+		t.Fatalf("glob fuzzed: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no .buzz files found in tests/fuzzed")
+	}
+	sort.Strings(files)
+
+	var panicked []string
+	for _, path := range files {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					panicked = append(panicked, fmt.Sprintf("%s: %v", filepath.Base(path), r))
+				}
+			}()
+			src, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return
+			}
+			ctx := context.Background()
+			sess := buzz.NewSession(ctx)
+			defer func() { _ = sess.Close() }()
+			_, _ = sess.Compile(string(src)) // an error is fine; a panic is not
+		}()
+	}
+	if len(panicked) > 0 {
+		sort.Strings(panicked)
+		t.Errorf("the front end panicked on %d of %d fuzz inputs:\n%s",
+			len(panicked), len(files), strings.Join(panicked, "\n"))
+	}
+}

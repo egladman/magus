@@ -124,12 +124,14 @@ fun walk(rel: str, site: Site) > void {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str) > Site {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: any, graph: any) > Site {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
     var site: Site = mut Site{};
     site.config = magusConfig();
+    site.targets = targets;
+    site.graph = graph;
     site.root = root;
     site.docs = docs;
     site.blog = blog;

@@ -1,0 +1,37 @@
+namespace crypto;
+
+/// The `crypto` module, matching upstream Buzz's src/lib/crypto.buzz.
+///
+/// The declarations live in Buzz rather than in Go so the CHECKER can see them.
+/// A host module built directly as a Go value carries no signatures, so an
+/// inferred enum case in an argument (`hash(.Md5, data: ...)`) has no parameter
+/// type to resolve against and cannot compile. Declaring the enum and the wrapper
+/// here gives `hash` a real typed signature; `cryptocore` supplies the digest
+/// itself, the one part a Buzz script cannot compute for itself.
+import "cryptocore";
+
+/// Hash algorithms.
+export enum HashAlgorithm {
+    Md5,
+    Sha1,
+    Sha224,
+    Sha256,
+    Sha384,
+    Sha512,
+    Sha512_224,
+    Sha512_256,
+    Sha512T256,
+    Sha3224,
+    Sha3256,
+    Sha3384,
+    Sha3512,
+}
+
+/// Returns the hash of data under the given algorithm, as RAW digest bytes. Call
+/// `.hex()` on the result for the hexadecimal form, as upstream's tests do.
+/// @param algo Hash algorithm to use
+/// @param data Data to hash
+/// @return The digest bytes
+export fun hash(algo: HashAlgorithm, data: str) > str {
+    return cryptocore\hash(algo, data: data);
+}

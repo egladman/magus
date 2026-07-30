@@ -1,0 +1,27 @@
+// @expect: L:M:none:a:ok
+// Regressions caught by review. Each previously answered WRONG rather than erroring,
+// which is the failure class this parity work exists to remove:
+//   - map.map collapsed every entry onto the stringified null key when the callback
+//     returned the wrong shape, instead of reporting it;
+//   - list.sort sorted its live backing slice, so a comparator that mutated the same
+//     list produced an index-out-of-range internal error from guest code.
+//   - a match arm whose condition is a compound TYPE value fell through to `else`,
+//     because the canonical spelling ("[str]") never reached the reduced shape the
+//     runtime type test compares against. This case also round-trips the type-value
+//     constant that Marshal could not serialize at all until v21.
+
+final xs = [ "a", "b" ];
+final listArm = match (xs) { <[str]> -> "L", else -> "none" };
+final mapArm = match ({ "k": 1 }) { <{str: int}> -> "M", else -> "none" };
+final wrongShape = match (xs) { <{str: int}> -> "M", else -> "none" };
+
+// The callback yields {key, value} records, so the inverted map is keyed by the old
+// value. A callback returning a bare value must raise rather than silently produce a
+// single "null" entry.
+final inverted = { "a": 1 }.map(fun (k: str, v: int) => .{ key = "{v}", value = k });
+
+// A comparator that shrinks the receiver must not crash the VM.
+final shrink = mut [ 5, 4, 3, 2, 1 ];
+_ = shrink.sort(fun (a: int, b: int) > bool { shrink.remove(0); return a < b; }) catch null;
+
+final __r = "{listArm}:{mapArm}:{wrongShape}:{inverted["1"]}:ok";

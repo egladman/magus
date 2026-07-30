@@ -47,6 +47,13 @@ var Magus = Module{
 			Impl:    MagusLs,
 		},
 		{
+			Name:    "targets",
+			Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap, Record: "TargetGraphOutput"}},
+			Impl:    MagusTargets,
+		},
+		{
 			Name: "affected",
 			Doc:  "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
 			Args: []Arg{
@@ -181,6 +188,18 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
 	}
 	return ws.DescribeProjects(), nil
+}
+
+// MagusTargets returns every project's target graph in-process. It is the typed
+// counterpart to `magus describe graph`: a caller that wants the target inventory no
+// longer has to shell out and parse the markdown that command renders. DescribeGraph
+// reads the magusfile statically, so this is side-effect free.
+func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.TargetGraphOutput{}, errors.New("magus.targets: no workspace on the context (magus.targets is callable from a magusfile target, not a bare script)")
+	}
+	return ws.DescribeGraph(ctx), nil
 }
 
 // MagusAffected computes the affected project set in-process. See MagusLs for why

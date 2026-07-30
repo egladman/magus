@@ -236,6 +236,45 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
 	}
+	// `protocol` is contextual for the same reason `test` is: upstream hard-reserves
+	// it, but reserving it here would break any embedding that already uses the word
+	// as a name. The statement-leading `protocol Name {` shape is unambiguous -- two
+	// juxtaposed identifiers followed by a brace is not otherwise valid Buzz.
+	if t.Kind == token.Ident && t.Val == "protocol" && !t.Raw &&
+		p.peekAt(1).Kind == token.Ident && p.peekAt(2).Kind == token.LBrace {
+		return p.parseProtocolDecl()
+	}
+	// `_: T = expr` is an ANNOTATED discard: upstream uses it to assert that a value
+	// matches a type without binding it (anonymous-objects.buzz checks a structural
+	// `obj{ ... }` type this way). Parsing it as an ordinary declaration named `_` makes
+	// the checker perform exactly that compatibility check; nothing reads the binding.
+	if t.Kind == token.Ident && t.Val == "_" && !t.Raw && p.peekAt(1).Kind == token.Colon {
+		p.advance() // `_`
+		p.advance() // ':'
+		annot, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Assign); err != nil {
+			return nil, err
+		}
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.optSemicolon()
+		return &ast.DeclStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: "_", TypeAnnot: annot, Value: val}, nil
+	}
+	// A statement-position `match (`: the same node the expression form produces,
+	// wrapped so its value is discarded. Contextual for the same reason as above.
+	if t.Kind == token.Ident && t.Val == "match" && !t.Raw && p.peekAt(1).Kind == token.LParen {
+		m, err := p.parseMatch()
+		if err != nil {
+			return nil, err
+		}
+		p.optSemicolon()
+		return &ast.ExprStmt{Pos: ast.NodePos(m), Expr: m}, nil
+	}
 	// `extern fun name(...) > T;` declares a native function's SIGNATURE with no
 	// body - how upstream types its stdlib (src/lib/*.buzz). Contextual like
 	// `test`: `extern` is a reserved word, so it can never be a binding name, but
@@ -343,6 +382,26 @@ func (p *parser) parseStmt() (ast.Node, error) {
 
 func (p *parser) parseImport() (*ast.ImportStmt, error) {
 	t, _ := p.eat(token.Import)
+	// The selective form `import a, b from "path"` names its members BEFORE the path,
+	// so an identifier here (rather than a string) is what distinguishes it.
+	var only []string
+	if p.check(token.Ident) {
+		for {
+			id, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			only = append(only, id.Val)
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+		}
+		if !p.check(token.Ident) || p.peek().Val != "from" {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected `from` after the imported names", p.peek().Line, p.peek().Col)
+		}
+		p.advance() // `from`
+	}
 	pathTok, err := p.eat(token.String)
 	if err != nil {
 		return nil, err
@@ -356,7 +415,7 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 		}
 	}
 	p.optSemicolon()
-	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias}, nil
+	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}, nil
 }
 
 func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
@@ -760,6 +819,25 @@ func (p *parser) parseIf() (*ast.IfStmt, error) {
 			return nil, err
 		}
 		bindName = id.Val
+	} else if as, ok := cond.(*ast.AsExpr); ok && !as.Optional && p.check(token.Colon) {
+		// `if (expr as name: Type)` takes the branch only when the cast succeeds, and
+		// binds name to the cast value inside Then. Upstream parses the if-condition
+		// specially (Parser.zig's ifStatement, `.As` branch) so it never builds a cast
+		// node at all; gopherbuzz reaches here having already consumed `as name` as a
+		// cast whose "type" is really the binding identifier, so split the halves back
+		// apart. The form then lowers exactly onto the optional-cast narrowing the `->`
+		// path above already compiles -- `expr as? Type -> name` -- which is why this
+		// needs no new AST, compiler, or checker case.
+		if strings.ContainsAny(as.TypeName, "[]{}?\\(), >") {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected an identifier before ':' in an `as` binding, got the type %q", as.Pos.Line, as.Pos.Col, as.TypeName)
+		}
+		p.advance() // ':'
+		typStr, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		bindName = as.TypeName
+		cond = &ast.AsExpr{Pos: as.Pos, Expr: as.Expr, TypeName: typStr, Optional: true}
 	}
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
@@ -1273,8 +1351,150 @@ func (p *parser) parseTestDecl() (*ast.TestDecl, error) {
 	return &ast.TestDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Body: body}, nil
 }
 
+// parseMatch parses `match (subject) { c1, c2 -> body, else -> body, }`. It serves
+// the statement and expression forms alike; the caller decides what to do with the
+// value (parseStmt wraps it in an ExprStmt, which discards it).
+//
+// A body is a block when `{` follows the arrow and an expression otherwise. That
+// makes `-> { ... }` always a block, never a map literal -- the same ambiguity
+// upstream resolves the same way.
+func (p *parser) parseMatch() (*ast.MatchExpr, error) {
+	t := p.advance() // `match`
+	if _, err := p.eat(token.LParen); err != nil {
+		return nil, err
+	}
+	subject, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.RParen); err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.LBrace); err != nil {
+		return nil, err
+	}
+	out := &ast.MatchExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Subject: subject}
+	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		var branch ast.MatchBranch
+		// `else` takes no conditions; every other arm carries one or more, comma
+		// separated, before the arrow.
+		if p.check(token.Else) {
+			p.advance()
+		} else {
+			for {
+				cond, err := p.parseExpr()
+				if err != nil {
+					return nil, err
+				}
+				branch.Conds = append(branch.Conds, cond)
+				if !p.check(token.Comma) {
+					break
+				}
+				p.advance()
+			}
+		}
+		if _, err := p.eat(token.Arrow); err != nil {
+			return nil, err
+		}
+		if p.check(token.LBrace) {
+			body, err := p.parseBlock()
+			if err != nil {
+				return nil, err
+			}
+			branch.Body = body
+		} else {
+			body, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			branch.Body = body
+		}
+		out.Branches = append(out.Branches, branch)
+		// Arms are comma separated, and a trailing comma before `}` is allowed.
+		if p.check(token.Comma) {
+			p.advance()
+		}
+	}
+	if _, err := p.eat(token.RBrace); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// parseProtocolDecl parses `protocol Name { fun sig; mut fun sig; }` into an
+// ObjectDecl carrying only method signatures. Bodies are not allowed and none is
+// parsed: a protocol names an interface, so every member is a bare signature
+// terminated by a semicolon, exactly like `extern fun`.
+func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
+	t := p.advance() // `protocol`
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.LBrace); err != nil {
+		return nil, err
+	}
+	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, IsProtocol: true}
+	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		// `mut fun` marks a method that mutates its receiver. It constrains the
+		// implementor, not the signature, so consume it and parse the rest normally.
+		if p.check(token.Mut) && p.peekAt(1).Kind == token.Fun {
+			p.advance()
+		}
+		if !p.check(token.Fun) {
+			return nil, fmt.Errorf("buzz: line %d:%d: a protocol member must be a `fun` signature", p.peek().Line, p.peek().Col)
+		}
+		ft := p.advance() // `fun`
+		mName, err := p.eatBindingIdent()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.skipTypeParams(); err != nil {
+			return nil, err
+		}
+		// parseFunRest(true) is the signature-only form `extern fun` uses: params and
+		// return annotation, no body.
+		fr, err := p.parseFunRest(true)
+		if err != nil {
+			return nil, err
+		}
+		decl.Methods = append(decl.Methods, &ast.FunDecl{
+			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val,
+			Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults,
+			RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot,
+		})
+		p.optSemicolon()
+	}
+	if _, err := p.eat(token.RBrace); err != nil {
+		return nil, err
+	}
+	p.optSemicolon()
+	return decl, nil
+}
+
 func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	t, _ := p.eat(token.Object)
+	// `object<A, B> Name` declares conformance to protocols A and B. Note this is
+	// BEFORE the name and uses plain angle brackets, which is what distinguishes it
+	// from the `object Name::<K, V>` type parameters handled below.
+	var conforms []string
+	if p.check(token.Lt) {
+		p.advance()
+		for {
+			id, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			conforms = append(conforms, id.Val)
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+		}
+		if _, err := p.eat(token.Gt); err != nil {
+			return nil, err
+		}
+	}
 	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
@@ -1289,7 +1509,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	if _, err := p.eat(token.LBrace); err != nil {
 		return nil, err
 	}
-	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
+	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Conforms: conforms}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		// `static` marks a member that lives on the type rather than an instance:
 		// `static fun` is a method called as Foo.make() with no receiver, and a
@@ -1716,6 +1936,11 @@ func (p *parser) parseUnary() (ast.Node, error) {
 		}
 		return &ast.TypeExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Annot: annot}, nil
 	}
+	// An expression-position `match (...) { ... }`, which yields the selected
+	// branch's value.
+	if p.peek().Kind == token.Ident && p.peek().Val == "match" && !p.peek().Raw && p.peekAt(1).Kind == token.LParen {
+		return p.parseMatch()
+	}
 	// `typeof x`. A reserved word rather than a token kind, so match it the same
 	// contextual way `extern fun` is matched.
 	if p.peek().Kind == token.Ident && p.peek().Val == "typeof" && !p.peek().Raw {
@@ -1888,7 +2113,15 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			}
 		case token.LParen:
 			t := p.advance()
-			args, names, err := p.parseArgList()
+			// Upstream parses `zdef("lib", "<decls>")` as a STATEMENT (Parser.zig
+			// zdefStatement consumes `( String , String )` itself), so its arguments
+			// never pass through argumentList and the "every argument after the first
+			// must be labeled" rule below cannot apply to them. gopherbuzz keeps zdef an
+			// ordinary call and lowers it in zdef_decl.go instead, which without this
+			// exemption would reject upstream's own FFI source for breaking a rule
+			// upstream does not enforce there.
+			zdefCallee, isIdent := node.(*ast.IdentExpr)
+			args, names, err := p.parseArgList(isIdent && zdefCallee.Name == "zdef")
 			if err != nil {
 				return nil, err
 			}
@@ -1963,11 +2196,31 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 // parseArgList parses call arguments, positional or labeled (upstream Buzz's
 // `name: expr` named arguments — an identifier immediately followed by a
 // colon). The names slice is nil when every argument is positional.
-func (p *parser) parseArgList() ([]ast.Node, []string, error) {
+//
+// statementForm exempts the list from the strict labeling rule, for a callee
+// upstream parses as its own statement rather than as a call (see the zdef note
+// at the call site).
+func (p *parser) parseArgList(statementForm bool) ([]ast.Node, []string, error) {
 	var args []ast.Node
 	var names []string
 	sawName := false
 	for !p.check(token.RParen) && !p.check(token.EOF) {
+		// A zdef declaration block is a backtick string full of braces (`extern struct {
+		// id: c_int }`), which the lexer necessarily splits as an interpolation. Upstream
+		// never interpolates one -- zdefStatement hands the raw token to its FFI parser --
+		// so take the verbatim text here instead of sub-parsing braces that were never
+		// expressions. Only reachable for a zdef callee, so an ordinary call's raw string
+		// still interpolates.
+		if statementForm && p.check(token.InterpStr) && p.peek().Val != "" {
+			t := p.advance()
+			args = append(args, &ast.StringLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: t.Val})
+			names = append(names, "")
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+			continue
+		}
 		name := ""
 		// `ident :` is a label, but `ident ::` opens a generic call argument
 		// (count::<int>(...)), so the second colon has to be excluded or every
@@ -1988,7 +2241,7 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 		// against the callee's params is left to the checker (and is impossible for
 		// host bindings), so this enforces only the syntactic rule upstream's parser
 		// applies.
-		if p.strict && len(args) > 0 && name == "" {
+		if p.strict && !statementForm && len(args) > 0 && name == "" {
 			if _, isIdent := arg.(*ast.IdentExpr); !isIdent {
 				pos := ast.NodePos(arg)
 				return nil, nil, fmt.Errorf("buzz: line %d:%d: argument %d must be labeled (name: value) (strict mode)", pos.Line, pos.Col, len(args)+1)
@@ -2104,8 +2357,21 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 }
 
 // buildInterp parses each embedded expression source of an interpolation token.
+//
+// In a BACKTICK string, a brace run that does not parse as an expression is LITERAL
+// text rather than an error. That is what "raw" has to mean for brace-heavy content:
+// magus's own docs engine keeps Mustache templates ({{name}}) in backtick strings,
+// and a zdef declaration block is full of Zig braces. Upstream never interpolates
+// either (its zdefStatement reads the raw token), so the lenient reading keeps both
+// working while a genuine `{expr}` still evaluates. A double-quoted string keeps
+// reporting the error, since nothing there has a reason to hold unparseable braces.
 func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 	expr := &ast.InterpExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
+	// Only lexRawString sets Val on an interpolated token (to the verbatim source), so
+	// a non-empty Val is what identifies a backtick string here.
+	raw := t.Val != ""
+	// literal re-emits an interpolation as the source text it was written as.
+	literal := func(text string) { expr.Parts = append(expr.Parts, ast.InterpPart{Lit: "{" + text + "}"}) }
 	for _, part := range t.Parts {
 		if !part.IsExpr {
 			expr.Parts = append(expr.Parts, ast.InterpPart{Lit: part.Text})
@@ -2115,13 +2381,25 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		// parser so strictness is consistent across the program.
 		sub, err := parseModed(part.Text+";", p.strict)
 		if err != nil {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: bad interpolation %q: %w", t.Line, t.Col, part.Text, err)
 		}
 		if len(sub.Stmts) != 1 {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: interpolation must be a single expression: %q", t.Line, t.Col, part.Text)
 		}
 		es, ok := sub.Stmts[0].(*ast.ExprStmt)
 		if !ok {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: interpolation must be an expression: %q", t.Line, t.Col, part.Text)
 		}
 		expr.Parts = append(expr.Parts, ast.InterpPart{Expr: es.Expr})
@@ -2339,16 +2617,41 @@ func (p *parser) parseMapLit() (*ast.MapExpr, error) {
 		return nil, err
 	}
 	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
-	// Typed empty-map literal `{<K: V>}` (upstream Buzz): the element types are
-	// only a static hint, which gopherbuzz tracks dynamically — skip them.
+	// Typed map literal `{<K: V>}`, and upstream's non-empty `{<K: V>, "k": v}` where
+	// the types annotate the entries that follow. The types are a static hint (the VM
+	// tracks them dynamically), but they are recorded rather than skipped because the
+	// value type is what resolves an inferred enum case in a value position.
 	if p.check(token.Lt) {
-		if err := p.skipGenericArgs(); err != nil {
+		inner, err := p.readGenericArg()
+		if err != nil {
 			return nil, err
 		}
-		if _, err := p.eat(token.RBrace); err != nil {
-			return nil, err
+		// Split at the first colon OUTSIDE any bracket, so a composite key type such
+		// as `<{int: str}: bool>` splits on its own colon rather than the nested one.
+		depth, cut := 0, -1
+		for i := 0; i < len(inner) && cut < 0; i++ {
+			switch inner[i] {
+			case '[', '{', '<', '(':
+				depth++
+			case ']', '}', '>', ')':
+				depth--
+			case ':':
+				if depth == 0 {
+					cut = i
+				}
+			}
 		}
-		return m, nil
+		if cut >= 0 {
+			m.KeyType = strings.TrimSpace(inner[:cut])
+			m.ValType = strings.TrimSpace(inner[cut+1:])
+		}
+		if !p.check(token.Comma) {
+			if _, err := p.eat(token.RBrace); err != nil {
+				return nil, err
+			}
+			return m, nil
+		}
+		p.advance() // ','
 	}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		key, err := p.parseMapKey()
@@ -2401,10 +2704,17 @@ func (p *parser) parseListLit() (*ast.ListExpr, error) {
 			return nil, err
 		}
 		lst.ElemType = elem
-		if _, err := p.eat(token.RBracket); err != nil {
-			return nil, err
+		// `[<T>]` is the empty typed literal, but upstream also allows `[<T>, a, b]`,
+		// where the type is still only an ANNOTATION and the elements follow it: in
+		// `[<Locale>, .it]` the type is what lets `.it` resolve, and `list[0]` is `.it`,
+		// not the type. Requiring `]` here rejected every non-empty form.
+		if !p.check(token.Comma) {
+			if _, err := p.eat(token.RBracket); err != nil {
+				return nil, err
+			}
+			return lst, nil
 		}
-		return lst, nil
+		p.advance() // ','
 	}
 	for !p.check(token.RBracket) && !p.check(token.EOF) {
 		item, err := p.parseExpr()

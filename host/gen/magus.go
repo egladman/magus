@@ -35,6 +35,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return host.AnyMapVal(ret0.ToMap()), nil
 	}))
+	m.MapSet("targets", vm.DirectValue("magus.targets", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusTargets(ctx)
+		if err != nil {
+			return vm.Null, err
+		}
+		return host.AnyMapVal(ret0.ToMap()), nil
+	}))
 	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := host.Str(bzArgs, 0)
 		ret0, err := std.MagusAffected(ctx, base)

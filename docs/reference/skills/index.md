@@ -21,6 +21,6 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 | [magus-docs](magus-docs.md) | 3670 | 2917 | 20% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
 | [magus-memory](magus-memory.md) | 3845 | 3167 | 17% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
 | [magus-query](magus-query.md) | 7785 | 5576 | 28% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
-| [magus-run](magus-run.md) | 7970 | 4199 | 47% | Run builds, tests, lints, and codegen through magus targets. |
+| [magus-run](magus-run.md) | 8178 | 4324 | 47% | Run builds, tests, lints, and codegen through magus targets. |
 | [magus-vcs](magus-vcs.md) | 5402 | 3443 | 36% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
-| **all 9** | **49635** | **35565** | **28%** | |
+| **all 9** | **49843** | **35690** | **28%** | |

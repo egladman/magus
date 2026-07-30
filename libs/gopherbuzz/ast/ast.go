@@ -24,6 +24,10 @@ type ImportStmt struct {
 	Pos
 	Path  string
 	Alias string // "" = use basename; "_" = flat (no bound name)
+	// Only holds the names of a SELECTIVE import, `import a, b from "path"`, which
+	// binds just those members unprefixed. Empty for every other form. It is distinct
+	// from a flat `as _` import, which binds all of them.
+	Only []string
 }
 
 // NamespaceStmt: namespace name; — declares the module's namespace identifier.
@@ -172,6 +176,17 @@ type ObjectDecl struct {
 	// static holds one value on the type, not a slot per instance.
 	StaticFields []ObjField
 	Methods      []*FunDecl
+	// IsProtocol marks a `protocol Name { ... }` declaration. A protocol is exactly
+	// an object with method SIGNATURES and no fields or bodies, so it reuses this
+	// node rather than adding a parallel one: the checker registers it as a named
+	// type the same way, and the compiler skips it because a protocol has no runtime
+	// representation (dispatch on a protocol-typed value is ordinary dynamic
+	// dispatch on whatever object is actually there).
+	IsProtocol bool
+	// Conforms lists the protocols named in `object<A, B> Name`. Upstream requires
+	// conformance to be DECLARED, not merely structural, so this is what makes an
+	// instance assignable to a protocol-typed target.
+	Conforms []string
 }
 
 // ObjField is a single object field declaration with an optional default.
@@ -244,6 +259,32 @@ type TypeExpr struct {
 	// of `typeof x == <T>` are produced by one function so they cannot disagree
 	// over spacing (`{str:int}` vs `{str: int}`) or an alias.
 	Resolved string
+}
+
+// MatchExpr: `match (subject) { c1, c2 -> body, else -> body, }`.
+//
+// One node serves both the statement and the expression form, because they differ
+// only in whether the produced value is used: a branch body is an expression, or a
+// block when it is written `-> { ... }`. A block body still yields a value (null),
+// so the statement form is just an expression whose value is discarded, and the
+// compiler needs no second code path.
+//
+// Matching is NOT plain equality. Upstream picks the comparison from the condition
+// and subject types: a range condition tests containment, a pattern against a
+// string (or a string against a pattern) tests a regex match, a type value tests
+// `is`, and everything else compares with `==`.
+type MatchExpr struct {
+	Pos
+	Subject  Node
+	Branches []MatchBranch
+}
+
+// MatchBranch is one `conds -> body` arm. Conds is empty for the `else` arm, which
+// is why the arms keep their source order: the else is only reached after every
+// preceding arm failed.
+type MatchBranch struct {
+	Conds []Node
+	Body  Node
 }
 
 // TypeOfExpr: `typeof x`. Buzz's typeof is STATIC - it yields the type the
@@ -335,6 +376,12 @@ type MapExpr struct {
 	Keys   []Node // key expressions (string literals or arbitrary exprs)
 	Values []Node
 	Mut    bool
+	// KeyType and ValType hold the explicit annotation from `{<K: V>, ...}`. Like a
+	// list's ElemType they are a static hint only, but ValType has to be recorded
+	// rather than skipped: it is the expected type for each value, which is the only
+	// thing that can tell an inferred enum case which enum it belongs to.
+	KeyType string
+	ValType string
 	// Anon marks the anonymous-object form `.{ field = expr }`, which parses to
 	// a map keyed by the field names. It is not a map literal: the checker types
 	// it against an expected object's fields, not as {K: V}.
@@ -436,6 +483,12 @@ type EnumCaseExpr struct {
 	Pos
 	Name string
 	Enum string
+	// EnumNS is the namespace the enum is reachable through, set when the enum came
+	// from a module imported WITHOUT flattening (`import "buzz:io"` makes FileMode
+	// reachable only as `io\FileMode`). The checker knows the enum by its bare name,
+	// but the compiler has to emit an access that exists at runtime. Empty when the
+	// bare name is in scope.
+	EnumNS string
 }
 
 type IsExpr struct {

@@ -43,11 +43,26 @@ var Modules = []buzz.Module{
 	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
 	{Name: "fs", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("fs", fsModule)},
 	{Name: "os", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("os", osModule)},
-	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("crypto", cryptoModule)},
+	// crypto and io each register TWICE: the native module under the real name, and
+	// a Buzz declaration source under the same name. The synthetic value is what runs
+	// (and what a host like magus overlays its own methods onto); the source is parsed
+	// for its SIGNATURES only, which is what lets an inferred enum case in an argument
+	// resolve. See resolveImport.
+	{Name: "cryptocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("cryptocore", cryptoCoreModule)},
+	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule("crypto", cryptoCoreModule())
+		s.SetSourceModule("crypto", cryptoSource)
+		return nil
+	}},
 	{Name: "gc", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("gc", gcModule)},
 	{Name: "debug", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("debug", debugModule)},
+	{Name: "iocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule("iocore", ioCoreModule(s)) // io binds against the session
+		return nil
+	}},
 	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule("io", ioModule(s)) // io binds against the session
+		s.SetSyntheticModule("io", ioCoreModule(s))
+		s.SetSourceModule("io", ioSource)
 		return nil
 	}},
 	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},
@@ -57,6 +72,13 @@ var Modules = []buzz.Module{
 	{Name: "assert", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("assert", assertSource)},
 	{Name: "suite", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("suite", suiteSource)},
 	{Name: "testing", Labels: []string{buzz.LabelGopherbuzz}, Bind: source("testing", testingSource)},
+	// Upstream's module is NAMED "test" even though its file is testing.buzz
+	// (static_headers.zig: `Header{ .name = "test", .path = "testing.buzz" }`), so
+	// upstream source reaches it as `import "buzz:test"`. The same source is bound
+	// under both spellings: "test" is what upstream programs write, and "testing" is
+	// the name gopherbuzz already published. Importing both in one program would exec
+	// the source twice, which no caller has reason to do.
+	{Name: "test", Labels: []string{buzz.LabelUpstream}, Bind: source("test", testingSource)},
 }
 
 // synthetic returns a Bind that installs a synthetic (host-value) module built by

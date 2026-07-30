@@ -1,0 +1,37 @@
+# Upstream Buzz compile-error allowlist.
+#
+# One base filename per line, sorted, naming files under upstream
+# <buzz-checkout>/tests/compile_errors/*.buzz that gopherbuzz correctly REJECTS
+# (see ../conformance_test.go). Upstream requires each of these to fail to
+# compile; a file NOT listed here is one gopherbuzz still wrongly accepts, which
+# is a soundness gap rather than a missing feature.
+#
+# The set may only GROW. TestUpstreamCompileErrors fails if a listed file starts
+# compiling clean (gopherbuzz got laxer) or if an unlisted file starts failing
+# (progress that must be recorded here).
+bad-fun-signature.buzz
+bad-pattern.buzz
+break.buzz
+const.buzz
+duplicated-namespace.buzz
+empty-import.buzz
+final-objects.buzz
+inferred-enum-case-invalid.buzz
+invalid-float-literal.buzz
+invalid-int-literal.buzz
+label-not-found.buzz
+local-assignment-value-type.buzz
+long-tuple.buzz
+match-else-missing-arrow.buzz
+misplaced-out.buzz
+multiple-location.buzz
+object-assignment-value-type.buzz
+tuple-mix.buzz
+tuple-shorthand-anonymous-numeric-field.buzz
+tuple-shorthand-binary-index.buzz
+tuple-shorthand-hex-index.buzz
+tuple-shorthand-named-object.buzz
+tuple-shorthand-out-of-range.buzz
+tuple-shorthand-underscore-index.buzz
+var-decl-without-value.buzz
+yield-wrong-value-type.buzz
