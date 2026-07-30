@@ -18,10 +18,10 @@ Every op is invoked as `docker["<op>"](opts?)`, where the optional options map a
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `docker["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108) |
-| `cwd` | `str` | Working directory the command runs in. Defaults to the project directory. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105) |
-| `env` | `{str: str}` | Environment variables set for the process, on top of the inherited environment. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `docker["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
+| `cwd` | `str` | Working directory the command runs in. Defaults to the project directory. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L143) |
+| `env` | `{str: str}` | Environment variables set for the process, on top of the inherited environment. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L146) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L180) |
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -41,7 +41,7 @@ import "magus/spell/docker";
 magus\project({ "spells": [docker] });
 
 export fun image(ctx: magus\Context, args: [str]) > void {
-    docker["docker-build"]({ "args": ["-t", "app:latest", "."] });
+    docker["docker-build"](ctx, { "args": ["-t", "app:latest", "."] });
 }
 ```
 
@@ -61,7 +61,7 @@ import "magus/spell/docker";
 magus\project({ "spells": [docker] });
 
 export fun image_check(ctx: magus\Context, args: [str]) > void {
-    docker["docker-build-check"]({ "args": ["."] });
+    docker["docker-build-check"](ctx, { "args": ["."] });
 }
 ```
 
@@ -81,7 +81,7 @@ import "magus/spell/docker";
 magus\project({ "spells": [docker] });
 
 export fun image_buildx(ctx: magus\Context, args: [str]) > void {
-    docker["docker-buildx"]({ "args": ["-t", "app:latest", "."] });
+    docker["docker-buildx"](ctx, { "args": ["-t", "app:latest", "."] });
 }
 ```
 
@@ -100,7 +100,7 @@ import "magus/spell/docker";
 magus\project({ "spells": [docker] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    docker["hadolint"]();
+    docker["hadolint"](ctx);
 }
 ```
 

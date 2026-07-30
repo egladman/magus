@@ -18,10 +18,10 @@ Every op is invoked as `cosign["<op>"](opts?)`, where the optional options map a
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `cosign["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108) |
-| `cwd` | `str` | Working directory the command runs in. Defaults to the project directory. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105) |
-| `env` | `{str: str}` | Environment variables set for the process, on top of the inherited environment. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `cosign["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
+| `cwd` | `str` | Working directory the command runs in. Defaults to the project directory. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L143) |
+| `env` | `{str: str}` | Environment variables set for the process, on top of the inherited environment. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L146) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L180) |
 
 Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).
 
@@ -41,7 +41,7 @@ import "magus/spell/cosign";
 magus\project({ "spells": [cosign] });
 
 export fun attest(ctx: magus\Context, args: [str]) > void {
-    cosign["cosign-attest"]({ "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
+    cosign["cosign-attest"](ctx, { "args": ["--predicate", "sbom.json", "--type", "cyclonedx", "app:latest"] });
 }
 ```
 
@@ -63,7 +63,7 @@ import "magus/spell/cosign";
 magus\project({ "spells": [cosign] });
 
 export fun sign(ctx: magus\Context, args: [str]) > void {
-    cosign["cosign-sign"]({ "args": ["app:latest"] });
+    cosign["cosign-sign"](ctx, { "args": ["app:latest"] });
 }
 ```
 
@@ -83,7 +83,7 @@ import "magus/spell/cosign";
 magus\project({ "spells": [cosign] });
 
 export fun verify(ctx: magus\Context, args: [str]) > void {
-    cosign["cosign-verify"]({ "args": ["app:latest"] });
+    cosign["cosign-verify"](ctx, { "args": ["app:latest"] });
 }
 ```
 
