@@ -124,7 +124,7 @@ func (o SpellOp) OpKind() string {
 // than a command op (run to completion).
 func (o SpellOp) IsService() bool { return o.Kind == OpKindService }
 
-// Key implements CacheRepository: an op is identified by the command it runs, which is
+// Key implements Keyer: an op is identified by the command it runs, which is
 // the honest answer to "what work is this" and what lets two entry points onto the same
 // op share an entry.
 //

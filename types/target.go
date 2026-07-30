@@ -192,7 +192,25 @@ func (r ExecResult) ToMap() map[string]any {
 // project's magusfile - see Project.MagusfileTargets for why it cannot answer for one.
 const MagusfileSpellName = "magusfile"
 
-// Key implements CacheRepository: a target is identified by its name, because its
+// Keyer is implemented by a unit of work: a spell op and a target. Both answer the same
+// question - what will actually run - so the cache asks it once through one method
+// instead of guessing from the target's name. A name is only a label: two names over
+// identical work can never share an entry, and one name over two bodies hashes as though
+// they were the same thing.
+//
+// It lives beside its implementers rather than in repository.go, which collects
+// PERSISTENCE ports - access surfaces implemented outside this package. This is the
+// opposite: a domain object stating its own identity. Naming it CacheRepository put a
+// domain concern in the ports file and left the actual cache, which holds the
+// persistence operations, with no port at all.
+type Keyer interface {
+	// Key returns the lines identifying this work, in a stable order (argument order is
+	// meaning, so nothing sorts them). Nil adds nothing to the key, which is not the
+	// same as adding an empty line.
+	Key() []string
+}
+
+// Key implements Keyer: a target is identified by its name, because its
 // body is Buzz rather than a command and has no argv to serialize - the body's text
 // already reaches the key through the magusfile's own Sources entry, leaving the entry
 // point as what separates build from go-build within one project.
