@@ -31,15 +31,14 @@ Every magus spell runs with `cwd = project.Dir` and may only walk
 files under `api/`, never reach up into siblings, and stop at the
 boundary of any registered descendant project (`api/docs` here).
 
-This warning fires when the audit observes filesystem writes inside a
-descendant's tree across the spell's pre/post snapshot window. The
-typical cause is a recursive glob in the spell's tool invocation that
-doesn't know about the descendant. For example, `prettier --write
-'**/*.md'` running from `api/` walks straight into `api/docs/` and
-reformats files there.
+Magus fails the target when the audit observes filesystem writes inside a
+descendant's tree across the spell's pre/post snapshot window. The typical
+cause is a recursive glob in the spell's tool invocation that doesn't know
+about the descendant. For example, `prettier --write '**/*.md'` running from
+`api/` walks straight into `api/docs/` and reformats files there.
 
-The warning is observational. Magus does not roll back the writes and
-does not fail the build. You (or the spell author) decide what to do.
+The audit cannot roll back a write that an external tool has already made, but
+the failed target prevents it from being accepted as a successful run.
 
 ## Resolution
 

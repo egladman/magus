@@ -1,11 +1,11 @@
 package trail
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/stretchr/testify/require"
 )
 

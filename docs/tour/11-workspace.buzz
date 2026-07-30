@@ -17,14 +17,14 @@ import "magus/spell/go";
 
 // The shared library project. Nothing depends on the app, so a lib change is what
 // ripples outward through the graph.
-magus.project("lib", {
+magus\project("lib", {
     "spells": [go],
     "outputs": ["lib/**"],
 });
 
 // The app project depends on lib: magus orders lib's work first, and a change to
 // lib marks the app affected too.
-magus.project("app", {
+magus\project("app", {
     "spells": [go],
     "outputs": ["bin/**"],
     "depends_on": ["lib"],

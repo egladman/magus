@@ -2,7 +2,6 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"

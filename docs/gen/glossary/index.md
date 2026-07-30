@@ -99,7 +99,7 @@ knowledge graph. See [daemon.md](guides/daemon.md).
 
 ### CI
 
-An ordinary magusfile-defined target you compose yourself with `magus.needs` -
+An ordinary magusfile-defined target you compose yourself with `magus\needs` -
 magus does not hardcode its stages. `Magus.RunCI` treats it specially only in
 that it strips the `rw` charm, it is the anchor `magus affected ci` keys off,
 and a selected scope with no project declaring it is a load error rather than

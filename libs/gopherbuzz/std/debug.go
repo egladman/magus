@@ -2,11 +2,11 @@ package std
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
+	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -81,7 +81,7 @@ func nodeToMap(n ast.Node) any {
 	case *ast.WhileStmt:
 		return map[string]any{"kind": "WhileStmt", "pos": pos(v.Pos), "cond": nodeToMap(v.Cond), "body": nodeToMap(v.Body)}
 	case *ast.ForStmt:
-		return map[string]any{"kind": "ForStmt", "pos": pos(v.Pos), "init": nodeToMap(v.Init), "cond": nodeToMap(v.Cond), "post": nodeToMap(v.Post), "body": nodeToMap(v.Body)}
+		return map[string]any{"kind": "ForStmt", "pos": pos(v.Pos), "init": ns(v.Init), "cond": nodeToMap(v.Cond), "post": ns(v.Post), "body": nodeToMap(v.Body)}
 	case *ast.ForEachStmt:
 		return map[string]any{"kind": "ForEachStmt", "pos": pos(v.Pos), "keyName": v.KeyName, "valName": v.ValName, "iter": nodeToMap(v.Iter), "body": nodeToMap(v.Body)}
 	case *ast.BreakStmt:
@@ -95,17 +95,25 @@ func nodeToMap(n ast.Node) any {
 		for i, f := range v.Fields {
 			fields[i] = map[string]any{"name": f.Name, "typeAnnot": f.TypeAnnot, "default": nodeToMap(f.Default)}
 		}
+		statics := make([]any, len(v.StaticFields))
+		for i, f := range v.StaticFields {
+			statics[i] = map[string]any{"name": f.Name, "typeAnnot": f.TypeAnnot, "default": nodeToMap(f.Default)}
+		}
 		methods := make([]any, len(v.Methods))
 		for i, meth := range v.Methods {
 			methods[i] = nodeToMap(meth)
 		}
-		return map[string]any{"kind": "ObjectDecl", "pos": pos(v.Pos), "name": v.Name, "fields": fields, "methods": methods}
+		return map[string]any{"kind": "ObjectDecl", "pos": pos(v.Pos), "name": v.Name, "fields": fields, "staticFields": statics, "methods": methods}
 	case *ast.EnumDecl:
 		return map[string]any{"kind": "EnumDecl", "pos": pos(v.Pos), "name": v.Name, "cases": v.Cases}
 	case *ast.DoStmt:
 		return map[string]any{"kind": "DoStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "cond": nodeToMap(v.Cond)}
 	case *ast.TryStmt:
-		return map[string]any{"kind": "TryStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "errName": v.ErrName, "catch": nodeToMap(v.Catch)}
+		catches := make([]any, len(v.Catches))
+		for i, cl := range v.Catches {
+			catches[i] = map[string]any{"pos": pos(cl.Pos), "errName": cl.ErrName, "typeName": cl.TypeName, "body": nodeToMap(cl.Body)}
+		}
+		return map[string]any{"kind": "TryStmt", "pos": pos(v.Pos), "body": nodeToMap(v.Body), "catches": catches}
 	case *ast.ThrowStmt:
 		return map[string]any{"kind": "ThrowStmt", "pos": pos(v.Pos), "value": nodeToMap(v.Value)}
 	case *ast.YieldExpr:

@@ -12,7 +12,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({
+magus\project({
     "spells": [go],
     "outputs": ["bin/**", "gen/**"],
     "targets": {

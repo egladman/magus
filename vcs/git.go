@@ -264,6 +264,18 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 	return vcsOutput(ctx, dir, "git", "describe", "--tags", "--always", "--dirty")
 }
 
+// Tags lists tags newest-first. creatordate is the sort key because it reads a
+// lightweight tag's commit date and an annotated tag's own date, so the two kinds
+// order together instead of the lightweight ones bunching at the repository's age.
+func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.Tag, error) {
+	const format = "%(refname:short)\t%(creatordate:iso-strict)\t%(objectname)"
+	out, err := vcsOutput(ctx, dir, "git", "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
+	if err != nil {
+		return nil, err
+	}
+	return parseTags(out, pattern)
+}
+
 // RemoteURL returns the "origin" remote's fetch URL (types.RemoteReporter). A repo
 // with no origin configured yields ErrVCSUnsupported, so callers degrade to no link.
 func (v gitVCS) RemoteURL(ctx context.Context, dir string) (string, error) {

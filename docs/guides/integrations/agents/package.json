@@ -1,0 +1,17 @@
+{
+  "name": "@magus/agents",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The guard-hook templates a magus workspace installs into an agent host, kept beside the guide that documents them (docs/guides/integrations/agents.md). Ships NO runtime code: the shell templates are copied into a host's hook config and the OpenCode plugin is loaded from source by OpenCode's own Bun runtime. devDependencies are the lint and type-check gates only - @opencode-ai/plugin for the Plugin type and bun-types for Bun.spawn, neither of which is bundled anywhere. pnpm (pinned in mise.toml), NOT npm; .npmrc's minimum-release-age is the supply-chain guard.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "biome": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.3",
+    "@opencode-ai/plugin": "1.18.5",
+    "bun-types": "1.2.23",
+    "typescript": "5.8.3"
+  }
+}

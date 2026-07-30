@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -16,12 +15,13 @@ import (
 	"sync"
 	"time"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
 
 // Connector tokens are the SECOND auth tier: named, hashed-at-rest, expiring
-// secrets minted for EXTERNAL MCP clients (a Claude connector, an IDE). Unlike
+// secrets minted for EXTERNAL MCP clients (a hosted connector, an IDE). Unlike
 // the single retrievable cli token (token.go), a connector token is shown ONCE
 // at creation and only its SHA-256 is stored, so it can never be re-displayed -
 // rotate by minting a new one. Multiple named tokens coexist so each client

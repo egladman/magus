@@ -4,5 +4,5 @@
 import "magus";
 
 export fun greet(args: [str]) > void {
-    magus.info("hello from magus");
+    magus\info("hello from magus");
 }

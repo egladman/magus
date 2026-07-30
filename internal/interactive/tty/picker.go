@@ -10,10 +10,9 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
-
-	"golang.org/x/term"
 )
 
 // ErrAborted is returned when the user presses ESC, Ctrl-C, or Ctrl-D.
@@ -44,16 +43,15 @@ func Pick(items []string, opts Options) (int, error) {
 		opts.MaxRows = 10
 	}
 
-	stdinFD := int(os.Stdin.Fd())
 	if !StdinIsTerminal() {
 		return -1, errors.New("picker: stdin is not a TTY")
 	}
 
-	old, err := term.MakeRaw(stdinFD)
+	restore, err := MakeRaw(os.Stdin.Fd())
 	if err != nil {
-		return -1, fmt.Errorf("picker: enter raw mode: %w", err)
+		return -1, fmt.Errorf("picker: %w", err)
 	}
-	defer func() { _ = term.Restore(stdinFD, old) }()
+	defer func() { _ = restore() }()
 
 	s := &session{
 		items:    items,
@@ -131,7 +129,7 @@ type session struct {
 	filter  string
 	matches []int // indices into items, post-filter
 	cursor  int   // index into matches
-	out     *os.File
+	out     io.Writer
 	reader  *bufio.Reader
 
 	linesOut int // tracks how many lines we last drew so redraws can clear
@@ -207,16 +205,8 @@ func (s *session) readKey() (rune, error) {
 }
 
 func (s *session) draw() {
-	// Erase previous render.
-	for i := 0; i < s.linesOut; i++ {
-		fmt.Fprint(s.out, "\x1b[2K\r") // clear line, return to col 0
-		if i < s.linesOut-1 {
-			fmt.Fprint(s.out, "\x1b[1A") // move up
-		}
-	}
-	if s.linesOut > 0 {
-		fmt.Fprint(s.out, "\r")
-	}
+	// Erase the previous render before drawing over it.
+	_ = EraseLines(s.out, s.linesOut)
 
 	var b strings.Builder
 	visible := s.opts.MaxRows
@@ -265,11 +255,6 @@ func (s *session) draw() {
 func (s *session) cleanup() {
 	// Erase our drawing so the parent terminal looks like the picker
 	// never ran. Caller prints whatever permanent output it wants.
-	for i := 0; i < s.linesOut; i++ {
-		fmt.Fprint(s.out, "\x1b[2K\r")
-		if i < s.linesOut-1 {
-			fmt.Fprint(s.out, "\x1b[1A")
-		}
-	}
+	_ = EraseLines(s.out, s.linesOut)
 	s.linesOut = 0
 }

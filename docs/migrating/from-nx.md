@@ -23,17 +23,17 @@ plainly, and vice versa.
 | project (`project.json` / `package.json`)     | project (a directory whose `magusfile.buzz` registers it)                                                                                                                           |
 | target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](../concepts/targets.md#the-target-name))                                                       |
 | executor / plugin                             | spell op (a [spell](../concepts/spells.md) is a library of tool-native ops)                                                                                                                     |
-| `nx:run-commands`                             | `os.exec(...)` in a target body                                                                                                                                                     |
+| `nx:run-commands`                             | `os\exec(...)` in a target body                                                                                                                                                     |
 | `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](../concepts/dependencies.md))                             |
-| `implicitDependencies`                        | `depends_on` in `magus.project`                                                                                                                                                     |
+| `implicitDependencies`                        | `depends_on` in `magus\project`                                                                                                                                                     |
 | `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](../concepts/workspace.md#magusproject-layering-policy)                                                                                |
 | `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
 | `nx affected`                                 | `magus affected`                                                                                                                                                                    |
 | `nx graph`                                    | `magus graph` / `magus affected --graph` / `magus graph open`                                                                                                                       |
-| Nx Cloud remote cache (Nx Replay)             | [magus remote cache](../concepts/remote-cache.md) (self-hosted backends, Ed25519-signed artifacts)                                                                                              |
+| Nx Cloud remote cache (Nx Replay)             | [magus remote cache](../concepts/cache/remote.md) (self-hosted backends, Ed25519-signed artifacts)                                                                                              |
 | Nx Cloud DTE / Nx Agents                      | `magus affected --plan` (a provider-neutral JSON shard plan; you bring the runners)                                                                                                 |
 | generators / scaffolding                      | fixed, not extensible: `magus init` writes a starter magusfile, `magus init spell <name>` scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds |
-| task pipeline (`targetDefaults` in `nx.json`) | composed `magus.needs` calls in the magusfile                                                                                                                                       |
+| task pipeline (`targetDefaults` in `nx.json`) | composed `magus\needs` calls in the magusfile                                                                                                                                       |
 
 ## Model differences
 
@@ -89,7 +89,7 @@ Said plainly, no hedging:
 
 - A signed remote-cache trust model: every remote artifact carries a
   detached Ed25519 signature verified against a configured trust set, not
-  just an access-token-gated store (see [remote-cache.md](../concepts/remote-cache.md)).
+  just an access-token-gated store (see [remote-cache.md](../concepts/cache/remote.md)).
 - Kernel-level sandboxing of spell subprocesses on Linux (landlock).
 - Services as a first-class declarative op kind, with readiness probes,
   shared-instance dedup, and idle teardown (see [services.md](../concepts/services.md)),
@@ -136,7 +136,7 @@ import "magus";
 import "project/../shared-lib" as shared;
 import "magus/spell/ts";
 
-magus.project({ "spells": [ts] });
+magus\project({ "spells": [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(shared.build);   // folds into depends_on automatically
@@ -164,6 +164,6 @@ from-scratch walkthrough.
 ## See also
 
 - [Getting started](../guides/getting-started.md): install to first `ci` pipeline, magus-native.
-- [Dependencies](../concepts/dependencies.md): the `magus.needs` / `depends_on` model this page's `dependsOn` row maps to.
-- [Remote caching](../concepts/remote-cache.md): the signed trust model behind the Nx Cloud comparison row.
+- [Dependencies](../concepts/dependencies.md): the `magus\needs` / `depends_on` model this page's `dependsOn` row maps to.
+- [Remote caching](../concepts/cache/remote.md): the signed trust model behind the Nx Cloud comparison row.
 - [Spells](../concepts/spells.md): the executor/plugin equivalent, and the built-in spell list.

@@ -1,8 +1,3 @@
----
-name: magus-docs
-description: Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).
----
-
 # Navigating the magus docs
 
 magus ships one official documentation corpus. It is a static site, so its

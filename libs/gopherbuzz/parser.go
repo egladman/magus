@@ -24,6 +24,14 @@ type parser struct {
 	// it for gopherbuzz's embedded use (REPL/eval/magusfiles), where top-level
 	// statements are the whole point.
 	strict bool
+	// fromDepth counts the `from { ... }` block expressions currently open, which
+	// is what makes `out` a statement keyword inside one and an ordinary
+	// identifier everywhere else.
+	fromDepth int
+	// typeTextSkips are half-open token spans that skipType consumed but that
+	// readType must leave out of the annotation text it reconstructs (a function
+	// type's `!>` error set and `*>` yield type). Append-only for the parse.
+	typeTextSkips [][2]int
 }
 
 func newParser(tokens []token.Token) *parser {
@@ -133,7 +141,9 @@ func (p *parser) eatBindingIdent() (token.Token, error) {
 	if err != nil {
 		return t, err
 	}
-	if reservedIdents[t.Val] {
+	// A free identifier (@"...") carries its spelling in quotes precisely so a
+	// reserved word can be used as a name, so the rule does not apply to it.
+	if !t.Raw && reservedIdents[t.Val] {
 		return t, fmt.Errorf("buzz: line %d:%d: %q is a reserved word and cannot be used as a name", t.Line, t.Col, t.Val)
 	}
 	return t, nil
@@ -218,6 +228,18 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
 	}
+	// `out expr;` leaves the enclosing block expression. Contextual like `test`:
+	// outside a `from` block `out` stays an ordinary identifier, so the check is
+	// gated on one actually being open.
+	if t.Kind == token.Ident && t.Val == "out" && p.fromDepth > 0 {
+		p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		p.optSemicolon()
+		return &ast.OutStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Value: val}, nil
+	}
 	switch t.Kind {
 	case token.Namespace:
 		return p.parseNamespace()
@@ -276,12 +298,14 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		return &ast.ExprStmt{Pos: ast.NodePos(expr), Expr: expr}, nil
 	case token.Break:
 		p.advance()
+		label := p.parseLoopTargetLabel()
 		p.optSemicolon()
-		return &ast.BreakStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
+		return &ast.BreakStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Label: label}, nil
 	case token.Continue:
 		p.advance()
+		label := p.parseLoopTargetLabel()
 		p.optSemicolon()
-		return &ast.ContinueStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}}, nil
+		return &ast.ContinueStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Label: label}, nil
 	case token.Object:
 		return p.parseObjectDecl()
 	case token.Enum:
@@ -355,6 +379,13 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 			return nil, err
 		}
 	}
+	pos := ast.Pos{Line: t.Line, Col: t.Col}
+	// A nullable declaration may omit its initializer: `final hello: int?;` binds
+	// null. Only nullable types get this - anything else still has to be assigned.
+	if strings.HasSuffix(typeAnnot, "?") && !p.check(token.Assign) {
+		p.optSemicolon()
+		return &ast.DeclStmt{Pos: pos, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: &ast.NullLit{Pos: pos}}, nil
+	}
 	if _, err := p.eat(token.Assign); err != nil {
 		return nil, err
 	}
@@ -363,7 +394,7 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 		return nil, err
 	}
 	p.optSemicolon()
-	return &ast.DeclStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: val}, nil
+	return &ast.DeclStmt{Pos: pos, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: val}, nil
 }
 
 // skipType skips a type expression; types are unused at runtime in Phase 1/3.
@@ -377,6 +408,12 @@ func (p *parser) skipType() error {
 	t := p.peek()
 	switch t.Kind {
 	case token.Ident, token.Void:
+		// `obj{ field: T }` is an anonymous (structural) object type. Types are erased
+		// here, so the shape only has to be consumed.
+		if t.Kind == token.Ident && t.Val == "obj" && p.peekAt(1).Kind == token.LBrace {
+			p.advance()
+			return p.skipBalancedBraces()
+		}
 		p.advance()
 		// Namespace-qualified type: serialize\Boxed, foo\bar\Baz.
 		for p.check(token.Backslash) {
@@ -385,10 +422,22 @@ func (p *parser) skipType() error {
 				return err
 			}
 		}
-		if p.check(token.Lt) {
+		// A generic instantiation: `Payload::<str, int>` (or the bare `Foo<T>`
+		// spelling). Type arguments are erased, so the identity is the bare name -
+		// the span is recorded for readType to drop, keeping `x is Payload::<str,
+		// int>` a test against `Payload`.
+		if p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt {
+			from := p.pos
+			if _, err := p.skipTypeParams(); err != nil {
+				return err
+			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+		} else if p.check(token.Lt) {
+			from := p.pos
 			if err := p.skipGenericArgs(); err != nil {
 				return err
 			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
 		}
 		if p.check(token.Question) {
 			p.advance()
@@ -423,6 +472,11 @@ func (p *parser) skipType() error {
 		}
 	case token.Fun:
 		p.advance()
+		// A function TYPE may itself be generic: `fun::<C, D>() > int`. Erased like
+		// every other type parameter, so it only has to parse.
+		if _, err := p.skipTypeParams(); err != nil {
+			return err
+		}
 		if _, err := p.eat(token.LParen); err != nil {
 			return err
 		}
@@ -458,6 +512,20 @@ func (p *parser) skipType() error {
 				return err
 			}
 		}
+		// A function TYPE carries the same error-set and yield-type suffixes a
+		// declaration does: `fn: fun (v: int) > int !> str` and
+		// `fn: fun () > int *> int?` both appear in parameter position upstream.
+		// Neither is part of the type's identity - a thrown error set and a yield
+		// type never affect assignability - so the span is recorded for readType
+		// to drop rather than folded into the annotation text.
+		for p.check(token.ErrArrow) || p.check(token.YieldArrow) {
+			from := p.pos
+			p.advance()
+			if err := p.skipType(); err != nil {
+				return err
+			}
+			p.typeTextSkips = append(p.typeTextSkips, [2]int{from, p.pos})
+		}
 		if p.check(token.Question) {
 			p.advance()
 		}
@@ -481,9 +549,23 @@ func (p *parser) readType() (string, error) {
 func (p *parser) joinTokens(from, to int) string {
 	var sb strings.Builder
 	for i := from; i < to; i++ {
+		if p.inTypeTextSkip(i) {
+			continue
+		}
 		sb.WriteString(tokenText(p.tokens[i]))
 	}
 	return sb.String()
+}
+
+// inTypeTextSkip reports whether token i falls in a span skipType consumed but
+// deliberately kept out of the reconstructed annotation text.
+func (p *parser) inTypeTextSkip(i int) bool {
+	for _, span := range p.typeTextSkips {
+		if i >= span[0] && i < span[1] {
+			return true
+		}
+	}
+	return false
 }
 
 // tokenText returns the source text for a single token.
@@ -525,6 +607,46 @@ func tokenText(t token.Token) string {
 }
 
 // skipGenericArgs skips a balanced <...> generic argument list.
+// skipTypeParams consumes an upstream `::<T, U>` clause and reports whether one was
+// present. Type parameters are ERASED: nothing in the language reflects on them at
+// runtime, so a generic function compiles to exactly the code its non-generic twin
+// would, and a call site's type arguments only have to parse.
+//
+// `::` is two Colon tokens - there is no distinct token for it - and the argument
+// list reuses skipGenericArgs, so nested `::<A::<B>>` fails for the same reason it
+// does upstream: the trailing `>>` lexes as a shift.
+func (p *parser) skipTypeParams() (bool, error) {
+	if !(p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt) {
+		return false, nil
+	}
+	p.advance()
+	p.advance()
+	if err := p.skipGenericArgs(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// skipBalancedBraces consumes a { ... } group, nesting included.
+func (p *parser) skipBalancedBraces() error {
+	if _, err := p.eat(token.LBrace); err != nil {
+		return err
+	}
+	for depth := 1; depth > 0; {
+		switch p.peek().Kind {
+		case token.LBrace:
+			depth++
+		case token.RBrace:
+			depth--
+		case token.EOF:
+			t := p.peek()
+			return fmt.Errorf("buzz: line %d:%d: unterminated anonymous object type", t.Line, t.Col)
+		}
+		p.advance()
+	}
+	return nil
+}
+
 func (p *parser) skipGenericArgs() error {
 	if _, err := p.eat(token.Lt); err != nil {
 		return err
@@ -657,35 +779,43 @@ func (p *parser) parseTryCatch() (*ast.TryStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.eat(token.Catch); err != nil {
-		return nil, err
-	}
-	// Catch-all form `catch { ... }` (upstream Buzz): no binding. The error is
-	// still pushed by the VM, so bind it to a throwaway "_" slot the body ignores.
-	errName := "_"
-	if p.check(token.LParen) {
-		p.advance()
-		nameTok, err := p.eatBindingIdent()
-		if err != nil {
-			return nil, err
-		}
-		errName = nameTok.Val
-		// Skip optional type annotation: catch (e: Type)
-		if p.check(token.Colon) {
+	out := &ast.TryStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body}
+	// Upstream allows several catch clauses, each narrowing on the error's type,
+	// with an untyped one acting as the catch-all. At least one is required.
+	for p.check(token.Catch) {
+		ct := p.advance()
+		clause := ast.CatchClause{Pos: ast.Pos{Line: ct.Line, Col: ct.Col}}
+		// Catch-all form `catch { ... }` (upstream Buzz): no binding. The error is
+		// still pushed by the VM, so bind it to a throwaway "_" slot the body ignores.
+		clause.ErrName = "_"
+		if p.check(token.LParen) {
 			p.advance()
-			if err := p.skipType(); err != nil {
+			nameTok, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			clause.ErrName = nameTok.Val
+			if p.check(token.Colon) {
+				p.advance()
+				if clause.TypeName, err = p.readType(); err != nil {
+					return nil, err
+				}
+			}
+			if _, err := p.eat(token.RParen); err != nil {
 				return nil, err
 			}
 		}
-		if _, err := p.eat(token.RParen); err != nil {
+		catch, err := p.parseBlock()
+		if err != nil {
 			return nil, err
 		}
+		clause.Body = catch
+		out.Catches = append(out.Catches, clause)
 	}
-	catch, err := p.parseBlock()
-	if err != nil {
-		return nil, err
+	if len(out.Catches) == 0 {
+		return nil, fmt.Errorf("buzz: line %d:%d: try requires at least one catch clause", t.Line, t.Col)
 	}
-	return &ast.TryStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body, ErrName: errName, Catch: catch}, nil
+	return out, nil
 }
 
 func (p *parser) parseThrow() (*ast.ThrowStmt, error) {
@@ -730,11 +860,15 @@ func (p *parser) parseWhile() (*ast.WhileStmt, error) {
 	if err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.WhileStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Body: body}, nil
+	return &ast.WhileStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Body: body, Label: label}, nil
 }
 
 func (p *parser) parseForLoop() (*ast.ForStmt, error) {
@@ -743,12 +877,16 @@ func (p *parser) parseForLoop() (*ast.ForStmt, error) {
 		return nil, err
 	}
 	out := &ast.ForStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
-	if !p.check(token.Semicolon) {
+	for !p.check(token.Semicolon) {
 		init, err := p.parseForInit()
 		if err != nil {
 			return nil, err
 		}
-		out.Init = init
+		out.Init = append(out.Init, init)
+		if !p.check(token.Comma) {
+			break
+		}
+		p.advance()
 	}
 	if _, err := p.eat(token.Semicolon); err != nil {
 		return nil, err
@@ -763,16 +901,25 @@ func (p *parser) parseForLoop() (*ast.ForStmt, error) {
 	if _, err := p.eat(token.Semicolon); err != nil {
 		return nil, err
 	}
-	if !p.check(token.RParen) {
+	for !p.check(token.RParen) {
 		post, err := p.parseAssignTail()
 		if err != nil {
 			return nil, err
 		}
-		out.Post = post
+		out.Post = append(out.Post, post)
+		if !p.check(token.Comma) {
+			break
+		}
+		p.advance()
 	}
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
+	out.Label = label
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
@@ -786,7 +933,45 @@ func (p *parser) parseForInit() (ast.Node, error) {
 	if p.check(token.Final) || p.check(token.Var) {
 		return p.parseDeclNoSemi()
 	}
+	// `for (i: int = 0; ...)` - upstream declares the loop variable with a type and
+	// no final/var keyword. The `ident :` shape is unambiguous here: an assignment
+	// tail can never carry a type annotation, so nothing else in for-init position
+	// starts this way. It binds mutable, since a for-loop's own post clause assigns
+	// to it.
+	if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon {
+		return p.parseTypedForDecl()
+	}
 	return p.parseAssignTail()
+}
+
+// parseTypedForDecl parses a keyword-less typed declaration (`i: int = 0`) for a
+// for-loop initializer. Separate from parseDecl only because that one opens by
+// consuming the final/var token this form does not have.
+func (p *parser) parseTypedForDecl() (*ast.DeclStmt, error) {
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Colon); err != nil {
+		return nil, err
+	}
+	typeAnnot, err := p.readType()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Assign); err != nil {
+		return nil, err
+	}
+	val, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.DeclStmt{
+		Pos:       ast.Pos{Line: nameTok.Line, Col: nameTok.Col},
+		Name:      nameTok.Val,
+		TypeAnnot: typeAnnot,
+		Value:     val,
+	}, nil
 }
 
 // parseDeclNoSemi parses a const/var declaration without consuming a semicolon.
@@ -832,7 +1017,57 @@ func (p *parser) parseAssignTail() (ast.Node, error) {
 		}
 		return &ast.AssignStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Target: expr, Value: val}, nil
 	}
+	if op, ok := compoundAssignOp(p.peek().Kind); ok {
+		p.advance()
+		val, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		if !isAssignable(expr) {
+			return nil, fmt.Errorf("buzz: line %d:%d: invalid assignment target", t.Line, t.Col)
+		}
+		// Desugar `x op= v` into `x = x op v`, sharing the target node so the
+		// checker and compiler see the ordinary assignment they already handle.
+		// The target is therefore evaluated twice, so a receiver with side effects
+		// (`f().n += 1`) would call f() twice where upstream calls it once; every
+		// assignable target is an identifier, field, or subscript, and only a call
+		// in that position makes the difference observable.
+		pos := ast.Pos{Line: t.Line, Col: t.Col}
+		return &ast.AssignStmt{
+			Pos:    pos,
+			Target: expr,
+			Value:  &ast.BinaryExpr{Pos: pos, Op: op, Left: expr, Right: val},
+		}, nil
+	}
 	return &ast.ExprStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: expr}, nil
+}
+
+// compoundAssignOp maps a compound-assignment token to the binary operator it
+// applies, or reports false when k is not one.
+func compoundAssignOp(k token.Kind) (string, bool) {
+	switch k {
+	case token.PlusAssign:
+		return "+", true
+	case token.MinusAssign:
+		return "-", true
+	case token.StarAssign:
+		return "*", true
+	case token.SlashAssign:
+		return "/", true
+	case token.PercentAssign:
+		return "%", true
+	case token.AmpAssign:
+		return "&", true
+	case token.PipeAssign:
+		return "|", true
+	case token.CaretAssign:
+		return "^", true
+	case token.ShlAssign:
+		return "<<", true
+	case token.ShrAssign:
+		return ">>", true
+	}
+	return "", false
 }
 
 func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
@@ -877,12 +1112,78 @@ func (p *parser) parseForeach() (*ast.ForEachStmt, error) {
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err
 	}
+	label, err := p.parseLoopLabel()
+	if err != nil {
+		return nil, err
+	}
+	out.Label = label
 	body, err := p.parseBlock()
 	if err != nil {
 		return nil, err
 	}
 	out.Body = body
 	return out, nil
+}
+
+// parseIfExpr parses the inline-if `if (cond) a else b`. Unlike the statement
+// form the else branch is mandatory: an expression has to produce a value on
+// every path. `else if` chains by recursing into the same production.
+func (p *parser) parseIfExpr() (*ast.IfExpr, error) {
+	t, _ := p.eat(token.If)
+	cond, err := p.parseParenCond()
+	if err != nil {
+		return nil, err
+	}
+	then, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.Else); err != nil {
+		return nil, err
+	}
+	els, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	return &ast.IfExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Cond: cond, Then: then, Else: els}, nil
+}
+
+// parseBlockExpr parses `from { stmts }`, a block used as an expression whose
+// value comes from an `out` statement inside it.
+func (p *parser) parseBlockExpr() (*ast.BlockExpr, error) {
+	t := p.advance() // `from`
+	p.fromDepth++
+	body, err := p.parseBlock()
+	p.fromDepth--
+	if err != nil {
+		return nil, err
+	}
+	return &ast.BlockExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Body: body}, nil
+}
+
+// parseLoopLabel parses the optional `:name` a loop header may carry between its
+// clause and its body (`while (i < 100) :here { ... }`), which `break name` and
+// `continue name` then target.
+func (p *parser) parseLoopLabel() (string, error) {
+	if !p.check(token.Colon) {
+		return "", nil
+	}
+	p.advance()
+	nameTok, err := p.eatIdent()
+	if err != nil {
+		return "", err
+	}
+	return nameTok.Val, nil
+}
+
+// parseLoopTargetLabel parses the optional loop name after `break`/`continue`.
+// Upstream writes the target bare (`break here;`), without the declaration's
+// colon.
+func (p *parser) parseLoopTargetLabel() string {
+	if !p.check(token.Ident) {
+		return ""
+	}
+	return p.advance().Val
 }
 
 // parseParenCond parses a parenthesized condition: ( expr ).
@@ -906,11 +1207,14 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	params, paramAnnots, retAnnot, yieldAnnot, body, err := p.parseFunRest()
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
+	fr, err := p.parseFunRest()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: body, Doc: t.Doc}, nil
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -935,16 +1239,25 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	if err != nil {
 		return nil, err
 	}
+	// `object Payload::<K, V>` declares type parameters. They are erased like a
+	// generic function's, so the object's identity stays its bare name and the
+	// parameters only have to parse - a field typed `K` resolves to Unknown,
+	// which is compatible with whatever the instance actually holds.
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
 	if _, err := p.eat(token.LBrace); err != nil {
 		return nil, err
 	}
 	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
-		// `static fun` declares a method called on the type (Foo.make()), with no
-		// receiver. `static` is not a keyword here (it lexes as an identifier), so
-		// match it by value only in the leading `static fun` shape.
+		// `static` marks a member that lives on the type rather than an instance:
+		// `static fun` is a method called as Foo.make() with no receiver, and a
+		// static field is one mutable value shared by every instance. It is not a
+		// keyword here (it lexes as an identifier), so match it by value; that is
+		// unambiguous because `static` is reserved and so can never be a member name.
 		isStatic := false
-		if p.check(token.Ident) && p.peek().Val == "static" && p.peekAt(1).Kind == token.Fun {
+		if p.check(token.Ident) && p.peek().Val == "static" {
 			p.advance()
 			isStatic = true
 		}
@@ -985,7 +1298,11 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			}
 			field.Default = def
 		}
-		decl.Fields = append(decl.Fields, field)
+		if isStatic {
+			decl.StaticFields = append(decl.StaticFields, field)
+		} else {
+			decl.Fields = append(decl.Fields, field)
+		}
 		if p.check(token.Comma) || p.check(token.Semicolon) {
 			p.advance()
 		}
@@ -998,6 +1315,20 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 
 func (p *parser) parseEnumDecl() (*ast.EnumDecl, error) {
 	t, _ := p.eat(token.Enum)
+	// Backing type: `enum<str> Name`. It precedes the name, so it is read before
+	// eatBindingIdent rather than alongside the other type annotations.
+	var backing string
+	if p.check(token.Lt) {
+		p.advance()
+		bt, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Gt); err != nil {
+			return nil, err
+		}
+		backing = bt
+	}
 	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
@@ -1014,19 +1345,21 @@ func (p *parser) parseEnumDecl() (*ast.EnumDecl, error) {
 	if _, err := p.eat(token.LBrace); err != nil {
 		return nil, err
 	}
-	decl := &ast.EnumDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
+	decl := &ast.EnumDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Backing: backing}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		caseTok, err := p.eatBindingIdent()
 		if err != nil {
 			return nil, err
 		}
+		var val ast.Node
 		if p.check(token.Assign) {
 			p.advance()
-			if _, err := p.parseExpr(); err != nil {
+			if val, err = p.parseExpr(); err != nil {
 				return nil, err
 			}
 		}
 		decl.Cases = append(decl.Cases, caseTok.Val)
+		decl.Values = append(decl.Values, val)
 		if p.check(token.Comma) || p.check(token.Semicolon) {
 			p.advance()
 		}
@@ -1069,16 +1402,19 @@ func (p *parser) parseBlock() (*ast.BlockStmt, error) {
 
 // ---- expression precedence climbing ----
 
-func (p *parser) parseExpr() (ast.Node, error) { return p.parseRange() }
+func (p *parser) parseExpr() (ast.Node, error) { return p.parseCoalesce() }
 
+// parseRange sits between comparison and additive, so `..` binds TIGHTER than
+// `==`: upstream writes `range == 0..10`, which at a looser precedence would
+// parse as `(range == 0)..10` and range a bool.
 func (p *parser) parseRange() (ast.Node, error) {
-	left, err := p.parseCoalesce()
+	left, err := p.parseAdditive()
 	if err != nil {
 		return nil, err
 	}
 	if p.check(token.DotDot) {
 		t := p.advance()
-		right, err := p.parseCoalesce()
+		right, err := p.parseAdditive()
 		if err != nil {
 			return nil, err
 		}
@@ -1156,7 +1492,7 @@ func (p *parser) parseEquality() (ast.Node, error) {
 }
 
 func (p *parser) parseComparison() (ast.Node, error) {
-	left, err := p.parseAdditive()
+	left, err := p.parseRange()
 	if err != nil {
 		return nil, err
 	}
@@ -1175,24 +1511,34 @@ func (p *parser) parseComparison() (ast.Node, error) {
 				op = ">="
 			}
 			t := p.advance()
-			right, err := p.parseAdditive()
+			right, err := p.parseRange()
 			if err != nil {
 				return nil, err
 			}
 			left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
 		case token.Is:
 			t := p.advance()
-			typeTok, err := p.eatIdent()
+			// readType, not eatIdent: upstream tests `x is [int]`, `x is {str: int}`,
+			// `x is int?`, `x is a\Hello`, and `x is fun (id: int) > int`. A bare
+			// identifier covers none of those. `as` one case below already reads the
+			// full type; `is` had simply never been widened to match it.
+			typStr, err := p.readType()
 			if err != nil {
 				return nil, err
 			}
-			left = &ast.IsExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: left, TypeName: typeTok.Val}
+			left = &ast.IsExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Expr: left, TypeName: typStr}
 		case token.As:
 			t := p.advance()
 			optional := false
 			if p.check(token.Question) { // `as?` — null on mismatch (upstream Buzz)
 				p.advance()
 				optional = true
+			} else if p.check(token.Bang) {
+				// `as!` — force the cast, raise on mismatch. That is already what a
+				// bare `as` does here, so this only accepts the spelling: upstream
+				// distinguishes them because its bare `as` is statically checked,
+				// while gopherbuzz resolves the cast at runtime either way.
+				p.advance()
 			}
 			typStr, err := p.readType()
 			if err != nil {
@@ -1206,7 +1552,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 }
 
 func (p *parser) parseAdditive() (ast.Node, error) {
-	left, err := p.parseMultiplicative()
+	left, err := p.parseBitwise()
 	if err != nil {
 		return nil, err
 	}
@@ -1216,13 +1562,67 @@ func (p *parser) parseAdditive() (ast.Node, error) {
 		if t.Kind == token.Minus {
 			op = "-"
 		}
-		right, err := p.parseMultiplicative()
+		right, err := p.parseBitwise()
 		if err != nil {
 			return nil, err
 		}
 		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
 	}
 	return left, nil
+}
+
+// parseBitwise parses `&`, `|`, and `^` at one shared level, which is upstream
+// Buzz's Precedence.Bitwise: tighter than `+`/`-`, looser than the shifts. An
+// `&` only reaches here in infix position; the prefix `&call()` fiber form is
+// parsed by parseUnary, so the two uses never compete.
+func (p *parser) parseBitwise() (ast.Node, error) {
+	left, err := p.parseShift()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		var op string
+		switch p.peek().Kind {
+		case token.Amp:
+			op = "&"
+		case token.Pipe:
+			op = "|"
+		case token.Caret:
+			op = "^"
+		default:
+			return left, nil
+		}
+		t := p.advance()
+		right, err := p.parseShift()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
+	}
+}
+
+func (p *parser) parseShift() (ast.Node, error) {
+	left, err := p.parseMultiplicative()
+	if err != nil {
+		return nil, err
+	}
+	for {
+		var op string
+		switch p.peek().Kind {
+		case token.Shl:
+			op = "<<"
+		case token.Shr:
+			op = ">>"
+		default:
+			return left, nil
+		}
+		t := p.advance()
+		right, err := p.parseMultiplicative()
+		if err != nil {
+			return nil, err
+		}
+		left = &ast.BinaryExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Op: op, Left: left, Right: right}
+	}
 }
 
 func (p *parser) parseMultiplicative() (ast.Node, error) {
@@ -1272,11 +1672,14 @@ func (p *parser) parseUnary() (ast.Node, error) {
 		}
 		return expr, nil
 	}
-	if p.check(token.Bang) || p.check(token.Minus) {
+	if p.check(token.Bang) || p.check(token.Minus) || p.check(token.Tilde) {
 		t := p.advance()
 		op := "!"
-		if t.Kind == token.Minus {
+		switch t.Kind {
+		case token.Minus:
 			op = "-"
+		case token.Tilde:
+			op = "~"
 		}
 		operand, err := p.parseUnary()
 		if err != nil {
@@ -1345,15 +1748,40 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 	// pendingTypeArg carries a `::<T>` generic argument from where it is parsed
 	// to the call `(` that immediately follows, so it lands on that CallExpr.
 	pendingTypeArg := ""
+	// optionalRecv is set by a `?` that introduces the next hop (`a?.b`, `a?[i]`)
+	// and consumed by that hop, which then yields null instead of erroring when
+	// its receiver is null.
+	optionalRecv := false
 	for {
 		switch p.peek().Kind {
+		case token.Question:
+			// Only `?.` and `?[` are postfix optional-chaining markers; a bare `?`
+			// belongs to a type annotation or a ternary the caller handles.
+			if next := p.peekAt(1).Kind; next != token.Dot && next != token.LBracket {
+				return node, nil
+			}
+			p.advance()
+			optionalRecv = true
 		case token.Dot:
+			// `callMe .{ ... }`: the parentheses around a lone anonymous-object
+			// argument may be omitted. A `.` followed by `{` is never member
+			// access, so the shape is unambiguous.
+			if p.peekAt(1).Kind == token.LBrace {
+				t := p.advance()
+				arg, err := p.parseAnonObjectLit()
+				if err != nil {
+					return nil, err
+				}
+				node = &ast.CallExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Callee: node, Args: []ast.Node{arg}}
+				continue
+			}
 			t := p.advance()
 			nameTok, err := p.eatIdent()
 			if err != nil {
 				return nil, err
 			}
-			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val}
+			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, OptionalRecv: optionalRecv}
+			optionalRecv = false
 		case token.Backslash:
 			// Namespace access: std\print. Resolves a member of an imported module,
 			// which is the same machinery as `.` member access on the module value.
@@ -1400,9 +1828,19 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			// expression and the error is not bound, matching upstream's call suffix.
 			if p.check(token.Catch) {
 				ct := p.advance()
-				def, err := p.parseExpr()
-				if err != nil {
-					return nil, err
+				// `call() catch void` swallows the error and yields nothing. `void`
+				// is a type keyword, not an expression, so it is matched here rather
+				// than left to parseExpr; null is what "nothing" is at runtime.
+				var def ast.Node
+				if p.check(token.Void) {
+					vt := p.advance()
+					def = &ast.NullLit{Pos: ast.Pos{Line: vt.Line, Col: vt.Col}}
+				} else {
+					d, err := p.parseExpr()
+					if err != nil {
+						return nil, err
+					}
+					def = d
 				}
 				return &ast.CatchExpr{Pos: ast.Pos{Line: ct.Line, Col: ct.Col}, Expr: node, Default: def}, nil
 			}
@@ -1421,7 +1859,8 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if _, err := p.eat(token.RBracket); err != nil {
 				return nil, err
 			}
-			node = &ast.IndexExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Index: idx, Optional: optional}
+			node = &ast.IndexExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Index: idx, Optional: optional, OptionalRecv: optionalRecv}
+			optionalRecv = false
 		case token.LBrace:
 			// `Name{...}` and the upstream-qualified `ns\Name{...}` are object
 			// literals. A namespaced type parses as a MemberExpr (`config\Bind`);
@@ -1456,7 +1895,10 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 	sawName := false
 	for !p.check(token.RParen) && !p.check(token.EOF) {
 		name := ""
-		if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon {
+		// `ident :` is a label, but `ident ::` opens a generic call argument
+		// (count::<int>(...)), so the second colon has to be excluded or every
+		// generic call nested inside another call's arguments is misread as a label.
+		if p.check(token.Ident) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind != token.Colon {
 			name = p.advance().Val
 			p.advance() // ':'
 			sawName = true
@@ -1493,7 +1935,34 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 
 func (p *parser) parsePrimary() (ast.Node, error) {
 	t := p.peek()
+	// `from` is a contextual keyword like `test`: it opens a block expression
+	// only in the unambiguous `from {` shape, so a variable or field named
+	// `from` still parses everywhere else.
+	if t.Kind == token.Ident && t.Val == "from" && p.peekAt(1).Kind == token.LBrace {
+		return p.parseBlockExpr()
+	}
 	switch t.Kind {
+	case token.If:
+		return p.parseIfExpr()
+	case token.Dot:
+		// Inferred enum case: `.one` with no receiver. Unambiguous in primary
+		// position, since member access always has an expression to its left and so
+		// never reaches here. Which enum it names is not knowable yet; the checker
+		// fills that in from the expected type.
+		if p.peekAt(1).Kind == token.LBrace {
+			// Anonymous object literal `.{ name = expr }`. Its type is structural, and
+			// gopherbuzz has no structural object runtime - but a map already is one:
+			// stored keys are reachable as members, so `.{ list = l }.list` works with
+			// no new value kind. Fields use `=`, unlike a map literal's `:`.
+			p.advance() // '.'
+			return p.parseAnonObjectLit()
+		}
+		if p.peekAt(1).Kind != token.Ident {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected an enum case name after '.'", t.Line, t.Col)
+		}
+		p.advance()
+		name := p.advance()
+		return &ast.EnumCaseExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: name.Val}, nil
 	case token.Fun:
 		return p.parseFunExpr()
 	case token.LBrace:
@@ -1589,48 +2058,71 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 // parseFunExpr parses `fun(params) rettype { body }` as an expression.
 func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	t, _ := p.eat(token.Fun)
-	params, paramAnnots, retAnnot, yieldAnnot, body, err := p.parseFunRest()
+	// A lambda can declare type parameters too: `fun::<E, F>() > int => 12`.
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
+	fr, err := p.parseFunRest()
 	if err != nil {
 		return nil, err
 	}
-	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: body}, nil
+	return &ast.FunExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body}, nil
+}
+
+// funRest is the shared tail of a function: (params) rettype *> yieldtype { body }.
+type funRest struct {
+	params      []string
+	paramAnnots []string // parallel to params
+	// paramDefaults is parallel to params, with a nil entry for a parameter that
+	// declares no `= expr` default.
+	paramDefaults []ast.Node
+	retAnnot      string
+	yieldAnnot    string
+	body          *ast.BlockStmt
 }
 
 // parseFunRest parses the shared tail of a function: (params) rettype *> yieldtype { body }.
-func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot string, yieldAnnot string, body *ast.BlockStmt, err error) {
-	if _, err = p.eat(token.LParen); err != nil {
-		return nil, nil, "", "", nil, err
+func (p *parser) parseFunRest() (funRest, error) {
+	var out funRest
+	if _, err := p.eat(token.LParen); err != nil {
+		return funRest{}, err
 	}
 	for !p.check(token.RParen) && !p.check(token.EOF) {
-		nameTok, e := p.eatBindingIdent()
-		if e != nil {
-			return nil, nil, "", "", nil, e
+		nameTok, err := p.eatBindingIdent()
+		if err != nil {
+			return funRest{}, err
 		}
-		params = append(params, nameTok.Val)
+		out.params = append(out.params, nameTok.Val)
 		// Strict parity with upstream Buzz: every parameter must be typed
 		// (`name: type`), including `_` and lambda params.
 		if !p.check(token.Colon) {
-			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: parameter %q must have a type annotation (name: type)", nameTok.Line, nameTok.Col, nameTok.Val)
+			return funRest{}, fmt.Errorf("buzz: line %d:%d: parameter %q must have a type annotation (name: type)", nameTok.Line, nameTok.Col, nameTok.Val)
 		}
-		var pa string
 		p.advance()
-		if pa, e = p.readType(); e != nil {
-			return nil, nil, "", "", nil, e
+		pa, err := p.readType()
+		if err != nil {
+			return funRest{}, err
 		}
-		paramAnnots = append(paramAnnots, pa)
+		out.paramAnnots = append(out.paramAnnots, pa)
+		var def ast.Node
 		if p.check(token.Assign) {
 			p.advance()
-			if _, e := p.parseExpr(); e != nil {
-				return nil, nil, "", "", nil, e
+			if def, err = p.parseExpr(); err != nil {
+				return funRest{}, err
 			}
+		} else if strings.HasSuffix(pa, "?") {
+			// A nullable parameter defaults to null, so a call may omit it - the
+			// same rule that lets `final hello: int?;` bind without an initializer.
+			def = &ast.NullLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}}
 		}
+		out.paramDefaults = append(out.paramDefaults, def)
 		if !p.check(token.Comma) {
 			break
 		}
 		p.advance()
 	}
-	if _, err = p.eat(token.RParen); err != nil {
-		return nil, nil, "", "", nil, err
+	if _, err := p.eat(token.RParen); err != nil {
+		return funRest{}, err
 	}
 	// Return type. With an explicit '>' arrow a return type is required, so a
 	// leading '{' there unambiguously begins a map type (e.g. fun f() > {str:
@@ -1641,23 +2133,27 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 		p.advance()
 		if p.check(token.Void) {
 			p.advance()
-			retAnnot = "void"
-		} else if retAnnot, err = p.readType(); err != nil {
-			return nil, nil, "", "", nil, err
+			out.retAnnot = "void"
+		} else {
+			rt, err := p.readType()
+			if err != nil {
+				return funRest{}, err
+			}
+			out.retAnnot = rt
 		}
 	} else if p.check(token.Void) || p.isTypeStart() {
 		// Strict parity with upstream Buzz: a return type must be introduced by '>'.
 		// `fun f() int {}` and `fun f() void {}` are rejected; write `fun f() > int {}`
 		// or, for no return value, `fun f() {}` (implicit void).
 		rt := p.peek()
-		return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: return type must be preceded by '>' (write `> %s ...`)", rt.Line, rt.Col, rt.Val)
+		return funRest{}, fmt.Errorf("buzz: line %d:%d: return type must be preceded by '>' (write `> %s ...`)", rt.Line, rt.Col, rt.Val)
 	}
 	// Consume optional !> error-set annotation: fun f() > T !> ErrType { }
 	if p.check(token.ErrArrow) {
 		p.advance()
 		if p.isTypeStart() {
 			if err := p.skipType(); err != nil {
-				return nil, nil, "", "", nil, err
+				return funRest{}, err
 			}
 		}
 	}
@@ -1666,16 +2162,20 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 		ya := p.advance()
 		if p.check(token.Void) {
 			p.advance()
-			yieldAnnot = "void"
-		} else if yieldAnnot, err = p.readType(); err != nil {
-			return nil, nil, "", "", nil, err
+			out.yieldAnnot = "void"
+		} else {
+			ya, err := p.readType()
+			if err != nil {
+				return funRest{}, err
+			}
+			out.yieldAnnot = ya
 		}
 		// Strict parity with upstream Buzz (src/Parser.zig): a fiber's yield type
 		// must be optional or void — resume returns null on completion, so the
 		// yielded type is inherently optional. Reject a non-optional yield type
 		// rather than leniently accepting it.
-		if yieldAnnot != "void" && !strings.HasSuffix(yieldAnnot, "?") {
-			return nil, nil, "", "", nil, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, yieldAnnot)
+		if out.yieldAnnot != "void" && !strings.HasSuffix(out.yieldAnnot, "?") {
+			return funRest{}, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, out.yieldAnnot)
 		}
 	}
 	// Expression-body function: `fun f(x: int) > int => expr;` desugars to a
@@ -1685,25 +2185,71 @@ func (p *parser) parseFunRest() (params []string, paramAnnots []string, retAnnot
 	// after the optional return/error/yield annotations and before the block form.
 	if p.check(token.FatArrow) {
 		arrow := p.advance()
-		expr, e := p.parseExpr()
-		if e != nil {
-			return nil, nil, "", "", nil, e
+		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
+		// A `> void` arrow body is a statement position: its value is discarded,
+		// and upstream writes an assignment there (`=> sum = sum + value`). An
+		// assignment is not an expression in Buzz, so parseExpr would stop at the
+		// target and choke on the `=`; parseAssignTail accepts both shapes and
+		// already returns a statement node.
+		var stmt ast.Node
+		if out.retAnnot == "void" {
+			s, err := p.parseAssignTail()
+			if err != nil {
+				return funRest{}, err
+			}
+			stmt = s
+		} else {
+			expr, err := p.parseExpr()
+			if err != nil {
+				return funRest{}, err
+			}
+			stmt = &ast.ReturnStmt{Pos: pos, Value: expr}
 		}
 		if p.check(token.Semicolon) {
 			p.advance()
 		}
-		pos := ast.Pos{Line: arrow.Line, Col: arrow.Col}
-		body = &ast.BlockStmt{Pos: pos, Stmts: []ast.Node{&ast.ReturnStmt{Pos: pos, Value: expr}}}
-		return params, paramAnnots, retAnnot, yieldAnnot, body, nil
+		out.body = &ast.BlockStmt{Pos: pos, Stmts: []ast.Node{stmt}}
+		return out, nil
 	}
-	body, err = p.parseBlock()
+	body, err := p.parseBlock()
 	if err != nil {
-		return nil, nil, "", "", nil, err
+		return funRest{}, err
 	}
-	return params, paramAnnots, retAnnot, yieldAnnot, body, nil
+	out.body = body
+	return out, nil
 }
 
 // parseMapLit parses {"key": val, ...}; an empty {} is an empty map.
+// parseAnonObjectLit parses `{ name = expr, ... }` (the brace of a `.{...}` literal)
+// into a map keyed by the field names.
+func (p *parser) parseAnonObjectLit() (*ast.MapExpr, error) {
+	t, err := p.eat(token.LBrace)
+	if err != nil {
+		return nil, err
+	}
+	m := &ast.MapExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Anon: true}
+	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		nameTok, err := p.eatIdent()
+		if err != nil {
+			return nil, err
+		}
+		val, err := p.parseFieldValue(nameTok)
+		if err != nil {
+			return nil, err
+		}
+		m.Keys = append(m.Keys, &ast.StringLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Val: nameTok.Val})
+		m.Values = append(m.Values, val)
+		if !p.check(token.Comma) {
+			break
+		}
+		p.advance()
+	}
+	if _, err := p.eat(token.RBrace); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (p *parser) parseMapLit() (*ast.MapExpr, error) {
 	t, err := p.eat(token.LBrace)
 	if err != nil {
@@ -1799,6 +2345,20 @@ func (p *parser) parseObjectLit(name *ast.IdentExpr) (*ast.ObjectLit, error) {
 	return p.parseObjectLitNamed(name.Name)
 }
 
+// parseFieldValue parses the value of one object-literal field whose name token
+// has already been consumed. `field = expr` is the full form; upstream also
+// allows punning a same-named variable, so a field followed by `,` or `}`
+// resolves to the identifier of the same name.
+func (p *parser) parseFieldValue(nameTok token.Token) (ast.Node, error) {
+	if p.check(token.Comma) || p.check(token.RBrace) {
+		return &ast.IdentExpr{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}, Name: nameTok.Val}, nil
+	}
+	if _, err := p.eat(token.Assign); err != nil {
+		return nil, err
+	}
+	return p.parseExpr()
+}
+
 // parseObjectLitNamed parses `{ field = val, ... }` for an object whose type
 // name is already known (a bare `Name` or the last segment of a qualified
 // `ns\Name`).
@@ -1813,10 +2373,7 @@ func (p *parser) parseObjectLitNamed(typeName string) (*ast.ObjectLit, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.eat(token.Assign); err != nil {
-			return nil, err
-		}
-		val, err := p.parseExpr()
+		val, err := p.parseFieldValue(fieldTok)
 		if err != nil {
 			return nil, err
 		}

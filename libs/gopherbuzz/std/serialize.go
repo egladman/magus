@@ -1,10 +1,11 @@
 package std
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 
+	json "github.com/egladman/magus/libs/gopherbuzz/internal/codec"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -193,15 +194,67 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 	if raw, ok := src.MapGet(boxedRawKey); ok {
 		src = raw
 	}
-	goVal, err := buzzToGo(src)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := encodeJSON(src, &buf); err != nil {
 		return vm.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
+	}
+	return vm.StrValue(buf.String()), nil
+}
+
+// encodeJSON writes v as JSON with map keys in INSERTION order.
+//
+// It exists because json.Marshal sorts the keys of a Go map, and a Buzz map is
+// ordered - mapObj carries a Keys slice, and foreach already iterates it in that
+// order. Round-tripping through buzzToGo therefore silently reordered a user's
+// object, which upstream's json test catches: it expects {"hello":...,"bye":...}
+// in the order written.
+//
+// Scalars still go through json.Marshal, so string escaping and number formatting
+// stay exactly as the standard library does them; only container ordering is ours.
+func encodeJSON(v vm.Value, buf *bytes.Buffer) error {
+	switch {
+	case v.IsList():
+		buf.WriteByte('[')
+		for i, it := range v.ListItems() {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			if err := encodeJSON(it, buf); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte(']')
+		return nil
+	case v.IsMap():
+		buf.WriteByte('{')
+		for i, k := range v.MapKeys() {
+			if i > 0 {
+				buf.WriteByte(',')
+			}
+			key, err := json.Marshal(k)
+			if err != nil {
+				return err
+			}
+			buf.Write(key)
+			buf.WriteByte(':')
+			kv, _ := v.MapGet(k)
+			if err := encodeJSON(kv, buf); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte('}')
+		return nil
+	}
+	goVal, err := buzzToGo(v)
+	if err != nil {
+		return err
 	}
 	b, err := json.Marshal(goVal)
 	if err != nil {
-		return vm.Null, fmt.Errorf("serialize.jsonEncode: %w", err)
+		return err
 	}
-	return vm.StrValue(string(b)), nil
+	buf.Write(b)
+	return nil
 }
 
 // serializeJSONDecode decodes a JSON string to a Boxed value.

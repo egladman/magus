@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
 	"os"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
 )
 

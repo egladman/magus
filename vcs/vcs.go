@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/types"
 )
@@ -148,4 +150,47 @@ func claimsExist(root string, claims []string) bool {
 		}
 	}
 	return false
+}
+
+// parseTags reads "<name>\t<rfc3339 date>\t<id>" lines, one tag per line, in the
+// order the backend emitted them, keeping only names matching pattern ("" keeps
+// all). Both git's for-each-ref --format and hg's tag template are configured to
+// produce this shape, so the two backends share one parser AND one matcher: git
+// could filter refs server-side via for-each-ref's own pattern, but then a glob
+// would mean subtly different things per backend, which is worse than the cost of
+// matching a handful of strings here.
+//
+// path.Match is the matcher because its wildcards stop at "/", so "v*" selects
+// v0.3.0 while correctly skipping a namespaced tag like backup/pre-reword. A
+// malformed pattern is a caller bug and is returned, not silently treated as
+// "match nothing". A line missing a name is skipped; an unparseable date is left
+// zero rather than dropping the tag, since the name is what callers rely on.
+func parseTags(out, pattern string) ([]types.Tag, error) {
+	if out == "" {
+		return nil, nil
+	}
+	lines := strings.Split(out, "\n")
+	tags := make([]types.Tag, 0, len(lines))
+	for _, line := range lines {
+		name, rest, ok := strings.Cut(line, "\t")
+		if !ok || name == "" {
+			continue
+		}
+		if pattern != "" {
+			match, err := path.Match(pattern, name)
+			if err != nil {
+				return nil, fmt.Errorf("vcs: tag pattern %q: %w", pattern, err)
+			}
+			if !match {
+				continue
+			}
+		}
+		when, id, _ := strings.Cut(rest, "\t")
+		tag := types.Tag{Name: name, ID: id}
+		if ts, err := time.Parse(time.RFC3339, when); err == nil {
+			tag.Date = ts
+		}
+		tags = append(tags, tag)
+	}
+	return tags, nil
 }

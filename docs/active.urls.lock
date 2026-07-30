@@ -78,12 +78,17 @@ codes/services/
 codes/services/MGS5001/
 codes/services/MGS5002/
 codes/services/MGS5003/
+concepts/
 concepts/cache/
+concepts/cache/output-refs/
+concepts/cache/remote/
 concepts/charms/
+concepts/ci-providers/
 concepts/concurrency/
 concepts/dependencies/
 concepts/engines/
 concepts/knowledge/
+concepts/knowledge/insight/
 concepts/operations/
 concepts/output-refs/
 concepts/remote-cache/
@@ -106,6 +111,7 @@ concepts/telemetry/
 concepts/volatility/
 concepts/wards/
 concepts/workspace/
+concepts/workspace/affected/
 concurrency/
 config/
 console/
@@ -137,6 +143,7 @@ flaky-builds/
 from-nx/
 getting-started/
 glossary/
+guides/
 guides/affected/
 guides/agents/
 guides/daemon/
@@ -149,6 +156,11 @@ guides/download/windows/
 guides/editor/
 guides/getting-started/
 guides/insight/
+guides/integrations/
+guides/integrations/agents/
+guides/integrations/daemon/
+guides/integrations/editor/
+guides/integrations/mcp/
 guides/mcp/
 guides/testing/
 guides/tips/
@@ -175,6 +187,7 @@ manpage/magus-where/
 manpage/magus-x/
 manpage/magus/
 mcp/
+migrating/
 migrating/breaking-changes/
 migrating/from-nx/
 modules/
@@ -207,6 +220,7 @@ public/release/index.json
 public/release/v0.1.0/
 public/release/v0.2.0/
 public/release/v0.2.1/
+reference/
 reference/buzz/
 reference/buzz/archive/
 reference/buzz/charm/
@@ -231,6 +245,9 @@ reference/buzz/uuid/
 reference/buzz/vcs/
 reference/buzz/xml/
 reference/buzz/yaml/
+reference/cli/
+reference/codes/
+reference/codes/auth/
 reference/codes/auth/MGS9001/
 reference/codes/auth/MGS9002/
 reference/codes/auth/MGS9003/
@@ -251,6 +268,12 @@ reference/codes/magusfile/MGS1005/
 reference/codes/magusfile/MGS1006/
 reference/codes/magusfile/MGS1007/
 reference/codes/magusfile/MGS1008/
+reference/codes/magusfile/MGS1009/
+reference/codes/magusfile/MGS1010/
+reference/codes/magusfile/MGS1011/
+reference/codes/magusfile/MGS1012/
+reference/codes/magusfile/MGS1013/
+reference/codes/magusfile/MGS1014/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -282,6 +305,8 @@ reference/config/
 reference/console/
 reference/diagnostics/
 reference/faq/
+reference/logging/
+reference/manpage/
 reference/manpage/magus-affected/
 reference/manpage/magus-completion/
 reference/manpage/magus-config/
@@ -291,6 +316,7 @@ reference/manpage/magus-graph/
 reference/manpage/magus-init/
 reference/manpage/magus-insight/
 reference/manpage/magus-ls/
+reference/manpage/magus-man/
 reference/manpage/magus-run/
 reference/manpage/magus-self/
 reference/manpage/magus-server/

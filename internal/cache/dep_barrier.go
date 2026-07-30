@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -20,6 +21,17 @@ func DepKey(project, target string) string {
 
 // stepKey is the node key for s itself.
 func stepKey(s Step) string { return DepKey(s.ProjectPath, s.Target) }
+
+// formatCycle renders a node-key cycle for a human. The keys carry nodeKeySep, a raw
+// control byte, so printing them with %v puts an unprintable character in a user-facing
+// error; this spells the separator out and arrows the hops in the order they close.
+func formatCycle(cycle []string) string {
+	hops := make([]string, len(cycle))
+	for i, k := range cycle {
+		hops[i] = strings.Replace(k, nodeKeySep, " ", 1)
+	}
+	return strings.Join(hops, " -> ")
+}
 
 // depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
@@ -142,7 +154,7 @@ func checkAcyclic(steps []Step) error {
 			continue
 		}
 		if cyc := visit(k); cyc != nil {
-			return fmt.Errorf("cache: RunAll: dependency cycle: %v", cyc)
+			return fmt.Errorf("cache: RunAll: dependency cycle: %s", formatCycle(cyc))
 		}
 	}
 	return nil

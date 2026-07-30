@@ -40,6 +40,38 @@ var Magus = Module{
 			Impl:    MagusCmd,
 		},
 		{
+			Name:    "ls",
+			Doc:     "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusLs,
+		},
+		{
+			Name: "affected",
+			Doc:  "Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusAffected,
+		},
+		{
+			Name:    "graph",
+			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Impl:    MagusGraph,
+		},
+		{
+			Name: "where",
+			Doc:  "Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString},
+			},
+			Returns: []Ret{{Type: TypeString}},
+			Impl:    MagusWhere,
+		},
+		{
 			Name: "run",
 			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
 			Args: []Arg{
@@ -129,6 +161,74 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
 	"run": true, "describe": true, "insight": true, "doctor": true,
+}
+
+// MagusLs lists the workspace's projects from the workspace already open on ctx.
+//
+// It is the first of the read-only verbs served IN-PROCESS. The typed methods below it
+// (run, describe, insight, doctor) and magus.cmd all fork a full magus subprocess via
+// runMagus: a process spawn, a second workspace discovery and load, a JSON encode, and a
+// Buzz-side parse - to answer a question this process already has the answer to. A read
+// that mutates nothing has no reason to pay that, and the domain method it needs is
+// already typed (types.WorkspaceRepository.DescribeProjects).
+//
+// The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
+// present for every magusfile target. A caller outside that path (a bare Buzz script
+// run through `magus buzz`) has none, hence the guard.
+func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
+	}
+	return ws.DescribeProjects(), nil
+}
+
+// MagusAffected computes the affected project set in-process. See MagusLs for why
+// the read-only verbs do not fork.
+//
+// It deliberately does NOT swallow ErrAffectedFallback. When the VCS cannot produce a
+// diff, magus selects every project as a safety net (MGS1010); a magusfile branching on
+// this result needs to know that happened, because "nothing changed" and "we could not
+// tell what changed" call for opposite decisions.
+func MagusAffected(ctx context.Context, base string) (types.AffectedResult, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.AffectedResult{}, errors.New("magus.affected: no workspace on the context (callable from a magusfile target, not a bare script)")
+	}
+	res, err := ws.Affected(ctx, base)
+	if err != nil {
+		return types.AffectedResult{}, err
+	}
+	return *res, nil
+}
+
+// MagusWhere returns the project path containing dir, or "" when dir is inside none.
+// "" rather than an error: asking whether a path is inside a project is a question, and
+// "no" is a valid answer a magusfile branches on.
+func MagusWhere(ctx context.Context, dir string) (string, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return "", errors.New("magus.where: no workspace on the context (callable from a magusfile target, not a bare script)")
+	}
+	p, ok := ws.Where(dir)
+	if !ok {
+		return "", nil
+	}
+	return p.Path, nil
+}
+
+// MagusGraph returns the project dependency graph as a flat record. See MagusLs for
+// why the read-only verbs are served in-process.
+func MagusGraph(ctx context.Context) (types.GraphView, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.GraphView{}, errors.New("magus.graph: no workspace on the context (callable from a magusfile target, not a bare script)")
+	}
+	g, err := ws.Graph()
+	if err != nil {
+		return types.GraphView{}, err
+	}
+	return g.View(), nil
 }
 
 // MagusCmd is the escape hatch: it runs `magus <args>` for any subcommand. It

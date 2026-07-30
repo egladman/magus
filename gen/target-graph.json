@@ -3,6 +3,7 @@
   "projects": [
     {
       "path": ".",
+      "name": "plans-buzz-parity-handoff-9b8119",
       "engine": "buzz",
       "nodes": [
         {
@@ -63,7 +64,9 @@
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
           "outputs": [
-            "manpage/*.1"
+            {
+              "glob": "manpage/*.1"
+            }
           ]
         },
         {
@@ -71,7 +74,9 @@
           "declared": "bindings_generate",
           "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
           "outputs": [
-            "host/gen/*.go"
+            {
+              "glob": "host/gen/*.go"
+            }
           ]
         },
         {
@@ -84,7 +89,9 @@
           "declared": "mocks_generate",
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
           "outputs": [
-            "**/gen/mocks/*.go"
+            {
+              "glob": "**/gen/mocks/*.go"
+            }
           ]
         },
         {
@@ -97,7 +104,9 @@
           "declared": "md_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "outputs": [
-            "MAGUS.md"
+            {
+              "glob": "MAGUS.md"
+            }
           ]
         },
         {
@@ -105,12 +114,17 @@
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
           "outputs": [
-            "gen/*.json"
+            {
+              "glob": "gen/*.json"
+            }
           ]
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary."
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
+          "charms": [
+            "gha"
+          ]
         },
         {
           "name": "generate",
@@ -144,7 +158,9 @@
             }
           ],
           "outputs": [
-            "dist/*"
+            {
+              "glob": "dist/*"
+            }
           ]
         },
         {
@@ -171,8 +187,11 @@
           ]
         },
         {
-          "name": "coverage",
-          "doc": "coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge.",
+          "name": "test",
+          "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
+          "dependencies": [
+            "format"
+          ],
           "charms": [
             "rw"
           ],
@@ -228,23 +247,8 @@
           ]
         },
         {
-          "name": "test",
-          "doc": "Formats first, then runs the Go test suite.",
-          "dependencies": [
-            "format"
-          ],
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-test"
-              ]
-            }
-          ]
-        },
-        {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint.",
+          "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
           "dependencies": [
             "format"
           ],
@@ -281,13 +285,11 @@
         },
         {
           "name": "ci",
-          "doc": "Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output.",
+          "doc": "Runs the CI gates through their declared dependencies.",
           "dependencies": [
-            "generate",
             "lint",
             "build",
-            "test",
-            "coverage"
+            "test"
           ]
         },
         {
@@ -309,6 +311,7 @@
     },
     {
       "path": "cmd/magus/starter",
+      "name": "cmd/magus/starter",
       "engine": "buzz",
       "nodes": [
         {
@@ -357,6 +360,7 @@
     },
     {
       "path": "console",
+      "name": "console",
       "engine": "buzz",
       "nodes": [
         {
@@ -377,11 +381,17 @@
           ],
           "charms": [
             "rw"
+          ],
+          "cross_dependencies": [
+            {
+              "project": ".",
+              "target": "graph-generate"
+            }
           ]
         },
         {
           "name": "lint",
-          "doc": "lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`.",
+          "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
           "dependencies": [
             "preflight"
           ],
@@ -396,6 +406,7 @@
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
           "dependencies": [
+            "preflight",
             "lint",
             "test",
             "build"
@@ -403,11 +414,13 @@
         }
       ],
       "depends_on": [
+        ".",
         "libs/textsearch"
       ]
     },
     {
       "path": "docs",
+      "name": "docs",
       "engine": "buzz",
       "nodes": [
         {
@@ -444,16 +457,29 @@
             }
           ],
           "outputs": [
-            "reference/buzz/*.md",
-            "concepts/spells/*.md",
-            "concepts/spells.md",
-            "reference/manpage/*.md",
-            "concepts/knowledge.md"
+            {
+              "glob": "reference/buzz/*.md"
+            },
+            {
+              "glob": "reference/config.md"
+            },
+            {
+              "glob": "concepts/spells/*.md"
+            },
+            {
+              "glob": "concepts/spells.md"
+            },
+            {
+              "glob": "reference/manpage/*.md"
+            },
+            {
+              "glob": "concepts/knowledge.md"
+            }
           ]
         },
         {
           "name": "generate",
-          "doc": "generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed.",
+          "doc": "generate is the full publication and drift gate.",
           "dependencies": [
             "preflight",
             "content-generate",
@@ -543,16 +569,18 @@
         },
         {
           "name": "render",
-          "doc": "render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate)."
+          "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks."
         }
       ],
       "depends_on": [
+        ".",
         "libs/gopherbuzz",
         "libs/textsearch"
       ]
     },
     {
       "path": "libs/diag",
+      "name": "libs/diag",
       "engine": "buzz",
       "nodes": [
         {
@@ -644,6 +672,7 @@
     },
     {
       "path": "libs/gopherbuzz",
+      "name": "libs/gopherbuzz",
       "engine": "buzz",
       "nodes": [
         {
@@ -735,11 +764,19 @@
           "name": "pgo-generate",
           "declared": "pgo_generate",
           "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
+        },
+        {
+          "name": "conformance",
+          "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
+          "dependencies": [
+            "preflight"
+          ]
         }
       ]
     },
     {
       "path": "libs/textsearch",
+      "name": "libs/textsearch",
       "engine": "buzz",
       "nodes": [
         {
@@ -787,6 +824,7 @@
     },
     {
       "path": "proto",
+      "name": "proto",
       "engine": "buzz",
       "nodes": [
         {

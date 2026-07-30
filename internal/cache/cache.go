@@ -23,7 +23,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 )
@@ -49,6 +51,14 @@ type Cache struct {
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
 	evictMu        sync.Mutex    // serialises evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	remote         RemoteBackend // optional remote backend; nil = local-only
+	// annotator folds failure output and raises notices for whichever CI
+	// provider is running the job; Nop off CI, so call sites never branch.
+	// annotateMu serialises a whole failure block (group open, dump, group
+	// close): projects run concurrently, and a peer's output landing between
+	// a group's markers would fold that peer's log into this project's
+	// section.
+	annotator  annotate.Annotator
+	annotateMu sync.Mutex
 
 	// Remote-artifact signing: signer signs on push, verifier authenticates on
 	// import. signingSeed/trustedKeys hold the raw option inputs until Open builds
@@ -77,14 +87,27 @@ type Step struct {
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
 	// The field itself is not written into the key - only the resulting file set is, so
 	// two ignore sets that yield the same files hash identically.
-	IgnoreDirs      []string
-	EnvAllow        []string // env var names whose values contribute to the key
-	Outputs         []string // globs snapshotted into cache and replayed on hit
+	IgnoreDirs []string
+	EnvAllow   []string // env var names whose values contribute to the key
+	Outputs    []string // globs snapshotted into cache and replayed on hit
+	// RequiredOutputs is the subset of Outputs that must each match at least one file,
+	// rather than the whole set merely matching something. It carries the globs another
+	// project's build order depends on (a cross-project output), where producing nothing
+	// is a build failure rather than an empty result: the manifest would omit the file
+	// and later cache hits would replay a partial output set into a tree this target does
+	// not own. Ordinary outputs stay lenient - a glob that legitimately matches nothing
+	// is common, and only a total miss is suspicious.
+	RequiredOutputs []string
 	Deps            []string // upstream project hashes folded into the key
 	DependsOn       []string // upstream project paths for scheduling (not hashed)
 	WorkspaceRoot   string
 	Target          string   // mixed into key to distinguish targets on the same sources
 	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
+	// ExtraArgs are the args after `--`, forwarded to the target. They change what
+	// the target does, so like Charms they MUST key the cache: without them a run
+	// with different args replays the previous run's result. Order is significant
+	// (`-run X` is not `X -run`), so unlike Charms they are never sorted.
+	ExtraArgs       []string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
 	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
 	NoCache         bool     // when true, always run fn; never replay or snapshot (long-running targets)
@@ -159,6 +182,8 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 		logLevel: defaultLevel,
 		mtimes:   newMtimeStore(dir, log),
 		outputs:  NewOutputStore(dir),
+		// Annotations go to stderr alongside the failure dump they wrap.
+		annotator: annotate.Detect(os.Stderr),
 	}
 	for _, o := range opts {
 		o(c)
@@ -171,6 +196,16 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 	}
 	warnIfCoarseMtimeResolution(dir, c.log)
 	return c, nil
+}
+
+// annotations returns the CI annotator, falling back to Nop for a Cache
+// built as a struct literal rather than through Open. Tests do that, and a
+// nil interface would panic on the first Active call.
+func (c *Cache) annotations() annotate.Annotator {
+	if c.annotator == nil {
+		return annotate.Nop{}
+	}
+	return c.annotator
 }
 
 // initSigning builds the signer and verifier from the raw option inputs, so a
@@ -242,6 +277,13 @@ func (c *Cache) Fresh(ctx context.Context, s Step) (bool, error) {
 // otherwise fn runs and its outputs are snapshotted. Per-hash locking prevents
 // manifest races when multiple RunAll goroutines share the same key.
 func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error, opts ...RunOption) (Result, error) {
+	// One recorder per step, so remote-cache waiting is attributed to the target that
+	// waited rather than smeared across the run. Installed here because Run is the only
+	// place a step's context is established, and both the hit and miss paths report from
+	// it below.
+	netRec := &httpx.Recorder{}
+	ctx = httpx.WithRecorder(ctx, netRec)
+
 	rc := &runCtx{step: &s}
 	for _, o := range opts {
 		o(rc)
@@ -369,12 +411,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				}
 				c.log.Info(
 					event,
-					slog.String("project", s.ProjectPath),
-					slog.String("label", s.Label),
-					slog.String("target", reproTarget(s)),
-					slog.Int64("duration", int64(result.Duration)),
-					slog.String("hash", shortHash(hash)),
-					slog.String("ref", ref),
+					append(netAttrs(netRec),
+						slog.String("project", s.ProjectPath),
+						slog.String("label", s.Label),
+						slog.String("target", reproTarget(s)),
+						slog.Int64("duration", int64(result.Duration)),
+						slog.String("hash", shortHash(hash)),
+						slog.String("ref", ref),
+					)...,
 				)
 				result.Ref = ref
 				if rc.onHit != nil {
@@ -450,11 +494,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	result.Ref = ref
 	c.log.Info(
 		"cache.miss",
-		slog.String("project", s.ProjectPath),
-		slog.String("label", s.Label),
-		slog.String("target", reproTarget(s)),
-		slog.Int64("duration", int64(result.Duration)),
-		slog.String("ref", ref),
+		append(netAttrs(netRec),
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.Int64("duration", int64(result.Duration)),
+			slog.String("ref", ref),
+		)...,
 	)
 	if rc.onMiss != nil {
 		rc.onMiss(&result)
@@ -638,7 +684,16 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := lim.AcquireN(gctx, slots); err != nil {
 				return err
 			}
-			defer lim.ReleaseN(slots)
+			// Report occupancy as it changes, so an interactive run can show
+			// a live pool counter. Emitted on both edges of the slot's life:
+			// once here (this step is now running) and once after release
+			// (the slot is free again). Handlers that do not render a status
+			// line ignore the event, so piped and CI output are unchanged.
+			c.logPool(gctx, lim)
+			defer func() {
+				lim.ReleaseN(slots)
+				c.logPool(gctx, lim)
+			}()
 			if slog.Default().Enabled(gctx, levelTrace) {
 				slog.LogAttrs(gctx, levelTrace, "schedule.run",
 					slog.String("project", s.ProjectPath), slog.String("target", s.Target),
@@ -1020,34 +1075,74 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	}
 
 	if runErr != nil {
+		// Under GitHub Actions, fold the dump into a collapsible section and
+		// raise the failure itself as an annotation. The dump is verbose and
+		// belongs behind a fold; the annotation is what reaches the pull
+		// request, so a reviewer sees which target failed without opening the
+		// log at all. Groups are cosmetic elsewhere, so nothing changes for
+		// any other host.
+		ann := c.annotations()
+		if ann.Active() {
+			c.annotateMu.Lock()
+			defer c.annotateMu.Unlock()
+			what := projectPath
+			if target != "" {
+				what += " " + target
+			}
+			// Expanded, not folded: a failure is the one thing the reader must
+			// not have to click for. Providers that cannot express an expanded
+			// section leave the output inline instead of hiding it.
+			groupID := "magus-fail-" + what
+			_ = ann.StartGroup(annotate.Group{ID: groupID, Title: "failed: " + what})
+			defer func() {
+				_ = ann.EndGroup(groupID)
+				_ = ann.Annotate(annotate.Annotation{
+					Level:   annotate.LevelError,
+					Title:   "magus: " + what,
+					File:    projectPath,
+					Message: runErr.Error(),
+				})
+			}()
+		}
 		switch {
 		case c.silent:
-			// Bound the dump to the log's tail and keep the full log so its path resolves.
+			// Bound the dump AND filter it: a plain tail of a test log is mostly
+			// successful lines, so the diagnostics that explain the failure scroll
+			// off the top exactly when they are the only thing wanted. Use the same
+			// diagnostic-focused excerpt the default display uses, and keep the
+			// full-log path so nothing is unreachable.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
-				tail, omitted := tailLines(data, maxFailTailLines)
+				excerpt, omitted := failureExcerpt(data, maxFailTailLines)
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
 				if omitted > 0 {
-					_, _ = fmt.Fprintf(os.Stderr, "... %d earlier line(s) omitted; full log: %s\n", omitted, logPath)
+					_, _ = fmt.Fprintf(os.Stderr, "... %d line(s) omitted; showing likely diagnostics; full log: %s\n", omitted, logPath)
 				}
-				_, _ = os.Stderr.Write(tail)
-				_, _ = fmt.Fprintln(os.Stderr)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
+				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
+					_, _ = fmt.Fprintln(os.Stderr)
+				}
 			}
 		case collapse:
 			// The live view (status + indented stage lines) went to stderr while the
-			// project ran. On failure replay the raw, unindented subprocess output to
-			// stdout so it stays copy/paste and pipe friendly (2>/dev/null yields just
-			// the failures). The header is part of the live view, hence stderr.
+			// project ran. Show a small, diagnostic-focused excerpt rather than replaying
+			// the entire raw log: the latter often hides the cause under successful test
+			// lines. The cache error emitted immediately afterward supplies the output
+			// ref for the complete, verbatim log.
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = os.Stdout.Write(data)
-				if data[len(data)-1] != '\n' {
-					_, _ = fmt.Fprintln(os.Stdout)
+				excerpt, omitted := failureExcerpt(data, maxFailureExcerptLines)
+				if omitted > 0 {
+					_, _ = fmt.Fprintf(os.Stderr, "... %d log line(s) omitted; showing likely diagnostics\n", omitted)
+				}
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(excerpt)))
+				if len(excerpt) > 0 && excerpt[len(excerpt)-1] != '\n' {
+					_, _ = fmt.Fprintln(os.Stderr)
 				}
 			}
 		case quiet:
 			if data, readErr := os.ReadFile(logPath); readErr == nil && len(data) > 0 {
 				_, _ = fmt.Fprintf(os.Stderr, "\n-- %s (failed) --\n", projectPath)
-				_, _ = os.Stderr.Write(data)
+				_, _ = io.WriteString(os.Stderr, ann.Quote(string(data)))
 				_, _ = fmt.Fprintln(os.Stderr)
 			}
 		}
@@ -1056,4 +1151,15 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 		// `magus query ref...`. It is overwritten on the next run of the same key.
 	}
 	return rawBuf.Bytes(), runErr
+}
+
+// netAttrs returns the remote-I/O attribute for a step, or nothing when the step did
+// no remote work. Absent rather than zero: a "remote: 0s" on every local build is noise
+// that trains people to skip the line, and the number is only interesting when it is
+// large enough to explain a wait.
+func netAttrs(rec *httpx.Recorder) []any {
+	if rec.Calls() == 0 {
+		return nil
+	}
+	return []any{slog.Int64("remote_ns", int64(rec.Elapsed()))}
 }

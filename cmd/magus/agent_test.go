@@ -1,82 +1,86 @@
 package main
 
 import (
-	"io/fs"
+	"archive/tar"
+	"bytes"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/docs"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestEmbeddedSkillsAreWellFormed guards that every shipped SKILL.md carries the
-// Agent Skills frontmatter (name + description) an agent host requires - a broken
-// skill would install silently and never trigger.
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
-	var checked int
-	err := fs.WalkDir(skillFS, "skills", func(p string, d fs.DirEntry, err error) error {
-		require.NoError(t, err)
-		if d.IsDir() || filepath.Base(p) != "SKILL.md" {
-			return nil
-		}
-		checked++
-		b, err := skillFS.ReadFile(p)
-		require.NoError(t, err)
-		fm, ok := docs.ParseFrontmatter(string(b))
-		require.True(t, ok, "%s must open with YAML frontmatter", p)
-		assert.NotEmpty(t, fm.Description, "%s needs a description", p)
-		// name: is required by the Agent Skills spec but is not a docs-frontmatter field,
-		// so check the block carries it directly.
-		assert.Contains(t, string(b), "\nname: ", "%s needs a name", p)
-		// User-facing skill text follows the plain-ASCII message rule.
-		for _, r := range string(b) {
-			require.LessOrEqual(t, r, rune(127), "%s must be plain ASCII", p)
-		}
-		return nil
-	})
+	skills, err := agentSkills.EmbeddedSkills()
 	require.NoError(t, err)
-	assert.Equal(t, 6, checked, "expected the magus-query, magus-run, magus-vcs, magus-architecture, magus-memory, and magus-docs skills")
+	require.Len(t, skills, 8)
+	for _, skill := range skills {
+		assert.NotEmpty(t, skill.Name)
+		assert.NotEmpty(t, skill.Description)
+		assert.NotEmpty(t, skill.Body)
+		for _, r := range agentSkills.RenderSkill(skill) {
+			require.LessOrEqual(t, r, byte(127), "%s must be plain ASCII", skill.Name)
+		}
+	}
+}
+
+func TestRenderAgentSkill(t *testing.T) {
+	got := string(agentSkills.RenderSkill(agent.AgentSkill{Name: "magus-test", Description: "Does one thing.", Body: "# Test\n\nDo it."}))
+	want := "---\nname: magus-test\ndescription: \"Does one thing.\"\n---\n\n# Test\n\nDo it.\n"
+	assert.Equal(t, want, got)
 }
 
 // TestAgentsSectionIsPlainASCII holds the AGENTS.md block to the same message rule.
 func TestAgentsSectionIsPlainASCII(t *testing.T) {
-	require.NotEmpty(t, agentsSection)
-	for _, r := range agentsSection {
+	require.NotEmpty(t, agentSkills.Section())
+	for _, r := range agentSkills.Section() {
 		require.LessOrEqual(t, r, rune(127), "agents-section.md must be plain ASCII")
 	}
 }
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := installSkillTree(dir, ".claude/skills", false)
+	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
-	skillPath := filepath.Join(dir, ".claude/skills/magus-query/SKILL.md")
-	assert.Contains(t, written, ".claude/skills/magus-query/SKILL.md")
+	const rel = ".claude/skills/magus-query/SKILL.md"
+	skillPath := filepath.Join(dir, rel)
+	assert.Contains(t, written, rel)
 
 	body, err := os.ReadFile(skillPath)
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(string(body), "---\n"), "frontmatter still leads the file")
-	assert.Contains(t, string(body), "agent-skill-version:", "install stamps the drift footer")
-	assert.Contains(t, string(body), "knowledge-schema-version:")
+	skills, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+	var query agent.AgentSkill
+	for _, skill := range skills {
+		if skill.Name == "magus-query" {
+			query = skill
+			break
+		}
+	}
+	require.NotEmpty(t, query.Name)
+	assert.Equal(t, string(agentSkills.StampSkill(agentSkills.RenderSkill(query))), string(body))
 }
 
 // TestInstallSkillTreeDestinationsShareBytes proves the host-agnostic promise:
 // every destination receives byte-identical files, only the directory differs.
 func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
-	for _, dest := range wellKnownSkillDirs {
-		_, err := installSkillTree(dir, dest, false)
+	dests := agent.WellKnownSkillDirs()
+	for _, dest := range dests {
+		_, err := agentSkills.WriteSkillTree(dir, dest, false)
 		require.NoError(t, err)
 	}
-	first, err := os.ReadFile(filepath.Join(dir, wellKnownSkillDirs[0], anchorSkillRel))
+	first, err := os.ReadFile(filepath.Join(dir, dests[0], "magus-query/SKILL.md"))
 	require.NoError(t, err)
-	for _, dest := range wellKnownSkillDirs[1:] {
-		other, err := os.ReadFile(filepath.Join(dir, dest, anchorSkillRel))
+	for _, dest := range dests[1:] {
+		other, err := os.ReadFile(filepath.Join(dir, dest, "magus-query/SKILL.md"))
 		require.NoError(t, err)
 		assert.Equal(t, string(first), string(other), "destination %s must receive identical bytes", dest)
 	}
@@ -84,15 +88,50 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := installSkillTree(dir, ".claude/skills", false)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
 
-	_, err = installSkillTree(dir, ".claude/skills", false)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = installSkillTree(dir, ".claude/skills", true)
+	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true)
 	assert.NoError(t, err, "--force overwrites")
+}
+
+func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
+	dir := t.TempDir()
+	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false)
+	require.Error(t, err, "an absolute destination must be refused")
+	assert.Contains(t, err.Error(), "outside the working tree")
+
+	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false)
+	require.Error(t, err, "a tilde-prefixed destination must be refused")
+	assert.Contains(t, err.Error(), "outside the working tree")
+}
+
+func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
+	dir := t.TempDir()
+	body, err := agentSkills.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	require.NotEmpty(t, body)
+
+	// Piping to tar -xf - -C <dir> is the supported install path; simulate it
+	// by writing body to a tempfile and extracting with archive/tar.
+	tmp := filepath.Join(dir, "skills.tar")
+	require.NoError(t, os.WriteFile(tmp, body, 0o644))
+	out := filepath.Join(dir, "out")
+	require.NoError(t, os.MkdirAll(out, 0o755))
+	extractTar(t, tmp, out)
+
+	first, err := os.ReadFile(filepath.Join(out, ".claude/skills", "magus-query", "SKILL.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(first), "name: magus-query")
+
+	// Reproducibility: identical bytes on a second call (no timestamps in body).
+	body2, err := agentSkills.SkillTar(".claude/skills")
+	require.NoError(t, err)
+	assert.Equal(t, body, body2, "SkillTar must be byte-stable across calls")
 }
 
 func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
@@ -100,17 +139,18 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 	path := filepath.Join(dir, "AGENTS.md")
 
 	// No AGENTS.md: created holding just the managed section.
-	written, err := installAgentsSection(dir)
+	written, err := agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"AGENTS.md"}, written)
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(body), "# AGENTS.md\n"))
 	assert.Contains(t, string(body), "magus:skills:begin")
 	assert.Contains(t, string(body), "agent-skill-version:")
 
 	// Existing AGENTS.md with other content: section appended, content preserved.
 	require.NoError(t, os.WriteFile(path, []byte("# My agents notes\n\nkeep me\n"), 0o644))
-	_, err = installAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	body, err = os.ReadFile(path)
 	require.NoError(t, err)
@@ -118,7 +158,7 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 	assert.Contains(t, string(body), "magus:skills:begin")
 
 	// Re-install: the section is replaced in place, not duplicated.
-	_, err = installAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 	body, err = os.ReadFile(path)
 	require.NoError(t, err)
@@ -127,16 +167,16 @@ func TestInstallAgentsSectionCreatesReplacesPreserves(t *testing.T) {
 }
 
 func TestStampSkillAppendsExactlyOneFooter(t *testing.T) {
-	out := string(stampSkill([]byte("---\nname: x\n---\nbody\n")))
+	out := string(agentSkills.StampSkill([]byte("---\nname: x\n---\nbody\n")))
 	assert.Equal(t, 1, strings.Count(out, "generated by: magus agent install"))
 	assert.True(t, strings.HasSuffix(out, "-->\n"), "footer is the last line")
 }
 
 func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
-	out := string(stampSkill([]byte("---\nname: x\ndescription: y\n---\nbody\n")))
+	out := string(agentSkills.StampSkill([]byte("---\nname: x\ndescription: y\n---\nbody\n")))
 	// Provenance lands inside the frontmatter (before the closing ---), leaving the
 	// source name/description ahead of it byte-for-byte.
-	assert.Contains(t, out, "---\nname: x\ndescription: y\nlicense: "+skillLicense+"\n")
+	assert.Contains(t, out, "---\nname: x\ndescription: y\nlicense: GPL-3.0-or-later\n")
 	assert.Contains(t, out, "compatibility: any-agent\n")
 	assert.Contains(t, out, "\n---\nbody\n", "closing --- and body follow the provenance")
 	fmStart := strings.Index(out, "---")
@@ -144,23 +184,18 @@ func TestStampSkillInjectsProvenanceInsideFrontmatter(t *testing.T) {
 	assert.Contains(t, out[:fmStart+3+fmEnd], "agent-skill-version:", "version metadata is within the frontmatter")
 }
 
-func TestInjectSkillProvenanceLeavesFrontmatterlessBodyAlone(t *testing.T) {
-	body := []byte("no frontmatter here\n")
-	assert.Equal(t, body, injectSkillProvenance(body))
-}
-
 func TestCheckSkillStatusesNothingInstalled(t *testing.T) {
-	assert.Empty(t, checkSkillStatuses(t.TempDir()))
+	assert.Empty(t, agentSkills.CheckStatuses(t.TempDir()))
 }
 
 func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
-	_, err := installSkillTree(dir, ".claude/skills", false)
+	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false)
 	require.NoError(t, err)
-	_, err = installAgentsSection(dir)
+	_, err = agentSkills.WriteAgentsSection(dir)
 	require.NoError(t, err)
 
-	statuses := checkSkillStatuses(dir)
+	statuses := agentSkills.CheckStatuses(dir)
 	require.Len(t, statuses, 2, "one status per installed location")
 	for _, s := range statuses {
 		assert.True(t, s.Installed, "%s installed", s.Location)
@@ -175,8 +210,8 @@ func TestCheckSkillStatusesStale(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude/skills/magus-query"), 0o755))
 	// A footer stamped with an older skill version is stale.
 	stale := "---\nname: x\n---\nbody\n<!-- agent-skill-version: 0; knowledge-schema-version: 1 -->\n"
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude/skills", anchorSkillRel), []byte(stale), 0o644))
-	statuses := checkSkillStatuses(dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude/skills", "magus-query/SKILL.md"), []byte(stale), 0o644))
+	statuses := agentSkills.CheckStatuses(dir)
 	require.Len(t, statuses, 1)
 	assert.True(t, statuses[0].Stale)
 	assert.Contains(t, statuses[0].Detail, "--force")
@@ -185,8 +220,8 @@ func TestCheckSkillStatusesStale(t *testing.T) {
 func TestCheckSkillStatusesNoFooter(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".claude/skills/magus-query"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude/skills", anchorSkillRel), []byte("---\nname: x\n---\nno footer\n"), 0o644))
-	statuses := checkSkillStatuses(dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".claude/skills", "magus-query/SKILL.md"), []byte("---\nname: x\n---\nno footer\n"), 0o644))
+	statuses := agentSkills.CheckStatuses(dir)
 	require.Len(t, statuses, 1)
 	assert.True(t, statuses[0].Stale, "a stamp-less install reads as stale (predates versioning)")
 }
@@ -196,7 +231,7 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 func TestCheckSkillStatusesIgnoresForeignAgentsMD(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# their file\n"), 0o644))
-	assert.Empty(t, checkSkillStatuses(dir))
+	assert.Empty(t, agentSkills.CheckStatuses(dir))
 }
 
 // TestEvaluateBashGuard pins the guard's decision table: destructive whole-tree
@@ -221,16 +256,72 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git checkout main"},
 		{command: "git checkout -b feat/x"},
 		{command: "git restore .", deny: true},
-		{command: "git restore cmd/magus/agent.go"},
+		// A path-scoped revert advises now: discarding a file because you did not
+		// hand-edit it is the most common wrong reflex about generated output.
+		{command: "git restore cmd/magus/agent.go", context: "magus-vcs"},
+		{command: "git checkout -- gen/", context: "role=output"},
+		{command: "git checkout HEAD -- docs/gen", context: "role=output"},
 		{command: "git clean -fd", deny: true},
 		{command: "git clean -n"},
 		{command: "git commit -m 'x'", context: "magus-vcs"},
+		// Push, not commit: committing mid-mess is ordinary, publishing is the
+		// moment the work stops being yours alone.
+		{command: "git push origin HEAD", context: "magus affected ci"},
+		{command: "git push --force-with-lease", context: "magus affected ci"},
 		{command: "git add -A", context: "magus-vcs"},
-		{command: "go test ./...", context: "magus-run"},
+		// The advisory names an explicit ladder: top-level target, then a single
+		// spell op which still runs through magus. The old text ended with "if no
+		// target covers this work, proceed", which read as permission to reach
+		// straight for the raw binary.
+		{command: "go test ./...", context: "<spell>::<op>"},
 		{command: "npm test", context: "magus-run"},
 		{command: "npx prettier --check .", context: "magus-run"},
 		{command: "pytest tests/", context: "magus-run"},
 		{command: "cargo build --release", context: "magus-run"},
+		{command: "gofmt -w x.go", context: "magus-run"},
+		// Exempt: these bypass nothing, so advising on them is pure noise.
+		{command: "go build -o /tmp/magus ./cmd/magus"},
+		{command: "gofmt -l ./libs"},
+		{command: "gofmt -d x.go"},
+		// The rule set is language-agnostic on purpose: magus workspaces are not
+		// Go-only, and a guard that only knows Go is useless in a Rust or JS repo.
+		{command: "ruff check .", context: "magus-run"},
+		{command: "mypy .", context: "magus-run"},
+		{command: "rustfmt src/main.rs", context: "magus-run"},
+		{command: "vitest run", context: "magus-run"},
+		{command: "buf lint", context: "magus-run"},
+		{command: "golangci-lint run", context: "magus-run"},
+		{command: "buf generate", context: "magus-run"},
+		{command: "mockery", context: "magus-run"},
+		// Trimming magus's own output with the shell: magus has output flags, and
+		// a pipe discards exactly what the agent then has to guess at.
+		{command: "magus affected ci 2>&1 | tail -30", context: "--silent"},
+		{command: "/tmp/magus run test | head -5", context: "--silent"},
+		{command: "MAGUS_X=1 magus query foo | grep bar", context: "--silent"},
+		// magus must be the COMMAND, not a substring: these are paths and text.
+		{command: "grep -n x cmd/magus/agent_test.go | head"},
+		{command: "ls cmd/magus | wc -l"},
+		{command: "cat x | magus buzz -"},
+		// jq composes with -o json rather than fighting it.
+		{command: "magus graph export -o json | jq ."},
+		// Repo-wide code search: the graph answers from declared sources. Narrow on
+		// purpose - reading one file with grep is not a structural question.
+		// Denied, not advised: a repo-wide text search is the habit that keeps the
+		// graph unused, and an advisory is scrolled past. The reason must ROUTE -
+		// refs for code symbols, query for domain entities - because an agent that
+		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
+		{command: `grep -rn "funcName" .`, context: "magus refs"},
+		{command: "rg symbolName", context: "magus refs"},
+		{command: `find . -name "*.go"`, context: "magus refs"},
+		// magus is CWD-relative, so cd-then-magus is how the right command lands
+		// on the wrong project. The project is an argument; only a different
+		// WORKSPACE needs --root.
+		{command: "cd libs/diag && magus run test", context: "CWD-relative"},
+		{command: "magus run test libs/diag"},
+		{command: "cd libs/diag"},
+		{command: "grep pattern onefile.txt"},
+		{command: "grep -n x file.go"},
+		{command: "cat x | grep y"},
 		{command: "go version"},
 		{command: "magus run test"},
 		{command: "ls -la"},
@@ -259,7 +350,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 func TestAgentHookCmd(t *testing.T) {
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
-		require.NoError(t, agentHookCmd(strings.NewReader(stdin), &out, args))
+		require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(stdin), &out, args))
 		return out.String()
 	}
 
@@ -322,5 +413,56 @@ func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
 	for _, r := range doc {
 		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
+	}
+}
+
+// extractTar reads a tar archive at src and writes its entries under dst,
+// creating parent directories. Mirrors the user-facing `tar -xf - -C <dst>`
+// pipe that the tar output mode is designed for.
+func extractTar(t *testing.T, src, dst string) {
+	t.Helper()
+	f, err := os.Open(src)
+	require.NoError(t, err)
+	defer f.Close()
+	tr := tar.NewReader(f)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return
+		}
+		require.NoError(t, err)
+		target := filepath.Join(dst, hdr.Name)
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			require.NoError(t, os.MkdirAll(target, 0o755))
+		case tar.TypeReg:
+			require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+			body, err := io.ReadAll(tr)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(target, body, 0o644))
+		default:
+			t.Fatalf("unexpected tar entry type %v for %s", hdr.Typeflag, hdr.Name)
+		}
+	}
+}
+
+// TestAgentHookPathMode covers --path, the definitive (non-heuristic) arm: a
+// declared target output is denied. The deny path needs a real workspace, so it
+// is exercised end to end elsewhere; what matters here is that the mode parses,
+// shares the standard output arm, and FAILS OPEN on anything it cannot classify.
+func TestAgentHookPathMode(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{name: "unclassifiable path", args: []string{"--path", "-o", "name", "--", "/nonexistent/elsewhere.txt"}},
+		{name: "empty path", args: []string{"--path", "-o", "name", "--", ""}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(""), &out, tt.args))
+			assert.Equal(t, "pass\n", out.String(),
+				"an unclassifiable path says nothing: an advisory fired on a guess trains the reader to ignore it")
+		})
 	}
 }

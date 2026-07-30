@@ -101,6 +101,14 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	cache.MapSet("remote", fn("magus.cache.remote", retNull))
 	m.MapSet("cache", cache)
 
+	// magus.ci.<...>: selects the CI provider spell in the real module.
+	// Stubbed no-op for the same reason as cache.remote - a magusfile calls
+	// it at top level, and the dry playground evaluates that without a VM
+	// able to resolve a spell.
+	ci := vm.NewMap()
+	ci.MapSet("provider", fn("magus.ci.provider", retNull))
+	m.MapSet("ci", ci)
+
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).
@@ -140,6 +148,37 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			return emptyExecResult(), nil
 		}))
 	}
+
+	// The in-process read-only verbs return workspace data on the real module. A dry
+	// run has no workspace, so each is stubbed with its result SHAPE - an empty but
+	// correctly-keyed record - so field access (magus.ls().projects, .affected) still
+	// resolves instead of blowing up on null.
+	m.MapSet("ls", fn("magus.ls", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("changed", vm.ListValue(nil))
+		res.MapSet("seed", vm.ListValue(nil))
+		res.MapSet("filesBySeed", vm.NewMap())
+		res.MapSet("affected", vm.ListValue(nil))
+		return res, nil
+	}))
+	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	m.MapSet("graph", fn("magus.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("nodes", vm.ListValue(nil))
+		res.MapSet("dependsOn", vm.NewMap())
+		res.MapSet("blastRadius", vm.NewMap())
+		return res, nil
+	}))
 
 	// magus.modules()/magus.module(name) introspect the real host module registry,
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
@@ -274,7 +313,7 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 // the same typos the real engine does instead of silently dropping them.
 var (
 	dryKnownProjectOptionKeys = []string{
-		"depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+		"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
 	}
 	dryKnownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
 )

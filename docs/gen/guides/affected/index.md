@@ -29,7 +29,7 @@ A project enters the affected set two ways:
 1. **Direct.** One of its source files (its spells' declared globs, plus the
    magusfile) appears in the diff.
 2. **Transitive.** A project it depends on is affected. Dependencies come from
-   [the two dependency mechanisms](../concepts/dependencies.md): a `magus.needs` edge, a
+   [the two dependency mechanisms](../concepts/dependencies.md): a `magus\needs` edge, a
    project-level `depends_on`, or a cross-project target reference (folded
    into `depends_on` - see [the fold](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)).
 
@@ -63,7 +63,7 @@ Four flags reason about the affected set instead of executing the target:
 
 `magus affected ci` is the workhorse of a monorepo pipeline: it runs the `ci`
 anchor for exactly the projects a pull request touched. Because
-[`affected` never applies `default_charms`](../concepts/charms.md#defaulting-charms-per-workspace-default_charms)
+[`magus affected` never applies `default_charms`](../concepts/charms.md#defaulting-charms-per-workspace-default_charms)
 and `RunCI` strips the `rw` charm, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with `--plan` feeding a shard
 matrix.
@@ -82,7 +82,7 @@ newlines. See [tips](tips.md) for the continuous-build loop.
 
 ## See also
 
-- [dependencies.md](../concepts/dependencies.md) - `magus.needs` versus `depends_on`, the edges the closure walks.
+- [dependencies.md](../concepts/dependencies.md) - `magus\needs` versus `depends_on`, the edges the closure walks.
 - [targets.md](../concepts/targets.md) - the target grammar these edges resolve against.
 - [operations.md](../concepts/operations.md) - what a target dispatches to per project.
 - [cache.md](../concepts/cache.md) - why an affected-but-unchanged target still replays from cache.

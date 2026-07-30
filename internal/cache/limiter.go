@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -144,4 +145,34 @@ func (l *Limiter) Snapshot() LimiterStats {
 		Running:  int(l.running.Load()),
 		Queued:   int(l.queued.Load()),
 	}
+}
+
+// logPool emits one cache.pool event carrying the limiter's current
+// occupancy. It is the feed behind the interactive pool status line.
+//
+// The numbers are a point-in-time sample, not a transaction: peers are
+// acquiring and releasing while this reads them, so a reader may see a
+// count that never existed at any single instant. That is the right
+// trade for a status line, which wants to be cheap and current rather
+// than exact, and it is why nothing downstream should compute from these
+// values -- the authoritative view is [Limiter.Snapshot] on the pool
+// inspector's own request.
+func (c *Cache) logPool(ctx context.Context, lim *Limiter) {
+	if lim == nil {
+		return
+	}
+	// Only a handler with a live region can show this. Emitting regardless
+	// would put two events per step into JSON output (which goes to
+	// stdout, where machine consumers read results) and into CI logs,
+	// where they would bury the actual results.
+	ph, ok := c.log.Handler().(*PrettyHandler)
+	if !ok || !ph.rendersStatus() {
+		return
+	}
+	s := lim.Snapshot()
+	c.log.LogAttrs(ctx, slog.LevelInfo, "cache.pool",
+		slog.Int("capacity", s.Capacity),
+		slog.Int("running", s.Running),
+		slog.Int("queued", s.Queued),
+	)
 }

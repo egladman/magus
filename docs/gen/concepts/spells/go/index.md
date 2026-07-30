@@ -37,7 +37,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     go["go-build"]();
@@ -56,7 +56,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     go["go-clean"]();
@@ -95,7 +95,7 @@ Replaces `-l` with `-w`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"]();
@@ -115,7 +115,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     go["go-generate"]();
@@ -123,8 +123,6 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 ```
 
 ## go-mod-tidy
-
-tidy checks by default (--diff exits non-zero if go.mod/go.sum need changes - safe for CI gating); the write charm applies the changes.
 
 **Command:** `go mod tidy --diff`
 
@@ -155,7 +153,7 @@ Drops `--diff`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun tidy(ctx: magus\Context, args: [str]) > void {
     go["go-mod-tidy"]();
@@ -163,8 +161,6 @@ export fun tidy(ctx: magus\Context, args: [str]) > void {
 ```
 
 ## go-run
-
-go-run compiles and runs a package. Alone among these ops it has no useful bare form: the caller names the package and its flags through the {"args": [...]} option (go["go-run"]({"args": ["../cmd/tool", "-out", "x"]}) -> `go run ../cmd/tool -out x`), so a magusfile drives a repo-local Go tool through the spell - version-pinned, sandbox- and charm-aware - instead of a raw os.exec("go", ["run", ...]).
 
 **Command:** `go run`
 
@@ -178,7 +174,7 @@ go-run compiles and runs a package. Alone among these ops it has no useful bare 
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     go["go-run"]({"args": ["./cmd/gen-docs", "-out", "./docs"]});
@@ -186,8 +182,6 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 ```
 
 ## go-test
-
-The cd charm instruments the run with an atomic-mode coverage profile written to coverage.out - the deliverable a CD pipeline ships to a coverage service (e.g. Coveralls). `magus run go::go-test:cd` (or ci:cd) emits the profile.
 
 **Command:** `go test ./...`
 
@@ -244,7 +238,7 @@ Appends `-v`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     go["go-test"]({ "args": ["-race"] });
@@ -265,7 +259,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"]();
@@ -323,7 +317,7 @@ Inserts `--fix`.
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["golangci-lint"]();
@@ -331,8 +325,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 ```
 
 ## govulncheck
-
-Scans for known vulnerabilities in the module's call graph. Command as a `go tool` (like golangci-lint) so it resolves from go.mod's tool block, not PATH.
 
 **Command:** `go tool govulncheck ./...`
 
@@ -347,7 +339,7 @@ Scans for known vulnerabilities in the module's call graph. Command as a `go too
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"]();
@@ -355,8 +347,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 ```
 
 ## scip
-
-scip is the reserved op that runs the language's SCIP indexer for the knowledge graph. Named for the format, not the binary, so the same verb produces symbols across every language spell (`magus run <project>::scip`). magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. Run through sh so the env var expands.
 
 **Command:** `sh -c scip-go --output "$MAGUS_SYMBOL_INDEX"`
 

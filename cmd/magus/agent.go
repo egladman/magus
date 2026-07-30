@@ -3,100 +3,46 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/agent"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
-// skillFS holds the agent-skill sources embedded at build time, so the knowledge
-// of HOW to use the knowledge graph travels with the binary and installs into any
-// consuming repo. The sources are static (they teach the tool surface, which ships
-// with the magus version) and never embed repo specifics - those live in the
-// generated MAGUS.md the skill defers to.
-//
-// One source tree serves every platform: the Agent Skills format (SKILL.md with
-// name+description frontmatter) is a cross-agent spec, so skill-dir platforms get
-// identical bytes at different destinations, and platforms without skill support
-// get the distilled AGENTS.md section instead. No per-model skill bodies exist.
+// skillFS holds provider-neutral skill bodies embedded at build time.
 //
 //go:embed skills
 var skillFS embed.FS
 
 // agentsSection is the distilled always-on block installed into AGENTS.md for
-// platforms that read that contract instead of skill directories (Codex, Aider,
-// and most other AGENTS.md-reading agents). Same rules as the skills, compressed.
+// hosts that read that contract instead of skill directories. Same rules as the
+// skills, compressed.
 //
 //go:embed agents-section.md
 var agentsSection string
 
-// agentSkillVersion is bumped whenever the installed skill content, or the tool
-// surface it documents, changes. Together with the knowledge schema version it
-// stamps the install footer, so the drift check (magus graph verify) can tell a
-// stale installed skill from a current one without diffing bytes.
-//
-//	v1: initial skill (verbs, grammar, reading results, MCP, --global, pagination)
-//	v2: teach CODEOWNERS ownership and the owns relation
-//	v3: teach the refs subcommand / magus_refs (SCIP symbol def+references)
-//	v4: teach the * wildcard in the query grammar
-//	v5: teach the graph diff subcommand (PR blast-radius against a baseline export)
-//	v6: teach the opt-in @vcs git-history attrs on file nodes
-//	v7: purpose-named skill set (magus-query, magus-run, magus-vcs,
-//	    magus-architecture, magus-memory); multi-platform install (claude/
-//	    opencode/agents skill dirs, AGENTS.md section for codex); query-first
-//	    fast path; describe-file triage; durable magus_memory workflow
-//	v8: output-control doctrine (-s/-q silence for runs, -o json as the
-//	    machine-reading default, the JSON envelope shape, MCP-first with quiet
-//	    CLI fallback); magus-vcs frontmatter name aligned with its directory
-//	v9: add magus-docs (navigate magus's own documentation via llms.txt /
-//	    search-index.json, the URL + section scheme, and the in-page nav axes)
-//	v10: magus-vcs teaches environmental-vs-real drift; install injects
-//	    open-standard provenance frontmatter (license, compatibility, metadata)
-//	v11: magus-run teaches CWD-relative project scope; tighten the prose
-//	v12: trigger-first frontmatter descriptions (literal command cues) for
-//	     magus-vcs/magus-run/magus-query; agents-section moment-to-skill routing
-//	     table; claude install merges a PreToolUse guard hook into
-//	     .claude/settings.json (magus agent hook)
-//	v13: agent-host agnostic surface: install takes explicit destination dirs
-//	     plus --agents-md (platform names removed); agent hook reads any host's
-//	     event via --from-json and renders its deny/advise/pass verdict through
-//	     -o json/yaml/template; the settings.json hook installer is removed in
-//	     favor of documented per-host recipes
-//	v14: magus-run forbids piping a magus command through a text filter (grep/head/
-//	     tail/awk) and gives the -o template / -o name / -s substitutions, carving
-//	     out magus-into-magus composition via --stdin and jq over -o json;
-//	     magus-architecture no longer demonstrates grep -c. The install stamp now
-//	     also carries skillContentDigest, so content drift no longer depends on
-//	     remembering to bump this counter.
-const agentSkillVersion = 14
-
-// wellKnownSkillDirs are the destinations checkSkillStatuses probes for an
-// installed skill tree. Discovery-only: install never consults this list - the
-// caller names the destination explicitly - but drift checking has to find what
-// previous installs wrote. The Agent Skills spec generic location plus the
-// common host conventions; magus itself is host-agnostic.
-var wellKnownSkillDirs = []string{".agents/skills", ".claude/skills", ".opencode/skills"}
+// agentSkills binds the command's embedded source assets to the reusable
+// provider-neutral catalog. The CLI owns embedding and presentation; internal/agent
+// owns the artifact's rendering, provenance, installation, and verification.
+var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// `install` writes the embedded skills into explicitly named destinations, and
-// `hook` evaluates one shell command to a guard verdict. Destinations and event
-// shapes are explicit arguments, never auto-detected (per the explicit-and-
-// granular preference); writing into a repo's agent-config dirs happens only
-// through this command, never as a side effect of another.
+// `install` writes the embedded skills into explicitly named destinations,
+// `install-agents-md` maintains the managed magus section in AGENTS.md, and
+// `hook` evaluates one shell command to a guard verdict. Destinations and
+// event shapes are explicit arguments, never auto-detected (per the
+// explicit-and-granular preference); writing into a repo's agent-config dirs
+// happens only through these commands, never as a side effect of another.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
@@ -104,47 +50,45 @@ func agentCmd(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
+	case "install-agents-md":
+		return agentInstallAgentsMDCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
 	case "hook":
-		return agentHookCmd(os.Stdin, os.Stdout, args[1:])
+		return agentHookCmd(ctx, os.Stdin, os.Stdout, args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return fmt.Errorf("agent: unknown subcommand %q (try: install, sample, hook)", args[0])
+		return fmt.Errorf("agent: unknown subcommand %q (try: install, install-agents-md, sample, hook)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent install <dir>... [--agents-md] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|install-agents-md|sample|hook> [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Install the magus agent skills into the current repo so an agent knows")
-	fmt.Fprintln(w, "how to use the knowledge graph instead of grepping, run work through")
-	fmt.Fprintln(w, "targets instead of raw tools, triage generated files, and ground")
-	fmt.Fprintln(w, "refactoring proposals in the graph.")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "magus is agent-host agnostic: the skills are one shared source in the")
-	fmt.Fprintln(w, "cross-agent Agent Skills format, and you name the directory your host")
-	fmt.Fprintln(w, "discovers skills in. Common destinations:")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  .agents/skills     Agent Skills spec generic project location")
-	fmt.Fprintln(w, "  .claude/skills     Claude Code")
-	fmt.Fprintln(w, "  .opencode/skills   OpenCode")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  --agents-md        maintain a managed magus section in AGENTS.md for")
-	fmt.Fprintln(w, "                     hosts that read that contract instead of skill dirs")
+	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
+	fmt.Fprintln(w, "                     into named destinations (.claude/skills, .agents/skills,")
+	fmt.Fprintln(w, "                     .opencode/skills, ...)")
+	fmt.Fprintln(w, "  install-agents-md  maintain the managed magus section in AGENTS.md")
 	fmt.Fprintln(w, "                     (created if absent, replaced in place on re-install,")
 	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
+	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
+	fmt.Fprintln(w, "                     never writes a file")
+	fmt.Fprintln(w, "  hook               evaluate one shell command against the magus guard")
+	fmt.Fprintln(w, "                     rules and emit a deny/advise/pass verdict")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Other subcommands:")
-	fmt.Fprintln(w, "  sample     print a starter AGENTS.md to stdout to own and tweak; never")
-	fmt.Fprintln(w, "             writes a file, so it cannot clobber an existing one")
-	fmt.Fprintln(w, "  hook       evaluate one shell command against the magus guard rules and")
-	fmt.Fprintln(w, "             emit a deny/advise/pass verdict. Input: arguments, raw stdin,")
-	fmt.Fprintln(w, "             or --from-json <dot.path> to extract it from a JSON event on")
-	fmt.Fprintln(w, "             stdin. Shape the verdict for your host with -o json|yaml|")
-	fmt.Fprintln(w, "             template=<go-template> (bare -o template lists the fields)")
+	fmt.Fprintln(w, "Stdout philosophy: `magus agent` is a pure data generator. To install")
+	fmt.Fprintln(w, "skills anywhere your shell can reach, use --tar and pipe to tar:")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C .claude/skills")
+	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C ~/.config/opencode/skills")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "The write-to-disk form is only for the in-repo, paths-relative-to-<dir>")
+	fmt.Fprintln(w, "case, where it preserves the previous one-line ergonomics. Absolute")
+	fmt.Fprintln(w, "destinations are refused unless --global is set, to keep magus from")
+	fmt.Fprintln(w, "silently writing outside the working tree.")
 }
 
 func agentUsageErr() error {
@@ -152,36 +96,58 @@ func agentUsageErr() error {
 	return fmt.Errorf("agent: a subcommand is required (try: install)")
 }
 
-// agentInstallCmd writes the embedded skills into every destination directory
-// named as a positional (repo-relative under --dir), and maintains the AGENTS.md
-// section when --agents-md is set. Destinations are explicit, never inferred
-// from an agent-host name: magus writes the standard format where told and stays
-// out of the host-specific business.
+// agentInstallCmd renders the embedded skills and either writes them under
+// <dir>/<dest>... or streams a tar archive to stdout (--tar). Destinations
+// are explicit, never inferred from an agent-host name: magus writes the
+// standard format where told and stays out of the host-specific business.
+// Absolute destinations are refused unless --global is set; the supported
+// way to install skills outside the working tree is `magus agent install
+// --tar | tar -xf - -C <absolute path>`.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
 	dir := fset.String("dir", ".", "Repo directory to install into")
-	force := fset.Bool("force", false, "Overwrite existing installed skill files")
-	agentsMD := fset.Bool("agents-md", false, "Maintain the managed magus section in AGENTS.md")
+	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
+	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
+	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	dests := fset.Args()
-	if len(dests) == 0 && !*agentsMD {
+
+	if *tarMode {
+		if len(dests) > 1 {
+			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
+		}
+		prefix := "."
+		if len(dests) == 1 {
+			prefix = dests[0]
+		}
+		body, err := agentSkills.SkillTar(prefix)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stdout.Write(body); err != nil {
+			return fmt.Errorf("agent install --tar: write stdout: %w", err)
+		}
+		return nil
+	}
+
+	if len(dests) == 0 {
 		agentUsage(os.Stderr)
-		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --agents-md")
+		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --tar")
+	}
+	if !*global {
+		for _, d := range dests {
+			if filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
+				return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global, or use --tar | tar -xf - -C %q instead", d, d)
+			}
+		}
 	}
 
 	var written []string
 	for _, dest := range dests {
-		w, err := installSkillTree(*dir, dest, *force)
-		if err != nil {
-			return err
-		}
-		written = append(written, w...)
-	}
-	if *agentsMD {
-		w, err := installAgentsSection(*dir)
+		w, err := agentSkills.WriteSkillTree(*dir, dest, *force)
 		if err != nil {
 			return err
 		}
@@ -194,298 +160,62 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-// installSkillTree copies the embedded skills/ tree into <dir>/<dest>/, stamping
-// each markdown file with a generated-by footer. It refuses to overwrite an
-// existing file unless force is set, returning the paths it wrote (repo-relative).
-func installSkillTree(dir, dest string, force bool) ([]string, error) {
-	var written []string
-	err := fs.WalkDir(skillFS, "skills", func(p string, d fs.DirEntry, err error) error {
+// agentInstallAgentsMDCmd renders the managed magus section for <dir>/AGENTS.md
+// and either writes it back in place or streams it on stdout (--tar).
+// Bytes outside the begin/end markers are preserved from any existing file.
+func agentInstallAgentsMDCmd(ctx context.Context, args []string) error {
+	fset := flag.NewFlagSet("agent install-agents-md", flag.ContinueOnError)
+	dir := fset.String("dir", ".", "Repo directory whose AGENTS.md to manage")
+	tarMode := fset.Bool("tar", false, "Stream a tar archive containing AGENTS.md to stdout instead of writing")
+	fset.Usage = func() { agentUsage(os.Stderr) }
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+		return err
+	}
+	if rest := fset.Args(); len(rest) > 0 {
+		return fmt.Errorf("agent install-agents-md: takes no positional arguments")
+	}
+	if *tarMode {
+		body, err := agentSkills.AgentsSectionTar(*dir)
 		if err != nil {
 			return err
 		}
-		if d.IsDir() {
-			return nil
+		if _, err := os.Stdout.Write(body); err != nil {
+			return fmt.Errorf("agent install-agents-md --tar: write stdout: %w", err)
 		}
-		rel := strings.TrimPrefix(p, "skills/") // e.g. "magus-query/SKILL.md"
-		outPath := filepath.Join(dir, dest, rel)
-		if !force {
-			if _, err := os.Stat(outPath); err == nil {
-				return fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
-			}
-		}
-		body, err := skillFS.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(outPath, stampSkill(body), 0o644); err != nil {
-			return fmt.Errorf("agent install: write %s: %w", outPath, err)
-		}
-		written = append(written, filepath.Join(dest, rel))
 		return nil
-	})
+	}
+	written, err := agentSkills.WriteAgentsSection(*dir)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return written, nil
-}
-
-// agentsSectionMarkers delimit the managed magus block in AGENTS.md. The begin
-// marker carries the version stamp (same fields as the skill footer) so the
-// drift check reads it the same way. Everything between the markers is owned by
-// magus and replaced wholesale on re-install; bytes outside them are never touched.
-var (
-	agentsSectionBegin = fmt.Sprintf(
-		"<!-- magus:skills:begin generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->",
-		agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-	agentsSectionEnd = "<!-- magus:skills:end -->"
-	agentsSectionRe  = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<!-- magus:skills:end -->`)
-)
-
-// installAgentsSection writes (or replaces) the managed magus section in
-// <dir>/AGENTS.md. Idempotent by construction - the section is regenerated in
-// place - so it takes no force flag. A missing AGENTS.md is created holding just
-// the section.
-func installAgentsSection(dir string) ([]string, error) {
-	path := filepath.Join(dir, "AGENTS.md")
-	block := agentsSectionBegin + "\n\n" + strings.TrimSpace(agentsSection) + "\n\n" + agentsSectionEnd
-	existing, err := os.ReadFile(path)
-	switch {
-	case os.IsNotExist(err):
-		if werr := os.WriteFile(path, []byte(block+"\n"), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
-	case err != nil:
-		return nil, fmt.Errorf("agent install: read %s: %w", path, err)
-	case agentsSectionRe.Match(existing):
-		out := agentsSectionRe.ReplaceAll(existing, []byte(block))
-		if werr := os.WriteFile(path, out, 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
-	default:
-		out := strings.TrimRight(string(existing), "\n") + "\n\n" + block + "\n"
-		if werr := os.WriteFile(path, []byte(out), 0o644); werr != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", path, werr)
-		}
+	for _, p := range written {
+		slog.InfoContext(ctx, "agent install-agents-md: wrote", slog.String("path", p))
 	}
-	return []string{"AGENTS.md"}, nil
-}
-
-// skillFooter is the generated-by marker appended to every installed skill file.
-// It is a greppable, parseable line a drift check reads to compare the installed
-// version against the running binary's; the "do not edit" note steers humans to
-// re-run install rather than hand-edit a generated file.
-var skillFooter = fmt.Sprintf(
-	"\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->\n",
-	agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-
-// skillLicense is the SPDX identifier injected into every installed skill's
-// provenance; it tracks the repository's LICENSE.
-const skillLicense = "GPL-3.0-or-later"
-
-// skillProvenance is the machine-owned frontmatter magus injects into every
-// installed skill: the Agent Skills open-standard fields (license, compatibility)
-// plus a metadata map carrying the same version counters as the footer, so a host
-// that reads YAML frontmatter but not the trailing comment still sees the source
-// and version. Source SKILL.md files carry only name/description (and hand-authored
-// allowed-tools); these fields are added at install time, keeping magus the single
-// source of truth for them across every platform.
-var skillProvenance = fmt.Sprintf(
-	"license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n",
-	skillLicense, agentSkillVersion, types.KnowledgeSchemaVersion, skillContentDigest)
-
-// stampSkill injects provenance frontmatter and appends the footer to a skill
-// file's content. The footer is a trailing HTML comment; the provenance goes just
-// inside the leading YAML frontmatter the Agent Skills spec requires. The footer
-// begins with its own newline, so it sits one blank line below the body -
-// deliberate, for readability in the rendered file.
-func stampSkill(body []byte) []byte {
-	body = injectSkillProvenance(body)
-	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), skillFooter...)
-}
-
-// injectSkillProvenance inserts skillProvenance immediately before the closing ---
-// of the leading YAML frontmatter. Insertion is textual, not a YAML re-marshal, so
-// the hand-authored name/description/allowed-tools stay byte-for-byte. A file with
-// no frontmatter is returned unchanged (the footer still stamps it).
-func injectSkillProvenance(body []byte) []byte {
-	s := string(body)
-	if !strings.HasPrefix(s, "---\n") {
-		return body
-	}
-	rel := strings.Index(s[len("---\n"):], "\n---")
-	if rel < 0 {
-		return body
-	}
-	closeAt := len("---\n") + rel + 1 // start of the closing "---" line
-	return []byte(s[:closeAt] + skillProvenance + s[closeAt:])
-}
-
-// skillContentDigest fingerprints the EMBEDDED skill sources: a short hash over every
-// path and body under skills/, walked in sorted order so it is deterministic across
-// builds and platforms.
-//
-// It exists because the version counters cannot detect the two drifts that actually
-// happen. agentSkillVersion is bumped by hand, so editing skill content and forgetting
-// to bump it leaves the drift permanently invisible. Worse, installing with a binary
-// built BEFORE a source edit writes the old bytes under a stamp whose version already
-// matches the current one, and the check reports "up to date" over content that is
-// wrong. Both were observed here: an install from a stale binary wrote skills missing
-// their newest section while graph verify passed green.
-//
-// A digest is derived from the bytes, so it needs nobody to remember anything.
-var skillContentDigest = computeSkillContentDigest()
-
-func computeSkillContentDigest() string {
-	h := sha256.New()
-	var paths []string
-	// WalkDir already yields lexical order, but collect-then-sort makes the guarantee
-	// local rather than inherited, since the digest is only useful if it is stable.
-	if err := fs.WalkDir(skillFS, "skills", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			paths = append(paths, p)
-		}
-		return nil
-	}); err != nil {
-		// The tree is embedded at build time, so a failure here means the binary itself
-		// is malformed. A sentinel keeps the stamp well-formed and, because it can never
-		// equal a real digest, makes every comparison report drift rather than passing.
-		return "unreadable"
-	}
-	sort.Strings(paths)
-	for _, p := range paths {
-		body, err := skillFS.ReadFile(p)
-		if err != nil {
-			return "unreadable"
-		}
-		// Length-prefix the path so no rename can collide with a content change.
-		fmt.Fprintf(h, "%d:%s\n", len(p), p)
-		h.Write(body)
-	}
-	// agents-section.md is a separate embed but part of the same installed surface, so
-	// it belongs in the fingerprint: editing it must invalidate an AGENTS.md install
-	// exactly as editing a SKILL.md invalidates a skill dir.
-	fmt.Fprintf(h, "%d:agents-section.md\n", len(agentsSection))
-	h.Write([]byte(agentsSection))
-	return hex.EncodeToString(h.Sum(nil))[:12]
-}
-
-// footerVersionRe pulls the two versions out of an installed skill's footer (or
-// the AGENTS.md begin marker - same fields), so a drift check can compare them
-// against the running binary without a byte diff.
-var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
-
-// footerDigestRe pulls the content fingerprint out of a footer. Separate from
-// footerVersionRe on purpose: a skill installed by a magus that predates the digest
-// still parses its versions, so gradeStamp can report "stamped by an older magus"
-// rather than failing to read the stamp at all.
-var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
-
-// anchorSkillRel is the skill file whose footer anchors the drift check inside a
-// skill-dir install: every install writes it, so its stamp speaks for the set.
-const anchorSkillRel = "magus-query/SKILL.md"
-
-// skillStatus is the verdict of checking one installed location against this
-// binary: whether it is present, and whether it has fallen behind (Stale). The
-// happy value is {Installed: true, Stale: false}.
-type skillStatus struct {
-	Location  string
-	Installed bool // the install exists
-	Stale     bool // it exists but its version predates the binary's
-	Detail    string
-}
-
-// checkSkillStatuses inspects every well-known skill location under dir plus the
-// AGENTS.md section, returning one status per location that has anything on
-// disk, sorted by location. An empty slice means nothing is installed anywhere.
-// It is the read half of the generated-by stamps: install writes the version,
-// this tells an operator or CI when a re-install is due after a magus upgrade.
-func checkSkillStatuses(dir string) []skillStatus {
-	var out []skillStatus
-	for _, dest := range wellKnownSkillDirs {
-		path := filepath.Join(dir, dest, anchorSkillRel)
-		body, err := os.ReadFile(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			// Present but unreadable (permissions, IO) is a real problem, not "absent":
-			// report it as drift so a --strict CI gate fails instead of passing green.
-			out = append(out, skillStatus{Location: dest, Installed: true, Stale: true,
-				Detail: "cannot read installed skill: " + err.Error()})
-			continue
-		}
-		out = append(out, gradeStamp(dest, "magus agent install "+dest+" --force", string(body)))
-	}
-	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
-		if section := agentsSectionRe.Find(body); section != nil {
-			out = append(out, gradeStamp("AGENTS.md", "magus agent install --agents-md", string(section)))
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
-	return out
-}
-
-// gradeStamp grades one install's stamped versions against the running binary;
-// reinstall is the command to suggest when it has fallen behind.
-func gradeStamp(location, reinstall, body string) skillStatus {
-	m := footerVersionRe.FindStringSubmatch(body)
-	if m == nil {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: "installed skill has no version stamp; re-run: " + reinstall}
-	}
-	// The regex captured \d+ for both groups, so Atoi cannot fail here.
-	skillVer, _ := strconv.Atoi(m[1])
-	schemaVer, _ := strconv.Atoi(m[2])
-	if skillVer < agentSkillVersion || schemaVer < types.KnowledgeSchemaVersion {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: fmt.Sprintf("stale (skill v%d/schema v%d; binary v%d/schema v%d); re-run: %s",
-				skillVer, schemaVer, agentSkillVersion, types.KnowledgeSchemaVersion, reinstall)}
-	}
-	// Versions can agree while the bytes do not, so the digest is the authority. It
-	// catches the two cases the counters structurally cannot: content edited without
-	// bumping agentSkillVersion, and an install performed by a binary built before the
-	// source edit, which writes old content under a current-looking version.
-	d := footerDigestRe.FindStringSubmatch(body)
-	if d == nil {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
-	}
-	if d[1] != skillContentDigest {
-		return skillStatus{Location: location, Installed: true, Stale: true,
-			Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s",
-				d[1], skillContentDigest, reinstall)}
-	}
-	return skillStatus{Location: location, Installed: true,
-		Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVer, schemaVer, skillContentDigest)}
+	printAgentInstallNextSteps(written)
+	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
-// interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
+// the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
 func printAgentInstallNextSteps(written []string) {
-	if !interactive.Enabled() || len(written) == 0 {
+	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
 	interactive.Emit(os.Stderr, "the skills point at MAGUS.md's routing table:  magus describe graph -o markdown")
-	interactive.Emit(os.Stderr, "safety: consider a line in your CLAUDE.md/AGENTS.md so parallel agents cannot wipe each other's work:")
+	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
 }
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
-// CLAUDE.md/AGENTS.md: it stops one agent's whole-tree revert from destroying
+// repo's agent instruction file: it stops one agent's whole-tree revert from destroying
 // another's uncommitted work. Shared by the install hint and the sample doc.
 const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
 // agentSampleDoc returns a complete, opinionated-but-tweakable AGENTS.md starter a
 // developer can paste and adapt. It is print-only (magus agent sample): unlike
-// `agent install codex`, which manages a marked magus section inside an existing
+// a host-named subcommand, which would manage a marked magus section inside an existing
 // AGENTS.md, this hands over a whole file to own, so magus never risks clobbering
 // one. The magus block reproduces agents-section.md verbatim.
 func agentSampleDoc() string {
@@ -501,7 +231,7 @@ func agentSampleDoc() string {
 		"     naming, error handling, comment style, and what NOT to touch. -->\n\n" +
 		"## Version control\n\n" +
 		"- " + vcsSafetyRule + "\n\n" +
-		strings.TrimSpace(agentsSection) + "\n"
+		strings.TrimSpace(agentSkills.Section()) + "\n"
 }
 
 // agentSampleCmd prints agentSampleDoc to stdout. It never writes a file: an
@@ -533,9 +263,10 @@ const guardSchemaVersion = 1
 // out through the standard -o arm, so a host-specific response shape is a
 // documented template, not code. A guard must fail open: an unreadable event is
 // a pass, never an error that would block every tool call.
-func agentHookCmd(in io.Reader, out io.Writer, args []string) error {
+func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("agent hook", flag.ContinueOnError)
 	fromJSON := fset.String("from-json", "", "Extract the command from a JSON document on stdin at this dot-separated path (e.g. tool_input.command)")
+	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
 	output := fset.String("output", "", outputFormatHelp)
 	fset.StringVar(output, "o", "", "Short for --output")
 	fset.Usage = func() { agentUsage(os.Stderr) }
@@ -548,6 +279,15 @@ func agentHookCmd(in io.Reader, out io.Writer, args []string) error {
 	}
 
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
+	if *asPath {
+		if path, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
+			if context := adviseGeneratedWrite(ctx, path); context != "" {
+				verdict.Decision = "advise"
+				verdict.Context = context
+			}
+		}
+		return writeGuardVerdict(out, opts, verdict)
+	}
 	if command, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
 		switch v := evaluateBashGuard(command); {
 		case v.Deny != "":
@@ -558,6 +298,11 @@ func agentHookCmd(in io.Reader, out io.Writer, args []string) error {
 			verdict.Context = v.Context
 		}
 	}
+	return writeGuardVerdict(out, opts, verdict)
+}
+
+// writeGuardVerdict renders a verdict through the standard output arm.
+func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guardVerdict) error {
 	switch opts.Format {
 	case FormatText:
 		switch verdict.Decision {
@@ -574,6 +319,43 @@ func agentHookCmd(in io.Reader, out io.Writer, args []string) error {
 		return nil
 	}
 	return writeFormatted(out, opts, verdict)
+}
+
+// adviseGeneratedWrite explains why editing path is wasted effort, or "" when
+// there is nothing to say. Unlike the command rules this is not a heuristic:
+// magus knows every target's declared outputs, so a role=output path is
+// generated by definition and an edit to it will be overwritten by the next run.
+//
+// It TEACHES rather than blocks, which is the rule the whole guard follows:
+// magus denies only what cannot be undone, and explains everything else. A
+// hand-edited generated file is wasteful, not destructive - regenerating erases
+// it - so it fails the cannot-be-undone test the whole-tree VCS operations pass.
+// Blocking would also treat the agent as unable to learn, when the
+// classification it needs is one `magus describe file` away.
+//
+// Silent on every uncertainty - no workspace, an unreadable one, an unclaimed
+// path - because an advisory fired on a guess trains the reader to ignore it.
+func adviseGeneratedWrite(ctx context.Context, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	// No root override: FindRoot walks up from the CWD, which is where the hook
+	// runs, so a nested project resolves to its own workspace.
+	ws, err := inspectWorkspace(ctx, "")
+	if err != nil || ws == nil {
+		return ""
+	}
+	files := ws.DescribeFiles([]string{path})
+	if len(files.Files) != 1 || files.Files[0].Role != "output" {
+		return ""
+	}
+	f := files.Files[0]
+	owner := f.Project
+	if owner == "" {
+		owner = "."
+	}
+	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs skill if not already loaded.", f.Path, owner, owner, f.Path)
 }
 
 // readGuardCommand resolves the command string from the three input forms:
@@ -644,12 +426,117 @@ var (
 	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
 	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
 	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
-	guardRawToolRe   = regexp.MustCompile(`\bgo\s+(test|build|vet)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bpytest\b|\btsc\b|\bcargo\s+(test|build|check|clippy)\b`)
+	// Push, NOT commit. Committing in a half-finished state is ordinary and
+	// sometimes necessary; a gate there would fire constantly and be tuned out.
+	// Publishing is where the work stops being yours alone, so that is where the
+	// reminder earns its place - and it stays an advise, because a push can
+	// legitimately carry a work-in-progress branch.
+	guardPushRe = regexp.MustCompile(`\bgit\s+push\b`)
+	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
+	// whole-tree forms above already deny; this one is legitimate often enough
+	// that it only advises, but it is the shape of the most common wrong reflex
+	// an agent has about generated files.
+	// `git checkout ... -- <paths>` needs the `--` separator to be a revert at
+	// all; without it the argument is a branch (`git checkout main`, `-b foo`),
+	// which is not this rule's business. `git restore` targets worktree files by
+	// definition, so its bare form counts.
+	guardScopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
+	// Raw-tool invocations that bypass nothing, so advising on them is pure noise.
+	// RE2 has no lookahead, so these are matched BEFORE the raw-tool rule rather
+	// than excluded inside it.
+	//
+	//   go build -o <path>  builds a binary to an explicit path - the documented
+	//                       dev-loop build, not a target's build artifact.
+	//   gofmt -l / -d       lists or diffs; only -w rewrites the tree.
+	guardRawToolExemptRe = regexp.MustCompile(`\bgo\s+build\b[^&|;]*\s-o\s|\bgofmt\s+-[ld]\b`)
+	guardRawToolRe       = regexp.MustCompile(`\bgo\s+(test|build|vet|generate)\b|\bgofmt\b|\bgoimports\b|\bgolangci-lint\b|\bmockery\b|\bbuf\s+(generate|lint|breaking)\b|\bnpm\s+(test|run|exec)\b|\bnpx\s|\bpnpm\b|\byarn\b|\beslint\b|\bprettier\b|\bbiome\b|\bvitest\b|\bjest\b|\bpytest\b|\bruff\b|\bblack\b|\bmypy\b|\btsc\b|\bcargo\s+(test|build|check|clippy|fmt)\b|\brustfmt\b`)
+	// `cd <dir> && magus ...`: magus is CWD-relative, so this is the shape of
+	// running the right command against the wrong project. Every magus command
+	// that acts on a project takes it as an explicit argument, so the cd is
+	// almost always avoidable - and when it is not (a DIFFERENT workspace), the
+	// answer is --root, not a cd.
+	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
+
+	// A repo-wide code search. This does NOT claim the agent asked the wrong
+	// question - a hook cannot know that - only that a whole-tree text search has
+	// a better tool here, because the graph answers from DECLARED sources while a
+	// grep hit is a guess. Deliberately narrow: a recursive grep, a bare ripgrep
+	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
+	// file` is reading one file and is left alone.
+	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+\S+\s+-name\b`)
+
+	// A magus invocation whose own output is truncated or filtered by the shell.
+	// magus has output flags for this; a pipe throws away the parts the agent
+	// then has to guess at. jq is deliberately absent: it composes with -o json
+	// rather than fighting it.
+	//
+	// magus must be the COMMAND, not merely a substring: it is anchored to the
+	// start of a command segment (start of line, or after ; && || |) and allows a
+	// leading path or env assignments. Matching a bare \bmagus\b fired on
+	// `grep x cmd/magus/*_test.go | head`, where the word is only a path.
+	magusCmd          = `(^|[;&|]|&&|\|\|)\s*(\w+=\S+\s+)*(\S*/)?magus\s`
+	guardMagusPipeRe  = regexp.MustCompile(magusCmd + `[^|;&]*\|\s*(tail|head|grep|wc|sed|awk|cut|sort|uniq)\b`)
+	guardMagusRedirRe = regexp.MustCompile(magusCmd + `[^|;&]*2>&1`)
 )
 
 const (
 	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Load the magus-vcs skill for the commit checklist if not already loaded."
-	runGuardContext = "magus workspace: a magus target likely covers this (magus run build / test / lint / format / generate; MAGUS.md lists every target). Raw language tools bypass the cache, the sandbox, and affected tracking. Load the magus-run skill if not already loaded; if no target covers this work, proceed."
+	// An explicit ladder, because the old text ended with "if no target covers
+	// this work, proceed" - which reads as permission to go straight to the raw
+	// binary. There is a rung between the two, and naming it is the whole point:
+	// a spell op still runs through magus, so the cache, the sandbox, and
+	// affected tracking all survive.
+	//
+	// Rung 2 DOES forward args: `magus run go::go-test <p> -- -run TestX` runs
+	// `go test ./... -run TestX`. That looked broken until the cache keyed extra
+	// args - the run replayed a cached success, so the arg never executed and the
+	// feature appeared missing.
+	runGuardContext = "magus workspace: run this through magus, not the raw tool - a raw tool bypasses the cache, the sandbox, and affected tracking. Escalate only as far as you actually need:\n" +
+		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - MAGUS.md lists every target\n" +
+		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
+		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
+		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded."
+	// Reverting regenerated output is the wrong default. An agent that did not
+	// hand-edit a gen/ file concludes it is not "its" change and discards it -
+	// but a generate target rewriting its declared outputs is the system working,
+	// and those outputs belong in the same commit as the source that moved them.
+	// The honest test is whether the SOURCE changed, not whether the agent typed
+	// into the output.
+	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs skill if not already loaded."
+	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
+	// search to fall back on, verified against a built binary - `magus query`
+	// fuzzy-matches the DOMAIN graph (targets, Buzz functions, docs) and returns
+	// 0 for a host-language symbol, `magus refs` needs the exact symbol name, and
+	// `magus x` is an interactive TTY picker. So "where does this string appear"
+	// has no magus answer, and denying grep removed a capability with no
+	// replacement - it blocked three legitimate lookups in one session. The
+	// advisory still fires on every repo-wide search, which is the pressure that
+	// matters, without making the agent unable to work.
+	//
+	// The reason must ROUTE, not scold. The two surfaces answer different
+	// questions and confusing them is why the graph gets abandoned: `magus query`
+	// indexes DOMAIN entities (projects, targets, spells, ops, docs) and returns 0
+	// for a code symbol, while `magus refs` indexes CODE symbols. An agent that
+	// tries `magus query someFunc`, gets 0, and concludes the graph is useless is
+	// the failure this text exists to prevent - so it names the prerequisite index
+	// too, since refs is empty until one is built.
+	// Names the mechanism, because the fix is not "remember where you are" - it is
+	// that the project is an argument and never needs to be implied by the CWD.
+	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
+
+	searchGuardReason = "this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
+		"  CODE SYMBOL (where is it defined / used):  magus refs <symbol>   -> definition file, every referencing file, exact lines\n" +
+		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
+		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
+		"  HOW two things connect:  magus path <a> <b>\n" +
+		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
+		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
+
+	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."
+
+	// Named for what the agent should do instead, not for what it did wrong: the
+	// flags are the actionable part, and a weaker model needs the exact spelling.
+	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading."
 )
 
 func denyWholeTree(op string) string {
@@ -671,10 +558,22 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: denyWholeTree("git restore .")}
 	case guardCleanRe.MatchString(command):
 		return bashGuardVerdict{Deny: denyWholeTree("git clean")}
+	case guardPushRe.MatchString(command):
+		return bashGuardVerdict{Context: pushGuardContext}
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext}
+	case guardScopedRevertRe.MatchString(command):
+		return bashGuardVerdict{Context: revertGuardContext}
+	case guardRawToolExemptRe.MatchString(command):
+		return bashGuardVerdict{}
 	case guardRawToolRe.MatchString(command):
 		return bashGuardVerdict{Context: runGuardContext}
+	case guardMagusPipeRe.MatchString(command), guardMagusRedirRe.MatchString(command):
+		return bashGuardVerdict{Context: outputGuardContext}
+	case guardCdMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: cwdGuardContext}
+	case guardCodeSearchRe.MatchString(command):
+		return bashGuardVerdict{Context: searchGuardReason}
 	}
 	return bashGuardVerdict{}
 }

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/httpx"
 )
 
 // RemoteBackend is a pluggable remote backend for cache artifacts, keyed by (projectPath,
@@ -120,6 +121,13 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 	if !c.remote.Active(ctx) {
 		return false
 	}
+	// Timed around the WHOLE fetch, not around GetArtifact alone: the call returns a
+	// stream, so the bytes actually move while importArtifact reads it. Timing the call
+	// would report a fast fetch for a slow download. Active() is excluded because a
+	// backend is asked to make it cheap and cache its probe.
+	start := time.Now()
+	defer func() { httpx.RecorderFrom(ctx).Add(time.Since(start)) }()
+
 	r, err := c.remote.GetArtifact(ctx, projectPath, hash)
 	if err != nil {
 		c.log.Warn("cache.warn", slog.String("msg",
@@ -157,7 +165,11 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 		_ = pw.CloseWithError(err)
 		errCh <- err
 	}()
+	putStart := time.Now()
 	putErr := c.remote.PutArtifact(ctx, s.ProjectPath, hash, pr)
+	// The upload streams from the pipe, so PutArtifact spans the transfer and this is
+	// the real wait. Waiting to publish is still waiting.
+	httpx.RecorderFrom(ctx).Add(time.Since(putStart))
 	_ = pr.CloseWithError(putErr)
 	exportErr := <-errCh
 	if exportErr != nil || putErr != nil {

@@ -31,6 +31,22 @@ type Config struct {
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
+	// TargetTimeout bounds how long any single target may run before magus
+	// cancels it. Zero, the default, means no limit.
+	//
+	// This is a runaway guard, not a performance budget. A magusfile is code,
+	// so a loop that never terminates is a thing someone can write by
+	// accident, and without a deadline nothing reclaims a CI runner that hit
+	// one. The Buzz VM samples cancellation on loop back edges, so a spinning
+	// target notices promptly.
+	//
+	// It bounds the WHOLE target, subprocesses included: cancelling the
+	// context kills the commands the target spawned. Set it above your
+	// slowest legitimate target, not near it, or a long compile becomes a
+	// timeout. Off by default for exactly that reason - a wrong value here
+	// fails builds that were fine.
+	TargetTimeout time.Duration `yaml:"target_timeout"`
+
 	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
 	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
 	HistoryPath string `yaml:"history_path"`
@@ -107,10 +123,22 @@ type Log struct {
 	// notice ("magus:notice:"). Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Silent *bool `yaml:"silent"`
+	// Stream shows every target's subprocess output live and interleaved, instead of
+	// withholding a passing target's output until it fails. This is deliberately NOT
+	// derived from Level: what gets logged and whether a target's own output is
+	// withheld are separate questions, and conflating them is why -v used to ambush
+	// people with a wall of concurrent output when they wanted a little more detail.
+	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
+	// Pointer to distinguish "not set" from explicit false.
+	Stream *bool `yaml:"stream"`
 }
 
 // IsSilent reports whether silent output mode is enabled.
 func (l Log) IsSilent() bool { return l.Silent != nil && *l.Silent }
+
+// IsStream reports whether target output is streamed live rather than withheld
+// until failure.
+func (l Log) IsStream() bool { return l.Stream != nil && *l.Stream }
 
 // Hints controls whether hint messages are emitted to the user.
 type Hints struct {

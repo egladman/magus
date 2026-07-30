@@ -4,6 +4,8 @@ package types
 import (
 	"strings"
 	"unicode"
+
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
 
 // Type represents a Buzz static type.
@@ -57,6 +59,11 @@ type FuncType struct {
 	// resolve named arguments at call sites. Like Yield, it is not part of
 	// TypeName/Compat — names never affect assignability.
 	ParamNames []string
+	// ParamDefaults is parallel to ParamNames and holds each parameter's `=
+	// expr` default, nil where it has none. The checker substitutes one into any
+	// argument slot a call leaves empty; like ParamNames it never affects
+	// assignability.
+	ParamDefaults []ast.Node
 }
 
 func (f *FuncType) TypeName() string {
@@ -111,6 +118,14 @@ func ParseAnnot(s string) Type {
 	return t
 }
 
+// orVoid maps an undeclared function return to Void, the type it means.
+func orVoid(t Type) Type {
+	if t == nil {
+		return Void
+	}
+	return t
+}
+
 // Compat reports whether got can be assigned to want.
 func Compat(got, want Type) bool {
 	// A nil leaf is a legitimate representation: a function type with no declared
@@ -138,7 +153,9 @@ func Compat(got, want Type) bool {
 				return false
 			}
 		}
-		return Compat(gf.Ret, wf.Ret)
+		// An omitted return type IS void in Buzz, so `fun ()` and `fun () > void`
+		// name the same type even though only one of them carries a Ret leaf.
+		return Compat(orVoid(gf.Ret), orVoid(wf.Ret))
 	}
 	// Container types: compare element-wise so the top-level Any-escape rule
 	// applies inside lists and maps too — `[any]` is compatible with `[double]`,

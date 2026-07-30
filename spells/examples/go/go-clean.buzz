@@ -2,7 +2,7 @@
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
     go["go-clean"]();

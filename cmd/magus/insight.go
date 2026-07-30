@@ -306,9 +306,16 @@ func volatilityText(out types.VolatilityReport) error {
 // insightReport gathers every lens and emits the combined Markdown doc (the default),
 // or the bundled struct under -o json/yaml.
 func insightReport(ctx context.Context, root string, args []string) error {
-	// The report's hotspots always include the per-file ranking.
+	// The report's hotspots always include the per-file ranking. The
+	// --mermaid-style=standard|safe flag picks between the rich render and the
+	// portable subset (no quadrantChart, no click/subgraph/classDef) for older
+	// or partial renderers. Default: standard.
+	var mermaidStyle string
 	a, opts, outOpts, err := insightSetup(ctx, root, "report", "Every lens as one Markdown document.", args,
-		func(_ *flag.FlagSet, o *types.InsightOptions) { o.Files = true }, outputMarkdown)
+		func(fs *flag.FlagSet, o *types.InsightOptions) {
+			o.Files = true
+			fs.StringVar(&mermaidStyle, "mermaid-style", "standard", "Mermaid subset: standard (full spec) or safe (portable across older renderers)")
+		}, outputMarkdown)
 	if err != nil {
 		return err
 	}
@@ -344,7 +351,16 @@ func insightReport(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(outOpts, report)
 	}
-	return render.WriteInsightMarkdown(os.Stdout, report)
+	var renderOpts []render.InsightOption
+	switch mermaidStyle {
+	case "safe":
+		renderOpts = append(renderOpts, render.WithMermaidSafe())
+	case "standard":
+		// default; no option needed
+	default:
+		return fmt.Errorf("insight report: --mermaid-style must be 'standard' or 'safe' (got %q)", mermaidStyle)
+	}
+	return render.WriteInsightMarkdown(os.Stdout, report, renderOpts...)
 }
 
 func hotspotText(out types.HotspotOutput) error {

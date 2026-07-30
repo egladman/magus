@@ -8,7 +8,7 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    local subcommands="ls describe run x where tail affected insight query explain path graph watch status doctor config server repl completion init self version clean merge-driver buzz help"
+    local subcommands="ls describe run x where tail affected insight query explain path graph watch status doctor config server repl completion man init self version clean merge-driver buzz help"
     local verbs="ls build test lint format clean generate ci"
     local nouns="spell charm target project workspace module mcp-tool"
     local lenses="hotspots affinity ownership trend report"
@@ -120,6 +120,9 @@ _magus_complete() {
             if [[ "$COMP_CWORD" -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "$shells" -- "$cur") )
             fi
+            ;;
+        man)
+            COMPREPLY=( $(compgen -W "install --dir" -- "$cur") )
             ;;
     esac
     return 0

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -262,6 +263,13 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // computed footprint is invisible to this static read and silently under-declaring it
 // risks a stale cache hit.
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
+	// Cross-project OUTPUT declarations, collected across the whole walk and applied
+	// after it. Deferred because the owner may not be walked yet when the writer declares
+	// it. Named rather than a positional pair because the direction is counterintuitive
+	// and reads backwards at a glance: the OWNER (whose tree is written) gains the
+	// dependency on the WRITER, so the writer runs first and the owner's cache key is
+	// computed against the finished bytes.
+	var crossOut []crossOutput
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -286,7 +294,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					}
 				}
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectLabel(p.Path, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.inputs/outputs requires string-literal globs; a computed argument is invisible to the cache and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -318,11 +326,50 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						extra = append(extra, owner)
 					}
 				}
-				for _, g := range n.Outputs {
-					if p.TargetOutputs == nil {
-						p.TargetOutputs = map[string][]string{}
+				for _, ref := range n.Outputs {
+					owner := ref.Project
+					if owner == "" {
+						owner = p.Path // same-project output: owned by this project
+					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+						owner = r
+					} else {
+						// A LOAD ERROR, not a best-effort drop as on the input side. The
+						// consequences invert: dropping an unresolvable input only
+						// under-declares the cache key, but dropping an output takes the
+						// glob out of the snapshot set, so the file is never recorded and
+						// every later cache hit replays a build that leaves it missing -
+						// the exact stale-hit failure this footprint exists to prevent.
+						return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
+							"%s: target %q: ctx.outputs declares an output into %q, which does not resolve to a path in this workspace",
+							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Project)
 					}
-					p.TargetOutputs[n.Name] = appendUniq(p.TargetOutputs[n.Name], g)
+					if p.TargetOutputs == nil {
+						p.TargetOutputs = map[string][]types.OutputRef{}
+					}
+					resolved := types.OutputRef{Project: owner, Glob: ref.Glob}
+					if !slices.Contains(p.TargetOutputs[n.Name], resolved) {
+						p.TargetOutputs[n.Name] = append(p.TargetOutputs[n.Name], resolved)
+					}
+					// The edge runs the OTHER WAY from an input's. Writing another
+					// project's tree means that project must run AFTER this one, so the
+					// OWNER gains the dependency - not this project. Recorded here and
+					// applied once every project is known, because the owner may not have
+					// been walked yet.
+					if owner != p.Path {
+						// The glob half needs the same hygiene the project half just got.
+						// Nothing checked it before: ctx.outputs(site.file("../../etc/x"))
+						// survived extraction and resolution and surfaced only once the target
+						// had already run - or, worse, made `magus clean` abort the WHOLE
+						// workspace, since clean expands globs for every project in one loop
+						// and doublestar rejects the pattern. The rule is the cache's own
+						// (internal/cache/snapshot.go): owner-relative, no "..".
+						if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
+							return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
+								"%s: target %q: ctx.outputs glob %q must be relative to %q and must not contain ..",
+								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
+						}
+						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
+					}
 				}
 			}
 		}
@@ -332,7 +379,97 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			p.DependsOn = slices.Compact(p.DependsOn)
 		}
 	}
+	for _, co := range crossOut {
+		op := m.ws.Get(co.owner)
+		if op == nil {
+			// Also a load error, and for the same reason the unresolvable case above is:
+			// file.Resolve is path hygiene, not a registration check, so an import naming
+			// a directory with no project marker resolves cleanly and lands here. The ref
+			// still reaches step.Outputs and is still snapshotted, but it gains no
+			// ordering edge and no owner records it, so nothing cleans it and the merge
+			// driver cannot regenerate it. The cross-INPUT side already fails loudly on
+			// the same typo (an unregistered dependency); outputs must not be quieter.
+			return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
+				"%s: ctx.outputs declares an output into %q, which magus did not discover as a project; it needs a project marker and must not sit under an ignored directory",
+				co.writer, co.owner)
+		}
+		// The two cross-project edges run opposite ways, so declaring both against one
+		// project closes a 2-cycle: reading b.file(...) makes this project depend on b,
+		// writing b.file(...) makes b depend on this project. That is the most natural
+		// shape to reach for - read a project's sources, write its generated file back -
+		// so it has to fail here, naming both halves, while both are still in hand.
+		//
+		// Left to the depgraph it surfaces as a bare "graph: dependency cycle" that names
+		// no project and no file, takes down `magus graph` and the whole affected
+		// pipeline rather than the two projects involved, and is scope-dependent: a run
+		// selecting only the writer never builds the full graph, so the same workspace
+		// passes or fails depending on what was asked for.
+		if wp := m.ws.Get(co.writer); wp != nil && slices.Contains(wp.DependsOn, co.owner) {
+			return types.DiagnosticErrorf(types.CrossOutputCycle,
+				"%s: ctx.outputs writes %q into %q, so %s must run after %s, but %s already depends on %s; a target cannot both read from and write into the same project",
+				co.writer, co.glob, co.owner, co.owner, co.writer, co.writer, co.owner)
+		}
+		if !slices.Contains(op.DependsOn, co.writer) {
+			op.DependsOn = append(op.DependsOn, co.writer)
+			slices.Sort(op.DependsOn)
+			op.DependsOn = slices.Compact(op.DependsOn)
+		}
+		// File the glob on the OWNER, keyed by the writer. This is what makes the file
+		// visible to everything that asks a project what lands in its tree - clean,
+		// watch's rebuild-loop guard, ownership lookup, the merge driver - none of which
+		// can see the writer's declaration, and all of which resolve globs against the
+		// project's own root, which is exactly what this glob is relative to.
+		if op.InboundOutputs == nil {
+			op.InboundOutputs = map[string][]string{}
+		}
+		// Two projects writing one path is not a conflict magus can order its way out of.
+		// Both snapshot the file, so whichever loses the race still records the winner's
+		// bytes as its own output, and a later cache hit for the loser replays content it
+		// never produced - cross-project cache poisoning, silent and durable.
+		//
+		// Checked here rather than left to the run-scoped MGS4002 advisory, which only
+		// fires when both writers land in ONE dispatch and only for the first stage per
+		// project, so two separate invocations never see it at all. Exact-path collisions
+		// only, the same comparison MGS4002 makes: glob-vs-glob overlap is not decidable
+		// in general.
+		if claimant := outputClaimant(op, co); claimant != "" {
+			first, second := min(claimant, co.writer), max(claimant, co.writer)
+			return types.DiagnosticErrorf(types.OutputOverlapDetected,
+				"%s: %q is declared as an output by two projects (%s and %s); they cannot be ordered against each other, and each would cache the other's bytes as its own output",
+				co.owner, co.glob, first, second)
+		}
+		op.InboundOutputs[co.writer] = append(op.InboundOutputs[co.writer], co.glob)
+	}
 	return nil
+}
+
+// crossOutput is one target's declaration that it writes into ANOTHER project's tree:
+// the owner whose tree receives the file, the writer producing it, and the glob relative
+// to the OWNER's root. Collected during the walk and applied once every project is known.
+type crossOutput struct{ owner, writer, glob string }
+
+// outputClaimant returns the project already claiming co.glob in the owner's tree, or ""
+// when the path is unclaimed. A claim is either another writer that declared the same
+// inbound path or the owner declaring it for itself - the second matters just as much,
+// since the owner's own build would then produce and clean a file the writer also owns.
+// The writer re-declaring its own glob is not a claim; that is idempotent.
+func outputClaimant(owner *types.Project, co crossOutput) string {
+	for _, writer := range slices.Sorted(maps.Keys(owner.InboundOutputs)) {
+		if writer != co.writer && slices.Contains(owner.InboundOutputs[writer], co.glob) {
+			return writer
+		}
+	}
+	if slices.Contains(owner.Outputs, co.glob) {
+		return owner.Path
+	}
+	for _, refs := range owner.TargetOutputs {
+		for _, ref := range refs {
+			if (ref.Project == "" || ref.Project == owner.Path) && ref.Glob == co.glob {
+				return owner.Path
+			}
+		}
+	}
+	return ""
 }
 
 // concatSource reads a project source's files in load order into one string for the
@@ -365,16 +502,21 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			continue // best-effort introspection: a project we can't read just omits its graph
 		}
 		for _, src := range srcs {
-			entry := types.TargetGraphProject{Path: p.Path, Engine: src.Engine, DependsOn: p.DependsOn}
+			entry := types.TargetGraphProject{Path: p.Path, Name: types.ProjectDisplayName(p.Path, p.Name, p.Dir), Engine: src.Engine, DependsOn: p.DependsOn}
 			if repoRoot != "" {
 				if rel, err := filepath.Rel(repoRoot, p.Dir); err == nil {
 					entry.RelPath = filepath.ToSlash(rel)
 				}
 			}
 			// The workspace-root project's path is ".", which would render as the
-			// ambiguous "## Project: ." heading; types.ProjectLabel collapses it to the
-			// workspace directory name (e.g. "magus"). A non-root RelPath is kept as-is.
-			entry.RelPath = types.ProjectLabel(entry.RelPath, p.Dir)
+			// ambiguous "## Project: ." heading. A DECLARED name wins outright - it is
+			// the only label that survives being checked out under a different
+			// directory name (a worktree, a renamed clone, a CI checkout), each of
+			// which otherwise renamed the root project and rewrote every generated
+			// index naming it. Without one, fall back to the directory-derived label.
+			// A non-root RelPath is kept as-is.
+			entry.RelPath = types.ProjectDisplayName(entry.RelPath, p.Name, p.Dir)
+			entry.Name = entry.RelPath
 			if src.Engine == "buzz" {
 				nodes := collectTargetNodes(src)
 				resolveNodeRefs(nodes, p.Path)

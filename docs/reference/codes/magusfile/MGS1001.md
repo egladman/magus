@@ -18,7 +18,7 @@ asked to run the `ci` target, but no project in the selected scope declares one.
 ## Why
 
 `ci` is an ordinary magusfile target. Magus does not hardcode a CI chain.
-You compose the gate yourself with `magus.needs`, ordering the stages your
+You compose the gate yourself with `magus\needs`, ordering the stages your
 workspace needs (build, test, lint, ...).
 
 It is the one target magus treats as the CI anchor: `magus
@@ -40,7 +40,7 @@ Magus fails fast instead. Both paths enforce the same rule:
 ## Resolution
 
 Define a `ci` target in your magusfile and compose the stages with
-`magus.needs`:
+`magus\needs`:
 
 ```buzz
 export fun ci(ctx: magus\Context, _a: [str]) > void {
@@ -58,7 +58,7 @@ for the anchor to resolve. Declare it wherever you compose the workspace gate.
 ## What this is NOT
 
 - **Not a missing-spell error.** `ci` is never a spell op; it lives in the
-  magusfile and composes spell-backed targets via `magus.needs`. Adding a
+  magusfile and composes spell-backed targets via `magus\needs`. Adding a
   spell will not satisfy this check.
 - **Not triggered by an empty affected set.** `magus affected ci` with no
   changed projects is a real no-op and does not raise MGS1001. The diagnostic

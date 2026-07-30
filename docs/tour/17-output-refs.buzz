@@ -1,0 +1,50 @@
+// Output references: what they are, and what they are not. Run `run build` and
+// this target fails on purpose. Under the failure card magus prints a short id:
+//
+//   [fail] demo build (ran, 4ms)
+//     cause: exit status 1
+//     output: out1a2b3c4d
+//     inspect: magus query output out1a2b3c4d
+//
+// That `out...` id is an OUTPUT REFERENCE: a handle to the bytes ONE execution
+// wrote. `magus query output <ref>` replays them verbatim - never a
+// reconstruction, never a summary - so the failing log survives the scrollback
+// even after a hundred later runs.
+//
+// What it is NOT is the more useful half:
+//
+//   Not your cache key. The cache key is the SHA-256 of a target's inputs and
+//   decides whether work runs at all. A ref identifies an EXECUTION, and the
+//   same key can have many. They answer different questions: "has this been
+//   built?" versus "what did that particular run print?".
+//
+//   Not deterministic, on purpose. A ref is minted fresh per execution rather
+//   than derived from the key, because deriving it would collapse every run of
+//   an unchanged target onto one id - and the whole reason you want a volatile
+//   target's history is that its runs DIFFER. Two failures deserve two refs.
+//
+//   Not portable. A ref addresses your machine's local cache. Paste one from a
+//   teammate's terminal, or from a CI log, and `query output` finds nothing:
+//   the runner that minted it was deleted when the job ended. That is why magus
+//   stops printing the `inspect:` hint when it detects CI - a command that
+//   cannot work where it is read is worse than no hint at all.
+//
+//   Not an archive. magus keeps the last few executions per cache key and prunes
+//   the rest. A ref is for the debugging loop you are in right now; anything you
+//   need to keep, keep as an artifact.
+//
+// The short version: a cache key answers "did this change?", a ref answers "what
+// happened that time?". Reach for `magus tail` to follow a run live, and a ref
+// when you want the exact bytes of one that already finished.
+//
+// (The body below uses os.exec, which runs a real command. magus.cmd is the escape
+// hatch for invoking magus ITSELF - `magus\cmd(["sh", ...])` would run `magus sh`.)
+
+import "magus";
+import "os";
+
+magus\project({});
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    os\exec("sh", ["-c", "echo 'compiling widget...'; echo 'error: undefined symbol' >&2; exit 1"], ".", {});
+}

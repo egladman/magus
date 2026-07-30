@@ -2,4 +2,4 @@
 // ffi.sizeOf now takes a C type-name *string* (C-ABI), not a Zig type or an int.
 // Passing a non-string is a clear error.
 import "ffi";
-ffi.sizeOf(1);
+ffi\sizeOf(1);

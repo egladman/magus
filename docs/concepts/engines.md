@@ -72,7 +72,7 @@ a long-running process `magus run` blocks on). The op's kind is inferred from th
 value, so one spell mixes both. A remote cache backend
 is not an op: it is a spell that exports the backend functions
 (`enabled`/`get_artifact`/`put_artifact`/`prune`), detected by name and wired with
-`magus.cache.remote` (see [Remote caching](remote-cache.md)).
+`magus\cache.remote` (see [Remote caching](cache/remote.md)).
 
 **Doc-comment capture.** Buzz captures a handler's doc comment at compile time
 (the parser binds the comment to the function node; `FunDoc` reads it back), and
@@ -85,20 +85,20 @@ built-ins.
 
 magus layers its host methods onto Buzz's own stdlib modules under the **same bare
 names**: `import "os"` carries both Buzz's `os.*` (sleep, env, execute) and magus's
-additions (`os.exec`, `os.which`, ...); `import "fs"` carries Buzz's `fs` plus
-`fs.glob`/`readFile`; and magus adds whole modules Buzz lacks (`vcs`, `archive`,
+additions (`os\exec`, `os\which`, ...); `import "fs"` carries Buzz's `fs` plus
+`fs\glob`/`readFile`; and magus adds whole modules Buzz lacks (`vcs`, `archive`,
 `http`, `charm`, ...). One import per domain covers the union, with no separate
 `extra` namespace to remember which side a call lives on.
 
 Where a method overlaps a Buzz stdlib call, the magus form is **sandbox-aware**
-while the bare stdlib is not. For example, `env.get`/`lookup` honor the env
-allowlist, whereas Buzz's `os.env` is raw. Those overlaps are noted per-method in the
+while the bare stdlib is not. For example, `env\get`/`lookup` honor the env
+allowlist, whereas Buzz's `os\env` is raw. Those overlaps are noted per-method in the
 [module reference](../reference/buzz/index.md) (either works); the cross-reference lives in
 `host/overlap.go`.
 
 A few entries are _not_ treated as duplicates because the magus behavior the
-stdlib can't reproduce: magus's `os.exit` raises a lifecycle error (Buzz's
-hard-exits the process), magus's `os.sleep` is cancellable (Buzz's blocks), and
+stdlib can't reproduce: magus's `os\exit` raises a lifecycle error (Buzz's
+hard-exits the process), magus's `os\sleep` is cancellable (Buzz's blocks), and
 magus's `crypto.*_file` hashes a file (Buzz's `hash` only takes a string). These
 stay on the magus surface.
 

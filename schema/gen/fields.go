@@ -333,6 +333,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project",
 	},
 	{
+		GoPath:   "Log.Stream",
+		YamlPath: "log.stream",
+		EnvVar:   "MAGUS_LOG_STREAM",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of",
+	},
+	{
 		GoPath:   "Hints.Enabled",
 		YamlPath: "hints.enabled",
 		EnvVar:   "MAGUS_HINTS_ENABLED",
@@ -411,6 +419,14 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "concurrency", Short: "j"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).",
+	},
+	{
+		GoPath:   "TargetTimeout",
+		YamlPath: "target_timeout",
+		EnvVar:   "MAGUS_TARGET_TIMEOUT",
+		Flag:     fieldtype.FlagNames{Long: "target-timeout"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus",
 	},
 	{
 		GoPath:   "HistoryPath",

@@ -107,11 +107,11 @@ func TestListEmptyStore(t *testing.T) {
 
 func TestValidateRejections(t *testing.T) {
 	cases := map[string]Record{
-		"bad name":       {Name: "Not Kebab", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
-		"unknown type":   {Name: "x", Type: "observation", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
-		"no refs":        {Name: "x", Type: TypePointer},
-		"unknown kind":   {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: "fact", Target: "t"}}},
-		"empty target":   {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "  "}}},
+		"bad name":        {Name: "Not Kebab", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
+		"unknown type":    {Name: "x", Type: "observation", Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}},
+		"no refs":         {Name: "x", Type: TypePointer},
+		"unknown kind":    {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: "fact", Target: "t"}}},
+		"empty target":    {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "  "}}},
 		"pointer w/prose": {Name: "x", Type: TypePointer, Refs: []Ref{{Kind: RefKindNode, Target: "project:magus"}}, Body: "not allowed"},
 	}
 	root := testRoot(t)
@@ -148,3 +148,46 @@ func TestCursorRoundTrip(t *testing.T) {
 	assert.Equal(t, "left off wiring the @memory shard", got)
 }
 
+func TestVerifyReportsMalformedAndStaleEntries(t *testing.T) {
+	root := testRoot(t)
+	good, err := Put(root, Record{Name: "active-plan", Type: TypePlan, Status: "active", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, Body: "Finish the release gate."})
+	require.NoError(t, err)
+	_, err = Put(root, Record{Name: "old-plan", Type: TypePlan, Status: "stale", Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{good.Name}, Body: "Replace this."})
+	require.NoError(t, err)
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	bad := filepath.Join(dir, recordsSubdir, "broken.md")
+	require.NoError(t, os.WriteFile(bad, []byte("not frontmatter"), 0o644))
+
+	report, err := Verify(root)
+	require.NoError(t, err)
+	assert.Equal(t, Verification{Records: 2, Issues: []Issue{
+		{Severity: "error", Code: "invalid-entry", Path: bad, Message: "memory: broken.md: missing YAML frontmatter", Hint: "Repair or remove this file, then run `magus memory verify` again."},
+		{Severity: "warning", Code: "stale-entry", Path: filepath.Join(dir, recordsSubdir, "old-plan.md"), Record: "old-plan", Message: "entry is marked stale", Hint: "Refresh it with `magus memory put` or remove it with `magus memory delete`."},
+	}}, report)
+	_, err = List(root)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus memory verify")
+}
+
+func TestVerifyReportsBrokenEntryReference(t *testing.T) {
+	root := testRoot(t)
+	_, err := Put(root, Record{Name: "release-plan", Type: TypePlan, Refs: []Ref{{Kind: RefKindCommand, Target: "magus affected ci"}}, References: []string{"missing-decision"}, Body: "Ship after CI."})
+	require.NoError(t, err)
+
+	report, err := Verify(root)
+	require.NoError(t, err)
+	assert.Equal(t, Verification{Records: 1, Issues: []Issue{{
+		Severity: "error", Code: "missing-reference", Record: "release-plan",
+		Path:    filepath.Join(mustDir(t, root), recordsSubdir, "release-plan.md"),
+		Message: "references missing entry \"missing-decision\"",
+		Hint:    "Create the referenced entry, update this entry with `magus memory put`, or delete the broken reference.",
+	}}}, report)
+}
+
+func mustDir(t *testing.T, root string) string {
+	t.Helper()
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	return dir
+}

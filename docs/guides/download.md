@@ -18,9 +18,9 @@ Each platform guide has a copy-paste `curl` install that pulls the current relea
 - [Windows](download/windows.md) - amd64
 - [Docker](download/docker.md) - run in a container instead of installing a binary (any platform)
 
-Prefer Go tooling or a local build? See [Install with Go](#install-with-go) and [Build from source](#build-from-source).
+Prefer a prebuilt binary or a local build? See [Install prebuilt binary](#install-prebuilt-binary) and [Build from source](#build-from-source). Already using a version manager? See [mise](#mise).
 
-Every build is published at [/public/release/](../../public/release/) alongside its `SHA256SUMS` manifest and signature. However you install, [verify the release](#verify-a-release) first.
+Every build is published to [GitHub Releases](https://github.com/egladman/magus/releases) alongside its `SHA256SUMS` manifest and signature. However you install, [verify the release](#verify-a-release) first.
 
 ## Update
 
@@ -39,7 +39,7 @@ Package-maintainer builds compiled with `-tags noselfupdate` disable this subcom
 
 ## Verify a release
 
-Alongside the binary tarballs, each release ships `SHA256SUMS` (the manifest) and `SHA256SUMS.sig` (its Ed25519 signature). All artifacts, plus the signing key, are listed at [/public/release/](../../public/release/).
+Alongside the binary tarballs, each release ships `SHA256SUMS` (the manifest) and `SHA256SUMS.sig` (its Ed25519 signature). All artifacts, plus the signing key, are attached to each [GitHub release](https://github.com/egladman/magus/releases); [/public/](../../public/) indexes the releases and the machine-readable manifest.
 
 **Already running magus?** Use the built-in verifier:
 
@@ -84,7 +84,7 @@ Raw base64 (32 bytes):
 /7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
 ```
 
-The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. Rotating the key requires shipping a new release built with the new embedded key; older binaries continue to trust only the previous key.
+The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. A planned rotation first ships a release signed by the current key that embeds the replacement key; later releases can use the replacement. Older binaries cannot be remotely revoked if the current key is compromised. The maintainer procedure is in the [contributing guide](../development/contributing/).
 
 ## Shell completion
 
@@ -108,17 +108,89 @@ Or create a symlink:
 ln -s "$(command -v magus)" ~/.local/bin/mgs
 ```
 
-## Install with Go
+## Install prebuilt binary
 
-`go install github.com/egladman/magus/cmd/magus@latest` is **not currently supported.** magus vendors its embedded Buzz interpreter through a local `replace` directive in `go.mod`, and `go install` refuses any module whose `go.mod` carries a `replace` - it fetches the tagged source from the module proxy, where a local path cannot resolve, and fails with:
+### A. Recommended
 
-```text
-The go.mod file for the module providing named packages contains one or
-more replace directives. It must not contain directives that would cause
-it to be interpreted differently than if it were the main module.
+
+``` sh
+curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
+less install.sh
+sh install.sh
 ```
 
-Until the interpreter is published as a standalone, versioned module, install a [prebuilt binary](#install) (recommended) or build from a clone below - a clone works because the `replace` resolves against the checked-out `./libs/gopherbuzz`.
+Review the script first: it lets you inspect the download, signature verification, and
+installation steps before granting a network response access to your shell.
+
+The installer selects the static binary by default. Pass `--variant dynamic` only
+when you specifically need the platform-native build and that release publishes it.
+
+
+### B. Yolo
+
+``` sh
+curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
+```
+
+## mise
+
+magus installs through [mise](https://mise.jdx.dev) with no plugin, via its
+[ubi](https://mise.jdx.dev/dev-tools/backends/ubi.html) backend, which pulls the
+GitHub release asset matching your platform:
+
+```bash
+mise use -g ubi:egladman/magus@__MAGUS_VERSION__
+```
+
+Pin it per repository by putting it in that repo's `mise.toml` instead:
+
+```toml
+[tools]
+"ubi:egladman/magus" = "__MAGUS_VERSION__"
+```
+
+Three things to know before choosing this route.
+
+**mise owns the version, not `magus self update`.** Upgrade with `mise upgrade`.
+Running `magus self update` on a mise-managed install would replace a binary mise
+believes it controls, and the next `mise install` would undo it.
+
+**Nothing verifies the release signature.** ubi fetches the asset over HTTPS and
+trusts GitHub; it performs no signature or checksum check of its own. The platform
+installers and `magus self update` both verify the artifact against the
+Ed25519-signed manifest. If that guarantee matters,
+[verify the release](#verify-a-release) by hand afterwards, or use the platform
+installer instead.
+
+**You may get a different binary than the installer hands you.** The installer
+defaults to the static build; ubi resolves to the dynamically linked one where a
+release publishes both. `darwin/amd64` currently ships only a static build, so
+that is what it gets there.
+
+### Why not aqua, or the go backend?
+
+[aqua](https://mise.jdx.dev/dev-tools/backends/aqua.html) is mise's preferred
+backend where a tool is registered, and it is the better target long-term because
+the aqua registry carries checksum and signature metadata that ubi has no
+equivalent for. It is not usable yet: magus has no aqua-registry entry, so
+`aqua:egladman/magus` fails with `no aqua-registry found`. Getting one is an
+upstream pull request to
+[aquaproj/aqua-registry](https://github.com/aquaproj/aqua-registry), and it would
+close the verification gap above.
+
+The `go` backend resolves and compiles, but do not use it for an install you
+intend to keep:
+
+```bash
+# builds, but reports: magus unknown (unknown) built unknown
+mise use -g go:github.com/egladman/magus/cmd/magus@latest
+```
+
+`go install` cannot pass the `-ldflags` that stamp the version, commit, and build
+date. `unknown` is not cosmetic - it is the dev-build sentinel magus keys on
+internally to fingerprint an unstamped build, so a go-backend install presents
+itself to magus as a development binary rather than the release it came from.
+Use it to try magus, not to run it.
 
 ## Build from source
 

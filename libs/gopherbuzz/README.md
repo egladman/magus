@@ -3,10 +3,105 @@
 A pure-Go bytecode VM for the [Buzz](https://buzz-lang.dev/) scripting
 language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
 `buzz-language/buzz` `main` at the commit pinned in [`version.go`](version.go)
-(`UpstreamRef`); the released 0.5.0 baseline stays compatible.
+(`UpstreamRef`).
+
+It implements a **subset** of the language. The goal is 100% compatibility; the
+running record of how far along that is lives in [Upstream parity](#upstream-parity),
+and is enforced by a test rather than asserted by this file.
 
 - Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
 - Hot-path notes: [Performance design](#performance-design) · JIT: [Baseline JIT](#baseline-jit)
+
+## Upstream parity
+
+**48 of 83** upstream behavior tests pass, measured against `UpstreamRef`
+(`0.5.0-251-ged42f47`) on 2026-07-28.
+
+The baseline when this record started was 12; `is` grammar, typed for-init, and
+the bitwise family, the inferred enum case, char literals plus `as!`, and string
+iteration/subscripting, the iterator protocol, decimal string escapes, ordered
+JSON encoding, static object fields, generics-as-erasure, multi-clause `for`,
+nullable declarations without an initializer, object-literal field punning,
+`> void` arrow bodies, `enum<T>` backing types, optional chaining, default
+argument values, `!>`/`*>` inside a function TYPE, multiple typed catch clauses,
+labeled loops, block expressions, free identifiers, and generic object
+declarations, inline ifs, `catch void`, and contextual typing for inferred enum
+cases, range precedence, the range methods, and anonymous object literals that
+resolve to their expected object have banked thirty-six since. Measure against the PINNED commit,
+not a local `main` checkout: a newer checkout has files that do not exist at the
+pin, which is how an earlier hand-count reached a wrong 13-of-84.
+
+That number is the honest headline, and it is lower than this file used to imply.
+It is produced by running every file in upstream's `tests/behavior/` through this
+VM. Nothing is copied into this repo: `magus run conformance gopherbuzz` fetches
+`buzz-language/buzz` at the pinned sha into a cache directory and runs the suite
+against it, so the record is reproducible and always measured against the ref this
+VM claims to track.
+
+`testdata/upstream-behavior-allowlist.txt` is the enforced source of truth. The
+test fails in **both** directions: an allowlisted test that regresses, and a
+non-allowlisted test that starts passing without being recorded. Parity can
+therefore only go up, and closing a gap forces the gain to be banked.
+
+### What works
+
+Objects (fields with defaults, methods, `static fun` and static fields, `mut` instances, optional
+unwrap `if (x -> y)`, field punning), enums (`enum<str>`/`enum<int>` backing
+types and explicit case values), namespaces and imports, optionals with `??`,
+`as?` and optional chaining `?.`/`?[`, nullable declarations that omit their
+initializer, default argument values, error sets on declarations plus
+`try` and multiple typed `catch` clauses, fibers with `resolve`, ranges, string
+interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
+the collection/loop core (multi-clause `for`, labeled loops), and block
+expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
+generic object declarations, inline ifs, and `catch void`. Two deliberate supersets: the contextual
+`test` keyword (below) and named-argument labels.
+
+### What does not, ranked by upstream tests blocked
+
+| Gap | Blocks | Example |
+| --- | ---: | --- |
+| Type-value literal `<T>` | 5 | `typeof x == <mut [int]>` |
+| Inferred enum case in an UNTYPED position | 2 | `io\File.open(p, mode: .read)` |
+| `match` expressions | 2 | `match (axis) { .up -> 1, .down -> 2 }` |
+| Forward-referenced top-level placeholders | 2 | `if (ahead == "wat")` before its decl |
+| `protocol` declarations | 1 | `protocol Shape { fun area() > int }` |
+
+Plus a long tail of single-test gaps (selective imports, anonymous object
+TYPES, tuples, nested backtick interpolation, assignment as an arrow-lambda
+body, `as`-binding in an if condition). Two remaining
+differences are deliberate, not pending:
+
+- **`math\deg` will not be matched.** Upstream's result implies a degrees-per-radian
+  constant of 57.295779513082195; the correctly-rounded f64 value is
+  57.29577951308232, which is what gopherbuzz returns. Matching upstream here would
+  mean shipping a less accurate constant to satisfy a test.
+- **GC collector callbacks** depend on Buzz's own collector running at points a Go
+  program does not control. Upstream's test asserts a collector ran after dropping a
+  reference; Go's GC gives no such guarantee.
+
+Two known divergences are ours rather than missing features. The first is the
+more dangerous, because it answers rather than errors: **closures capture
+upvalues by VALUE**, a snapshot taken when the closure is created, so a closure
+that assigns to an enclosing local updates only its own copy. `var sum = 0;
+final add = fun (n: int) > void { sum = sum + n; }; add(5);` leaves `sum` at 0
+where upstream leaves it at 5. This is what blocks `functional.buzz`, whose
+`forEach` tests accumulate into an enclosing variable. Fixing it means boxing
+upvalues into cells rather than copying Values, which is a VM change, not a
+parser one. `parity_test.go` pins the current behaviour so a fix has to be
+deliberate.
+
+The second: a compound assign
+(`x op= v`) desugars to `x = x op v` sharing the target node, so the target is
+evaluated twice. `f().n += 1` calls `f()` twice where upstream calls it once.
+Harmless for the plain-variable and field cases that make up ordinary use, wrong
+for a call or any other side-effecting target.
+
+A test is often blocked by more than one gap, so closing a single entry does not
+always flip a file green. The allowlist reports real progress; this table only
+explains it. Widening the `is` type grammar is the worked example: it unblocked
+`is.buzz`, while `maps.buzz` and `mutual-import.buzz` stayed red behind other
+gaps even though their `is` usage now parses.
 
 ## Performance
 

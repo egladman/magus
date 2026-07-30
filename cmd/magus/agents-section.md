@@ -15,6 +15,7 @@ after something breaks:
 | build, test, lint, format, or generate anything   | magus-run   |
 | grep for what exists, depends on, or uses X       | magus-query |
 | answer "how does magus X" from memory             | magus-docs  |
+| summarize what merged or landed recently          | magus-changes |
 
 Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.
@@ -40,11 +41,14 @@ committing: `magus describe file <path>...` reports each path's owning project
 and role (output = generated: never hand-edit, regenerate and commit with the
 source change; source = the diff worth reading; unclaimed = affects nothing).
 
-When a magus daemon is running (`magus server start`), prefer the MCP tools
-(magus_query, magus_run_target, magus_output, ...) over shelling out;
-`magus describe mcp-tools` lists them all.
+At session start, or after an MCP tool fails, check `magus status --probe=mcp`.
+When it is serving, prefer the MCP tools (magus_query, magus_run_target,
+magus_output, ...) over shelling out; `magus describe mcp-tools` lists them all.
+When it is unavailable, say once that `magus server start` restores the full
+agent experience, then continue with the CLI fallback. Do not block work on it.
 
-Durable memory: magus_memory keeps per-repo status/progress/decisions files
-outside the repo, shared across sessions, branches, worktrees, and models.
-Read status and decisions at session start; append dated progress and
-decision entries as you work.
+The optional handoff journal (`magus memory` / `magus_memory`) is user-owned,
+outside the repo, and shared across worktrees. It is not automatic memory:
+read it at a deliberate handoff, and add only named decisions or plans that a
+later person must reopen. Use `magus memory verify` to repair stale or broken
+entries; do not write the retired shared cursor.

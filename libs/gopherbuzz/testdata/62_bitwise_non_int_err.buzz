@@ -1,0 +1,5 @@
+// @error: << requires int operands, got double
+// Bitwise operators are declared over int alone - a float operand is rejected
+// rather than promoted or truncated, unlike the arithmetic operators.
+final x = 1.5;
+final __r = x << 1;

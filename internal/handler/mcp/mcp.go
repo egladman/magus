@@ -9,7 +9,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -305,7 +304,7 @@ func argsJSON(args map[string]any) []byte {
 	if len(args) == 0 {
 		return nil
 	}
-	raw, err := json.Marshal(args)
+	raw, err := codec.Marshal(args)
 	if err != nil {
 		return nil
 	}

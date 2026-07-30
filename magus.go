@@ -30,14 +30,10 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
-	"golang.org/x/term"
 )
 
 // collapseOnSuccess decides whether per-project subprocess output is withheld until a
-// failure (showing only a status line on success). It is enabled only for interactive
-// pretty runs at default verbosity: a non-TTY/CI stdout keeps full streaming so logs
-// stay complete, -v (level below Info) streams live, --silent has its own stricter
-// handling, and json/text formats are never collapsed.
+// failure. It is the default for human output; -v streams live.
 func collapseOnSuccess(l config.Log) bool {
 	switch strings.ToLower(l.Format) {
 	case "pretty", "plain", "":
@@ -45,10 +41,13 @@ func collapseOnSuccess(l config.Log) bool {
 	default:
 		return false
 	}
-	if l.IsSilent() || l.SlogLevel() < slog.LevelInfo {
+	// Keyed on Stream, not on Level. Raising the log level asks for more RECORDS;
+	// it is not a request to stop withholding each target's own output. -vv sets
+	// Stream explicitly for callers who do want that.
+	if l.IsSilent() || l.IsStream() {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return true
 }
 
 // Magus is the high-level orchestrator. Not safe for concurrent use. Inspect-constructed workspaces have no cache.
@@ -283,13 +282,13 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
+			return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: preload %q: %w", p.Path, err)
+				return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
@@ -570,6 +569,7 @@ func (m *Magus) volatilityConfig() volatility.Config {
 		BootstrapSamples: m.cfg.Volatility.BootstrapSamples,
 		MinSamples:       m.cfg.Volatility.MinSamples,
 		Threshold:        m.cfg.Volatility.Threshold,
+		Annotate:         m.cfg.Volatility.AnnotateGHA,
 	}
 }
 
@@ -608,7 +608,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: ispell.BuiltinsHash(),
-		Label:           types.ProjectLabel(p.Path, p.Dir),
+		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}
 }
 

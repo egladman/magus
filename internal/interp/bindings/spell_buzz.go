@@ -68,7 +68,11 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 // directory, added to the import search path so a spell that imports sibling helper
 // modules (e.g. render.buzz's `import "render_text"`) resolves during discovery.
 func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.Descriptor, error) {
-	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(dir)...))
+	roots := []string{dir}
+	if source := interp.SourceFromContext(ctx); source != nil && source.Dir != dir {
+		roots = append(roots, source.Dir)
+	}
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithSearchPaths(spellSearchPaths(roots...)...))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
@@ -78,27 +82,19 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.
 	return ispell.Resolve(ctx, sess)
 }
 
-// spellSearchPaths returns the import search paths the discovery probe uses for a
-// workspace-local spell: the project-relative layouts rooted at the spell's own
-// directory, so a plain sibling import (e.g. render.buzz's `import "render_text"`)
-// resolves no matter the process cwd. This is deliberately narrower than the run-time
-// magusSearchPaths (runtime.go): it omits the cwd, workspace-root, and magusfiles/
-// roots and any system/$BUZZ_PATH fallback. The probe only needs to classify a file
-// as spell-or-library, and a spell that imports outside its own dir still resolves at
-// run time via the fuller set. It is not a port of upstream Buzz resolution (the
-// shipped binary is cwd-relative); rooting at the file's own dir is a magus choice
-// that keeps discovery cwd-independent. `buzz:` stdlib and registered host modules
-// resolve ahead of this via the module resolver.
-func spellSearchPaths(dir string) []string {
+// spellSearchPaths resolves imports from the candidate and its magusfile's directory.
+func spellSearchPaths(roots ...string) []string {
 	templates := []string{
 		"?.buzz",
 		filepath.Join("?", "main.buzz"),
 		filepath.Join("?", "src", "main.buzz"),
 		filepath.Join("?", "src", "?.buzz"),
 	}
-	paths := make([]string, 0, len(templates))
-	for _, t := range templates {
-		paths = append(paths, filepath.Join(dir, t))
+	paths := make([]string, 0, len(roots)*len(templates))
+	for _, root := range roots {
+		for _, t := range templates {
+			paths = append(paths, filepath.Join(root, t))
+		}
 	}
 	return paths
 }

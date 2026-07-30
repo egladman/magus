@@ -87,4 +87,4 @@ surfaces retried and regression outcomes as GitHub Actions annotations.
 
 - [affected.md](../guides/affected.md) - the `--bisect` regression hunt.
 - [cache.md](cache.md) - why an under-declared input reads as volatility.
-- [debugging.md](../guides/debugging.md) - the interactive REPL and `magus.pry` breakpoints.
+- [debugging.md](../guides/debugging.md) - the interactive REPL and `magus\pry` breakpoints.

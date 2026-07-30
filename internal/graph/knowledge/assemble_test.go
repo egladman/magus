@@ -168,6 +168,10 @@ func TestAssembleEdges(t *testing.T) {
 	assert.True(t, hasEdge(out, "project:pkg/a", "project:pkg/b", types.RelationDependsOn), "project depends_on project")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "target:pkg/a:gen", types.RelationDependsOn), "intra-project target dep")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "target:pkg/b:build", types.RelationDependsOn), "cross-project target dep")
+	assert.Contains(t, out.Links, types.KnowledgeEdge{
+		Source: "target:pkg/a:build", Target: "spell:go", Relation: types.RelationUses,
+		Confidence: types.ConfidenceExtracted, Score: 1, Provenance: "pkg/a",
+	}, "target dispatches spell")
 	assert.True(t, hasEdge(out, "target:pkg/a:build", "op:go:go-build", types.RelationUses), "target uses op")
 	assert.True(t, hasEdge(out, "charm:rw", "target:pkg/a:build", types.RelationReferences), "charm references target")
 	assert.True(t, hasEdge(out, "spell:go", "op:go:go-build", types.RelationContains), "spell contains op")
@@ -393,4 +397,36 @@ func TestDeclaredAsAttr(t *testing.T) {
 	assert.Equal(t, "goBuild", n.Attrs[AttrDeclaredAs], "raw spelling surfaced as declared_as")
 	plain, _ := nodeByID(out, "target:.:build")
 	assert.Empty(t, plain.Attrs[AttrDeclaredAs], "no declared_as when the name matches")
+}
+
+func TestOwningProjectPath(t *testing.T) {
+	projects := []types.TargetGraphProject{
+		{Path: "."},
+		{Path: "docs"},
+		{Path: "foo"},
+		{Path: "foo/bar"},
+	}
+
+	cases := []struct {
+		file string
+		want string
+	}{
+		{"docs/render.buzz", "docs"},  // nested project wins over root
+		{"magusfile.buzz", "."},       // root-level file falls to the root project
+		{"foo/bar/x.buzz", "foo/bar"}, // longest matching project wins
+		{"foo/x.buzz", "foo"},         // not deep enough for foo/bar
+		{"foobar/x.buzz", "."},        // "foo" must not claim "foobar" (path-prefix guard)
+	}
+	for _, c := range cases {
+		got, ok := owningProjectPath(c.file, projects)
+		assert.True(t, ok, "file %q should be owned", c.file)
+		assert.Equal(t, c.want, got, "owner of %q", c.file)
+	}
+}
+
+func TestOwningProjectPathNoRootUnowned(t *testing.T) {
+	// With no root project, a top-level file belongs to nobody rather than being
+	// force-fit into an unrelated nested project.
+	_, ok := owningProjectPath("top.buzz", []types.TargetGraphProject{{Path: "docs"}})
+	assert.False(t, ok)
 }

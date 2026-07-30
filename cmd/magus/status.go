@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
-	"golang.org/x/term"
 )
 
 // statusFlags groups the local flags for `magus status` into one value: an
@@ -75,7 +75,7 @@ func status(ctx context.Context, args []string) error {
 		return printStatus(ctx, f.socket, opts, 0, f.compact)
 	}
 
-	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
 	useGrid := gridEnabled(opts, isTTY) && !f.compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
@@ -89,7 +89,9 @@ func status(ctx context.Context, args []string) error {
 	animFrame := 0
 	for {
 		if opts.Format == outputText && isTTY {
-			fmt.Print("\033[H\033[2J")
+			// Repaint in place. This is a plain clear, never the alternate
+			// screen buffer, so the user keeps their scrollback after quitting.
+			_ = tty.ClearScreen(os.Stdout)
 		}
 		if err := printStatus(ctx, f.socket, opts, animFrame, f.compact); err != nil {
 			return err
@@ -136,7 +138,7 @@ func printStatus(ctx context.Context, socket string, opts OutputOptions, animFra
 			printStatusCompact(os.Stdout, r, time.Now())
 			return nil
 		}
-		isTTY := term.IsTerminal(int(os.Stdout.Fd()))
+		isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
 		printStatusText(os.Stdout, r, gridEnabled(opts, isTTY), animFrame)
 	}
 	return nil
@@ -247,7 +249,7 @@ func buildTelemetryStatus(t config.Telemetry) telemetryStatus {
 	}
 	switch {
 	case !t.Enabled:
-		st.Note = "telemetry is disabled. Set telemetry.enabled=true in magus.yaml to ship metrics/traces to your OTLP collector. Magus does not run a hosted backend — the endpoint is yours."
+		st.Note = "telemetry is disabled. Set telemetry.enabled=true in magus.yaml to ship metrics/traces to your OTLP collector. magus does not run a hosted backend; the endpoint is yours."
 	case t.Endpoint == "":
 		st.Note = "telemetry is enabled but telemetry.endpoint is empty. The exporter will fail to start."
 	default:
@@ -255,7 +257,7 @@ func buildTelemetryStatus(t config.Telemetry) telemetryStatus {
 		if proto == "" {
 			proto = "grpc"
 		}
-		st.Note = fmt.Sprintf("phoning home to %s (%s) — this is YOUR collector, not a magus-operated service.", t.Endpoint, proto)
+		st.Note = fmt.Sprintf("phoning home to %s (%s); this is YOUR collector, not a magus-operated service.", t.Endpoint, proto)
 	}
 	return st
 }
@@ -557,11 +559,12 @@ func cellState(i, running, capacity, numCPU int) cellKind {
 	}
 }
 
+// The pool grid's palette, as SGR parameter codes. The escape wrapping
+// itself lives in tty.Colorize; these only choose the colours.
 const (
-	ansiReset       = "\x1b[0m"
-	ansiBrightGreen = "\x1b[1;32m"
-	ansiDimGrey     = "\x1b[2;37m"
-	ansiYellow      = "\x1b[33m"
+	sgrPoolRunning = tty.SGRBrightGreen // a slot doing work
+	sgrPoolIdle    = tty.SGRDimGrey     // a free slot
+	sgrPoolQueued  = tty.SGRYellow      // work waiting for a slot
 )
 
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
@@ -602,13 +605,13 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 			kind := cellState(i, pool.Running, pool.Capacity, numCPU)
 			switch kind {
 			case cellRunning:
-				sb.WriteString(ansiBrightGreen + "●" + ansiReset + " ")
+				sb.WriteString(tty.Colorize("●", sgrPoolRunning) + " ")
 			case cellIdle:
 				sb.WriteString("○ ")
 			case cellOutOfPool:
-				sb.WriteString(ansiDimGrey + "·" + ansiReset + " ")
+				sb.WriteString(tty.Colorize("·", sgrPoolIdle) + " ")
 			case cellOverSubscribed:
-				sb.WriteString(ansiYellow + "●" + ansiReset + " ")
+				sb.WriteString(tty.Colorize("●", sgrPoolQueued) + " ")
 			}
 		}
 		fmt.Fprintln(w, sb.String())
@@ -620,8 +623,8 @@ func drawPoolGrid(w io.Writer, pool *types.StatusOutput, numCPU int, animFrame i
 		drawRunningTree(w, pool.RunningTargets, time.Now())
 	}
 
-	fmt.Fprintf(w, "\n  %s●%s running  ○ idle  %s·%s cpu\n",
-		ansiBrightGreen, ansiReset, ansiDimGrey, ansiReset)
+	fmt.Fprintf(w, "\n  %s running  ○ idle  %s cpu\n",
+		tty.Colorize("●", sgrPoolRunning), tty.Colorize("·", sgrPoolIdle))
 }
 
 func poolHeader(pool *types.StatusOutput, numCPU int) string {
@@ -716,12 +719,12 @@ func drawProjectTree(w io.Writer, indent string, projects map[string][]leafEntry
 			vPrefix, actIndent := branchPrefix(vIndent, vLast)
 			line := truncate(lf.target, runningLineWidth)
 			if d := formatDur(lf.duration); d != "" {
-				line += " " + ansiDimGrey + "(" + d + ")" + ansiReset
+				line += " " + tty.Colorize("("+d+")", sgrPoolIdle)
 			}
 			fmt.Fprintf(w, "%s%s\n", vPrefix, line)
 			if lf.step != "" {
 				actPrefix, _ := branchPrefix(actIndent, true)
-				fmt.Fprintf(w, "%s%s%s%s\n", actPrefix, ansiDimGrey, truncate(lf.step, runningLineWidth), ansiReset)
+				fmt.Fprintf(w, "%s%s\n", actPrefix, tty.Colorize(truncate(lf.step, runningLineWidth), sgrPoolIdle))
 			}
 		}
 	}
@@ -804,9 +807,12 @@ func parseRunning(args []string) (project, target string) {
 	}
 }
 
+// truncate shortens s to fit n bytes for the running-tree lines.
+//
+// It delegates to tty.Clip rather than slicing: a raw s[:n-1] splits a
+// multi-byte rune, so a project or target name with a non-ASCII
+// character rendered as a replacement glyph. The ellipsis is ASCII for
+// the same reason every other magus-authored string is.
 func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n-1] + "…"
+	return tty.Clip(s, n)
 }

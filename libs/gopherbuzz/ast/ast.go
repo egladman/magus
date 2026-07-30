@@ -79,20 +79,25 @@ type IfStmt struct {
 	BindName string
 }
 
-// WhileStmt: while (cond) body
+// WhileStmt: while (cond) body, optionally labeled `while (cond) :name body`.
 type WhileStmt struct {
 	Pos
-	Cond Node
-	Body *BlockStmt
+	Cond  Node
+	Body  *BlockStmt
+	Label string // "" when unlabeled
 }
 
-// ForStmt: for (init; cond; post) body. Init/Cond/Post may be nil.
+// ForStmt: for (init; cond; post) body. Cond may be nil, and Init/Post may be
+// empty. Both clauses are lists because upstream allows several comma-separated
+// declarations and assignments in each (`for (i: int = 0, j: int = 9; ...; i = i
+// + 1, j = j - 1)`); they share the loop's scope, so they are not a BlockStmt.
 type ForStmt struct {
 	Pos
-	Init Node
-	Cond Node
-	Post Node
-	Body *BlockStmt
+	Init  []Node
+	Cond  Node
+	Post  []Node
+	Body  *BlockStmt
+	Label string // "" when unlabeled
 }
 
 // ForEachStmt: foreach (val in iter) or foreach (key, val in iter)
@@ -102,13 +107,22 @@ type ForEachStmt struct {
 	ValName string
 	Iter    Node
 	Body    *BlockStmt
+	Label   string // "" when unlabeled
 }
 
-// BreakStmt: break;
-type BreakStmt struct{ Pos }
+// BreakStmt: break; or `break label;`, which exits the named enclosing loop
+// rather than the innermost one.
+type BreakStmt struct {
+	Pos
+	Label string // "" targets the innermost loop
+}
 
-// ContinueStmt: continue;
-type ContinueStmt struct{ Pos }
+// ContinueStmt: continue; or `continue label;`, which resumes the named
+// enclosing loop rather than the innermost one.
+type ContinueStmt struct {
+	Pos
+	Label string // "" targets the innermost loop
+}
 
 // FunDecl: fun name(params) rettype { body } — a named function statement/method.
 type FunDecl struct {
@@ -120,9 +134,12 @@ type FunDecl struct {
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
-	RetAnnot    string   // return type annotation; "" = unannotated
-	YieldAnnot  string   // yield type annotation after *>; "" = non-fiber function
-	Body        *BlockStmt
+	// ParamDefaults is parallel to Params, with a nil entry for a parameter that
+	// declares no `= expr` default. A call may omit any parameter that has one.
+	ParamDefaults []Node
+	RetAnnot      string // return type annotation; "" = unannotated
+	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
+	Body          *BlockStmt
 	// Doc is the documentation comment block immediately preceding the
 	// declaration (see token.Token.Doc); "" when undocumented. Carried onto the
 	// compiled chunk so host code (spell resolution, magus describe/doctor) can
@@ -144,7 +161,12 @@ type ObjectDecl struct {
 	IsExported bool
 	Name       string
 	Fields     []ObjField
-	Methods    []*FunDecl
+	// StaticFields are `static name: T = default` declarations. They are kept out
+	// of Fields because Fields IS the instance layout: its index order is the flat
+	// field-slot order every instance and every this.field lookup indexes by, and a
+	// static holds one value on the type, not a slot per instance.
+	StaticFields []ObjField
+	Methods      []*FunDecl
 }
 
 // ObjField is a single object field declaration with an optional default.
@@ -154,15 +176,43 @@ type ObjField struct {
 	Default   Node   // nil when no default
 }
 
-// EnumDecl: enum Name { CASE1, CASE2 }
+// EnumDecl: enum Name { CASE1, CASE2 } or enum<str> Name { CASE1 = "a" }.
 type EnumDecl struct {
 	Pos
 	IsExported bool
 	Name       string
 	Cases      []string
+	// Backing names the type of a case's `.value`: "int" (the default, where an
+	// unassigned case takes its ordinal) or "str" (where it takes its own name).
+	Backing string
+	// Values holds each case's explicit `= literal`, parallel to Cases, with a nil
+	// entry where the case has none. Nil entirely when no case assigns a value.
+	Values []Node
+}
+
+// OutStmt: out expr; — leaves the enclosing block expression with expr's value.
+type OutStmt struct {
+	Pos
+	Value Node
 }
 
 // ---- expressions ----
+
+// IfExpr: if (cond) thenExpr else elseExpr — the inline-if (ternary) form. Both
+// branches are required, since the expression must always produce a value.
+type IfExpr struct {
+	Pos
+	Cond Node
+	Then Node
+	Else Node
+}
+
+// BlockExpr: from { stmts } — a block used as an expression. Its value is the
+// one an `out` statement inside it produces, or null if none runs.
+type BlockExpr struct {
+	Pos
+	Body *BlockStmt
+}
 
 // BinaryExpr: left op right
 type BinaryExpr struct {
@@ -196,21 +246,26 @@ type CallExpr struct {
 	TypeArg string
 }
 
-// MemberExpr: object.name
+// MemberExpr: object.name. OptionalRecv is set for the graceful-unwrapping form
+// object?.name, which yields null when object is null instead of erroring. When
+// the member is called (object?.name()), the guard covers the call too.
 type MemberExpr struct {
 	Pos
-	Object Node
-	Name   string
+	Object       Node
+	Name         string
+	OptionalRecv bool
 }
 
 // IndexExpr: object[index]. Optional is set for the checked subscript form
 // object[?index], which yields null on an out-of-bounds index instead of an
-// error (Buzz null-safety).
+// error (Buzz null-safety). OptionalRecv is the separate object?[index] form,
+// which yields null when the OBJECT is null.
 type IndexExpr struct {
 	Pos
-	Object   Node
-	Index    Node
-	Optional bool
+	Object       Node
+	Index        Node
+	Optional     bool
+	OptionalRecv bool
 }
 
 // ForceExpr: operand! — force-unwraps an optional, erroring at runtime if the
@@ -231,9 +286,12 @@ type FunExpr struct {
 	Pos
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
-	RetAnnot    string   // return type annotation; "" = unannotated
-	YieldAnnot  string   // yield type annotation after *>; "" = non-fiber function
-	Body        *BlockStmt
+	// ParamDefaults is parallel to Params, with a nil entry for a parameter that
+	// declares no `= expr` default. A call may omit any parameter that has one.
+	ParamDefaults []Node
+	RetAnnot      string // return type annotation; "" = unannotated
+	YieldAnnot    string // yield type annotation after *>; "" = non-fiber function
+	Body          *BlockStmt
 }
 
 // MapExpr: {"key": val, ...}. Mut is set for the `mut {…}` form (a mutable map);
@@ -243,6 +301,15 @@ type MapExpr struct {
 	Keys   []Node // key expressions (string literals or arbitrary exprs)
 	Values []Node
 	Mut    bool
+	// Anon marks the anonymous-object form `.{ field = expr }`, which parses to
+	// a map keyed by the field names. It is not a map literal: the checker types
+	// it against an expected object's fields, not as {K: V}.
+	Anon bool
+	// ObjectName is set by the checker on an Anon literal whose expected type is
+	// a named object, and names that object. The compiler then builds a real
+	// instance - with the object's methods and field defaults - instead of a map.
+	// Empty when the literal has no object to fill, which stays a map.
+	ObjectName string
 }
 
 // ListExpr: [val, ...]. Mut is set for the `mut [...]` form (a mutable list); a
@@ -326,6 +393,17 @@ type RangeExpr struct {
 }
 
 // IsExpr: expr is TypeName
+// EnumCaseExpr is the inferred enum-case shorthand: a leading-dot case with no
+// receiver, as in `fun f(c: Suit = .one)` or `final l: [Locale] = [.fr, .it]`.
+// Enum is empty at parse time and filled by the checker from the type expected at
+// the use site, which is the only place that information exists - the expression
+// itself names no enum.
+type EnumCaseExpr struct {
+	Pos
+	Name string
+	Enum string
+}
+
 type IsExpr struct {
 	Pos
 	Expr     Node
@@ -351,12 +429,23 @@ type CatchExpr struct {
 	Default Node
 }
 
-// TryStmt: try { body } catch (name) { handler }
+// TryStmt: try { body } followed by one or more catch clauses.
 type TryStmt struct {
 	Pos
 	Body    *BlockStmt
-	ErrName string // catch binding name
-	Catch   *BlockStmt
+	Catches []CatchClause
+}
+
+// CatchClause is one `catch (name: Type) { ... }` arm. Clauses are tried in
+// source order and the first whose TypeName matches the thrown value runs; an
+// error no clause matches is rethrown to the enclosing handler.
+type CatchClause struct {
+	Pos
+	// ErrName is the binding name, "_" for the bindingless `catch { }` form.
+	ErrName string
+	// TypeName is the clause's declared error type; "" matches any error.
+	TypeName string
+	Body     *BlockStmt
 }
 
 // ThrowStmt: throw expr;

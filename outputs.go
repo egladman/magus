@@ -3,8 +3,10 @@ package magus
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/types"
@@ -82,18 +84,36 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 	return m.cache.Clean(ctx, paths...)
 }
 
-// FindOutputOwner returns the first project whose declared Outputs globs
-// match absPath. absPath must be an absolute filesystem path. Returns nil
-// when no project claims the path.
-func (m *Magus) FindOutputOwner(absPath string) *types.Project {
+// FindOutputProducer returns the project whose target REGENERATES absPath, or nil when
+// no project declares the path as an output. absPath must be absolute.
+//
+// The producer is not always the project the file sits in. For an output a project
+// declares for itself the two coincide, but for one another project writes into its tree
+// (InboundOutputs) only the WRITER can rebuild it - the owner has no target that produces
+// those bytes. The merge driver is the consumer that makes this distinction load-bearing:
+// handed the owner, it would run a target that touches nothing, then copy the
+// unregenerated file over the conflict and report a clean merge.
+func (m *Magus) FindOutputProducer(absPath string) *types.Project {
+	matches := func(p *types.Project, glob string) bool {
+		rel, err := filepath.Rel(p.Dir, absPath)
+		if err != nil {
+			return false
+		}
+		ok, err := doublestar.Match(glob, filepath.ToSlash(rel))
+		return err == nil && ok
+	}
 	for _, p := range m.ws.All() {
-		for _, glob := range p.AllOutputs() {
-			rel, err := filepath.Rel(p.Dir, absPath)
-			if err != nil {
-				continue
+		// Sorted, so a path claimed by more than one writer resolves to the same
+		// project every run rather than following map iteration order.
+		for _, writer := range slices.Sorted(maps.Keys(p.InboundOutputs)) {
+			for _, glob := range p.InboundOutputs[writer] {
+				if matches(p, glob) {
+					return m.ws.Get(writer)
+				}
 			}
-			ok, err := doublestar.Match(glob, filepath.ToSlash(rel))
-			if err == nil && ok {
+		}
+		for _, glob := range p.AllOutputs() {
+			if matches(p, glob) {
 				return p
 			}
 		}

@@ -269,6 +269,7 @@ export fun pruneStaleOutputs(site: Site) > void {
     // band).
     final alwaysKeep: {str: bool} = mut {
         "index.html": true, "index.md": true, "404.html": true,
+        "install": true,
         "sitemap.xml": true, "robots.txt": true, "manifest.webmanifest": true,
         "service-worker.js": true, "search-index.json": true, "site-manifest.sha256": true,
         "site.css": true, "console.css": true, "ui-panels.css": true, "theme.css": true, "theme.js": true, "main.js": true,
@@ -290,6 +291,15 @@ export fun pruneStaleOutputs(site: Site) > void {
         staleDirs[path.sub(0, path.len() - 11)] = true;   // len("/index.html") == 11
     }
     foreach (dir in staleDirs.keys()) {
+        // Pruning keys off a missing index.html but deletes the whole directory, so a
+        // directory holding produced NON-page outputs must survive its page going away.
+        // /public/atom/ (the Atom feeds) and /public/release/ (the signed release
+        // manifest) are exactly that: real files, no page of their own.
+        var produced = false;
+        foreach (w in site.writtenPaths.keys()) {
+            if (w.startsWith(dir + "/")) { produced = true; }
+        }
+        if (produced) { continue; }
         std\print("  pruning stale " + dir + "/ (no longer produced)");
         fs\delete(site.outDir + "/" + dir);
     }

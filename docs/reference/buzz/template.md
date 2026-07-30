@@ -9,7 +9,7 @@ tags: [template, module, stdlib, magusfile]
 
 Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).
 
-> **Naming convention:** import the module under its bare name (`import "template"`) and call methods in `camelCase` (`template.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "template"`), reach members with a backslash, and call methods in `camelCase`: `template\someMethod`.
 
 ## Methods
 
@@ -17,7 +17,7 @@ Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache)
 
 Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.
 
-**Signature:** `template.render(template, data) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L40)
+**Signature:** `template\render(template, data) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L40)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -35,15 +35,15 @@ import "template";
 
 // Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
 // would collide with Buzz's own {expr} string interpolation.
-std.print(template.render(`Hello {{name}}`, {"name": "world"}));
+std\print(template\render(`Hello {{name}}`, {"name": "world"}));
 // -> "Hello world"
 ```
 
-### render_partials
+### renderPartials
 
 Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.
 
-**Signature:** `template.renderPartials(template, data, partials) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L51)
+**Signature:** `template\renderPartials(template, data, partials) → string` · [source](https://github.com/egladman/magus/blob/main/std/template.go#L51)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -69,7 +69,7 @@ final partials = {
     "footer": `<footer>{{title}}</footer>`,
 };
 
-std.print(template.renderPartials(page, {"title": "magus", "body": "hi"}, partials));
+std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials));
 // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
 ```
 

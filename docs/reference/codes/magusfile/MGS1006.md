@@ -1,6 +1,6 @@
 ---
 title: "MGS1006: unknown target"
-description: Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus.needs.
+description: Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus\needs.
 tags: [MGS1006, magusfile, targets, needs, depends, authoring]
 ---
 

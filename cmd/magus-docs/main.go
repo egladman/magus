@@ -231,10 +231,13 @@ func renderModule(m std.Module) string {
 		fmt.Fprintf(&b, "%s\n\n", m.Doc)
 	}
 
-	// Naming convention note: each module is imported under its bare name, with
-	// methods in camelCase.
+	// Naming convention note. Both halves of this are things a reader gets
+	// wrong otherwise: methods are camelCase even though they are declared
+	// snake_case on the Go side, and namespace access is a backslash, the
+	// form upstream Buzz specifies.
 	fmt.Fprintf(&b, "> **Naming convention:** import the module under its bare name "+
-		"(`import \"%s\"`) and call methods in `camelCase` (`%s.someMethod`).\n\n",
+		"(`import \"%s\"`), reach members with a backslash, and call methods in "+
+		"`camelCase`: `%s\\someMethod`.\n\n",
 		m.Name, m.Name)
 
 	// Runnability note. WASM-compatible modules (dry.WASMCompatibleMagusModules) get
@@ -270,10 +273,16 @@ func renderModule(m std.Module) string {
 	if len(m.Methods) > 0 {
 		fmt.Fprintf(&b, "## Methods\n\n")
 		for _, meth := range m.Methods {
+			// The heading carries the name a caller actually types, not the
+			// Go-side declared name: the two differ in case (kebab_case is
+			// declared, kebabCase is callable), and a reader scanning headings
+			// who copies the declared form gets "null is not callable" with
+			// nothing pointing at the real symbol.
+			//
 			// Heading stays plain text so its auto-generated slug (the #method
 			// anchor) stays clean; the source link and stdlib footnote both ride
 			// the Signature line instead.
-			fmt.Fprintf(&b, "### %s\n\n", meth.Name)
+			fmt.Fprintf(&b, "### %s\n\n", host.BuzzMethodName(meth))
 
 			if meth.Doc != "" {
 				fmt.Fprintf(&b, "%s\n\n", meth.Doc)
@@ -357,11 +366,7 @@ func renderModule(m std.Module) string {
 // buzzMethodName renders the module-qualified camelCase call (e.g. "fs.delete")
 // for a footnote, matching the form used in signatures.
 func buzzMethodName(m std.Module, meth std.Method) string {
-	name := host.CamelCase(meth.Name)
-	if meth.BuzzName != "" {
-		name = meth.BuzzName
-	}
-	return m.Name + "." + name
+	return m.Name + `\` + host.BuzzMethodName(meth)
 }
 
 func writeIndex(dir string, modules []std.Module) error {

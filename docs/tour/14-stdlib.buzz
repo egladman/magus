@@ -13,9 +13,9 @@ import "strings";
 // derive an artifact slug and compare two versions, then print them. `run stamp`
 // computes each value for real.
 export fun stamp(ctx: magus\Context, args: [str]) > void {
-    final slug = strings.kebabCase("Build The App");
-    final newer = semver.compare("1.10.0", ">", "1.4.0");   // true: 1.10.0 outranks 1.4.0
-    magus.info("artifact slug: {slug}");
-    magus.info("tag:           v1.4.0");
-    magus.info("1.10.0 newer than 1.4.0? {newer}");
+    final slug = strings\kebabCase("Build The App");
+    final newer = semver\compare("1.10.0", ">", "1.4.0");   // true: 1.10.0 outranks 1.4.0
+    magus\info("artifact slug: {slug}");
+    magus\info("tag:           v1.4.0");
+    magus\info("1.10.0 newer than 1.4.0? {newer}");
 }

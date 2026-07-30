@@ -9,15 +9,15 @@ tags: [strings, module, stdlib, magusfile]
 
 Case conversion and word helpers (camel/snake/kebab/Pascal, capitalize, words, ellipsis).
 
-> **Naming convention:** import the module under its bare name (`import "strings"`) and call methods in `camelCase` (`strings.someMethod`).
+> **Naming convention:** import the module under its bare name (`import "strings"`), reach members with a backslash, and call methods in `camelCase`: `strings\someMethod`.
 
 ## Methods
 
-### camel_case
+### camelCase
 
 Convert s to camelCase.
 
-**Signature:** `strings.camelCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L77)
+**Signature:** `strings\camelCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L77)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -32,15 +32,15 @@ Convert s to camelCase.
 import "std";
 import "strings";
 
-std.print(strings.camelCase("hello world"));
+std\print(strings\camelCase("hello world"));
 // -> "helloWorld"
 ```
 
-### snake_case
+### snakeCase
 
 Convert s to snake_case.
 
-**Signature:** `strings.snakeCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L82)
+**Signature:** `strings\snakeCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L82)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -55,15 +55,15 @@ Convert s to snake_case.
 import "std";
 import "strings";
 
-std.print(strings.snakeCase("HelloWorld"));
+std\print(strings\snakeCase("HelloWorld"));
 // -> "hello_world"
 ```
 
-### kebab_case
+### kebabCase
 
 Convert s to kebab-case.
 
-**Signature:** `strings.kebabCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L87)
+**Signature:** `strings\kebabCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L87)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -78,15 +78,15 @@ Convert s to kebab-case.
 import "std";
 import "strings";
 
-std.print(strings.kebabCase("MyComponentName"));
+std\print(strings\kebabCase("MyComponentName"));
 // -> "my-component-name"
 ```
 
-### pascal_case
+### pascalCase
 
 Convert s to PascalCase.
 
-**Signature:** `strings.pascalCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L92)
+**Signature:** `strings\pascalCase(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L92)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -101,7 +101,7 @@ Convert s to PascalCase.
 import "std";
 import "strings";
 
-std.print(strings.pascalCase("user_profile"));
+std\print(strings\pascalCase("user_profile"));
 // -> "UserProfile"
 ```
 
@@ -109,7 +109,7 @@ std.print(strings.pascalCase("user_profile"));
 
 Uppercase the first rune of s and lowercase the rest.
 
-**Signature:** `strings.capitalize(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L97)
+**Signature:** `strings\capitalize(s) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L97)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -124,7 +124,7 @@ Uppercase the first rune of s and lowercase the rest.
 import "std";
 import "strings";
 
-std.print(strings.capitalize("hELLO"));
+std\print(strings\capitalize("hELLO"));
 // -> "Hello"
 ```
 
@@ -132,7 +132,7 @@ std.print(strings.capitalize("hELLO"));
 
 Split s into its constituent words (splitting on case changes, digits, and separators).
 
-**Signature:** `strings.words(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L102)
+**Signature:** `strings\words(s) → []string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L102)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -147,8 +147,8 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 import "std";
 import "strings";
 
-final parts = strings.words("parseHTTPResponse2");
-foreach (w in parts) { std.print(w); }
+final parts = strings\words("parseHTTPResponse2");
+foreach (w in parts) { std\print(w); }
 // -> parse
 // -> HTTP
 // -> Response
@@ -159,7 +159,7 @@ foreach (w in parts) { std.print(w); }
 
 Trim s to at most length runes, appending "..." when truncated.
 
-**Signature:** `strings.ellipsis(s, length) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L107)
+**Signature:** `strings\ellipsis(s, length) → string` · [source](https://github.com/egladman/magus/blob/main/std/strings.go#L107)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -175,7 +175,7 @@ Trim s to at most length runes, appending "..." when truncated.
 import "std";
 import "strings";
 
-std.print(strings.ellipsis("the quick brown fox", 12));
+std\print(strings\ellipsis("the quick brown fox", 12));
 // -> "the quick..."
 ```
 

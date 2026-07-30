@@ -6,6 +6,11 @@
 // so this file imports only leaf modules and never forms an import cycle.
 namespace types;
 
+// maxSubtreeRows caps the "Everything here" sidebar list. Past this it stops
+// being a way to find a page and becomes a wall to scroll; such a branch wants
+// a real section index page instead. See Site.renderSubtree.
+final maxSubtreeRows = 40;
+
 import "fs";
 import "io";
 import "serialize";
@@ -579,6 +584,54 @@ export object Site {
 `, {"root": root, "picks": picks});
     }
 
+    // renderSubtree builds the "Everything here" list: EVERY page beneath this one,
+    // nested, not just the direct children renderSectionNav shows. It is the
+    // discovery axis - a reader on concepts/targets/ sees the whole branch at once
+    // rather than clicking down a level at a time to find out what exists.
+    //
+    // Rendered only when it would say something new: if no page is more than one
+    // segment deeper, the subtree is exactly the "In this section" list and repeating
+    // it is noise. Tagging finds a page you can already name; this is for the ones
+    // you cannot.
+    //
+    // Depth is carried as an indent class rather than nested <ul>s, so the markup
+    // stays one flat list a screen reader reads in order.
+    fun renderSubtree(curUrl: str, root: str) > str {
+        if (curUrl == "") { return ""; }
+
+        // Every descendant, with its depth relative to this page.
+        var rows: [{str: any}] = mut [<{str: any}>];
+        var deepest = 0;
+        foreach (p in this.docPages) {
+            if (p.url == curUrl or p.url.startsWith(curUrl) == false) { continue; }
+            final depth = splitPath(p.url.sub(curUrl.len())).len();
+            if (depth > deepest) { deepest = depth; }
+            rows.append(mut {"url": p.url, "title": p.title, "depth": depth});
+        }
+        // One level deep only: renderSectionNav already covers it.
+        if (deepest < 2) { return ""; }
+        // Too big to be navigation. A sidebar list past this stops being a way to
+        // find a page and becomes a wall to scroll past - the site root, which
+        // prefixes every page there is, lands here. Such a branch wants a real
+        // section index page, not a sidebar dump.
+        if (rows.len() > maxSubtreeRows) { return ""; }
+
+        final ordered = rows.sort(fun (a: {str: any}, b: {str: any}) > bool {
+            return strLess("" + a["url"], "" + b["url"]);
+        });
+        var picks: [{str: any}] = mut [<{str: any}>];
+        foreach (r in ordered) {
+            picks.append(mut {"url": r["url"], "title": r["title"], "depth": "" + r["depth"]});
+        }
+        return template\render(`        <p class="toc-title">Everything here</p>
+        <ul class="subtree-nav">
+{{#picks}}
+          <li class="subtree-d{{depth}}"><a href="{{root}}{{url}}" title="{{title}}">{{title}}</a></li>
+{{/picks}}
+        </ul>
+`, {"root": root, "picks": picks});
+    }
+
     // collectGlossaryTerms parses glossary.md into the term corpus, pre-walk (like
     // collectDocPages), so every page's render can auto-link the vocabulary.
     fun collectGlossaryTerms() > void {
@@ -677,8 +730,25 @@ export object Site {
                     url = "reference/manpage/" + base + "/",
                     summary = this.fileDescription(manBase + "/" + name),
                 });
+                ents.append(Entity{
+                    token = sub,
+                    kind = "command",
+                    url = "reference/manpage/" + base + "/",
+                    summary = "magus " + sub + ": " + this.fileDescription(manBase + "/" + name),
+                });
             }
         }
+
+        ents.append(Entity{ token = "magus query", kind = "command", url = "concepts/knowledge/", summary = "Search the knowledge graph." });
+        ents.append(Entity{ token = "magus explain", kind = "command", url = "concepts/knowledge/", summary = "Explain one knowledge-graph node." });
+        ents.append(Entity{ token = "magus path", kind = "command", url = "concepts/knowledge/", summary = "Show the shortest path between knowledge-graph nodes." });
+        ents.append(Entity{ token = "magus refs", kind = "command", url = "concepts/knowledge/", summary = "Find a symbol's definition and references." });
+        ents.append(Entity{ token = "magus graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "Open a graph explorer for the workspace graph." });
+        ents.append(Entity{ token = "query", kind = "command", url = "concepts/knowledge/", summary = "magus query: search the knowledge graph." });
+        ents.append(Entity{ token = "explain", kind = "command", url = "concepts/knowledge/", summary = "magus explain: explain one knowledge-graph node." });
+        ents.append(Entity{ token = "path", kind = "command", url = "concepts/knowledge/", summary = "magus path: show the shortest path between knowledge-graph nodes." });
+        ents.append(Entity{ token = "refs", kind = "command", url = "concepts/knowledge/", summary = "magus refs: find a symbol's definition and references." });
+        ents.append(Entity{ token = "graph open", kind = "command", url = "reference/manpage/magus-graph/", summary = "magus graph open: open a graph explorer." });
 
         // Module methods: each reference/buzz/<mod>.md H3 is a method; token "mod\method"
         // (backslash-namespaced, so it never collides with prose), anchor = its goldmark slug.
@@ -749,13 +819,31 @@ export object Site {
         foreach (anchor in this.glossaryRefs.keys()) {
             final urls = this.glossaryRefs[anchor];
             if (urls == null) { continue; }
-            var links = "";
-            var first = true;
+            // A URL with no docs page behind it cannot be rendered as a link a reader
+            // can act on. The home page reaches here under two spellings - "" from the
+            // walk and "index.html" from the root render - and only one of them is a
+            // docPages URL, so the other used to emit <a href="../index.html"></a>:
+            // an anchor with no text, unclickable and silent to a screen reader.
+            // Dropping the untitled spelling both fixes that and de-duplicates the
+            // home page, which would otherwise be listed twice under one term.
+            var seen: {str: bool} = mut {};
+            var items = "";
+            var count = 0;
             foreach (u in urls!) {
-                if (first) { first = false; } else { links = links + ", "; }
-                links = links + "<a href=\"" + relativePath("glossary", u) + "\">" + this.lookupTitle(u) + "</a>";
+                final title = this.lookupTitle(u);
+                if (title == "") { continue; }
+                if (seen[u] != null) { continue; }
+                seen[u] = true;
+                items = items + "<li><a href=\"" + relativePath("glossary", u) + "\">" + title + "</a></li>";
+                count = count + 1;
             }
-            byAnchor[anchor] = "<p class=\"glossary-backlinks\"><span class=\"glossary-backlinks-label\">Referenced on</span> " + links + "</p>\n";
+            if (count == 0) { continue; }
+            // A list, marked up as one. The busiest terms are referenced on ~70 pages,
+            // and comma-joining those into a <p> produced a wall of prose where the
+            // reader wanted a scannable index - so this is a <nav> landmark with a real
+            // heading, matching how every other set-of-page-links on the site is built.
+            byAnchor[anchor] = "<nav class=\"glossary-backlinks\" aria-label=\"Pages referencing this term\">"
+                + "<h4>Referenced on</h4><ul>" + items + "</ul></nav>\n";
         }
         return byAnchor;
     }
@@ -847,4 +935,40 @@ test "renderRelated ranks neighbors by shared glossary terms over shared tags" {
     final iTagsy = got.indexOf("concepts/tagsy/");
     assert\equal(iDeps != null and iTagsy != null, true, "both neighbors listed");
     assert\equal(iDeps! < iTagsy!, true, "the shared-term neighbor outranks the shared-tag-only one");
+}
+
+test "renderSubtree lists the whole branch, nested by depth" {
+    final s = mut Site{};
+    s.docPages.append(DocPage{ url = "concepts/", title = "Concepts", srcRel = "docs/concepts.md", overview = true, section = "concepts" });
+    s.docPages.append(DocPage{ url = "concepts/targets/", title = "Targets", srcRel = "docs/concepts/targets.md", section = "concepts" });
+    s.docPages.append(DocPage{ url = "concepts/targets/ci/", title = "CI", srcRel = "docs/concepts/targets/ci.md", section = "concepts" });
+    s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", section = "guides" });
+
+    final got = s.renderSubtree("concepts/", "../");
+    assert\equal(got.indexOf("Everything here") != null, true, "subtree label present");
+    assert\equal(got.indexOf("subtree-d1") != null, true, "a direct child is depth 1");
+    assert\equal(got.indexOf("subtree-d2") != null, true, "a grandchild is depth 2 - the whole point");
+    assert\equal(got.indexOf("href=\"../concepts/targets/ci/\"") != null, true, "grandchild is reachable");
+    assert\equal(got.indexOf("guides/") != null, false, "an unrelated branch is excluded");
+}
+
+test "renderSubtree stays quiet when it would repeat the section list" {
+    final s = mut Site{};
+    // Only direct children: renderSectionNav already shows exactly this.
+    s.docPages.append(DocPage{ url = "guides/", title = "Guides", srcRel = "docs/guides.md", overview = true, section = "guides" });
+    s.docPages.append(DocPage{ url = "guides/mcp/", title = "MCP", srcRel = "docs/guides/mcp.md", section = "guides" });
+    assert\equal(s.renderSubtree("guides/", "../"), "", "one level deep adds nothing over In this section");
+    assert\equal(s.renderSubtree("", "../"), "", "no url, no subtree");
+}
+
+test "renderSubtree refuses to become a wall of links" {
+    final s = mut Site{};
+    s.docPages.append(DocPage{ url = "all/", title = "All", srcRel = "docs/all.md", overview = true, section = "all" });
+    // One deep child so the depth guard passes, then enough rows to trip the cap.
+    s.docPages.append(DocPage{ url = "all/deep/child/", title = "Deep", srcRel = "docs/all/deep/child.md", section = "all" });
+    for (var i = 0; i < maxSubtreeRows + 1; i = i + 1) {
+        s.docPages.append(DocPage{ url = "all/p" + i + "/", title = "P" + i, srcRel = "docs/all/p.md", section = "all" });
+    }
+    assert\equal(s.renderSubtree("all/", "../"), "",
+        "a branch too big for a sidebar wants a section index page, not a dump");
 }

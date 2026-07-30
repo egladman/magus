@@ -30,9 +30,9 @@ func TestAssembleIO(t *testing.T) {
 		Nodes: []types.TargetGraphNode{
 			// Inputs carry the owning project's workspace-relative path (as resolved in
 			// DescribeGraph); a same-project input's owner is this project ("docs").
-			{Name: "gen", Outputs: []string{"spells/*.md"}, Inputs: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
-			{Name: "ghost", Outputs: []string{"nowhere/*.md"}}, // matches no node
-			{Name: "wide", Outputs: []string{"**/*.md"}},       // too broad -> guard drops it
+			{Name: "gen", Outputs: []types.OutputRef{{Glob: "spells/*.md"}}, Inputs: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
+			{Name: "ghost", Outputs: []types.OutputRef{{Glob: "nowhere/*.md"}}}, // matches no node
+			{Name: "wide", Outputs: []types.OutputRef{{Glob: "**/*.md"}}},       // too broad -> guard drops it
 		},
 	}}
 	out := mergeAll([]Shard{assembleIO(projects, pathToNode)}).Output()

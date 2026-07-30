@@ -13,12 +13,15 @@ import (
 // BuzzSignature renders a method's Buzz call form: the module imported under its
 // bare name with the method camelCased, e.g. `env.lookup(name) → string, bool`.
 // mod and m are the parent module and one of its methods.
+// The separator is a backslash, the form upstream Buzz specifies for
+// namespace member access. Docs show only that form so a reader never
+// copies a notation magus is moving away from.
 func BuzzSignature(mod std.Module, m std.Method) string {
 	name := CamelCase(m.Name)
 	if m.BuzzName != "" {
 		name = m.BuzzName
 	}
-	return mod.Name + "." + name + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
+	return mod.Name + `\` + name + "(" + strings.Join(argNames(m), ", ") + ")" + returnSuffix(m)
 }
 
 // argNames lists the parameter names, marking variadic ones with a trailing "..."
@@ -73,4 +76,17 @@ func CamelCase(s string) string {
 		}
 	}
 	return out
+}
+
+// BuzzMethodName is the identifier a Buzz caller types for m: the
+// declared name converted to camelCase, or an explicit BuzzName override.
+//
+// It exists because the two names differ and only this one is callable.
+// A method declared "kebab_case" is reached as "kebabCase"; documenting
+// the declared form sends a reader to a symbol that does not resolve.
+func BuzzMethodName(m std.Method) string {
+	if m.BuzzName != "" {
+		return m.BuzzName
+	}
+	return CamelCase(m.Name)
 }

@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -154,9 +155,13 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Cond, inFunc, keep)
 		collectFuncRefs(v.Body, inFunc, keep)
 	case *ast.ForStmt:
-		collectFuncRefs(v.Init, inFunc, keep)
+		for _, n := range v.Init {
+			collectFuncRefs(n, inFunc, keep)
+		}
 		collectFuncRefs(v.Cond, inFunc, keep)
-		collectFuncRefs(v.Post, inFunc, keep)
+		for _, n := range v.Post {
+			collectFuncRefs(n, inFunc, keep)
+		}
 		collectFuncRefs(v.Body, inFunc, keep)
 	case *ast.ForEachStmt:
 		collectFuncRefs(v.Iter, inFunc, keep)
@@ -166,7 +171,9 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Cond, inFunc, keep)
 	case *ast.TryStmt:
 		collectFuncRefs(v.Body, inFunc, keep)
-		collectFuncRefs(v.Catch, inFunc, keep)
+		for _, cl := range v.Catches {
+			collectFuncRefs(cl.Body, inFunc, keep)
+		}
 	case *ast.ThrowStmt:
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.FunDecl:
@@ -177,6 +184,9 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 	case *ast.ObjectDecl:
 		for i := range v.Fields {
 			collectFuncRefs(v.Fields[i].Default, inFunc, keep)
+		}
+		for i := range v.StaticFields {
+			collectFuncRefs(v.StaticFields[i].Default, inFunc, keep)
 		}
 		for _, m := range v.Methods {
 			collectFuncRefs(m, inFunc, keep)
@@ -222,6 +232,10 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Expr, inFunc, keep)
 	case *ast.AsExpr:
 		collectFuncRefs(v.Expr, inFunc, keep)
+	case *ast.IfExpr:
+		collectFuncRefs(v.Cond, inFunc, keep)
+		collectFuncRefs(v.Then, inFunc, keep)
+		collectFuncRefs(v.Else, inFunc, keep)
 	case *ast.CatchExpr:
 		collectFuncRefs(v.Expr, inFunc, keep)
 		collectFuncRefs(v.Default, inFunc, keep)
@@ -243,6 +257,7 @@ type loopInfo struct {
 	continuePatch  []int
 	continueTarget int
 	isForeach      bool
+	label          string // "" when the loop header declared no `:name`
 }
 
 type localVar struct {
@@ -370,6 +385,10 @@ func (c *compiler) staticType(n ast.Node) styp {
 			if t := c.staticType(v.Operand); t == sInt || t == sFloat {
 				return t
 			}
+		case "~":
+			if c.staticType(v.Operand) == sInt {
+				return sInt
+			}
 		case "not":
 			return sBool
 		}
@@ -389,6 +408,10 @@ func (c *compiler) staticType(n ast.Node) styp {
 			if v.Op == "+" && lt == sStr {
 				return sStr
 			}
+		case "&", "|", "^", "<<", ">>":
+			if c.staticType(v.Left) == sInt && c.staticType(v.Right) == sInt {
+				return sInt
+			}
 		}
 		return sUnknown
 	}
@@ -405,6 +428,10 @@ type compiler struct {
 	parent    *compiler
 	typeDecls map[string]*ast.ObjectDecl
 	loops     []loopInfo
+	// blockExprs is a stack, one entry per `from { ... }` currently being
+	// compiled, holding the jump indexes each `out` inside it emitted. They are
+	// patched to the block's end once its body is done.
+	blockExprs [][]int
 	// useSlots selects slot-based locals (a stack register window) over runtime
 	// Env bindings for this scope's declarations and lookups. Always true for
 	// function bodies; true for the top-level chunk only when compiled as a
@@ -623,8 +650,38 @@ func (c *compiler) compileZdefDecl(call *ast.CallExpr, names []string) error {
 	return nil
 }
 
-func (c *compiler) pushLoop(continueTarget int, isForeach bool) {
-	c.loops = append(c.loops, loopInfo{continueTarget: continueTarget, isForeach: isForeach})
+func (c *compiler) pushLoop(continueTarget int, isForeach bool, label string) {
+	c.loops = append(c.loops, loopInfo{continueTarget: continueTarget, isForeach: isForeach, label: label})
+}
+
+// targetLoop resolves the loop a break/continue names: the innermost one for an
+// empty label, else the nearest enclosing loop carrying that label. It returns
+// the loop's index in c.loops so the caller can also see the loops nested inside
+// it, whose iterator state has to come off the stack on the way out.
+func (c *compiler) targetLoop(label string) int {
+	if len(c.loops) == 0 {
+		return -1
+	}
+	if label == "" {
+		return len(c.loops) - 1
+	}
+	for i := len(c.loops) - 1; i >= 0; i-- {
+		if c.loops[i].label == label {
+			return i
+		}
+	}
+	return -1
+}
+
+// popIterStates emits one OpPop per foreach in c.loops[from:to], discarding the
+// iterator state each left on the stack. Jumping out of a foreach without this
+// strands its state and desynchronizes every later stack offset.
+func (c *compiler) popIterStates(from, to int) {
+	for i := from; i < to; i++ {
+		if c.loops[i].isForeach {
+			c.chunk.Emit(vmpackage.OpPop, 0, 0)
+		}
+	}
 }
 
 func (c *compiler) popLoop() loopInfo {
@@ -646,6 +703,15 @@ func (c *compiler) patchBreaks(li loopInfo) {
 	for _, idx := range li.breakPatch {
 		c.chunk.Code[idx].A = end
 	}
+}
+
+// breakOutsideLoop reports a break/continue that names no reachable loop: either
+// there is no enclosing loop at all, or no enclosing loop carries the label.
+func breakOutsideLoop(kw, label string) error {
+	if label == "" {
+		return fmt.Errorf("buzz: %s outside loop", kw)
+	}
+	return fmt.Errorf("buzz: %s %s: no enclosing loop is labeled %q", kw, label, label)
 }
 
 func (c *compiler) compileStmt(n ast.Node) error {
@@ -758,28 +824,42 @@ func (c *compiler) compileStmt(n ast.Node) error {
 	case *ast.ForEachStmt:
 		return c.compileForEach(v)
 
+	case *ast.OutStmt:
+		if len(c.blockExprs) == 0 {
+			return fmt.Errorf("buzz: out outside a from block")
+		}
+		if err := c.compileExpr(v.Value); err != nil {
+			return err
+		}
+		top := len(c.blockExprs) - 1
+		c.blockExprs[top] = append(c.blockExprs[top], c.chunk.EmitJump(vmpackage.OpJump))
+		return nil
+
 	case *ast.BreakStmt:
-		li := c.currentLoop()
-		if li == nil {
-			return fmt.Errorf("buzz: break outside loop")
+		target := c.targetLoop(v.Label)
+		if target < 0 {
+			return breakOutsideLoop("break", v.Label)
 		}
-		if li.isForeach {
-			c.chunk.Emit(vmpackage.OpPop, 0, 0)
-		}
+		// Leaving the target loop leaves every foreach from here up to and
+		// including it, so each of their iterator states is discarded.
+		c.popIterStates(target, len(c.loops))
 		idx := c.chunk.EmitJump(vmpackage.OpJump)
-		li.breakPatch = append(li.breakPatch, idx)
+		c.loops[target].breakPatch = append(c.loops[target].breakPatch, idx)
 		return nil
 
 	case *ast.ContinueStmt:
-		li := c.currentLoop()
-		if li == nil {
-			return fmt.Errorf("buzz: continue outside loop")
+		target := c.targetLoop(v.Label)
+		if target < 0 {
+			return breakOutsideLoop("continue", v.Label)
 		}
-		if li.continueTarget >= 0 {
-			c.chunk.Emit(vmpackage.OpJump, int32(li.continueTarget), 0)
+		// The target loop is re-entered, not left: only the loops nested inside it
+		// are exited, so its own iterator state stays on the stack.
+		c.popIterStates(target+1, len(c.loops))
+		if t := c.loops[target].continueTarget; t >= 0 {
+			c.chunk.Emit(vmpackage.OpJump, int32(t), 0)
 		} else {
 			idx := c.chunk.EmitJump(vmpackage.OpJump)
-			li.continuePatch = append(li.continuePatch, idx)
+			c.loops[target].continuePatch = append(c.loops[target].continuePatch, idx)
 		}
 		return nil
 
@@ -975,7 +1055,7 @@ func (c *compiler) compileIfLet(v *ast.IfStmt) error {
 
 func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 	top := c.chunk.Current()
-	c.pushLoop(top, false)
+	c.pushLoop(top, false, v.Label)
 	if err := c.compileExpr(v.Cond); err != nil {
 		return err
 	}
@@ -996,7 +1076,7 @@ func (c *compiler) compileWhile(v *ast.WhileStmt) error {
 
 func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 	top := c.chunk.Current()
-	c.pushLoop(top, false)
+	c.pushLoop(top, false, "")
 	c.enterBlock()
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -1021,6 +1101,30 @@ func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 	return nil
 }
 
+// compileBlockExpr lowers `from { ... }` inline rather than as a called closure:
+// the body's statements run in the enclosing frame, and each `out` pushes its
+// value and jumps to the end. Falling off the end without an out yields null.
+//
+// Statements leave the stack balanced, so the only value live at an out is the
+// one it just pushed - which is what makes jumping straight out safe.
+func (c *compiler) compileBlockExpr(v *ast.BlockExpr) error {
+	c.blockExprs = append(c.blockExprs, nil)
+	c.enterBlock()
+	for _, s := range v.Body.Stmts {
+		if err := c.compileStmt(s); err != nil {
+			return err
+		}
+	}
+	c.exitBlock()
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	outs := c.blockExprs[len(c.blockExprs)-1]
+	c.blockExprs = c.blockExprs[:len(c.blockExprs)-1]
+	for _, idx := range outs {
+		c.chunk.PatchJump(idx)
+	}
+	return nil
+}
+
 func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Emit TryBegin with a placeholder for the catch IP.
 	tryBeginIdx := c.chunk.EmitJump(vmpackage.OpTryBegin)
@@ -1041,14 +1145,46 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Patch TryBegin to point here (the catch handler).
 	c.chunk.PatchJump(tryBeginIdx)
 
-	// Compile the catch body: bind error to ErrName in a slot, then run handler.
+	// The thrown error is on the stack. Park it in a slot of its own so each
+	// clause can type-test it without consuming it, then run the first clause
+	// whose declared type it satisfies.
 	c.enterBlock()
-	slot := c.defineLocal(v.ErrName)
-	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
-	for _, s := range v.Catch.Stmts {
-		if err := c.compileStmt(s); err != nil {
-			return err
+	errSlot := c.defineLocal("<caught>")
+	c.chunk.Emit(vmpackage.OpSetLocal, errSlot, 0)
+
+	var clauseEnds []int
+	for _, cl := range v.Catches {
+		nextClause := -1
+		if cl.TypeName != "" {
+			base, nullable := isTypeShape(cl.TypeName)
+			var nul int32
+			if nullable {
+				nul = 1
+			}
+			c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+			c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			nextClause = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 		}
+		c.enterBlock()
+		c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+		c.chunk.Emit(vmpackage.OpSetLocal, c.defineLocal(cl.ErrName), 0)
+		for _, s := range cl.Body.Stmts {
+			if err := c.compileStmt(s); err != nil {
+				return err
+			}
+		}
+		c.exitBlock()
+		clauseEnds = append(clauseEnds, c.chunk.EmitJump(vmpackage.OpJump))
+		if nextClause >= 0 {
+			c.chunk.PatchJump(nextClause)
+		}
+	}
+	// No clause matched its type: rethrow, so the error reaches an enclosing
+	// handler instead of being swallowed by a try that did not claim it.
+	c.chunk.Emit(vmpackage.OpGetLocal, errSlot, 0)
+	c.chunk.Emit(vmpackage.OpThrow, 0, 0)
+	for _, idx := range clauseEnds {
+		c.chunk.PatchJump(idx)
 	}
 	c.exitBlock()
 
@@ -1083,8 +1219,8 @@ func (c *compiler) compileCatchExpr(v *ast.CatchExpr) error {
 func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 	// outer block scopes the init variable
 	c.enterBlock()
-	if v.Init != nil {
-		if err := c.compileStmt(v.Init); err != nil {
+	for _, init := range v.Init {
+		if err := c.compileStmt(init); err != nil {
 			return err
 		}
 	}
@@ -1097,7 +1233,7 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 		}
 		jf = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 	}
-	c.pushLoop(-1, false)
+	c.pushLoop(-1, false, v.Label)
 	c.enterBlock()
 	for _, s := range v.Body.Stmts {
 		if err := c.compileStmt(s); err != nil {
@@ -1111,8 +1247,8 @@ func (c *compiler) compileForLoop(v *ast.ForStmt) error {
 	for _, idx := range li.continuePatch {
 		c.chunk.Code[idx].A = target
 	}
-	if v.Post != nil {
-		if err := c.compileStmt(v.Post); err != nil {
+	for _, post := range v.Post {
+		if err := c.compileStmt(post); err != nil {
 			return err
 		}
 	}
@@ -1141,7 +1277,7 @@ func (c *compiler) compileForEach(v *ast.ForEachStmt) error {
 	// cross-chunk visible, so slots are correct in both slot and SharedGlobals mode.
 	top := c.chunk.Current()
 	jdone := c.chunk.Emit(vmpackage.OpIterNext, 0, keyB)
-	c.pushLoop(top, true)
+	c.pushLoop(top, true, v.Label)
 	c.enterBlock()
 	// OpIterNext (not done) pushes: [key?,] val (val on top)
 	valSlot := c.defineLocal(v.ValName)
@@ -1264,11 +1400,31 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 		c.chunk.Emit(vmpackage.OpLoadConst, c.nameConst(m.Name), 0)
 		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
 	}
+	// Static-field defaults are emitted as (name, value) pairs the same way an
+	// instance literal emits its fields, because buildObjectDef, like
+	// buildObjectVal, evaluates nothing itself: whatever the type-level state
+	// starts as has to arrive on the stack. They follow the methods so the def
+	// builder can pop them first.
+	for _, f := range v.StaticFields {
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(f.Name)), 0)
+		if f.Default != nil {
+			if err := c.compileExpr(f.Default); err != nil {
+				return err
+			}
+		} else {
+			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+		}
+	}
 	c.typeDecls[v.Name] = v
 	nameIdx := c.nameConst(v.Name)
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
-	c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
+	// A and B are both spoken for (decl const, method count), so the static-field
+	// count rides in C rather than sharing B with the method count: B's high bits
+	// already carry InstrMutBit on this opcode's literal path, and a second packed
+	// count there would add a masking rule for every reader of that operand.
+	c.chunk.Code[newObj].C = int32(len(v.StaticFields))
 	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
 	if c.depth == 0 {
 		if v.IsExported {
@@ -1280,8 +1436,46 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	return nil
 }
 
+// enumCaseValues resolves each case's `.value`. An explicit `= literal` wins;
+// otherwise a str-backed enum takes the case name and any other enum takes the
+// case's ordinal. Only literals are accepted, matching upstream: the values are
+// baked into the enum's constant, so there is no frame to evaluate them in.
+func enumCaseValues(v *ast.EnumDecl) ([]vmpackage.Value, error) {
+	out := make([]vmpackage.Value, len(v.Cases))
+	for i, name := range v.Cases {
+		var explicit ast.Node
+		if i < len(v.Values) {
+			explicit = v.Values[i]
+		}
+		switch lit := explicit.(type) {
+		case nil:
+			if v.Backing == "str" {
+				out[i] = vmpackage.StrValue(name)
+			} else {
+				out[i] = vmpackage.IntValue(int64(i))
+			}
+		case *ast.IntLit:
+			out[i] = vmpackage.IntValue(lit.Val)
+		case *ast.FloatLit:
+			out[i] = vmpackage.FloatValue(lit.Val)
+		case *ast.StringLit:
+			out[i] = vmpackage.StrValue(lit.Val)
+		case *ast.BoolLit:
+			out[i] = vmpackage.BoolValue(lit.Val)
+		default:
+			pos := ast.NodePos(explicit)
+			return nil, fmt.Errorf("buzz: line %d:%d: enum case %s.%s value must be a literal", pos.Line, pos.Col, v.Name, name)
+		}
+	}
+	return out, nil
+}
+
 func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
-	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases))
+	values, err := enumCaseValues(v)
+	if err != nil {
+		return err
+	}
+	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases, values))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
 	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
 	if c.depth == 0 {
@@ -1359,6 +1553,12 @@ func (c *compiler) compileExpr(n ast.Node) error {
 	case *ast.CallExpr:
 		return c.compileCall(v)
 	case *ast.MemberExpr:
+		if v.OptionalRecv {
+			return c.compileOptionalHop(v.Object, func() error {
+				c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(v.Name), 0)
+				return nil
+			})
+		}
 		if idx, ok := c.thisFieldIndex(v.Object, v.Name); ok {
 			c.chunk.Emit(vmpackage.OpLoadThis, 0, 0)
 			c.chunk.Emit(vmpackage.OpGetField, idx, c.nameConst(v.Name))
@@ -1374,18 +1574,41 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(v.Name), 0)
 		}
 	case *ast.IndexExpr:
-		if err := c.compileExpr(v.Object); err != nil {
-			return err
-		}
-		if err := c.compileExpr(v.Index); err != nil {
-			return err
-		}
 		// A=1 selects the checked subscript (out-of-bounds → null); A=0 errors.
 		var opt int32
 		if v.Optional {
 			opt = 1
 		}
-		c.chunk.Emit(vmpackage.OpGetIndex, opt, 0)
+		emitIndex := func() error {
+			if err := c.compileExpr(v.Index); err != nil {
+				return err
+			}
+			c.chunk.Emit(vmpackage.OpGetIndex, opt, 0)
+			return nil
+		}
+		if v.OptionalRecv {
+			return c.compileOptionalHop(v.Object, emitIndex)
+		}
+		if err := c.compileExpr(v.Object); err != nil {
+			return err
+		}
+		return emitIndex()
+	case *ast.BlockExpr:
+		return c.compileBlockExpr(v)
+	case *ast.IfExpr:
+		if err := c.compileExpr(v.Cond); err != nil {
+			return err
+		}
+		jElse := c.chunk.EmitJump(vmpackage.OpJumpFalse)
+		if err := c.compileExpr(v.Then); err != nil {
+			return err
+		}
+		jEnd := c.chunk.EmitJump(vmpackage.OpJump)
+		c.chunk.PatchJump(jElse)
+		if err := c.compileExpr(v.Else); err != nil {
+			return err
+		}
+		c.chunk.PatchJump(jEnd)
 	case *ast.ForceExpr:
 		if err := c.compileExpr(v.Operand); err != nil {
 			return err
@@ -1406,6 +1629,22 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		}
 		c.chunk.Emit(vmpackage.OpNewList, int32(len(v.Items)), mutFlag(v.Mut))
 	case *ast.MapExpr:
+		// An anonymous object literal the checker resolved to a named object is
+		// built as that object, so it carries the type's methods and its
+		// unmentioned fields' defaults. Without this it stays a map, which
+		// answers member reads but has none of the type's methods.
+		if v.ObjectName != "" {
+			lit := &ast.ObjectLit{Pos: v.Pos, TypeName: v.ObjectName, Mut: v.Mut}
+			for i, k := range v.Keys {
+				name, ok := k.(*ast.StringLit)
+				if !ok {
+					return fmt.Errorf("buzz: line %d:%d: anonymous object field name must be an identifier", v.Line, v.Col)
+				}
+				lit.Keys = append(lit.Keys, name.Val)
+				lit.Values = append(lit.Values, v.Values[i])
+			}
+			return c.compileObjectLit(lit)
+		}
 		for i, k := range v.Keys {
 			if err := c.compileExpr(k); err != nil {
 				return err
@@ -1425,11 +1664,33 @@ func (c *compiler) compileExpr(n ast.Node) error {
 			return err
 		}
 		c.chunk.Emit(vmpackage.OpRange, 0, 0)
+	case *ast.EnumCaseExpr:
+		// The checker resolved which enum this belongs to; emit exactly what an
+		// explicit Enum.case would, so there is one code path for enum access and
+		// nothing new at runtime.
+		if v.Enum == "" {
+			return fmt.Errorf("buzz: line %d:%d: unresolved enum case .%s", v.Line, v.Col, v.Name)
+		}
+		return c.compileExpr(&ast.MemberExpr{
+			Pos:    v.Pos,
+			Object: &ast.IdentExpr{Pos: v.Pos, Name: v.Enum},
+			Name:   v.Name,
+		})
 	case *ast.IsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
 		}
-		c.chunk.Emit(vmpackage.OpIs, c.nameConst(v.TypeName), 0)
+		// Reduce the annotation to the runtime shape HERE, once, rather than parsing
+		// a type string on every evaluation: `is` can sit inside a loop, and OpIs is
+		// dispatched from the I-cache-bound Exec switch where per-execution string
+		// work is exactly what the hot path cannot afford. B carries nullability so
+		// the VM spends one branch instead of a scan.
+		base, nullable := isTypeShape(v.TypeName)
+		var nul int32
+		if nullable {
+			nul = 1
+		}
+		c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
 	case *ast.AsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
@@ -1549,6 +1810,16 @@ func (c *compiler) compileBinary(v *ast.BinaryExpr) error {
 		c.chunk.Emit(vmpackage.OpDiv, 0, 0)
 	case "%":
 		c.chunk.Emit(vmpackage.OpMod, 0, 0)
+	case "&":
+		c.chunk.Emit(vmpackage.OpBAnd, 0, 0)
+	case "|":
+		c.chunk.Emit(vmpackage.OpBOr, 0, 0)
+	case "^":
+		c.chunk.Emit(vmpackage.OpBXor, 0, 0)
+	case "<<":
+		c.chunk.Emit(vmpackage.OpShl, 0, 0)
+	case ">>":
+		c.chunk.Emit(vmpackage.OpShr, 0, 0)
 	case "==":
 		c.chunk.Emit(vmpackage.OpEqual, 0, 0)
 	case "!=":
@@ -1576,9 +1847,33 @@ func (c *compiler) compileUnary(v *ast.UnaryExpr) error {
 		c.chunk.Emit(vmpackage.OpNeg, 0, 0)
 	case "!":
 		c.chunk.Emit(vmpackage.OpNot, 0, 0)
+	case "~":
+		c.chunk.Emit(vmpackage.OpBNot, 0, 0)
 	default:
 		return fmt.Errorf("buzz: compile: unknown unary op %q", v.Op)
 	}
+	return nil
+}
+
+// compileOptionalHop compiles the `?.`/`?[` guard: recv is evaluated once, and
+// when it is null the whole hop yields null instead of running. emitHop emits
+// the hop's own opcodes with the (non-null) receiver already on the stack.
+//
+// It reuses OpJumpIfNull, which peeks and - on null - pops and falls through,
+// so no new opcode enters the Exec switch (a new case regresses every benchmark;
+// see the README gotcha).
+func (c *compiler) compileOptionalHop(recv ast.Node, emitHop func() error) error {
+	if err := c.compileExpr(recv); err != nil {
+		return err
+	}
+	notNull := c.chunk.EmitJump(vmpackage.OpJumpIfNull)
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	done := c.chunk.EmitJump(vmpackage.OpJump)
+	c.chunk.PatchJump(notNull)
+	if err := emitHop(); err != nil {
+		return err
+	}
+	c.chunk.PatchJump(done)
 	return nil
 }
 
@@ -1589,16 +1884,24 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 	// would make). The receiver is pushed once and reused as the call's base; the
 	// VM handler reads the method name from the const pool (A) and arg count (B).
 	if m, ok := v.Callee.(*ast.MemberExpr); ok {
+		emitInvoke := func() error {
+			for _, arg := range v.Args {
+				if err := c.compileExpr(arg); err != nil {
+					return err
+				}
+			}
+			c.chunk.Emit(vmpackage.OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
+			return nil
+		}
+		// `recv?.method(args)`: the guard covers the call, so a null receiver
+		// yields null rather than invoking a method on nothing.
+		if m.OptionalRecv {
+			return c.compileOptionalHop(m.Object, emitInvoke)
+		}
 		if err := c.compileExpr(m.Object); err != nil {
 			return err
 		}
-		for _, arg := range v.Args {
-			if err := c.compileExpr(arg); err != nil {
-				return err
-			}
-		}
-		c.chunk.Emit(vmpackage.OpInvoke, c.nameConst(m.Name), int32(len(v.Args)))
-		return nil
+		return emitInvoke()
 	}
 	if err := c.compileExpr(v.Callee); err != nil {
 		return err
@@ -1654,4 +1957,39 @@ func mutFlag(mut bool) int32 {
 		return vmpackage.InstrMutBit
 	}
 	return 0
+}
+
+// isTypeShape reduces a source type annotation to the base name vm.buzzIsType
+// compares against, plus whether the annotation admits null. It runs at compile
+// time so OpIs stays a constant compare at runtime.
+//
+// Only the OUTER shape survives, because that is all a runtime tag can answer:
+// `[int]` and `[str]` are both a list to a value that carries no element type.
+// Element types are the checker's business, and it has the full annotation.
+func isTypeShape(annot string) (base string, nullable bool) {
+	s := strings.TrimSpace(annot)
+	s = strings.TrimPrefix(s, "mut ")
+	s = strings.TrimSpace(s)
+	if t := strings.TrimSuffix(s, "?"); t != s {
+		s, nullable = strings.TrimSpace(t), true
+	}
+	switch {
+	case strings.HasPrefix(s, "["):
+		return "list", nullable
+	case strings.HasPrefix(s, "{"):
+		return "map", nullable
+	case s == "fun" || strings.HasPrefix(s, "fun ") || strings.HasPrefix(s, "fun("):
+		// Function types carry no runtime signature, so every arity and return
+		// type collapses to "is it callable".
+		return "fun", nullable
+	}
+	if s := s[strings.LastIndex(s, `\`)+1:]; s != "" {
+		// Namespace-qualified names (a\Hello) match on the declared name, which is
+		// what an object or enum definition stores.
+		if i := strings.IndexByte(s, '<'); i >= 0 {
+			return s[:i], nullable // generic instantiation matches its base type
+		}
+		return s, nullable
+	}
+	return s, nullable
 }

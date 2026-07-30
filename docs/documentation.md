@@ -38,7 +38,7 @@ This writes `magus.yaml`, stubs a starter `magusfile.buzz`, and wires the VCS me
 import "magus";
 import "spells/hello";          // ./spells/hello/spell.buzz
 
-magus.project({ "spells": [hello] });
+magus\project({ "spells": [hello] });
 
 // Each exported function becomes a runnable target.
 export fun build(ctx: magus\Context, args: [str]) > void { hello.build(); }
@@ -62,7 +62,7 @@ Start here to understand the model magus is built on.
 
 - [Workspace and projects](concepts/workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
 - [Targets](concepts/targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
-- [Dependencies](concepts/dependencies.md) - `magus.needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
+- [Dependencies](concepts/dependencies.md) - `magus\needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
 - [Spells](concepts/spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](concepts/spells.md#spells-vs-targets) for where the line falls.
 - [Charms](concepts/charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
 - [Operations and the work hierarchy](concepts/operations.md) - how a run is scheduled and parallelized across projects.
@@ -78,12 +78,12 @@ Start here to understand the model magus is built on.
 
 Once the basics click, these cover running magus at scale and in CI.
 
-- [CI](concepts/targets/ci.md) - compose a `ci` target with `magus.needs`, and the shared-cache trust model.
+- [CI](concepts/targets/ci.md) - compose a `ci` target with `magus\needs`, and the shared-cache trust model.
 - [Daemon and concurrency](guides/daemon.md) - one persistent process, one shared pool across every client.
 - [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations (with `MAGUS_NO_WAIT`).
-- [Remote caching](concepts/remote-cache.md) - share the build cache across machines and CI, with a signing-based trust model.
+- [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](guides/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
-- [Debugging](guides/debugging.md) - the interactive REPL, `magus.pry()` breakpoints, and stepping through a target.
+- [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
 - [MCP](guides/mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](concepts/telemetry.md) - OpenTelemetry traces and metrics.

@@ -227,19 +227,40 @@ export fun verify(ctx: magus\Context, _opts: [str]) > void {
 
 func TestRunTargetWithArgs(t *testing.T) {
 	dir := t.TempDir()
-	// Forwarded args are spread as positional parameters to a Buzz target, so the
-	// target declares one parameter per forwarded arg.
+	// Forwarded args arrive as ONE list, matching the (ctx, args: [str]) signature
+	// every real magusfile target declares. They used to be spread as positional
+	// parameters, which meant `args: [str]` bound to the FIRST arg as a str and
+	// the rest were dropped - so the documented convention and the runtime
+	// disagreed, and every target in this repo was on the losing side.
 	writeMagusfile(t, dir, `
 import "magus";
 import "fs";
-export fun db_migrate(ctx: magus\Context, a: str, b: str, c: str) > void {
-    fs.writeFile("ran", a + " " + b + " " + c);
+export fun db_migrate(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", args.join(" "));
 }
 `)
 	require.NoError(t, runTarget(t, dir, "db:migrate", "a", "b", "c"))
 	got, err := os.ReadFile(sentinel(dir))
 	require.NoError(t, err, "sentinel not created")
 	assert.Equal(t, "a b c", string(got))
+}
+
+// TestRunTargetWithNoArgs pins the other half of the contract: a target with no
+// forwarded args still receives a list, not null, so `args.len()` is safe in
+// every target rather than only in the ones someone remembered to pass args to.
+func TestRunTargetWithNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun probe(ctx: magus\Context, args: [str]) > void {
+    fs.writeFile("ran", "len={args.len()}");
+}
+`)
+	require.NoError(t, runTarget(t, dir, "probe"))
+	got, err := os.ReadFile(sentinel(dir))
+	require.NoError(t, err, "sentinel not created")
+	assert.Equal(t, "len=0", string(got))
 }
 
 func TestRunTargetReturnsError(t *testing.T) {

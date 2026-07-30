@@ -1,0 +1,82 @@
+---
+title: "MGS1009: target never replays from cache"
+description: Fires when a target has executed many times and never once replayed from cache, which almost always means its declared footprint is wider than what it actually reads.
+tags: [MGS1009, magusfile, cache, inputs, outputs, footprint, doctor]
+---
+
+# MGS1009: target never replays from cache
+
+magus noticed that a target you just waited on has executed repeatedly and
+**never** replayed from cache. Not a cold cache - a cache that cannot work.
+
+```text
+[MGS1009] docs render:rw has run 8 times without ever replaying from cache
+(11m spent). Its declared footprint is probably wider than it reads, so
+unrelated edits keep changing its key; run 'magus doctor' for the full list
+```
+
+`magus doctor` reports every affected target at once, worst wall-clock first:
+
+```text
+[fail] cache yield: 2 target(s) executed repeatedly and never replayed from cache
+    docs generate:rw: 74 runs, 0 cached, 5226s spent (71s avg)
+    docs render:rw: 8 runs, 0 cached, 574s spent (72s avg)
+```
+
+## Why
+
+This is the most expensive kind of misconfiguration precisely because nothing
+looks wrong. Every run passes. The cache reports no error. The only symptom is
+that the build is slower than it should be - and since it has always been that
+slow, there is nothing to compare against. It is invisible per-run and obvious
+only in aggregate, which is why magus reads it back out of the invocation
+journals rather than trying to detect it live.
+
+A target's cache key is derived from its **footprint**: the union of the globs a
+bound spell contributes, the project-wide `sources`/`outputs`, and any per-target
+[`magus\inputs`/`magus\outputs`](../../../concepts/cache.md). If that footprint
+includes files the target never reads, then editing one of those files changes
+the key without changing anything the target cares about. Do that routinely -
+edit a Markdown file in a project whose `sources` include `**/*.md`, when the
+target compiles TypeScript - and the key changes on every commit. The cache is
+working exactly as designed; it has simply been told that everything matters.
+
+The threshold is deliberately conservative. A handful of misses proves nothing,
+because a target legitimately misses while you edit its real inputs, and a target
+that misses in milliseconds costs nothing to rerun. magus stays quiet until a
+target has executed at least 8 times, averaged at least 2 seconds, and replayed
+**zero** times. A single replay clears it: one hit proves the cache works for
+that target, and the rest are ordinary edit-rebuild cycles.
+
+## Fix
+
+Narrow the footprint, or move the work.
+
+**Check what the target actually reads.** If a target compiles Go and its
+project declares `**/*.md` in `sources`, every docs commit rebuilds it. Split the
+glob, or move the target into a project whose sources describe its real inputs.
+
+**Per-target `magus\inputs` cannot rescue you here.** It is additive: it adds to
+the footprint and cannot narrow below the project-wide baseline (see
+[MGS1005](MGS1005.md) for the same asymmetry from the other direction). If the
+project declares too much, the fix belongs in the project, not the target.
+
+**Consider whether the work is in the right project at all.** A step whose inputs
+have nothing to do with its neighbours - protobuf codegen inside a docs project,
+say - will keep busting its key on every unrelated edit no matter how you declare
+it. Two sets of work with disjoint inputs sharing one project means the union
+invalidates both. That is a project-boundary problem, and no footprint
+declaration solves it.
+
+**Confirm the target declares outputs.** A target that produces files but declares
+no `magus\outputs` has nothing for magus to snapshot, so there is nothing to
+replay even when the key matches.
+
+## Not a bug when
+
+- **The target is genuinely non-deterministic** or exists to always run (a deploy,
+  a smoke test against a live service). Those should be short; if one is slow and
+  intentionally uncached, the finding is noise you can ignore.
+- **You have been editing its real inputs every time.** Eight consecutive real
+  changes to the files a target reads is a legitimate zero hit rate. The wall-clock
+  figure is the tell: if it looks like time you meant to spend, it was.

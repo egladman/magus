@@ -109,10 +109,7 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, projectPath, hash 
 	return &removeOnClose{File: f, path: dest}, nil
 }
 
-// PutArtifact streams r into a temp file and invokes the spell's put_artifact op. The
-// op's bool result is advisory and ignored here — a push is best-effort and the
-// cache already treats a failed push as non-fatal; only a spell/transport error
-// surfaces.
+// PutArtifact streams r into a temp file and invokes the spell's put_artifact op.
 func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash string, r io.Reader) error {
 	src, err := tempArtifactPath("magus-remote-put-")
 	if err != nil {
@@ -132,11 +129,17 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash 
 		return err
 	}
 
-	_, err = b.drv.Invoke(ctx, types.InvokeRequest{
+	resp, err := b.drv.Invoke(ctx, types.InvokeRequest{
 		Target: "put_artifact",
 		Params: map[string]any{"project": projectPath, "hash": hash, "src": src},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if stored, ok := resp.Data.(bool); !ok || !stored {
+		return fmt.Errorf("remote backend %q did not store artifact", b.drv.Name())
+	}
+	return nil
 }
 
 // PruneArtifacts implements cache.RemotePruner by invoking the spell's optional

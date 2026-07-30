@@ -30,11 +30,9 @@ Unfamiliar with a term? See the [Glossary](https://eli.gladman.cc/magus/glossary
 
 Need the detail this index leaves out? Run `magus describe target <name>` for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and `magus describe mcp-tools` for the tools this workspace exposes to AI agents.
 
-Prefer a picture? Explore this graph in the [Graph Explorer](https://eli.gladman.cc/magus/console/graph/#src=https%3A%2F%2Fraw.githubusercontent.com%2Fegladman%2Fmagus%2Fmain%2Fdocs%2Fgraph.json) - an interactive, force-directed view of this repo's committed graph.json (it renders in your browser; nothing is uploaded).
-
 ## Query first
 
-This workspace has a knowledge graph of **2078 nodes** and **4472 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2482 nodes** and **4775 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -46,51 +44,52 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 8 | [`magus query kind:project`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:project) | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 78 | [`magus query kind:target`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:target) | `content-generate`, `generate`, `generate` |
-| spell | 12 | [`magus query kind:spell`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:spell) | `go`, `ts`, `docker` |
-| op | 53 | [`magus query kind:op`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:op) | `go-build`, `go-test`, `go-fmt` |
-| tool | 13 | [`magus query kind:tool`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:tool) | `sh`, `go`, `pnpm` |
-| charm | 5 | [`magus query kind:charm`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:charm) | `rw`, `static`, `cd` |
-| module | 23 | [`magus query kind:module`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:module) | `fs`, `charm`, `vcs` |
-| method | 152 | [`magus query kind:method`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:method) | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 40 | [`magus query kind:diagnostic`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:diagnostic) | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 184 | [`magus query kind:doc`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:doc) | `docs/reference/manpage/magus-doctor.md`, `docs/concepts/spells.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 96 | [`magus query kind:dir`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:dir) | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 225 | [`magus query kind:file`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:file) | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1072 | [`magus query kind:function`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:function) | `sel`, `sendObject`, `send` |
-| import | 113 | [`magus query kind:import`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:import) | `std`, `magus`, `fs` |
-| rationale | 4 | [`magus query kind:rationale`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20kind:rationale) | `NOTE`, `NOTE`, `NOTE` |
+| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 82 | `magus query kind:target` | `content-generate`, `bindings-generate`, `generate` |
+| spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
+| op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
+| tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| charm | 5 | `magus query kind:charm` | `rw`, `gha`, `static` |
+| module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
+| method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 45 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
+| doc | 215 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 414 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 230 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1102 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 117 | `magus query kind:import` | `std`, `magus`, `fs` |
+| rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 25 | [`magus query project:.`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:.) | `generate`, `format`, `image-build` |
-| cmd/magus/starter | 7 | [`magus query project:cmd/magus/starter`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:cmd%2Fmagus%2Fstarter) | `format`, `ci`, `build` |
-| console | 5 | [`magus query project:console`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:console) | `build`, `ci`, `lint` |
-| docs | 15 | [`magus query project:docs`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:docs) | `content-generate`, `generate`, `ci` |
-| libs/diag | 8 | [`magus query project:libs/diag`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fdiag) | `format`, `generate`, `build` |
-| libs/gopherbuzz | 9 | [`magus query project:libs/gopherbuzz`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Fgopherbuzz) | `build`, `format`, `generate` |
-| libs/textsearch | 6 | [`magus query project:libs/textsearch`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:libs%2Ftextsearch) | `lint`, `generate`, `preflight` |
-| proto | 3 | [`magus query project:proto`](https://eli.gladman.cc/magus/console/graph/#q=magus%20query%20project:proto) | `ci`, `generate`, `lint` |
+| . | 25 | `magus query project:.` | `bindings-generate`, `generate`, `image-build` |
+| cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
+| console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
+| docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
+| docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
+| libs/diag | 8 | `magus query project:libs/diag` | `format`, `build`, `generate` |
+| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
+| proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: magus
 
 | Target | What it does |
 |---|---|
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
-| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary. |
+| `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
+| `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `buzz-check` | Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check). |
 | `buzz-run` | Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz). |
 | `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `test` | Formats first, then runs the Go test suite. |
-| `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint. |
+| `lint` | Formats first, then golangci-lint, go vet, and markdownlint. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
-| `ci` | Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate; the affected/pipeline anchor - one command that also catches unregenerated output. |
+| `ci` | Runs the CI gates through their declared dependencies. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
@@ -101,7 +100,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
 | `config-generate` | Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go. |
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
-| `coverage` | coverage runs the suite with per-package coverage and rewrites the assets/coverage.svg badge. |
+| `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 
 ## Project: cmd/magus/starter
 
@@ -121,7 +120,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|---|
 | `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests). |
 | `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
-| `lint` | lint is the console's static-analysis gate: it runs the TypeScript type-check (tsc --noEmit), the same way a Go project's lint runs `go vet`. |
+| `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps. |
 | `preflight` |  |
 
@@ -129,7 +128,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
-| `generate` | generate renders the site, refreshes MAGUS.md, regenerates CHANGELOG.md (the released sections), and rebuilds the client bundles, then gates on drift: a clean checkout only goes dirty when a source edit wasn't re-rendered/rebuilt and committed. |
+| `generate` | generate is the full publication and drift gate. |
 | `format` |  |
 | `lint` | lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
@@ -138,12 +137,20 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
 | `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. |
-| `render` | render is the fast, single-purpose site render: it runs render.site_render into gen/ and nothing else (no MAGUS.md refresh, no changelog, no JS-bundle rebuild, no drift gate). |
+| `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
 | `preflight` |  |
 | `md-generate` | md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
 | `changelog-generate` | changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. |
 | `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
+
+## Project: docs/guides/integrations/agents
+
+| Target | What it does |
+|---|---|
+| `lint` | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
+| `ci` | 'ci' is the anchor `magus affected ci` keys off. |
+| `preflight` |  |
 
 ## Project: libs/diag
 
@@ -169,6 +176,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` |  |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `pgo-generate` | Regenerates default.pgo, the Buzz VM's PGO profile. |
+| `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 

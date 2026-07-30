@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
+	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -22,6 +23,18 @@ type rootOnlyWS struct {
 }
 
 func (w rootOnlyWS) Root() string { return w.root }
+
+func TestLoadLocalBuzzLibraryUsesProjectRootImports(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "lib/text.buzz", `export fun value() > str { return "ok"; }`)
+	path := filepath.Join(root, "lib", "helper.buzz")
+	writeFile(t, root, "lib/helper.buzz", `import "lib/text" as text;
+export fun helper() > str { return text.value(); }`)
+
+	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
+	_, _, err := loadBuzzSpell(ctx, path)
+	assert.ErrorIs(t, err, ispell.ErrNotASpell)
+}
 
 // TestProjectImportFileResolver exercises the reserved `.file(rel)` member on a
 // project-import handle: at runtime `b.file("go.mod")` resolves to the authoritative

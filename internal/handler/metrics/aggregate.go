@@ -137,7 +137,7 @@ func findMetric(rm metricdata.ResourceMetrics, name string) (metricdata.Aggregat
 // attrOf reads a string attribute off a data point's set, or "" when absent.
 func attrOf(set attribute.Set, key string) string {
 	if v, ok := set.Value(attribute.Key(key)); ok {
-		return v.Emit()
+		return v.String()
 	}
 	return ""
 }

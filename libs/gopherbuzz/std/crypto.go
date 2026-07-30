@@ -32,7 +32,7 @@ func cryptoModule() vm.Value {
 		"Sha3256",
 		"Sha3384",
 		"Sha3512",
-	}))
+	}, nil))
 	m.MapSet("hash", fn("crypto.hash", cryptoHash))
 	return m
 }

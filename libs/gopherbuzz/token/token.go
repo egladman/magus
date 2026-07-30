@@ -4,6 +4,7 @@ package token
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -79,6 +80,23 @@ const (
 	Arrow      // ->
 	Backslash  // \
 	Amp        // &
+	Pipe       // |
+	Caret      // ^
+	Tilde      // ~
+	Shl        // <<
+	Shr        // >>
+
+	// compound assignment
+	PlusAssign    // +=
+	MinusAssign   // -=
+	StarAssign    // *=
+	SlashAssign   // /=
+	PercentAssign // %=
+	AmpAssign     // &=
+	PipeAssign    // |=
+	CaretAssign   // ^=
+	ShlAssign     // <<=
+	ShrAssign     // >>=
 
 	// keywords added for syntax parity
 	Is
@@ -203,6 +221,38 @@ func (k Kind) String() string {
 		return "'>='"
 	case DotDot:
 		return "'..'"
+	case Amp:
+		return "'&'"
+	case Pipe:
+		return "'|'"
+	case Caret:
+		return "'^'"
+	case Tilde:
+		return "'~'"
+	case Shl:
+		return "'<<'"
+	case Shr:
+		return "'>>'"
+	case PlusAssign:
+		return "'+='"
+	case MinusAssign:
+		return "'-='"
+	case StarAssign:
+		return "'*='"
+	case SlashAssign:
+		return "'/='"
+	case PercentAssign:
+		return "'%='"
+	case AmpAssign:
+		return "'&='"
+	case PipeAssign:
+		return "'|='"
+	case CaretAssign:
+		return "'^='"
+	case ShlAssign:
+		return "'<<='"
+	case ShrAssign:
+		return "'>>='"
 	case EOF:
 		return "EOF"
 	default:
@@ -281,6 +331,10 @@ type Token struct {
 	Parts []StringPart // only for InterpStr
 	Line  int
 	Col   int
+	// Raw marks an Ident that was written in the free-identifier form @"...".
+	// Its spelling is whatever the quotes held, so the reserved-word rule that
+	// governs ordinary identifiers does not apply to it.
+	Raw bool
 	// Doc carries the documentation comment block immediately preceding this
 	// token — the contiguous run of // line comments (or a single /* */ block)
 	// on the lines directly above, with no blank line in between. It is "" for
@@ -453,17 +507,44 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		}
 		return simple(Dot, size), nil
 	case '+':
+		if l.peekByte() == '=' {
+			return simple(PlusAssign, 2), nil
+		}
 		return simple(Plus, size), nil
 	case '&':
+		if l.peekByte() == '=' {
+			return simple(AmpAssign, 2), nil
+		}
 		return simple(Amp, size), nil
+	case '|':
+		if l.peekByte() == '=' {
+			return simple(PipeAssign, 2), nil
+		}
+		return simple(Pipe, size), nil
+	case '^':
+		if l.peekByte() == '=' {
+			return simple(CaretAssign, 2), nil
+		}
+		return simple(Caret, size), nil
+	case '~':
+		return simple(Tilde, size), nil
 	case '*':
 		if l.peekByte() == '>' {
 			return simple(YieldArrow, 2), nil
 		}
+		if l.peekByte() == '=' {
+			return simple(StarAssign, 2), nil
+		}
 		return simple(Star, size), nil
 	case '/':
+		if l.peekByte() == '=' {
+			return simple(SlashAssign, 2), nil
+		}
 		return simple(Slash, size), nil
 	case '%':
+		if l.peekByte() == '=' {
+			return simple(PercentAssign, 2), nil
+		}
 		return simple(Percent, size), nil
 	case '=':
 		if l.peekByte() == '=' {
@@ -482,11 +563,26 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		}
 		return simple(Bang, size), nil
 	case '<':
+		// `<<` wins over `<` here, matching upstream's scanner. It costs nested
+		// generic type arguments (`::<A::<B>>` scans as `... Shr`), a limitation
+		// upstream shares for the same reason.
+		if l.peekByte() == '<' {
+			if l.peekByteAt(2) == '=' {
+				return simple(ShlAssign, 3), nil
+			}
+			return simple(Shl, 2), nil
+		}
 		if l.peekByte() == '=' {
 			return simple(Le, 2), nil
 		}
 		return simple(Lt, size), nil
 	case '>':
+		if l.peekByte() == '>' {
+			if l.peekByteAt(2) == '=' {
+				return simple(ShrAssign, 3), nil
+			}
+			return simple(Shr, 2), nil
+		}
 		if l.peekByte() == '=' {
 			return simple(Ge, 2), nil
 		}
@@ -500,9 +596,14 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		if l.peekByte() == '>' {
 			return simple(Arrow, 2), nil
 		}
+		if l.peekByte() == '=' {
+			return simple(MinusAssign, 2), nil
+		}
 		// Negative numeric literal vs minus operator is resolved by the parser
 		// (unary). Always emit minus here.
 		return simple(Minus, size), nil
+	case '\'':
+		return l.lexChar(startLine, startCol)
 	case '"':
 		return l.lexString(startLine, startCol)
 	case '`':
@@ -514,6 +615,23 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
 	case '\\':
 		return simple(Backslash, size), nil
+	case '@':
+		// Free (raw) identifier: @"any text" names a binding, field, or member
+		// whose spelling the ordinary identifier rules would reject - including a
+		// reserved word or a name with punctuation in it.
+		if l.peekByte() == '"' {
+			l.pos++ // '@'
+			l.col++
+			t, err := l.lexString(startLine, startCol)
+			if err != nil {
+				return Token{}, err
+			}
+			if t.Kind != String {
+				return Token{}, fmt.Errorf("buzz: line %d:%d: a free identifier cannot interpolate", startLine, startCol)
+			}
+			return Token{Kind: Ident, Val: t.Val, Raw: true, Line: startLine, Col: startCol}, nil
+		}
+		return Token{}, fmt.Errorf("buzz: unexpected character %q at line %d:%d", r, l.line, l.col)
 	}
 
 	if r >= '0' && r <= '9' {
@@ -531,14 +649,71 @@ func (l *lexer) advance(n int) {
 }
 
 // peekByte returns the byte one position ahead of the current one, or 0.
-func (l *lexer) peekByte() byte {
-	if l.pos+1 >= len(l.src) {
+func (l *lexer) peekByte() byte { return l.peekByteAt(1) }
+
+// peekByteAt returns the byte n positions ahead of the current one, or 0. The
+// three-byte compound shifts (`<<=`, `>>=`) need to look two ahead.
+func (l *lexer) peekByteAt(n int) byte {
+	if l.pos+n >= len(l.src) {
 		return 0
 	}
-	return l.src[l.pos+1]
+	return l.src[l.pos+n]
 }
 
 // lexString scans a double-quoted string, splitting on {expr} interpolation.
+// lexChar scans a character literal ('A', '\n', '\”) and emits it as an Int token
+// holding the rune's codepoint - upstream compares them against integers directly
+// (`'\” == 39`), so a char IS an int and needs no distinct token kind, no distinct
+// value tag, and no VM support at all.
+func (l *lexer) lexChar(line, col int) (Token, error) {
+	l.pos++ // opening quote
+	l.col++
+	if l.pos >= len(l.src) {
+		return Token{}, fmt.Errorf("buzz: unterminated character literal at line %d:%d", line, col)
+	}
+
+	r := rune(l.src[l.pos])
+	if r == '\\' {
+		l.pos++
+		l.col++
+		if l.pos >= len(l.src) {
+			return Token{}, fmt.Errorf("buzz: unterminated escape in character literal at line %d:%d", line, col)
+		}
+		esc, ok := charEscapes[l.src[l.pos]]
+		if !ok {
+			return Token{}, fmt.Errorf("buzz: unknown escape %q in character literal at line %d:%d", string(l.src[l.pos]), line, col)
+		}
+		r = esc
+	}
+	l.pos++
+	l.col++
+
+	if l.pos >= len(l.src) || l.src[l.pos] != '\'' {
+		return Token{}, fmt.Errorf("buzz: unterminated character literal at line %d:%d", line, col)
+	}
+	l.pos++ // closing quote
+	l.col++
+	return Token{Kind: Int, Val: strconv.Itoa(int(r)), Line: line, Col: col}, nil
+}
+
+// allDigits reports whether every byte of s is an ASCII digit.
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// charEscapes are the escapes valid inside a character literal, matching the set
+// upstream's basic-types behavior test exercises.
+var charEscapes = map[byte]rune{
+	'n': '\n', 'r': '\r', 't': '\t', '0': 0,
+	'a': 7, 'b': 8, 'f': 12, 'v': 11,
+	'\'': '\'', '"': '"', '\\': '\\',
+}
+
 func (l *lexer) lexString(line, col int) (Token, error) {
 	l.pos++ // opening "
 	l.col++
@@ -589,6 +764,19 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 				case '}':
 					lit.WriteByte('}')
 				default:
+					// \NNN is a DECIMAL byte escape, not octal: upstream asserts
+					// "\008" is 8 and "\012" is 12, which octal would make 8 and 10.
+					// Exactly three digits, so "\0" followed by text stays unambiguous.
+					if esc >= '0' && esc <= '9' && l.pos+3 <= len(l.src) && allDigits(l.src[l.pos:l.pos+3]) {
+						n, err := strconv.Atoi(l.src[l.pos : l.pos+3])
+						if err != nil || n > 255 {
+							return Token{}, fmt.Errorf("buzz: invalid escape %q in string at line %d:%d", l.src[l.pos:l.pos+3], line, col)
+						}
+						lit.WriteByte(byte(n))
+						l.pos += 3
+						l.col += 3
+						continue
+					}
 					lit.WriteRune('\\')
 					lit.WriteRune(esc)
 				}
@@ -632,13 +820,36 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 	l.pos++ // opening `
 	l.col++
 	start := l.pos
+	var lit strings.Builder
+	escaped := false
 	for l.pos < len(l.src) {
 		c := l.src[l.pos]
 		if c == '`' {
 			val := l.src[start:l.pos]
+			if escaped {
+				val = lit.String()
+			}
 			l.pos++
 			l.col++
 			return Token{Kind: String, Val: val, Line: line, Col: col}, nil
+		}
+		// A raw string still interpolates, so it needs a way to write a literal
+		// brace; upstream spells that \{. Nothing else is unescaped here - that is
+		// what "raw" means, and a regex or Windows path inside one must survive
+		// intact. The builder is only populated once an escape is actually seen, so
+		// the common case still slices the source directly.
+		if c == '\\' && l.pos+1 < len(l.src) && (l.src[l.pos+1] == '{' || l.src[l.pos+1] == '}') {
+			if !escaped {
+				lit.WriteString(l.src[start:l.pos])
+				escaped = true
+			}
+			lit.WriteByte(l.src[l.pos+1])
+			l.pos += 2
+			l.col += 2
+			continue
+		}
+		if escaped {
+			lit.WriteByte(c)
 		}
 		if c == '\n' {
 			l.line++

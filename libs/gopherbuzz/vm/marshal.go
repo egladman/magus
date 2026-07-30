@@ -33,7 +33,53 @@ import (
 //
 // v7 adds Instr.C (4 bytes, compile-time destination register). An older VM would
 // read C's bytes as the next instruction's Op/A fields, silently mis-executing.
-const BytecodeVersion uint16 = 9
+//
+// v10 gives OpIs.B a meaning: 1 marks a nullable annotation (`x is int?`), and A
+// now holds a compile-time-reduced base name rather than the raw identifier. An
+// older VM ignores B, so `null is int?` would answer false instead of true - a
+// wrong answer rather than a crash, which is exactly the case the version guard
+// exists to catch.
+//
+// v11 adds the bitwise opcodes OpBAnd/OpBOr/OpBXor/OpShl/OpShr/OpBNot. An older
+// VM has no case and no default handler for them, so it would abort with
+// "unknown opcode" partway through a chunk - after any side effects already
+// executed. The guard turns that into a clean load-time rejection.
+//
+// v12 adds static object fields: ObjectDecl serializes a second ObjField block,
+// and OpNewObject's C operand now carries a static-field count whose (name,
+// value) pairs the compiler pushes ahead of the instruction. An older VM reads
+// neither, so it would strand those pairs on the stack and run the rest of the
+// chunk against a misaligned one.
+//
+// v13 widens three node encodings, each of which desynchronizes a reader of the
+// other version from the point of the change onward:
+//   - ForStmt's init and post clauses are u32-counted node lists instead of
+//     single nodes, so a for-loop can carry several comma-separated clauses.
+//   - EnumDecl gains a backing-type string and a node list of case values, and
+//     the enum-def CONSTANT gains a counted run of resolved case values, so
+//     `enum<str>` and `case = 1` reach the VM at all.
+//   - MemberExpr and IndexExpr gain their optional-chaining flags (`a?.b`,
+//     `a?[i]`, and the previously unserialized checked subscript `a[?i]`).
+//
+// v14 widens two more, with the same desynchronizing effect:
+//   - TryStmt carries a counted list of catch CLAUSES (each with its binding
+//     name, declared error type, and body) instead of one name plus one block.
+//   - WhileStmt, ForStmt, ForEachStmt, BreakStmt and ContinueStmt each carry a
+//     loop label string, so `break outer` reaches the loop it names.
+//
+// v15 adds the OutStmt and BlockExpr node tags for `from { ... out v; }`. An
+// older decoder has no case for either tag and rejects the node outright.
+//
+// v16 adds the IfExpr node tag for the inline if (`if (c) a else b`). Same
+// reasoning as v15: an unknown tag is not decodable.
+//
+// v17 adds MapExpr's Anon flag, which separates the anonymous-object form
+// `.{ f = v }` from a real map literal. It is read before the entry count, so
+// the two versions disagree about where the count starts.
+//
+// v18 adds MapExpr's ObjectName, the object a resolved anonymous literal builds.
+// It sits beside Anon, ahead of the entry count, so the same desync applies.
+const BytecodeVersion uint16 = 18
 
 var (
 	// bcMagic prefixes the bytecode (.bo) blob; bdbMagic the debug-info (.bdb)
@@ -269,6 +315,12 @@ func (e *enc) constVal(v Value) error {
 		e.u8(constTagEnumDef)
 		e.str(ed.Name)
 		e.strs(ed.Cases)
+		e.u32(uint32(len(ed.Values)))
+		for _, cv := range ed.Values {
+			if err := e.constVal(cv); err != nil {
+				return err
+			}
+		}
 	case tagObjDecl:
 		e.u8(constTagObjDecl)
 		return e.node(v.asObjDecl())
@@ -326,6 +378,9 @@ const (
 	nodeResumeExpr   = 40
 	nodeResolveExpr  = 41
 	nodeCatchExpr    = 42
+	nodeOutStmt      = 43
+	nodeBlockExpr    = 44
+	nodeIfExpr       = 45
 )
 
 func (e *enc) node(n ast.Node) error {
@@ -387,10 +442,13 @@ func (e *enc) node(n ast.Node) error {
 		e.u8(nodeMemberExpr)
 		e.pos(p)
 		e.str(v.Name)
+		e.boolean(v.OptionalRecv)
 		return e.node(v.Object)
 	case *ast.IndexExpr:
 		e.u8(nodeIndexExpr)
 		e.pos(p)
+		e.boolean(v.Optional)
+		e.boolean(v.OptionalRecv)
 		if err := e.node(v.Object); err != nil {
 			return err
 		}
@@ -406,6 +464,8 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.MapExpr:
 		e.u8(nodeMapExpr)
 		e.pos(p)
+		e.boolean(v.Anon)
+		e.str(v.ObjectName)
 		e.u32(uint32(len(v.Keys)))
 		for i := range v.Keys {
 			if err := e.node(v.Keys[i]); err != nil {
@@ -510,6 +570,7 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.WhileStmt:
 		e.u8(nodeWhileStmt)
 		e.pos(p)
+		e.str(v.Label)
 		if err := e.node(v.Cond); err != nil {
 			return err
 		}
@@ -517,19 +578,27 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.ForStmt:
 		e.u8(nodeForStmt)
 		e.pos(p)
-		if err := e.node(v.Init); err != nil {
-			return err
+		e.str(v.Label)
+		e.u32(uint32(len(v.Init)))
+		for _, n := range v.Init {
+			if err := e.node(n); err != nil {
+				return err
+			}
 		}
 		if err := e.node(v.Cond); err != nil {
 			return err
 		}
-		if err := e.node(v.Post); err != nil {
-			return err
+		e.u32(uint32(len(v.Post)))
+		for _, n := range v.Post {
+			if err := e.node(n); err != nil {
+				return err
+			}
 		}
 		return e.node(v.Body)
 	case *ast.ForEachStmt:
 		e.u8(nodeForEachStmt)
 		e.pos(p)
+		e.str(v.Label)
 		e.str(v.KeyName)
 		e.str(v.ValName)
 		if err := e.node(v.Iter); err != nil {
@@ -539,9 +608,11 @@ func (e *enc) node(n ast.Node) error {
 	case *ast.BreakStmt:
 		e.u8(nodeBreakStmt)
 		e.pos(p)
+		e.str(v.Label)
 	case *ast.ContinueStmt:
 		e.u8(nodeContinueStmt)
 		e.pos(p)
+		e.str(v.Label)
 	case *ast.FunDecl:
 		e.u8(nodeFunDecl)
 		e.pos(p)
@@ -564,6 +635,14 @@ func (e *enc) node(n ast.Node) error {
 				return err
 			}
 		}
+		e.u32(uint32(len(v.StaticFields)))
+		for _, f := range v.StaticFields {
+			e.str(f.Name)
+			e.str(f.TypeAnnot)
+			if err := e.node(f.Default); err != nil {
+				return err
+			}
+		}
 		e.u32(uint32(len(v.Methods)))
 		for _, m := range v.Methods {
 			if err := e.node(m); err != nil {
@@ -575,6 +654,13 @@ func (e *enc) node(n ast.Node) error {
 		e.pos(p)
 		e.str(v.Name)
 		e.strs(v.Cases)
+		e.str(v.Backing)
+		e.u32(uint32(len(v.Values)))
+		for _, cv := range v.Values {
+			if err := e.node(cv); err != nil {
+				return err
+			}
+		}
 	case *ast.DoStmt:
 		e.u8(nodeDoStmt)
 		e.pos(p)
@@ -588,8 +674,33 @@ func (e *enc) node(n ast.Node) error {
 		if err := e.node(v.Body); err != nil {
 			return err
 		}
-		e.str(v.ErrName)
-		return e.node(v.Catch)
+		e.u32(uint32(len(v.Catches)))
+		for _, cl := range v.Catches {
+			e.pos(cl.Pos)
+			e.str(cl.ErrName)
+			e.str(cl.TypeName)
+			if err := e.node(cl.Body); err != nil {
+				return err
+			}
+		}
+	case *ast.OutStmt:
+		e.u8(nodeOutStmt)
+		e.pos(p)
+		return e.node(v.Value)
+	case *ast.BlockExpr:
+		e.u8(nodeBlockExpr)
+		e.pos(p)
+		return e.node(v.Body)
+	case *ast.IfExpr:
+		e.u8(nodeIfExpr)
+		e.pos(p)
+		if err := e.node(v.Cond); err != nil {
+			return err
+		}
+		if err := e.node(v.Then); err != nil {
+			return err
+		}
+		return e.node(v.Else)
 	case *ast.ThrowStmt:
 		e.u8(nodeThrowStmt)
 		e.pos(p)
@@ -740,6 +851,53 @@ func (d *dec) strs() ([]string, error) {
 		}
 	}
 	return ss, nil
+}
+
+// nodeList decodes a u32-counted run of nodes.
+func (d *dec) nodeList() ([]ast.Node, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	if err := d.checkCount(n); err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	ns := make([]ast.Node, int(n))
+	for i := range ns {
+		ns[i], err = d.node()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ns, nil
+}
+
+// objFields reads one length-prefixed ObjField block. An ObjectDecl carries two
+// of them (instance fields, then static fields) in the same shape.
+func (d *dec) objFields() ([]ast.ObjField, error) {
+	n, err := d.u32()
+	if err != nil {
+		return nil, err
+	}
+	if err := d.checkCount(n); err != nil {
+		return nil, err
+	}
+	fields := make([]ast.ObjField, int(n))
+	for i := range fields {
+		if fields[i].Name, err = d.str(); err != nil {
+			return nil, err
+		}
+		if fields[i].TypeAnnot, err = d.str(); err != nil {
+			return nil, err
+		}
+		if fields[i].Default, err = d.node(); err != nil {
+			return nil, err
+		}
+	}
+	return fields, nil
 }
 
 func (d *dec) chunk() (*Chunk, error) {
@@ -920,7 +1078,20 @@ func (d *dec) constVal() (Value, error) {
 		if err != nil {
 			return Null, err
 		}
-		return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases}), nil
+		n, err := d.u32()
+		if err != nil {
+			return Null, err
+		}
+		if err := d.checkCount(n); err != nil {
+			return Null, err
+		}
+		values := make([]Value, int(n))
+		for i := range values {
+			if values[i], err = d.constVal(); err != nil {
+				return Null, err
+			}
+		}
+		return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases, Values: values}), nil
 	case constTagObjDecl:
 		n, err := d.node()
 		if err != nil {
@@ -1047,12 +1218,24 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
+		optionalRecv, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		obj, err := d.node()
 		if err != nil {
 			return nil, err
 		}
-		return &ast.MemberExpr{Pos: p, Object: obj, Name: name}, nil
+		return &ast.MemberExpr{Pos: p, Object: obj, Name: name, OptionalRecv: optionalRecv}, nil
 	case nodeIndexExpr:
+		optional, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
+		optionalRecv, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
 		obj, err := d.node()
 		if err != nil {
 			return nil, err
@@ -1061,7 +1244,7 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.IndexExpr{Pos: p, Object: obj, Index: idx}, nil
+		return &ast.IndexExpr{Pos: p, Object: obj, Index: idx, Optional: optional, OptionalRecv: optionalRecv}, nil
 	case nodeFunExpr:
 		params, err := d.strs()
 		if err != nil {
@@ -1089,6 +1272,14 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.FunExpr{Pos: p, Params: params, ParamAnnots: paramAnnots, RetAnnot: retAnnot, YieldAnnot: yieldAnnot, Body: blockBody}, nil
 	case nodeMapExpr:
+		anon, err := d.boolean()
+		if err != nil {
+			return nil, err
+		}
+		objectName, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		n, err := d.u32()
 		if err != nil {
 			return nil, err
@@ -1106,7 +1297,7 @@ func (d *dec) node() (ast.Node, error) {
 				return nil, err
 			}
 		}
-		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals}, nil
+		return &ast.MapExpr{Pos: p, Keys: keys, Values: vals, Anon: anon, ObjectName: objectName}, nil
 	case nodeListExpr:
 		n, err := d.u32()
 		if err != nil {
@@ -1273,6 +1464,10 @@ func (d *dec) node() (ast.Node, error) {
 		}
 		return &ast.IfStmt{Pos: p, Cond: cond, Then: blockThen, Else: els}, nil
 	case nodeWhileStmt:
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		cond, err := d.node()
 		if err != nil {
 			return nil, err
@@ -1285,9 +1480,13 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("WhileStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody}, nil
+		return &ast.WhileStmt{Pos: p, Cond: cond, Body: blockBody, Label: label}, nil
 	case nodeForStmt:
-		init, err := d.node()
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		init, err := d.nodeList()
 		if err != nil {
 			return nil, err
 		}
@@ -1295,7 +1494,7 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		post, err := d.node()
+		post, err := d.nodeList()
 		if err != nil {
 			return nil, err
 		}
@@ -1307,8 +1506,12 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("ForStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.ForStmt{Pos: p, Init: init, Cond: cond, Post: post, Body: blockBody}, nil
+		return &ast.ForStmt{Pos: p, Init: init, Cond: cond, Post: post, Body: blockBody, Label: label}, nil
 	case nodeForEachStmt:
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
 		keyName, err := d.str()
 		if err != nil {
 			return nil, err
@@ -1329,11 +1532,19 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("ForEachStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.ForEachStmt{Pos: p, KeyName: keyName, ValName: valName, Iter: iter, Body: blockBody}, nil
+		return &ast.ForEachStmt{Pos: p, KeyName: keyName, ValName: valName, Iter: iter, Body: blockBody, Label: label}, nil
 	case nodeBreakStmt:
-		return &ast.BreakStmt{Pos: p}, nil
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.BreakStmt{Pos: p, Label: label}, nil
 	case nodeContinueStmt:
-		return &ast.ContinueStmt{Pos: p}, nil
+		label, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.ContinueStmt{Pos: p, Label: label}, nil
 	case nodeFunDecl:
 		name, err := d.str()
 		if err != nil {
@@ -1373,24 +1584,13 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		fcount, err := d.u32()
+		fields, err := d.objFields()
 		if err != nil {
 			return nil, err
 		}
-		if err := d.checkCount(fcount); err != nil {
+		statics, err := d.objFields()
+		if err != nil {
 			return nil, err
-		}
-		fields := make([]ast.ObjField, int(fcount))
-		for i := range fields {
-			if fields[i].Name, err = d.str(); err != nil {
-				return nil, err
-			}
-			if fields[i].TypeAnnot, err = d.str(); err != nil {
-				return nil, err
-			}
-			if fields[i].Default, err = d.node(); err != nil {
-				return nil, err
-			}
 		}
 		mcount, err := d.u32()
 		if err != nil {
@@ -1411,7 +1611,7 @@ func (d *dec) node() (ast.Node, error) {
 			}
 			methods[i] = fd
 		}
-		return &ast.ObjectDecl{Pos: p, Name: name, Fields: fields, Methods: methods}, nil
+		return &ast.ObjectDecl{Pos: p, Name: name, Fields: fields, StaticFields: statics, Methods: methods}, nil
 	case nodeEnumDecl:
 		name, err := d.str()
 		if err != nil {
@@ -1421,7 +1621,15 @@ func (d *dec) node() (ast.Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &ast.EnumDecl{Pos: p, Name: name, Cases: cases}, nil
+		backing, err := d.str()
+		if err != nil {
+			return nil, err
+		}
+		values, err := d.nodeList()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.EnumDecl{Pos: p, Name: name, Cases: cases, Backing: backing, Values: values}, nil
 	case nodeDoStmt:
 		body, err := d.node()
 		if err != nil {
@@ -1445,19 +1653,68 @@ func (d *dec) node() (ast.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("TryStmt body: expected *ast.BlockStmt, got %T", body)
 		}
-		errName, err := d.str()
+		n, err := d.u32()
 		if err != nil {
 			return nil, err
 		}
-		catch, err := d.node()
+		if err := d.checkCount(n); err != nil {
+			return nil, err
+		}
+		catches := make([]ast.CatchClause, int(n))
+		for i := range catches {
+			cp, err := d.pos()
+			if err != nil {
+				return nil, err
+			}
+			errName, err := d.str()
+			if err != nil {
+				return nil, err
+			}
+			typeName, err := d.str()
+			if err != nil {
+				return nil, err
+			}
+			catch, err := d.node()
+			if err != nil {
+				return nil, err
+			}
+			blockCatch, ok := catch.(*ast.BlockStmt)
+			if !ok {
+				return nil, fmt.Errorf("TryStmt catch: expected *ast.BlockStmt, got %T", catch)
+			}
+			catches[i] = ast.CatchClause{Pos: cp, ErrName: errName, TypeName: typeName, Body: blockCatch}
+		}
+		return &ast.TryStmt{Pos: p, Body: blockBody, Catches: catches}, nil
+	case nodeOutStmt:
+		val, err := d.node()
 		if err != nil {
 			return nil, err
 		}
-		blockCatch, ok := catch.(*ast.BlockStmt)
+		return &ast.OutStmt{Pos: p, Value: val}, nil
+	case nodeBlockExpr:
+		body, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		blockBody, ok := body.(*ast.BlockStmt)
 		if !ok {
-			return nil, fmt.Errorf("TryStmt catch: expected *ast.BlockStmt, got %T", catch)
+			return nil, fmt.Errorf("BlockExpr body: expected *ast.BlockStmt, got %T", body)
 		}
-		return &ast.TryStmt{Pos: p, Body: blockBody, ErrName: errName, Catch: blockCatch}, nil
+		return &ast.BlockExpr{Pos: p, Body: blockBody}, nil
+	case nodeIfExpr:
+		cond, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		then, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		els, err := d.node()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.IfExpr{Pos: p, Cond: cond, Then: then, Else: els}, nil
 	case nodeThrowStmt:
 		val, err := d.node()
 		if err != nil {

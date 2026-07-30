@@ -27,10 +27,10 @@ import "project/libs/gopherbuzz" as gopherbuzz;
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 import "spells/github/actions" as github;
-final cache_trusted = os.env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
-final cache_insecure = os.env("MAGUS_CACHE_REMOTE_INSECURE");
+final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
+final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
 if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
-    magus.cache.remote(github);
+    magus\cache.remote(github);
 }
 
 // Outputs are declared per-target with ctx.outputs (in each *-generate body
@@ -39,7 +39,13 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // both wasteful and a hazard - a go-build cache hit would restore a stale MAGUS.md.
 // `magus clean --outputs` still sees them all (Project.AllOutputs unions the
 // per-target sets). See docs/cache.md#per-target-inputs-and-outputs.
-magus.project({
+magus\project({
+    // Declared so the root project's label is stable. Without it the label falls
+    // back to the checkout's directory basename, so a worktree, a differently
+    // named clone, or a CI checkout each renamed the root project and rewrote
+    // every generated index naming it - which is why regenerating MAGUS.md from
+    // a worktree produced spurious diffs.
+    "name": "magus",
     "spells": [magusfile, go, buzz, md],
     "targets": {
         "watch": {"skip_cache": true},
@@ -47,33 +53,32 @@ magus.project({
         "serve": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
-        "postflight": {"skip_cache": true},
         "image-build": {"skip_cache": true},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
         "release-build": {"skip_cache": true},
         "release-sign": {"skip_cache": true},
-        // coverage rewrites assets/coverage.svg; a cache hit would skip the write.
-        "coverage": {"skip_cache": true},
+        // test rewrites assets/coverage.svg; a cache hit would skip the write.
+        "test": {"skip_cache": true},
     },
 });
 
 fun version() > str {
-    final v = vcs.describe();
+    final v = vcs\describe();
     if (v == "") { return "unknown"; }
     return v;
 }
 
 fun commit() > str {
-    final c = vcs.shortHash();
+    final c = vcs\shortHash();
     if (c == "") { return "unknown"; }
     return c;
 }
 
 // Commit record date (RFC3339) for reproducible builds; empty => "unknown".
 fun build_date() > str {
-    final c: Commit = vcs.commit();
+    final c: Commit = vcs\commit();
     if (c.date == "") { return "unknown"; }
     return c.date;
 }
@@ -87,7 +92,7 @@ fun ld_flags() > str {
 
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(gopherbuzz.build);
+    ctx.needs(gopherbuzz\build);
     go["go-build"]({
         "env": {"GOEXPERIMENT": "jsonv2"},
         "args": ["-trimpath",
@@ -119,7 +124,7 @@ fun build_variant(dockerfile: str, platforms: str, tags: [str], meta: str, publi
     docker["docker-buildx"]({"cwd": ".", "args": args});
 
     if (publish) {
-        final digest = serialize.jsonDecode(fs.readFile(meta)).q("containerimage.digest").stringValue();
+        final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
         cosign["cosign-sign"]({"args": [IMAGE + "@" + digest]});
     }
 }
@@ -145,15 +150,15 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 export fun image_scan(ctx: magus\Context, args: [str]) > void {
     ctx.needs(image_build);
     if (ctx.has_charm("rw")) {
-        fs.makeDirectory("dist");
-        os.exec("trivy", ["image",
+        fs\makeDirectory("dist");
+        os\exec("trivy", ["image",
             "--format", "sarif",
-            "--output", fs.join("dist", "trivy.sarif"),
+            "--output", fs\join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
             image_tag()]);
     } else {
-        os.exec("trivy", ["image", image_tag()]);
+        os\exec("trivy", ["image", image_tag()]);
     }
 }
 
@@ -164,19 +169,19 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 // same internal/manpage registry by cmd/magus-manpage (see its -format flag).
 export fun man_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("manpage/*.1");
-    fs.makeDirectory("manpage");
-    os.exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
+    fs\makeDirectory("manpage");
+    os\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("host/gen/*.go");
-    os.exec("go", ["generate", "./std/..."]);
+    os\exec("go", ["generate", "./std/..."]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spell/gen).
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
-    os.exec("go", ["generate", "./internal/spell/..."]);
+    os\exec("go", ["generate", "./internal/spell/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
@@ -184,12 +189,12 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void {
 // generated tree; mockery is pinned in the go.mod tool block.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("**/gen/mocks/*.go");
-    os.exec("go", ["tool", "mockery"]);
+    os\exec("go", ["tool", "mockery"]);
 }
 
 // Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
-    os.exec("go", ["generate", "./cmd/magus/..."]);
+    os\exec("go", ["generate", "./cmd/magus/..."]);
 }
 
 // The committed docs Markdown (Buzz module reference, spell docs, Markdown manpages)
@@ -201,8 +206,8 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void {
 // Renders MAGUS.md via `magus describe graph`.
 export fun md_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("MAGUS.md");
-    final doc = magus.describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
-    fs.writeFile("MAGUS.md", doc + "\n");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
 }
 
 // Exports both graphs the browser Graph Explorer can load, so its demo is this
@@ -214,29 +219,41 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 // from inside a project only sees that project.
 export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     ctx.outputs("gen/*.json");
-    fs.mkdirall("gen");
+    fs\mkdirall("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus.cmd(["graph", "export", "-o", "json"], {"quiet": true}).stdout;
-    fs.writeFile(fs.join("gen", "knowledge-graph.json"), knowledge);
+    final knowledge = magus\cmd(["graph", "export", "-o", "json"], {"quiet": true}).stdout;
+    fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
-    final targets = magus.describe(["graph", "-o", "json"], {"quiet": true}).stdout;
-    fs.writeFile(fs.join("gen", "target-graph.json"), targets);
+    final targets = magus\describe(["graph", "-o", "json"], {"quiet": true}).stdout;
+    fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
-// Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in
-// GitHub Actions, appends it to the job step summary. The final CI step; never gates.
+// Renders the insight report (hotspots, affinity, ownership, trend) and, with the
+// `gha` charm, appends it to a host output path supplied via env. The final CI step;
+// never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
+// the host that sets it (the workflow) is what knows it's GitHub Actions and
+// points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the
+// safe Mermaid subset so older or partial renderers handle it.
 export fun postflight(ctx: magus\Context, args: [str]) > void {
-    final doc = magus.insight(["report", "--workspace"]).stdout; // teed to stdout, like md-generate
-    final summaryPath = os.env("GITHUB_STEP_SUMMARY");
-    if (summaryPath != null and ("" + summaryPath) != "") {
-        final sp = "" + summaryPath;
-        var existing = "";
-        if (fs.exists(sp)) { existing = fs.readFile(sp); }
-        fs.writeFile(sp, existing + doc + "\n");
-        magus.info("postflight: wrote insight report to the GitHub Actions step summary");
+    final hasGha = ctx.has_charm("gha");
+    var styleArgs = ["report", "--workspace"];
+    if (hasGha) { styleArgs = ["report", "--workspace", "--mermaid-style", "safe"]; }
+    final doc = magus\insight(styleArgs).stdout;
+
+    if (hasGha) {
+        final outputPath = os\env("MAGUS_INSIGHT_OUTPUT_PATH");
+        if (outputPath != null and outputPath != "") {
+            var existing = "";
+            if (fs\exists(outputPath)) { existing = fs\readFile(outputPath); }
+            fs\writeFile(outputPath, existing + doc + "\n");
+            magus\info("postflight: appended insight report");
+            return;
+        }
     }
+    // Default: print to stdout so a local `magus run postflight` is useful too.
+    magus\info(doc);
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to
@@ -245,11 +262,11 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 // only a regeneration that changes a clean file fails (a generator input changed
 // but its output was not re-run and committed).
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    final clean_before = vcs.isDirty() == false;
+    final clean_before = vcs\isDirty() == false;
     ctx.needs(ctx.glob("*-generate"));
     if (ctx.has_charm("rw")) { return; }
 
-    if (clean_before and vcs.isDirty()) {
+    if (clean_before and vcs\isDirty()) {
         throw "generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw` and commit";
     }
@@ -262,13 +279,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // release-build's cgo and static (charm) modes both call this, differing only in
 // CGO_ENABLED and the asset suffix.
 fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void {
-    fs.makeDirectory("dist");
+    fs\makeDirectory("dist");
     final v = version();
     var binary = "magus";
     if (goos == "windows") { binary = "magus.exe"; }
 
-    final stage = fs.join("dist", goos + "-" + goarch + suffix);
-    fs.makeDirectory(stage);
+    final stage = fs\join("dist", goos + "-" + goarch + suffix);
+    fs\makeDirectory(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
     if (cgo) {
@@ -277,13 +294,13 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
         // isn't already on the default search path (currently just windows/MSYS2);
         // empty on Linux/macOS, where apt/brew already put libzstd.pc/liblzma.pc where
         // pkg-config looks by default.
-        final cc = os.env("MAGUS_CGO_CC");
+        final cc = os\env("MAGUS_CGO_CC");
         if (cc != null and cc != "") { env["CC"] = cc; }
         // PKG_CONFIG pins the exact pkg-config binary cgo runs, so it can never fall
         // back to a broken one earlier on PATH (Strawberry Perl's on the Windows runner).
-        final pkgbin = os.env("MAGUS_CGO_PKG_CONFIG");
+        final pkgbin = os\env("MAGUS_CGO_PKG_CONFIG");
         if (pkgbin != null and pkgbin != "") { env["PKG_CONFIG"] = pkgbin; }
-        final pkgcfg = os.env("MAGUS_CGO_PKG_CONFIG_PATH");
+        final pkgcfg = os\env("MAGUS_CGO_PKG_CONFIG_PATH");
         if (pkgcfg != null and pkgcfg != "") { env["PKG_CONFIG_PATH"] = pkgcfg; }
     } else {
         env["CGO_ENABLED"] = "0";
@@ -291,15 +308,15 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
 
     go["go-build"]({
         "env": env,
-        "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs.join(stage, binary), "./cmd/magus"],
+        "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs\join(stage, binary), "./cmd/magus"],
     });
 
-    final asset = fs.join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
-    archive.compress(stage, asset, {});
-    fs.delete(stage);
+    final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
+    archive\compress(stage, asset, {});
+    fs\delete(stage);
 
-    final digest = crypto.hash(crypto.HashAlgorithm.Sha256, fs.readFile(asset));
-    fs.writeFile(asset + ".sha256", digest + "  " + fs.basename(asset) + "\n");
+    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
+    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
 }
 
 // Resolves which platform to build: the explicit (goos, goarch) args when given, else
@@ -311,10 +328,10 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
     // GOOS/GOARCH in the environment cross-target this build (the standard Go convention), so CD can
     // ask one runner for another platform's binary - e.g. the arm64 macOS job cross-builds darwin/amd64
     // static via `GOOS=darwin GOARCH=amd64 magus run release-build:static`. Empty env falls to native.
-    final envos = os.env("GOOS");
-    final envarch = os.env("GOARCH");
+    final envos = os\env("GOOS");
+    final envarch = os\env("GOARCH");
     if (envos != null and envos != "" and envarch != null and envarch != "") { return [envos, envarch]; }
-    final p = os.platform();
+    final p = os\platform();
     return [p[0], p[1]];
 }
 
@@ -348,20 +365,20 @@ export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
 // regression guard, safe to run here (unlike setup-magus, which can't depend on the
 // magus source tree since it's reused by arbitrary external repos).
 export fun release_sign(ctx: magus\Context, args: [str]) > void {
-    os.exec("go", ["run", "./cmd/magus-utils", "sign", fs.join("dist", "SHA256SUMS")]);
-    os.exec("go", ["run", "./cmd/magus-utils", "verify",
-        fs.join("dist", "SHA256SUMS"), fs.join("dist", "SHA256SUMS.sig")]);
+    os\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
+    os\exec("go", ["run", "./cmd/magus-utils", "verify",
+        fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
 export fun watch(ctx: magus\Context, args: [str]) > void {
-    magus.info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
-    fs.watch(["cmd", "internal"], fun(changed: [str]) > bool {
-        magus.info("change detected — rebuilding");
+    magus\info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
+    fs\watch(["cmd", "internal"], fun(changed: [str]) > bool {
+        magus\info("change detected — rebuilding");
         try {
             go_build(ctx, []);
         } catch (e) {
-            magus.warn("build failed, still watching: " + e);
+            magus\warn("build failed, still watching: " + e);
         }
         return false;
     });
@@ -376,34 +393,19 @@ fun total_coverage(func_out: str) > str {
     return cell;
 }
 
-// coverage runs the suite with per-package coverage and rewrites the
-// assets/coverage.svg badge. Like `generate`, it then drift-gates: a clean checkout
-// only goes dirty if the committed badge was stale, so `ci` (which depends on this)
-// fails when the badge was not refreshed and committed. Run the `rw` charm
-// (`coverage:rw`) to keep the new badge instead.
-//
-// Per-package, not -coverpkg=./...: cross-package instrumentation rewrites std/*.go
-// with counter statements, which shifts the source line numbers the module-doc
-// generator embeds (it reads runtime source info), tripping TestModuleDocsUpToDate.
-// Per-package leaves dependencies un-instrumented, so those links stay stable.
-export fun coverage(ctx: magus\Context, args: [str]) > void {
-    final clean_before = vcs.isDirty([fs.join("assets", "coverage.svg")]) == false;
-    // -race here is how ci race-checks the suite (ci needs coverage): magus is a
-    // concurrency orchestrator, so its own tests run under the detector. atomic
-    // covermode is already required by -race, and local `magus run test` stays fast
-    // because it does not run coverage.
-    go["go-test"]({"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
-    final pct = total_coverage(os.exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
-    // Soft coverage floor: ci fails when total statement coverage regresses below
-    // this, not only when the badge is stale. Raise it as coverage climbs; lower it
-    // here deliberately if a drop is intended.
-    if (std.parseInt(pct.split(".")[0]) < 55) {
-        throw "coverage: " + pct + "% is below the 55% floor; investigate the regression or lower the floor deliberately";
+// Tests with race detection, coverage, and a drift-gated coverage badge.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
+    ctx.needs(format);
+    go["go-test"]({"env": {"GOEXPERIMENT": "jsonv2"}, "args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
+    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    if (std\parseInt(pct.split(".")[0]) < 60) {
+        throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    fs.writeFile(fs.join("assets", "coverage.svg"), badge.coverage("go coverage", percent: pct, radius: 3));
+    fs\writeFile(fs\join("assets", "coverage.svg"), badge\coverage("go coverage", percent: pct, radius: 3));
     if (ctx.has_charm("rw")) { return; }
-    if (clean_before and vcs.isDirty([fs.join("assets", "coverage.svg")])) {
-        throw "coverage: assets/coverage.svg is stale; re-run `magus run coverage:rw` and commit the badge";
+    if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
+        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw` and commit the badge";
     }
 }
 
@@ -418,7 +420,7 @@ export fun buzz_run(ctx: magus\Context, args: [str]) > void {
 }
 
 // Gates the build on workspace health by running `magus doctor`.
-export fun preflight(ctx: magus\Context, args: [str]) > void { magus.doctor([]); }
+export fun preflight(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
 
 // Compiles one artifact: the host binary, or the container image under the `container` charm.
 export fun build(ctx: magus\Context, args: [str])  > void {
@@ -429,93 +431,84 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Formats first, then runs the Go test suite.
-export fun test(ctx: magus\Context, args: [str])   > void { ctx.needs(format); go["go-test"](); }
-// Formats first, then golangci-lint, go vet, govulncheck, markdownlint. golangci-lint
-// and govulncheck run via os.exec to pass -modfile=go.tool.mod (their deps live there,
-// not in the library go.mod).
+// Formats first, then golangci-lint, go vet, and markdownlint. golangci-lint runs
+// through os.exec to use the tool module rather than the library module.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
-export fun lint(ctx: magus\Context, args: [str])   > void { ctx.needs(format); os.exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]); go["go-vet"](); os.exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]); md.markdownlint(); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    os\exec("go", ["tool", "-modfile=go.tool.mod", "golangci-lint", "run", "./..."]);
+    go["go-vet"]();
+    os\withEnv({"GOEXPERIMENT": "jsonv2"}, fun() > void {
+        os\exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
+    });
+    md.markdownlint();
+}
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
 // TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely
 // to format markdown.
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
 
-// Runs generate (drift gate), lint, build, test, and the coverage-badge freshness gate;
-// the affected/pipeline anchor - one command that also catches unregenerated output.
-// generate is a DIRECT dep (not just transitively via format) so the drift gate is a
-// first-class part of ci, independent of the mutating format/build chain. coverage
-// drift-gates assets/coverage.svg, so a stale badge fails ci instead of rotting silently.
+// Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, build, test, coverage);
+    ctx.needs(lint, build, test);
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix
 // outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.
 export fun ci_shard(ctx: magus\Context, args: [str]) > void {
     var input = "";
-    if (!os.stdinIsTerminal()) {
+    if (!os\stdinIsTerminal()) {
         input = io.stdin.readAll();
     }
     if (input == "") {
         throw "ci-shard: no shard plan on stdin — pipe one in: magus affected ci --plan | magus run ci-shard:gha";
     }
-    final plan = serialize.jsonDecode(input);
+    final plan = serialize\jsonDecode(input);
     var include = mut [];
     foreach (row in plan.q("matrix").listValue()) {
         include.append({"shard": row.q("shard").stringValue(), "projects": row.q("projects").stringValue()});
     }
-    final block = "matrix=" + serialize.jsonEncode({"include": include}) + "\n"
+    final block = "matrix=" + serialize\jsonEncode({"include": include}) + "\n"
         + "count=" + plan.q("count").integerValue() + "\n"
         + "max_parallel=" + plan.q("max_parallel").integerValue() + "\n";
 
     if (!ctx.has_charm("gha")) {
-        magus.info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
+        magus\info("ci-shard preview (add the gha charm — `magus run ci-shard:gha` — to write $GITHUB_OUTPUT):\n" + block);
         return;
     }
-    final path = os.env("GITHUB_OUTPUT");
+    final path = os\env("GITHUB_OUTPUT");
     var p = "";
     if (path != null) { p = "" + path; }
     if (p == "") {
         throw "ci-shard: the gha charm is set but $GITHUB_OUTPUT is unset — run this inside a GitHub Actions step";
     }
     var existing = "";
-    if (fs.exists(p)) { existing = fs.readFile(p); }
-    fs.writeFile(p, existing + block);
+    if (fs\exists(p)) { existing = fs\readFile(p); }
+    fs\writeFile(p, existing + block);
 
-    // Render a human-readable summary (shard plan + dependency graph) to the job step summary.
-    final summaryPath = os.env("GITHUB_STEP_SUMMARY");
+    // Render an actionable, portable summary to the job step summary.
+    final summaryPath = os\env("GITHUB_STEP_SUMMARY");
     if (summaryPath != null and ("" + summaryPath) != "") {
         final sp = "" + summaryPath;
         var md = "## Affected CI plan\n\n"
             + plan.q("count").integerValue() + " shard(s), max parallel "
             + plan.q("max_parallel").integerValue() + "\n\n"
-            + "| shard | projects |\n| --- | --- |\n";
-        // Scope the graph to the workspace root ($GITHUB_WORKSPACE), not the nested magus workspace.
-        var graphArgs = mut ["graph", "-o", "mermaid"];
-        var graphOpts = mut {<str: str>};
-        final root = os.env("GITHUB_WORKSPACE");
-        if (root != null and ("" + root) != "") {
-            graphOpts["root"] = "" + root;
-        }
-        var nproj = 0;
+            + "| Shard | Projects |\n| --- | --- |\n";
         foreach (row in plan.q("matrix").listValue()) {
-            final projects = row.q("projects").stringValue();
+            var projects = row.q("projects").stringValue();
+            if (projects == ".") { projects = "magus"; }
+            if (projects.startsWith(". ")) { projects = "magus" + projects.sub(1, projects.len()); }
             md = md + "| " + row.q("shard").stringValue() + " | " + projects + " |\n";
-            foreach (proj in projects.split(" ")) {
-                if (proj != "") { graphArgs.append(proj); nproj = nproj + 1; }
-            }
         }
-        if (nproj > 0) {
-            md = md + "\n## Dependency graph (affected)\n\n```mermaid\n"
-                + magus.describe(graphArgs, graphOpts).stdout
-                + "\n```\n";
-        }
+        md = md + "\n**What this means:** each shard runs the listed projects concurrently within the declared limit. "
+            + "To inspect why a project was selected, run `magus affected ci --explain` locally. "
+            + "[Affected CI guide](https://eli.gladman.cc/magus/guides/affected/) · "
+            + "[CI target guide](https://eli.gladman.cc/magus/concepts/targets/ci/)\n";
         var existingSummary = "";
-        if (fs.exists(sp)) { existingSummary = fs.readFile(sp); }
-        fs.writeFile(sp, existingSummary + md);
+        if (fs\exists(sp)) { existingSummary = fs\readFile(sp); }
+        fs\writeFile(sp, existingSummary + md);
     }
 }
 
@@ -523,10 +516,10 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
 // (pnpm run build), installing its deps first on a cold tree. Run from the console/
 // dir so pnpm resolves that project's package.json.
 fun rebuild_console() > void {
-    if (!fs.isDir(fs.join("console", "node_modules"))) {
-        os.exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
+    if (!fs\isDir(fs\join("console", "node_modules"))) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
     }
-    os.exec("pnpm", ["run", "build"], "console", {});
+    os\exec("pnpm", ["run", "build"], "console", {});
 }
 
 // rerender_docs re-renders docs/gen via the docs project's fast `render` target.
@@ -537,9 +530,9 @@ fun rebuild_console() > void {
 // way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set
 // for magus child processes) and fall back to `magus` on PATH.
 fun rerender_docs() > void {
-    var bin = os.env("MAGUS");
+    var bin = os\env("MAGUS");
     if (bin == null or ("" + bin) == "") { bin = "magus"; }
-    os.exec("" + bin, ["run", "render", "docs"], ".", {});
+    os\exec("" + bin, ["run", "render", "docs"], ".", {});
 }
 
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
@@ -560,17 +553,17 @@ fun rerender_docs() > void {
 export fun serve(ctx: magus\Context, args: [str]) > void {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";
-    if (!fs.isDir(DOCS_GEN)) { throw "serve: " + DOCS_GEN + " not found - run `magus run build docs` first"; }
-    if (!fs.isDir(CONSOLE_GEN)) { throw "serve: " + CONSOLE_GEN + " not found - run `magus run build console` first"; }
+    if (!fs\isDir(DOCS_GEN)) { throw "serve: " + DOCS_GEN + " not found - run `magus run build docs` first"; }
+    if (!fs\isDir(CONSOLE_GEN)) { throw "serve: " + CONSOLE_GEN + " not found - run `magus run build console` first"; }
 
     // No port -> http.server scans from 8080 for the first free one and returns it, so
     // the printed URL is correct even when 8080 is busy. "/console/" is longer than
     // "/", so a /console/ request routes (longest-prefix) to the console tree.
-    final port = http.server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
-    magus.info("serving the deploy at http://localhost:{port}/");
-    magus.info("  /          -> " + DOCS_GEN + "  (docs)");
-    magus.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
-    magus.info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
+    final port = http\server({"mounts": {"/": DOCS_GEN, "/console/": CONSOLE_GEN}});
+    magus\info("serving the deploy at http://localhost:{port}/");
+    magus\info("  /          -> " + DOCS_GEN + "  (docs)");
+    magus\info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
+    magus\info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
 
     // Watch SOURCES only, never the gen/ output trees: fs.watch's built-in ignore
     // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
@@ -584,10 +577,10 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
     // process that has quietly gone out of date.
     // Refuse rather than reload: CLAUDE.md forbids a watch-rebuild loop for magus itself,
     // so the correct move is to stop generating and make the human restart.
-    final exe = os.executable();
+    final exe = os\executable();
     final exeStamp = fun() > str {
         try {
-            final st = fs.stat(exe);
+            final st = fs\stat(exe);
             // Bracket access, not st.size: `size` is a built-in map METHOD, so dot access
             // returns the method rather than the stat field.
             return "{st["mtime"]}:{st["size"]}";
@@ -599,7 +592,7 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
     };
     final startStamp = exeStamp();
 
-    fs.watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
+    fs\watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
         final nowStamp = exeStamp();
         if (startStamp != "" and nowStamp != "" and nowStamp != startStamp) {
             // One record, not four: this is a single event, and each magus.error is its own
@@ -609,11 +602,11 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
             // precisely the callers that cannot infer the fix themselves. The watch is
             // ending here, so losing the remedy leaves no way forward. Hints carry what is
             // safe to lose; this is not.
-            magus.error("serve: the magus binary changed while this server was running (" + exe
+            magus\error("serve: the magus binary changed while this server was running (" + exe
                 + "); this process still runs the OLD code, so anything it regenerates now would be stale."
                 + " Stop it (Ctrl-C) and start it again to pick up the new build.");
             // Advisory, and safe to lose: the general rule behind this one instance.
-            magus.hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
+            magus\hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
             return true; // end the watch; a stale generator must not keep writing gen/
         }
         var docsHit = false;
@@ -626,19 +619,19 @@ export fun serve(ctx: magus\Context, args: [str]) > void {
             }
         }
         if (docsHit) {
-            magus.info("docs/blog change - re-rendering " + DOCS_GEN);
+            magus\info("docs/blog change - re-rendering " + DOCS_GEN);
             try {
                 rerender_docs();
             } catch (e) {
-                magus.warn("docs render failed, still watching: " + e);
+                magus\warn("docs render failed, still watching: " + e);
             }
         }
         if (consoleHit) {
-            magus.info("console change - rebuilding " + CONSOLE_GEN);
+            magus\info("console change - rebuilding " + CONSOLE_GEN);
             try {
                 rebuild_console();
             } catch (e) {
-                magus.warn("console build failed, still watching: " + e);
+                magus\warn("console build failed, still watching: " + e);
             }
         }
         return false;

@@ -1,8 +1,3 @@
----
-name: magus-run
-description: Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).
----
-
 # Running work through magus
 
 magus is the task orchestrator: targets declare their inputs, outputs, and
@@ -21,6 +16,10 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
 ## Rules
 
 1. Prefer the MCP tools; they return structured content with nothing to silence.
+   At session start, or after an MCP call fails, check `magus status --probe=mcp`.
+   If it is unavailable, say once that `magus server start` restores the full
+   agent experience, then continue with the CLI fallback below. Do not make the
+   daemon a prerequisite for completing the work.
    Two distinct tools, pick by what you know:
    - `magus_run_target` {target, projects} - run named projects (or the cwd
      project). Use when you know which projects to run.

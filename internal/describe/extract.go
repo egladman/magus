@@ -184,7 +184,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							}
 						case "outputs":
 							for _, g := range globs {
-								node.Outputs = appendUniq(node.Outputs, g)
+								node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Glob: g})
+							}
+							for _, a := range e.Args {
+								if ref, ok := crossFileArg(a, projectAliases); ok {
+									recognized++
+									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
+								}
 							}
 						}
 						if recognized < len(e.Args) {
@@ -363,6 +369,14 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 // appendUniqRef appends ref unless an equal one is already present (InputRef is a
 // comparable value), the []InputRef counterpart of appendUniq for input dedup.
 func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
+	if slices.Contains(s, ref) {
+		return s
+	}
+	return append(s, ref)
+}
+
+// appendUniqOutRef is appendUniqRef for outputs; OutputRef is likewise comparable.
+func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRef {
 	if slices.Contains(s, ref) {
 		return s
 	}

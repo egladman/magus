@@ -23,6 +23,7 @@ var All = []Command{
 	configCommand,
 	serverCommand,
 	completionCommand,
+	manCommand,
 	initCommand,
 	selfCommand,
 	versionCommand,
@@ -306,9 +307,13 @@ Run-outcome lens:
              targets. It reads the shared runtime-history file, not git, so it takes
              no --commits/--since window and is always workspace-wide.
 
-  report     Every lens plus graph stats as one whole-workspace Markdown document
-             (the magusfile's postflight target writes this to the GitHub Actions
-             step summary).
+  report     Every lens plus graph stats as one whole-workspace Markdown document.
+             With --mermaid-style=safe the Mermaid subset is restricted to what
+             older or partial renderers (GitHub step summaries, blog renderers)
+             reliably handle; the default "standard" emits the full Mermaid spec
+             for tools that render it. The magusfile's postflight target
+             consumes this on the workflow side, writing the doc to a sink
+             supplied via the generic MAGUS_INSIGHT_OUTPUT_PATH env var.
 
 The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
 date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
@@ -568,6 +573,22 @@ var completionCommand = Command{
 		{"Zsh", "magus completion zsh >> ~/.zshrc"},
 		{"Fish", "magus completion fish >> ~/.config/fish/config.fish"},
 		{"PowerShell", "magus completion powershell >> $PROFILE"},
+	},
+}
+
+var manCommand = Command{
+	Name:        "man",
+	Short:       "Install the man pages embedded in this binary",
+	Description: "Write magus section 1 man pages from the running binary to a user-selected manpath.",
+	Tags:        []string{"cli", "magus man", "manpage", "documentation", "install"},
+	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
+	Usage:       "magus man install [--dir DIR]",
+	Children: []Command{
+		{Name: "install", Short: "Write the embedded section 1 man pages"},
+	},
+	Examples: []Example{
+		{"Install to the default user manpath", "magus man install"},
+		{"Install to a custom prefix", "magus man install --dir ~/.local/share/man/man1"},
 	},
 }
 

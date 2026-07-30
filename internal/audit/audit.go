@@ -5,9 +5,11 @@ package audit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"path/filepath"
+	"sort"
 	"strings"
 	"unsafe"
 
@@ -37,6 +39,10 @@ const (
 type change struct {
 	path string
 	kind changeKind
+}
+
+type changeBucket struct {
+	added, modified, removed []string
 }
 
 // Audit carries the pre-snapshot needed to detect descendant writes
@@ -84,16 +90,16 @@ func Begin(ctx context.Context, p *types.Project, write bool) *Audit {
 	return &Audit{project: p, descs: descs, roots: roots, snap: snap}
 }
 
-// Finish diffs descendant trees against the snapshot and warns on cross-project writes. Nil-safe.
-func (a *Audit) Finish(ctx context.Context, target string) {
+// Finish diffs descendant trees against the snapshot and rejects cross-project writes. Nil-safe.
+func (a *Audit) Finish(ctx context.Context, target string) error {
 	if a == nil {
-		return
+		return nil
 	}
 	changes := diff(ctx, a.snap, a.roots)
 	if len(changes) == 0 {
-		return
+		return nil
 	}
-	report(ctx, a.project, target, a.descs, changes)
+	return report(ctx, a.project, target, a.descs, changes)
 }
 
 func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active map[string]struct{}) []descendant {
@@ -237,8 +243,7 @@ func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 	var out []change
 	for _, d := range roots {
 		_ = walkFiles(ctx, d.dir, func(buf []byte, mt, sz int64) {
-			// Stack-local string view avoids one alloc per map probe; heap string only for change entries.
-			key := unsafe.String(unsafe.SliceData(buf), len(buf))
+			key := string(buf)
 			prev, existed := pre[key]
 			if !existed {
 				out = append(out, change{path: string(buf), kind: changeAdded})
@@ -259,15 +264,12 @@ func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 	return out
 }
 
-// reportCap bounds per-bucket file list length to prevent log inflation.
+// reportCap bounds each reported path list.
 const reportCap = 50
 
-// report buckets changes by descendant project and warns; attribution uses innermost dir prefix.
-func report(ctx context.Context, p *types.Project, target string, descs []descendant, changes []change) {
-	type bucket struct {
-		added, modified, removed []string
-	}
-	by := make(map[string]*bucket, len(descs))
+// report buckets changes by descendant project and returns actionable failures.
+func report(ctx context.Context, p *types.Project, target string, descs []descendant, changes []change) error {
+	by := make(map[string]*changeBucket, len(descs))
 	for _, c := range changes {
 		bestIdx, bestLen := -1, -1
 		for i, d := range descs {
@@ -285,7 +287,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 		d := descs[bestIdx]
 		b := by[d.path]
 		if b == nil {
-			b = &bucket{}
+			b = &changeBucket{}
 			by[d.path] = b
 		}
 		rel, err := filepath.Rel(d.dir, c.path)
@@ -301,39 +303,50 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 			b.removed = append(b.removed, rel)
 		}
 	}
-	for desc, b := range by {
-		attrs := []any{
-			slog.String("project", p.Path),
-			slog.String("target", target),
-			slog.String("descendant", desc),
-		}
-		if n := len(b.modified); n > 0 {
-			attrs = append(attrs, slog.Any("modified", capPaths(b.modified)))
-			if n > reportCap {
-				attrs = append(attrs, slog.Int("modified_total", n))
-			}
-		}
-		if n := len(b.added); n > 0 {
-			attrs = append(attrs, slog.Any("added", capPaths(b.added)))
-			if n > reportCap {
-				attrs = append(attrs, slog.Int("added_total", n))
-			}
-		}
-		if n := len(b.removed); n > 0 {
-			attrs = append(attrs, slog.Any("removed", capPaths(b.removed)))
-			if n > reportCap {
-				attrs = append(attrs, slog.Int("removed_total", n))
-			}
-		}
-		slog.WarnContext(ctx,
-			types.FormatDiagnostic(types.DescendantBoundaryCrossed, "descendant project boundary crossed"),
-			attrs...)
+	descPaths := make([]string, 0, len(by))
+	for desc := range by {
+		descPaths = append(descPaths, desc)
 	}
+	sort.Strings(descPaths)
+
+	project := p.Path
+	if project == "" {
+		project = "."
+	}
+	errs := make([]error, 0, len(descPaths))
+	for _, desc := range descPaths {
+		b := by[desc]
+		summary := changeSummary(b)
+		message := fmt.Sprintf("project %q target %q wrote into descendant project %q: %s\nfix: move this work to %q or exclude that path from the parent target", project, target, desc, summary, desc)
+		types.EmitDiagnostic(ctx, types.DiagnosticEvent{
+			Code:    types.DescendantBoundaryCrossed,
+			Message: message,
+			Unit:    project + ":" + target,
+		})
+		errs = append(errs, types.DiagnosticErrorf(types.DescendantBoundaryCrossed, "%s", message))
+	}
+	return errors.Join(errs...)
 }
 
-func capPaths(paths []string) []string {
-	if len(paths) <= reportCap {
-		return paths
+func changeSummary(b *changeBucket) string {
+	parts := make([]string, 0, 3)
+	if len(b.modified) > 0 {
+		parts = append(parts, changePart("modified", b.modified))
 	}
-	return paths[:reportCap]
+	if len(b.added) > 0 {
+		parts = append(parts, changePart("added", b.added))
+	}
+	if len(b.removed) > 0 {
+		parts = append(parts, changePart("removed", b.removed))
+	}
+	return strings.Join(parts, " ")
+}
+
+func changePart(kind string, paths []string) string {
+	paths = append([]string(nil), paths...)
+	sort.Strings(paths)
+	if len(paths) <= reportCap {
+		return fmt.Sprintf("%s=%v", kind, paths)
+	}
+	return fmt.Sprintf("%s=%v (%d total)", kind, paths[:reportCap], len(paths))
 }

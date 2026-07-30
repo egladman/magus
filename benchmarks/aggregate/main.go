@@ -6,7 +6,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	json "github.com/egladman/magus/internal/codec"
 )
 
 // hyperfineOutput is the JSON schema emitted by hyperfine --export-json.

@@ -1,5 +1,5 @@
 // Package memory is the console-facing MemoryService handler: an observable, editable view
-// over the durable agent-memory RECORDS the MCP magus_memory tool writes. It is a SECOND
+// over the durable handoff-journal entries the MCP magus_memory tool writes. It is a second
 // door onto the EXACT on-disk store that tool maintains (internal/memory, aliased `store`
 // here), never a second store of its own, so the browser edit surface and the agent-facing
 // tool share one set of records. Its reason to exist: an agent can accumulate stale or
@@ -97,7 +97,7 @@ func (s *Service) DeleteMemory(_ context.Context, req *connect.Request[memoryv1.
 	return connect.NewResponse(&memoryv1.DeleteMemoryResponse{}), nil
 }
 
-// GetCursor returns the cursor snapshot, empty when never written.
+// GetCursor returns a legacy cursor snapshot for migration. New handoffs use named entries.
 func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.GetCursorResponse], error) {
 	content, err := store.ReadCursor(s.ws.Root())
 	if err != nil {
@@ -106,13 +106,10 @@ func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCu
 	return connect.NewResponse(&memoryv1.GetCursorResponse{Content: content}), nil
 }
 
-// UpdateCursor overwrites the cursor snapshot.
-func (s *Service) UpdateCursor(_ context.Context, req *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.UpdateCursorResponse], error) {
-	content := req.Msg.GetContent()
-	if err := store.WriteCursor(s.ws.Root(), content); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	return connect.NewResponse(&memoryv1.UpdateCursorResponse{Content: content}), nil
+// UpdateCursor rejects global cursor writes: a shared single snapshot lets one session erase
+// another's handoff. The RPC remains in the schema so older consoles receive a migration hint.
+func (s *Service) UpdateCursor(_ context.Context, _ *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.UpdateCursorResponse], error) {
+	return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("memory: cursor writes are retired; create or update a named decision or plan entry instead"))
 }
 
 // recordToProto maps a stored record to the wire message, stamping the output-only

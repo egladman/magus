@@ -54,14 +54,18 @@ func TestDiagnosticCode_URL(t *testing.T) {
 	assert.Contains(t, CodeURL(RaceDetected), "MGS4001")
 	assert.Contains(t, CodeURL(NoCITarget), "MGS1001")
 
+	// The URL addresses the rendered docs site, which serves each code as a directory,
+	// not the Markdown source on the repo host. A reader clicks these while stuck, so
+	// they should land on a styled, navigable page rather than a raw file view.
 	for _, code := range []DiagnosticCode{PathReadDenied, RaceDetected, NoCITarget} {
-		assert.Truef(t, strings.HasSuffix(CodeURL(code), ".md"), "URL() = %q, want .md suffix", CodeURL(code))
+		assert.Truef(t, strings.HasSuffix(CodeURL(code), "/"), "URL() = %q, want a directory URL", CodeURL(code))
+		assert.NotContainsf(t, CodeURL(code), ".md", "URL() = %q, want no source extension", CodeURL(code))
 	}
 	// MGS1xxx routes to the magusfile docs dir, not the sandbox/race bases.
-	assert.Contains(t, CodeURL(NoCITarget), "/docs/reference/codes/magusfile/")
+	assert.Contains(t, CodeURL(NoCITarget), "/reference/codes/magusfile/")
 	// MGS5xxx routes to the services docs dir.
 	assert.Contains(t, CodeURL(NearDuplicateServices), "MGS5001")
-	assert.Contains(t, CodeURL(NearDuplicateServices), "/docs/reference/codes/services/")
+	assert.Contains(t, CodeURL(NearDuplicateServices), "/reference/codes/services/")
 }
 
 func TestDiagnosticError_Is(t *testing.T) {

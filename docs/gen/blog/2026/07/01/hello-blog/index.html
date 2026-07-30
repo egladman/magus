@@ -33,9 +33,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div id="announcement-bar" data-version="v0.2.1">
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
     <div class="container">
-      <span>magus <strong>v0.2.1</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.2.1">See what's new</a></span>
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
@@ -158,7 +158,7 @@ one-shot target. See <a href="../../../../../concepts/services/">services</a>.</
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than

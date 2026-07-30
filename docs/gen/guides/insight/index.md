@@ -41,8 +41,12 @@ The first argument selects a lens:
   delta is a rising hotspot; a negative one is cooling.
 - **report** - every lens, plus the knowledge graph's shape from
   [`magus graph stats`](../reference/manpage/magus-graph.md), as one whole-workspace
-  Markdown document. The magusfile's postflight target writes it to the GitHub
-  Actions step summary.
+  Markdown document. With `--mermaid-style=safe` the Mermaid subset is
+  restricted to what older or partial renderers (GitHub step summaries, blog
+  renderers) reliably handle; the default `standard` emits the full Mermaid spec
+  for tools that render it. The magusfile's postflight target consumes this on
+  the workflow side, writing the doc to a sink supplied via the generic
+  `MAGUS_INSIGHT_OUTPUT_PATH` env var.
 
 ## Bounding the scan
 

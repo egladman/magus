@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>MGS1010: affected set could not be computed - magus</title>
+  <meta name="description" content="Fires when magus cannot derive a changed-file set from the VCS and selects every project as a safety net, turning an incremental run into a full build.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1010/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="MGS1010: affected set could not be computed - magus">
+  <meta property="og:description" content="Fires when magus cannot derive a changed-file set from the VCS and selects every project as a safety net, turning an incremental run into a full build.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1010/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../../theme.css">
+  <link rel="stylesheet" href="../../../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../../../ui-panels.css">
+  <script src="../../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
+    <div class="container">
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../../index.html" class="contrast"><picture><source srcset="../../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../../index.html">Home</a></li>
+        <li><a href="../../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../../blog/">Blog</a></li>
+        <li><a href="../../../../guides/download/">Download</a></li>
+        <li><a href="../../../../tour/">Tour</a></li>
+        <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../../index.html">Home</a></li><li><a href="../../../../documentation/">Documentation</a></li><li><a href="../../../../reference/">Reference</a></li><li><a href="../../../../reference/codes/">Codes</a></li><li><a href="../../../../reference/codes/magusfile/">magusfile diagnostics</a></li><li aria-current="page">MGS1010: affected set could not be computed</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/codes/magusfile/MGS1010.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../../../reference/codes/magusfile/MGS1001/" title="MGS1001: no ci target defined">MGS1001: no ci target defined</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1002/" title="MGS1002: spell import shadowed">MGS1002: spell import shadowed</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1003/" title="MGS1003: bespoke phase-fragment target name">MGS1003: bespoke phase-fragment target name</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1004/" title="MGS1004: unreached footprint declaration">MGS1004: unreached footprint declaration</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1005/" title="MGS1005: redundant footprint glob">MGS1005: redundant footprint glob</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1006/" title="MGS1006: unknown target">MGS1006: unknown target</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1007/" title="MGS1007: target dependency cycle">MGS1007: target dependency cycle</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1008/" title="MGS1008: target missing its context parameter">MGS1008: target missing its context parameter</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1009/" title="MGS1009: target never replays from cache">MGS1009: target never replays from cache</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1010/" aria-current="page" title="MGS1010: affected set could not be computed">MGS1010: affected set could not be computed</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1011/" title="MGS1011: cross-project output names an unusable owner">MGS1011: cross-project output names an unusable owner</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1012/" title="MGS1012: cross-project output forms a dependency cycle">MGS1012: cross-project output forms a dependency cycle</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1013/" title="MGS1013: cross-project output glob escapes its owner">MGS1013: cross-project output glob escapes its owner</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1014/" title="MGS1014: cross-project output was never produced">MGS1014: cross-project output was never produced</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#fix" title="Fix">Fix</a></li><li><a href="#where-you-see-it" title="Where you see it">Where you see it</a></li><li><a href="#not-a-bug-when" title="Not a bug when">Not a bug when</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <article>
+<h1 id="mgs1010-affected-set-could-not-be-computed">MGS1010: affected set could not be computed</h1>
+<p>magus could not ask the VCS which files changed, so it selected <strong>every</strong> <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>
+rather than risk running nothing.</p>
+<pre><code class="language-text">[MGS1010] affected: could not compute a changed-file set, so EVERY project was
+selected. This runs a full build, not an incremental one. Reason: affected:
+cannot compute affected set: git merge-base: exit status 128
+</code></pre>
+<p>The <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> is correct. It is just not the run you asked for.</p>
+<h2 id="why">Why</h2>
+<p><code><a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> &lt;target&gt;</code><a class="convention-hint" href="../../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> exists to run a <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> only for the projects a VCS diff
+touched, plus their dependents. When the diff cannot be computed, magus has two
+choices, and only one of them is safe: select everything, or select nothing.
+Selecting nothing would let a gate exit 0 having checked no code, which is the
+most expensive failure a pipeline can have - so magus over-builds instead. That
+decision is deliberate and it is not going to change.</p>
+<p>What the fallback costs is time and truth. You are paying full build cost while
+believing you have an incremental one, and on <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> that difference can be the whole
+budget. Worse, it is stable: a misconfigured base ref does not fail loudly once,
+it silently degrades every run forever.</p>
+<p>The commonest cause by far is a <strong>shallow clone</strong>. A CI checkout with
+<code>fetch-depth: 1</code> contains no history, so there is no merge base to diff against.
+Others:</p>
+<ul>
+<li>The configured base ref does not exist in this clone (a branch that was never
+fetched, or a typo in <code><a class="code-xref" href="../../../config/#vcs" data-kind="config" data-def="string, flag --vcs-base-ref, env MAGUS_VCS_BASE_REF">vcs.base_ref</a></code> / <code>MAGUS_VCS_BASE_REF</code>).</li>
+<li>The <a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> is not a repository at all - a source tarball, or a container
+build that copied files in without <code>.git</code>.</li>
+<li>The VCS binary is missing from the image.</li>
+</ul>
+<h2 id="fix">Fix</h2>
+<p><strong>In CI, fetch enough history.</strong> For GitHub Actions:</p>
+<pre><code class="language-yaml">- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0 # or enough depth to contain the base ref
+</code></pre>
+<p><strong>Verify the base ref resolves.</strong> <code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> probes it directly and reports a
+<code>vcs base ref</code> failure when it does not. <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --<a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> &lt;project&gt;</code> shows
+what magus believed changed and why a project was selected.</p>
+<p><strong>Check the ref name.</strong> Configure it explicitly rather than relying on the default
+when your default branch is not the one magus assumes.</p>
+<h2 id="where-you-see-it">Where you see it</h2>
+<p>On a terminal, <code>magus affected</code> already reveals this in its scope line, which
+carries the reason:</p>
+<pre><code class="language-text">projects: . (affected: cannot compute affected set
+git merge-base: exit status 128)
+</code></pre>
+<p>The diagnostic exists for the callers that have no scope line - notably the MCP
+<code>run_affected</code> tool, <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> an agent would otherwise be told only that the run
+passed, with no way to know it had just built the entire workspace instead of the
+<a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set.</p>
+<h2 id="not-a-bug-when">Not a bug when</h2>
+<p>You are running <code>affected</code> in a workspace with no VCS on purpose. There is nothing
+to diff, so the fallback is the only correct behavior. If that is your steady
+state, run the target directly with <code><a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> and skip the pretence of an
+incremental selection.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../MGS1009/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1009: target never replays from cache</span></a>
+      <a class="page-nav-next" href="../MGS1011/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS1011: cross-project output names an unusable owner</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1001/"><span class="related-card-title">MGS1001: no ci target defined</span><span class="related-card-desc">Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.</span></a>
+        <a class="related-card" href="../../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
+        <a class="related-card" href="../../../../concepts/workspace/affected/"><span class="related-card-title">Affected</span><span class="related-card-desc">How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1010%22">MGS1010</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../../search/?q=tag%3A%22base+ref%22">base ref</a><a class="tag" href="../../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../../search/?q=tag%3A%22shallow+clone%22">shallow clone</a></div>
+    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="magusfile">Magusfile</h3>
+<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
+binds its spells. See <a href="../../../../concepts/targets/">targets</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../../concepts/targets/">targets</a>.</p>
+<h3 id="affected">Affected</h3>
+<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
+only over them. See <a href="../../../../guides/affected/">affected</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../../concepts/targets/#the-target-name">targets</a>.</p>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../../../reference/buzz/">module reference</a>, the
+<a href="../../../../concepts/spells/">spell reference</a>, the <a href="../../../../reference/manpage/magus/">man pages</a>, and the
+<a href="../../../../reference/config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../../search/">Search</a> &middot; <a href="../../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../../console/">Console</a> &middot; <a href="../../../../playground/">Playground</a> &middot; <a href="../../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../../main.js"></script>
+</body>
+</html>

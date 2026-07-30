@@ -32,9 +32,9 @@
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
-  <div id="announcement-bar" data-version="v0.2.1">
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
     <div class="container">
-      <span>magus <strong>v0.2.1</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.2.1">See what's new</a></span>
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
@@ -67,7 +67,7 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li>Reference</li><li aria-current="page">Console API</li></ul>
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../reference/">Reference</a></li><li aria-current="page">Console API</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
@@ -75,6 +75,18 @@
     <div class="with-toc">
     <aside class="toc">
       <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../reference/buzz/" title="magus stdlib">magus stdlib</a></li>
+          <li><a href="../../reference/cli/" title="The CLI in practice">The CLI in practice</a></li>
+          <li><a href="../../reference/codes/" title="Codes">Codes</a></li>
+          <li><a href="../../reference/config/" title="magus.yaml configuration">magus.yaml configuration</a></li>
+          <li><a href="../../reference/console/" aria-current="page" title="Console API">Console API</a></li>
+          <li><a href="../../reference/diagnostics/" title="Diagnostics">Diagnostics</a></li>
+          <li><a href="../../reference/faq/" title="FAQ">FAQ</a></li>
+          <li><a href="../../reference/logging/" title="Logging and verbosity">Logging and verbosity</a></li>
+          <li><a href="../../reference/manpage/" title="Manpage">Manpage</a></li>
+        </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#what-the-console-serves" title="What the console serves">What the console serves</a></li><li><a href="#job-control" title="Job control">Job control</a></li><li><a href="#how-it-is-secured" title="How it is secured">How it is secured</a></li><li><a href="#safari-limitation" title="Safari limitation">Safari limitation</a></li><li><a href="#kill-switch" title="Kill switch">Kill switch</a></li><li><a href="#privacy-statement" title="Privacy statement">Privacy statement</a></li><li><a href="#magus-doctor-check" title="magus doctor check">magus doctor check</a></li><li><a href="#live-mode-pairing" title="Live mode pairing">Live mode pairing</a><ul><li><a href="#how-to-pair" title="How to pair">How to pair</a></li><li><a href="#two-state-model" title="Two-state model">Two-state model</a></li><li><a href="#safari-limitation-1" title="Safari limitation">Safari limitation</a></li><li><a href="#target-graph-in-live-mode" title="Target graph in live mode">Target graph in live mode</a></li><li><a href="#affected-view" title="Affected view">Affected view</a></li></ul></li><li><a href="#verify-our-claims---dont-take-our-word-for-it" title="Verify our claims - don't take our word for it">Verify our claims - don't take our word for it</a><ul><li><a href="#claim-this-page-cannot-send-your-graph-or-source-code-anywhere" title="Claim: this page cannot send your graph or source code anywhere">Claim: this page cannot send your graph or source code anywhere</a></li><li><a href="#claim-your-graph-never-appears-in-any-network-request" title="Claim: your graph never appears in any network request">Claim: your graph never appears in any network request</a></li><li><a href="#claim-everything-works-with-your-network-unplugged" title="Claim: everything works with your network unplugged">Claim: everything works with your network unplugged</a></li><li><a href="#claim-we-store-nothing-without-asking" title="Claim: we store nothing without asking">Claim: we store nothing without asking</a></li><li><a href="#the-deep-audit-record-every-byte-chrome-sends" title="The deep audit: record every byte Chrome sends">The deep audit: record every byte Chrome sends</a></li><li><a href="#claim-the-code-running-here-is-the-code-in-the-repo" title="Claim: the code running here is the code in the repo">Claim: the code running here is the code in the repo</a></li><li><a href="#the-one-nuance-the-service-worker-is-not-covered-by-this-policy" title="The one nuance: the service worker is not covered by this policy">The one nuance: the service worker is not covered by this policy</a></li><li><a href="#the-opt-out-remove-us-entirely" title="The opt-out: remove us entirely">The opt-out: remove us entirely</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
@@ -86,9 +98,9 @@
 <h1 id="console-api">Console API</h1>
 <p>The <a class="glossary-term" href="../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a> is three frozen, read-only GET routes that the magus <a class="glossary-term" href="../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>
 exposes over loopback so the hosted <a href="https://eli.gladman.cc/magus/console/" rel="noopener noreferrer" target="_blank" data-external>console</a>
-(its Graph Explorer <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>) can display your current <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>.</p>
+(its <a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">Graph</a> Explorer <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>) can display your current <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>.</p>
 <p><strong>These read routes cannot change your workspace.</strong> The console's GET API has no
-write surface, no POST routes, and no way to trigger a build, run a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, or
+write surface, no POST routes, and no way to trigger a build, <a class="code-xref" href="../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, or
 change configuration - it only reads. This is a design decision, not just a
 security posture (see section 0.3 of the PWA plan).</p>
 <p>The daemon does expose one mutating surface, separate from these read routes: an
@@ -120,10 +132,10 @@ arbitrary command - only a fixed set of maintenance jobs.</p>
 </tr>
 <tr>
 <td><code>GET /api/v1/graph?select=&lt;terms&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
-<td>Scoped neighborhood (same query <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as <code>magus query</code>)</td>
+<td>Scoped neighborhood (same <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a> as <code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a></code>)</td>
 </tr>
 <tr>
-<td><code>GET /api/v1/status</code></td>
+<td><code>GET /api/v1/<a class="code-xref" href="../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></code></td>
 <td>Daemon <a class="glossary-term" href="../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> state (same as <code><a class="code-xref" href="../manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a> -o json</code>)</td>
 </tr>
 <tr>
@@ -133,7 +145,7 @@ arbitrary command - only a fixed set of maintenance jobs.</p>
 </tbody>
 </table></figure>
 <p>No other routes exist. The console mounts at <code>/api/v1/</code> on the same port as the
-MCP server (<code>127.0.0.1:7391</code> by default).</p>
+MCP <a class="code-xref" href="../manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> (<code>127.0.0.1:7391</code> by default).</p>
 <p><strong>Error bodies.</strong> When a route fails (5xx), the response body contains
 <code>err.Error()</code> detail to help an authenticated loopback caller diagnose the
 problem. This detail is returned only to a caller that has already passed the
@@ -195,7 +207,7 @@ the console logs a warning and does not register its routes.</p>
 The token is the same one the MCP server uses. Retrieve it with:</p>
 <pre><code class="language-sh">magus config mcp token print
 </code></pre>
-<p>The token is stored on disk (<code>~/.config/magus/mcp-token</code>) and never logged.</p>
+<p>The token is stored on disk (<code>~/.<a class="code-xref" href="../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>/magus/mcp-token</code>) and never logged.</p>
 <p><strong>DNS-rebind guard.</strong> The console shares the MCP server's host-header check.
 A request whose <code>Host</code> header does not resolve to the loopback range is
 rejected with 403 before the bearer token is examined.</p>
@@ -216,7 +228,7 @@ permission prompt in Chrome when you first connect the explorer.</p>
 <h2 id="safari-limitation">Safari limitation</h2>
 <p>Safari blocks fetch requests from an HTTPS page to <code>http://127.0.0.1</code> (mixed
 content). The console will not work in Safari's live mode. Use
-<code>magus graph open --serve</code> instead, which runs an ephemeral loopback server
+<code><a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="Open a graph explorer for the workspace graph.">magus graph open</a> --serve</code> instead, which runs an ephemeral loopback server
 with a matching same-origin response and opens the graph via a <code>#src=</code> fragment
 that is served directly.</p>
 <h2 id="kill-switch">Kill switch</h2>
@@ -234,7 +246,7 @@ A binary built without that tag has no console and no <code>/api/v1/</code> rout
 <li>Log request payloads</li>
 <li>Store anything beyond what the daemon already caches on disk</li>
 <li>Accept any write request</li>
-<li>Expose any path outside the routes listed above</li>
+<li>Expose any <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> outside the routes listed above</li>
 </ul>
 <p>The hosted explorer page loads your graph via the bearer-authenticated fetch.
 The graph data never appears in a URL (fragments are used for the fragment
@@ -249,7 +261,7 @@ log in the address bar).</p>
 When <code><a class="code-xref" href="../config/#console" data-kind="config" data-def="bool _(env only)_, env MAGUS_CONSOLE_ENABLED">console.enabled</a>: false</code> is set, the check reports that the console is
 disabled.</p>
 <h2 id="live-mode-pairing">Live mode pairing</h2>
-<p><code>magus graph open --live</code> opens the explorer connected to the running daemon.</p>
+<p><code>magus <a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph open: open a graph explorer.">graph open</a> --live</code> opens the explorer connected to the running daemon.</p>
 <h3 id="how-to-pair">How to pair</h3>
 <ol>
 <li>Start the daemon: <code>magus server start</code></li>
@@ -295,7 +307,7 @@ the token rides the fragment). The page:</p>
 <p><code>magus graph open --live --targets</code> opens the live target dependency graph:
 <code>http://127.0.0.1:7391/console/graph/#token=&lt;bearer&gt;&amp;flavor=targets</code></p>
 <h3 id="affected-view">Affected view</h3>
-<p>When the daemon has computed an <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set (from <code><a class="code-xref" href="../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> in a <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus.needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> context), the <code>/api/v1/status</code> response includes an <code>affected</code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
+<p>When the daemon has computed an <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set (from <code><a class="code-xref" href="../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code> in a <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> context), the <code>/api/v1/status</code> response includes an <code><a class="code-xref" href="../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a></code> array of node ids. The &quot;What does my diff touch?&quot; view is enabled automatically and paints those nodes.</p>
 <h2 id="verify-our-claims---dont-take-our-word-for-it">Verify our claims - don't take our word for it</h2>
 <p>Your dependency graph may be confidential. Every claim below is either
 enforced by your browser or checkable by you. Nothing on this page asks for
@@ -311,7 +323,7 @@ complete network permission, in one line.</p>
 <code>&lt;meta name=&quot;generator&quot; content=&quot;magus&quot;&gt;</code>). Its <code>connect-src</code> clause -
 the directive that governs <code>fetch</code>/<code>XMLHttpRequest</code>/SSE, the ways a page
 could actually exfiltrate data - reads
-<code>connect-src 'self' http://127.0.0.1:* http://[::1]:*</code>: this page's own
+<code>connect-src '<a class="code-xref" href="../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>' http://127.0.0.1:* http://[::1]:*</code>: this page's own
 origin, plus your machine's loopback address, and nothing else.
 <code>default-src 'self'</code> closes the same same-origin-only gap for anything not
 named by a more specific directive.</p>
@@ -328,7 +340,7 @@ compiled into the page; nothing on the home page builds an image URL
 from anything you typed or loaded there.</p>
 </li>
 <li>
-<p>Watch Chrome enforce it. Press <code>F12</code> to open DevTools, pick the
+<p><a class="code-xref" href="../manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">Watch</a> Chrome enforce it. Press <code>F12</code> to open DevTools, pick the
 <strong>Console</strong> tab, and paste:
 <code>fetch(&quot;https://example.com&quot;)</code>
 Chrome refuses, and the error message quotes the policy back to you:
@@ -448,10 +460,10 @@ loopback daemon console documented above.)</p>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
+        <a class="related-card" href="../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../guides/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -460,57 +472,25 @@ loopback daemon console documented above.)</p>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h1 id="glossary">Glossary</h1>
-<p>The vocabulary that runs through the rest of the docs. Each entry is a short
-definition; follow the link for the page that covers the term in depth. Every
-term has its own anchor, so you can deep-link a single definition (for example
-<code>glossary/#output-reference</code>).</p>
-<h2 id="core-model">Core model</h2>
-<h3 id="workspace">Workspace</h3>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
 <p>The magus root directory that owns a set of projects and shared config; the unit
 magus operates over. See <a href="../../concepts/workspace/">workspace</a>.</p>
 <h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
 caching, scheduling, and dependency tracking. See <a href="../../concepts/workspace/">workspace</a>.</p>
-<h3 id="magusfile">Magusfile</h3>
-<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
-binds its spells. See <a href="../../concepts/targets/">targets</a>.</p>
 <h3 id="target">Target</h3>
 <p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
 may compose a spell's tool-native operations and depend on other targets. See
 <a href="../../concepts/targets/">targets</a>.</p>
-<h3 id="operation">Operation</h3>
-<p>A single tool-native command a target composes; the middle of the work hierarchy
-(Spell to Operation to Target). See <a href="../../concepts/operations/">operations</a>.</p>
-<h3 id="spell">Spell</h3>
-<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
-toolchain's real commands. See <a href="../../concepts/spells/">spells</a>.</p>
-<h3 id="charm">Charm</h3>
-<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
-runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
-place, and <code>ci</code> always strips it. See <a href="../../concepts/charms/">charms</a>.</p>
-<h3 id="ward">Ward</h3>
-<p>A coded diagnostic that inspects a resolved op and nudges or blocks an
-anti-pattern before it runs. See <a href="../../concepts/wards/">wards</a>.</p>
-<h3 id="module">Module</h3>
-<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
-exec, vcs, and more. See <a href="../../reference/buzz/">the module reference</a>.</p>
-<h3 id="buzz">Buzz</h3>
-<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
-<a href="../../concepts/engines/">engines</a>.</p>
 <h3 id="engine">Engine</h3>
 <p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
 <a href="../../concepts/engines/">engines</a>.</p>
-<h2 id="execution-and-caching">Execution and caching</h2>
 <h3 id="cache">Cache</h3>
 <p>The content-addressed store magus consults before running a target, so unchanged
 work is skipped. See <a href="../../concepts/cache/">cache</a>.</p>
 <h3 id="affected">Affected</h3>
 <p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
 only over them. See <a href="../../guides/affected/">affected</a>.</p>
-<h3 id="sandbox">Sandbox</h3>
-<p>The restricted filesystem and environment a target runs in, so builds stay
-reproducible and side-effect-free. See <a href="../../concepts/sandbox/">sandbox</a>.</p>
 <h3 id="service">Service</h3>
 <p>A long-running or shared process magus manages across runs, distinct from a
 one-shot target. See <a href="../../concepts/services/">services</a>.</p>
@@ -518,160 +498,29 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
 <h3 id="ci">CI</h3>
-<p>An ordinary magusfile-defined target you compose yourself with <code>magus.needs</code> -
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than
 a silent no-op. See <a href="../../concepts/targets/#the-target-name">targets</a>.</p>
-<h3 id="output-reference">Output reference</h3>
-<p>A short, shareable id (<code>ref1a2b3c</code>, &quot;ref&quot; for short) for one target execution's
-captured output; it appears on each target's line, and
-<code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
-it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
-whole <code>magus</code> invocation). See <a href="../../concepts/output-refs/">output-refs</a>.</p>
-<h3 id="trace">Trace</h3>
-<p>OpenTelemetry's name for one whole <code>magus</code> invocation; every target it runs is a
-span beneath it. See <a href="../../concepts/telemetry/">telemetry</a>.</p>
-<h3 id="span">Span</h3>
-<p>OpenTelemetry's name for one unit of work under a trace - a target execution,
-whose sub-operations are child spans. An output reference points at a span's
-captured output. See <a href="../../concepts/telemetry/">telemetry</a>.</p>
 <h3 id="pool">Pool</h3>
 <p>The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to <code>MAGUS_CONCURRENCY</code>, then 4 on
 GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</code> and the
 <a href="../../guides/daemon/">dashboard</a> report it live. See <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="slot">Slot</h3>
-<p>One unit of the pool's capacity. A target acquires the slots it needs to run
-(most take one) and releases them when it finishes; the pool tracks capacity
-(total slots), running (acquired), and queued (blocked). See
-<a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="concurrency">Concurrency</h3>
-<p>How many targets run at once. It is bounded by the pool's capacity and set with
-<code>--concurrency</code>, <code>MAGUS_CONCURRENCY</code>, or the <code>concurrency</code> config key. See
-<a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="queued">Queued</h3>
-<p>A target that wants a slot while the pool is full; it blocks first-in-first-out
-until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
-See <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="pool-mode">Pool mode</h3>
-<p>Which pool a run uses: <strong>daemon</strong> (one shared pool the background daemon owns
-across every workspace and client) or <strong>proc</strong> (a per-process pool for a single
-one-off invocation). See <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="one-off">One-off</h3>
-<p>A single <code>magus</code> invocation that runs a target and exits, using a per-process
-pool; the opposite of the long-lived daemon or a service. See
-<a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="remote-cache">Remote cache</h3>
-<p>A CI-only backend that shares content-addressed artifacts across runners: a cold
-machine replays a build another runner already did instead of rebuilding. Every
-remote artifact must be signed by a trusted key. See
-<a href="../../concepts/remote-cache/">remote-cache</a>.</p>
 <h3 id="snapshot">Snapshot</h3>
 <p>A point-in-time view of live state - the pool's occupancy or a tick of exported
 metrics - as opposed to accumulated history. See <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="backfill">Backfill</h3>
-<p>The recent history the daemon replays to a dashboard on connect, so its charts
-start populated instead of empty. It is served from a bounded ring buffer of the
-last few hundred samples. See <a href="../../guides/daemon/">daemon</a>.</p>
-<h2 id="telemetry-and-health">Telemetry and health</h2>
-<h3 id="latency">Latency</h3>
-<p>How long an operation takes. magus records latency as OpenTelemetry histograms
-per family - target execution, cache op, pool wait, and graph query - and reports
-each as a count, sum, and percentiles. See <a href="../../concepts/telemetry/">telemetry</a>.</p>
-<h3 id="percentile">Percentile</h3>
-<p>A latency value at a given rank, interpolated from a histogram's buckets: <strong>p50</strong>
-is the median, <strong>p95</strong> and <strong>p99</strong> are the tail that most latency budgets care
-about. See <a href="../../concepts/telemetry/">telemetry</a>.</p>
-<h3 id="health">Health</h3>
-<p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
-reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
-The dashboard color-codes each state. See <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="volatility">Volatility</h3>
-<p>A target that fails once and passes on rerun is <strong>volatile</strong>, as opposed to a
-regression that started failing and stays failing. magus keeps per-target
-pass/fail history and a Wilson-score volatility rate to tell them apart and
-auto-retry the noise. See <a href="../../concepts/volatility/">volatility</a>.</p>
-<h2 id="insight-and-knowledge">Insight and knowledge</h2>
 <h3 id="knowledge-graph">Knowledge graph</h3>
 <p>The queryable graph of a workspace's spells, targets, docs, and code
 relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
 <a href="../../concepts/knowledge/">knowledge</a>.</p>
-<h3 id="magusmd">MAGUS.md</h3>
-<p>The committed routing index at a workspace root, regenerated from the knowledge
-graph: it lists every node and points at the exact query for a given question,
-so it is the entry point an agent reads first. See
-<a href="../../concepts/knowledge/">knowledge</a>.</p>
-<h3 id="insight">Insight</h3>
-<p>The reports magus derives over the graph and history (hotspots, affinity,
-ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
-<h3 id="hotspot">Hotspot</h3>
-<p>An insight lens: edit frequency times complexity, the prime refactoring targets.
-The project view heat-colours the dependency graph by churn; <code>--files</code> ranks
-individual files. See <a href="../../guides/insight/">insight</a>.</p>
-<h3 id="affinity">Affinity</h3>
-<p>An insight lens: projects that change together (temporal coupling). A pair that
-co-changes without either declaring a dependency on the other is a candidate
-architectural smell. See <a href="../../guides/insight/">insight</a>.</p>
-<h3 id="ownership">Ownership</h3>
-<p>An insight lens: author concentration - the primary author and their share, the
-distinct-author count (the bus factor), and abandonment. See
-<a href="../../guides/insight/">insight</a>.</p>
-<h3 id="trend">Trend</h3>
-<p>An insight lens: the recent half of the window against the earlier half. A
-positive delta is a rising hotspot; a negative one is cooling. See
-<a href="../../guides/insight/">insight</a>.</p>
-<h3 id="diagnostic-code">Diagnostic code</h3>
-<p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
-referenced and looked up; some are guardrails (see <a href="../../concepts/wards/">wards</a>), others hard
-errors.</p>
-<h2 id="console">Console</h2>
-<p>The vocabulary of the browser app. These terms name things you only meet in the
-console's UI, so they are defined here rather than left to be inferred from it.</p>
-<h3 id="console-1">Console</h3>
-<p>The browser app that reads a magus workspace: a tabbed, tiling page hosting the
-log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the daemon serves - the daemon exposes a loopback API
-it calls: read-only views plus one bearer-gated job-control service for
-maintenance jobs. See <a href="../../reference/console/">reference/console</a>.</p>
 <h3 id="surface">Surface</h3>
 <p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
 Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
 you navigate to: it is mounted into a tab, or into a pane beside another one.
 Each is single-instance - opening one you already have focuses it instead of
 duplicating it. See <a href="../../reference/console/">reference/console</a>.</p>
-<h3 id="pane">Pane</h3>
-<p>A split within a tab. Splitting divides the focused pane along its longer side,
-so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
-with no split is a single pane. Drag the divider to re-weight the split. See
-<a href="../../reference/console/">reference/console</a>.</p>
-<h3 id="chord">Chord</h3>
-<p>A key combination bound to a console command, written <code>mod+k</code> - where <code>mod</code> is
-Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
-rebindable (Settings &gt; Keybindings), and a command remains reachable from the
-command bar whether or not it has one. See <a href="../../reference/console/">reference/console</a>.</p>
-<h3 id="command-bar">Command bar</h3>
-<p>The console's runner: one searchable list of every command and its chord,
-opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
-chords dispatch the same commands it does. See <a href="../../reference/console/">reference/console</a>.</p>
-<h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon. The daemon serves the console
-from its own loopback origin, so the link is that origin plus the surface path and
-a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
-The daemon prints it; the console consumes the token, stores it, and strips it from
-the URL, so the secret never lingers in history or a copied link. The origin must be
-literal loopback - <code>localhost</code> and hostnames are rejected before any request.
-Without one, a surface
-reads only what rides in the link itself. See <a href="../../reference/console/">reference/console</a>.</p>
-<h2 id="see-also">See also</h2>
-<ul>
-<li><a href="../../conventions/">Documentation conventions</a> - how to read the placeholders,
-shell commands, and admonitions used across these pages.</li>
-<li><a href="../../concepts/targets/">Targets</a> - the fuller Target-struct glossary (Path, Name, Files)
-for magusfile authors.
-</content></li>
-</ul>
-</invoke>
 </div>
   </details>
   <details class="ref-section" open>

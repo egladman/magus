@@ -3,10 +3,11 @@ package journal
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"sync"
+
+	json "github.com/egladman/magus/internal/codec"
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a

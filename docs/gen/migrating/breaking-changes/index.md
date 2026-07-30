@@ -32,7 +32,7 @@ standard CI baseline:
 import "magus";
 import "magus/spell/buf";
 
-magus.project({ "spells": [buf] });
+magus\project({ "spells": [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     buf["buf-lint"]();

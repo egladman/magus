@@ -2,6 +2,13 @@ package codec
 
 import (
 	"bytes"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,4 +62,82 @@ func TestDurationRoundTrips(t *testing.T) {
 	var got withDur
 	require.NoError(t, Unmarshal(b, &got))
 	assert.Equal(t, 6*time.Hour, got.TTL)
+}
+
+func TestProductionCodeUsesSharedCodec(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	allowed := map[string]bool{
+		"internal/codec/json.go":                    true,
+		"internal/codec/json_v2.go":                 true,
+		"libs/gopherbuzz/internal/codec/json.go":    true,
+		"libs/gopherbuzz/internal/codec/json_v2.go": true,
+	}
+	bypasses, err := productionCodecBypasses(root, allowed)
+	require.NoError(t, err)
+	assert.Empty(t, bypasses, "JSON must use a shared codec")
+}
+
+func TestProductionCodecBypassesSkipsDependencyAndBuildTrees(t *testing.T) {
+	root := t.TempDir()
+	for _, path := range []string{
+		"cmd/magus/main.go",
+		"node_modules/example/index.go",
+		"vendor/example/codec.go",
+		"third_party/example/codec.go",
+		"build/generated.go",
+		"dist/generated.go",
+	} {
+		fullPath := filepath.Join(root, path)
+		require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+		require.NoError(t, os.WriteFile(fullPath, []byte("package example\nimport _ \"encoding/json\"\n"), 0o644))
+	}
+
+	bypasses, err := productionCodecBypasses(root, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cmd/magus/main.go"}, bypasses)
+}
+
+func productionCodecBypasses(root string, allowed map[string]bool) ([]string, error) {
+	var bypasses []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if skipProductionCodecDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil || allowed[rel] {
+			return err
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		for _, imp := range f.Imports {
+			if strings.HasPrefix(strings.Trim(imp.Path.Value, "\""), "encoding/json") {
+				bypasses = append(bypasses, rel)
+			}
+		}
+		return nil
+	})
+	slices.Sort(bypasses)
+	return bypasses, err
+}
+
+func skipProductionCodecDir(name string) bool {
+	switch name {
+	case ".git", ".hg", ".svn", ".cache", ".magus", ".quad", "node_modules", "vendor", "third_party", "third-party", "build", "dist", "out":
+		return true
+	default:
+		return false
+	}
 }

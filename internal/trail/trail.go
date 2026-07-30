@@ -22,11 +22,12 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+
+	json "github.com/egladman/magus/internal/codec"
 )
 
 // dir is the base-dir subdirectory holding the trail, a sibling of the journal's runs/.

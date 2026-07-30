@@ -62,6 +62,12 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	for _, c := range s.Charms {
 		writeLine("charm:", c)
 	}
+	// Same reasoning as charms, and the same empty-adds-nothing property: a run
+	// with no extra args hashes exactly as before, so this does not invalidate a
+	// single existing cache entry and keyVersion need not change.
+	for _, a := range s.ExtraArgs {
+		writeLine("arg:", a)
+	}
 
 	files, err := expandSources(s.Sources, s.WorkspaceRoot, s.Outputs, s.IgnoreDirs)
 	if err != nil {

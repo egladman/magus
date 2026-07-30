@@ -127,11 +127,11 @@ func TestAssembleDocs(t *testing.T) {
 // tree cannot silently sever them. Entities here sit under a directory no convention names.
 func TestDocsPathResilience(t *testing.T) {
 	root := t.TempDir()
-	writeFile(t, root, "handbook/errors/MGS2001.md", "# MGS2001\n")     // code: filename-keyed
-	writeFile(t, root, "handbook/spells/go.md", "# go\n")               // spell: "spells" segment
-	writeFile(t, root, "handbook/buzz/fs.md", "# fs\n")                 // module: "buzz" segment
-	writeFile(t, root, "handbook/errors/MGS9998.md", "# MGS9998\n")     // unregistered code
-	writeFile(t, root, "handbook/spells/notaspell.md", "# not\n")       // not a known spell
+	writeFile(t, root, "handbook/errors/MGS2001.md", "# MGS2001\n") // code: filename-keyed
+	writeFile(t, root, "handbook/spells/go.md", "# go\n")           // spell: "spells" segment
+	writeFile(t, root, "handbook/buzz/fs.md", "# fs\n")             // module: "buzz" segment
+	writeFile(t, root, "handbook/errors/MGS9998.md", "# MGS9998\n") // unregistered code
+	writeFile(t, root, "handbook/spells/notaspell.md", "# not\n")   // not a known spell
 
 	out := mergeAll([]Shard{assembleDocs(root, types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go"}}}, nil)}).Output()
 

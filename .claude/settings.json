@@ -6,7 +6,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v magus >/dev/null 2>&1 || exit 0; exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\" sh docs/guides/integrations/agents/magus-guard-path.sh",
             "timeout": 10
           }
         ]

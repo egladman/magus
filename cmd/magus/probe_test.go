@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )

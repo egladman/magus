@@ -375,8 +375,9 @@ func assembleRegistry(in Inputs) Shard {
 
 // assembleProject builds one project's shard: the project node, its targets and
 // contains edges, target->target dependencies (intra- and cross-project),
-// target->op uses edges, charm->target references, and project->project deps. What a
-// target runs is reached via its target->op edge; the op carries the argv and tool.
+// target->spell/op uses edges, charm->target references, and project->project deps.
+// A target's resolved dispatch names both the spell and its operation, so explain and
+// orphan analysis do not have to infer the spell through the registry containment edge.
 func assembleProject(p types.TargetGraphProject) Shard {
 	s := Shard{Name: p.Path}
 	pID := projectID(p.Path)
@@ -435,6 +436,11 @@ func assembleProject(p types.TargetGraphProject) Shard {
 			s.Edges = append(s.Edges, extractedEdge(tID, targetID(cd.Project, cd.Target), types.RelationDependsOn, p.Path))
 		}
 		for _, su := range n.Spells {
+			sID := spellID(su.Spell)
+			// As with ops below, retain a minimal spell node for a workspace spell
+			// absent from the registry shard. The registry enriches it when present.
+			s.Nodes = append(s.Nodes, types.KnowledgeNode{ID: sID, Kind: types.KindSpell, Label: su.Spell})
+			s.Edges = append(s.Edges, extractedEdge(tID, sID, types.RelationUses, p.Path))
 			for _, op := range su.Ops {
 				oID := opID(su.Spell, op)
 				// Emit a minimal op node too, so a target using an op the registry

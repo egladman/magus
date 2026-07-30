@@ -26,7 +26,7 @@ fast, and genuinely good at the narrow thing it does.
 
 The other half of the job is knowledge. Monorepos outgrow the people and tools
 reading them. Humans grep; AI agents grep faster and guess more confidently;
-both drown in generated files, legacy patterns, and dependency chains nobody
+both drown in generated files, unfamiliar patterns, and dependency chains nobody
 holds in their head. magus takes the opposite bet. The build tool already has to
 know the repo precisely, down to every project, every target's inputs and
 declared outputs, and what a diff reaches, so it hands that knowledge back as
@@ -91,7 +91,17 @@ the same way.
 ### Install
 
 magus ships as a single self-contained binary, so there is no second toolchain
-to install. See the [Download guide](docs/guides/download.md).
+to install.
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
+less install.sh
+sh install.sh
+```
+
+Reviewing the downloaded script before executing it lets you audit the URL, verification,
+and installation steps instead of piping an unreviewed network response directly to your shell.
+See the [Download guide](docs/guides/download.md) for platform details, verification, and updates.
 
 ### A first look
 
@@ -106,7 +116,7 @@ bind:[^playground]
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 // Every exported function is a runnable target. It receives a magus\Context,
 // the handle it uses to declare what it needs. magus caches each target's
@@ -141,8 +151,8 @@ magus query "kind:spell"                  # what the graph knows
 magus describe file docs/gen/index.html   # is this file generated, and by what
 ```
 
-Nothing here plans a workflow or decides for you. `describe file` tells you a
-path is a generated output so you skip its diff; `affected ci` tells you which
+Nothing here plans a workflow or decides for you. `magus describe file` tells you a
+path is a generated output so you skip its diff; `magus affected ci` tells you which
 projects a change reaches so you run no more than that.
 
 ## Architecture
@@ -166,7 +176,7 @@ flowchart LR
     serve["Ephemeral loopback server<br/>graph open --serve (Safari fallback)"]
 
     sources["Declared sources<br/>magusfiles, docs, buzz,<br/>SCIP index, git history, CODEOWNERS"]
-    gjson["Graph export -o json<br/>docs/graph.json (offline PWA)<br/>MAGUS.md (routing index)"]
+    gjson["Graph export -o json<br/>console graph demo data<br/>MAGUS.md (routing index)"]
 
     subgraph daemon["magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)"]
         sock["Unix domain socket<br/>proc RPC, private 0700<br/>internal/proc"]
@@ -271,7 +281,7 @@ the wire contracts are the [`proto/magus`](https://github.com/egladman/magus/tre
 protobufs.
 
 Green is the Unix domain socket, the local control plane: it dispatches
-`run`/`affected` into one shared [concurrency pool](docs/guides/daemon.md#concurrency),
+`magus run`/`magus affected` into one shared [concurrency pool](docs/guides/daemon.md#concurrency),
 answers `magus status`, and adopts nested `magus` calls. Fast and private
 (`0700`); the local CLI and the liveness/readiness probes use it.
 
@@ -307,8 +317,8 @@ Teal is the browser console, four static surfaces on the daemon, covered in
 
 The graph itself is assembled from declared sources as shards (the magusfile
 registry, docs, `@symbols` from SCIP, `@vcs` from git history, `CODEOWNERS`).
-`magus graph export -o json` writes the committed `docs/graph.json` that the
-offline console loads, and `magus describe graph -o markdown` writes the
+`magus graph export -o json` writes the graph data copied into the console's
+offline demo, and `magus describe graph -o markdown` writes the
 `MAGUS.md` routing index; live, the daemon serves the same graph byte-identical
 at `/api/v1/graph`.
 
@@ -348,9 +358,13 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 ## Working with AI agents
 
+> The fastest way to make your agent better at your code base isn't a smarter model. It's a tighter feedback loop. Most of these are scripts you already have because you had to set up environments for developers. You just need to hook them up the right way.
+
+That hookup is what magus is. The build, test, lint, format, and cache scripts that already run for human developers become the same feedback loop an agent gets - deterministic, fast, and answerable through the knowledge graph instead of through guess and grep.
+
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 
-- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. Install them into whatever directory your agent host reads: `magus agent install .claude/skills` (or `.opencode/skills`, `.agents/skills`, `--agents-md` for AGENTS.md hosts).
+- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. For Codex, install both its Agent Skills and the managed always-on guidance: `magus agent install .agents/skills --agents-md`. Claude Code uses `.claude/skills`; see [Agents](docs/guides/agents.md) for the full host setup.
 - **The committed `MAGUS.md`** is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.
 - **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.[^mcp]
 
@@ -361,8 +375,8 @@ Full detail, including which tools exist and how to connect, is on the [Agents](
 Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^docs-source] The major sections:
 
 - Core concepts: [Targets](docs/concepts/targets.md), [Spells](docs/concepts/spells.md), [Charms](docs/concepts/charms.md), [Operations](docs/concepts/operations.md), [Services](docs/concepts/services.md)
-- Running at scale: [CI](docs/concepts/targets/ci.md), [Daemon](docs/guides/daemon.md), [Remote caching](docs/concepts/remote-cache.md), [MCP](docs/guides/mcp.md), [Telemetry](docs/concepts/telemetry.md)
-- Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/output-refs.md), [Tips and tricks](docs/guides/tips.md)
+- Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci-providers.md), [Daemon](docs/guides/daemon.md), [Remote caching](docs/concepts/remote-cache.md), [MCP](docs/guides/mcp.md), [Telemetry](docs/concepts/telemetry.md)
+- Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Testing](docs/guides/testing.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/output-refs.md), [Tips and tricks](docs/guides/tips.md)
 
 Inside a workspace, the entry point is the committed [`MAGUS.md`](https://github.com/egladman/magus/blob/main/MAGUS.md): a
 generated routing index of the workspace's projects, targets, and the exact
@@ -384,7 +398,7 @@ mise install           # installs the pinned Go, Node, esbuild, and TinyGo
 go build -o magus ./cmd/magus
 ```
 
-Only building the `magus` binary? Go alone is enough and you can skip `mise install`; you need it for the docs site (`magus run generate docs`) and the playground.
+Only building the `magus` binary? Go alone is enough: run `GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus`. Use `mise install` for the docs site (`magus run generate docs`) and the playground.
 
 ### Running the tests
 

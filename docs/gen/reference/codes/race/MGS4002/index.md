@@ -34,6 +34,34 @@ The `--race` runtime detector (MGS4001) observes _actual_ file writes during
 execution and can catch races that involve undeclared outputs. MGS4002 runs
 earlier and cheaper: it catches _declared_ overlaps before any code runs.
 
+## Two overlaps, two severities
+
+The observational behavior above covers projects that declare overlapping globs
+for their **own** trees. A **cross-project** output - one project declaring
+`ctx.outputs(<other>.file(...))` into another project's tree - is checked at
+**load** instead, and is fatal:
+
+```text
+[MGS4002] site: "shared.txt" is declared as an output by two projects (p1 and
+p2); they cannot be ordered against each other, and each would cache the other's
+bytes as its own output
+```
+
+It is fatal because the consequence is worse than a nondeterministic file. Both
+writers snapshot the path into their own cache entries, so whichever loses the
+race still records the winner's bytes as its own output. Replaying the loser
+alone then reproduces content it never produced - cache poisoning that outlives
+the run that caused it, in a project that looks perfectly healthy.
+
+It is checked at load because the run-scoped check cannot see it reliably. That
+check only fires when both writers land in one dispatch, it keeps just the first
+stage's step per project, and two separate invocations are never compared at all.
+A collision this expensive must not depend on what you happened to ask for.
+
+The same check also fires when a writer claims a path the owner already declares
+for itself, which would have the owner's own build produce and clean a file the
+writer also owns.
+
 ## Resolution
 
 ### 1. Scope outputs under the project directory

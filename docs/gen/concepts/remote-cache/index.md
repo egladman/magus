@@ -64,7 +64,7 @@ configured (e.g. a developer machine with no credentials):
 ```buzz
 // magusfile.buzz
 import "spells/github/actions" as github;
-magus.cache.remote(github);
+magus\cache.remote(github);
 ```
 
 ```yaml
@@ -75,7 +75,7 @@ cache:
       - "<base64 Ed25519 public key>"
 ```
 
-`magus.cache.remote(handle)` records the backend; magus resolves and drives it
+`magus\cache.remote(handle)` records the backend; magus resolves and drives it
 during a run. Bind **one** backend. A non-empty `cache.remote.trusted_keys` is
 **required** alongside it: a remote backend with no trust set fails at load (see
 the next section). Generate a key with `magus config cache key generate`.
@@ -87,7 +87,7 @@ stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.
 
 ```buzz
 import "spells/github/actions" as github;
-magus.cache.remote(github);
+magus\cache.remote(github);
 ```
 
 It reads everything it needs from the runner environment, all provided
@@ -112,7 +112,7 @@ Signature V4.
 
 ```buzz
 import "spells/aws/s3-cache" as s3;
-magus.cache.remote(s3);
+magus\cache.remote(s3);
 ```
 
 Configuration comes from the environment (standard AWS variables plus a bucket):
@@ -235,8 +235,8 @@ under their own `.remote` prefix and are never folded into the local
 Any store reachable over HTTP can be a backend. Implement the three functions
 (`enabled`/`get_artifact`/`put_artifact`) in a spell: read inputs from the `cb(io)`
 callback (`io.hash`, `io.dest`/`io.src`), use the `http` byte primitives
-(`http.download`/`upload_chunked`/`byteSize`) and `crypto` for request signing
-(e.g. AWS SigV4 via `crypto.hmacSha256`), and
+(`http\download`/`upload_chunked`/`byteSize`) and `crypto` for request signing
+(e.g. AWS SigV4 via `crypto\hmacSha256`), and
 return the boolean result. The two shipped backends are worked examples; start
 from whichever transport is closest.
 

@@ -38,7 +38,7 @@ test "collectAlias trims slashes and records every alias" {
     s.collectAlias("/old-path/", "new-path/");
 
     // Buzz's == is reference identity for maps, so compare by value with assert.
-    assert.equal(s.aliasTarget, {"old-path": "new-path/"}, "alias recorded, slashes trimmed");
+    assert\equal(s.aliasTarget, {"old-path": "new-path/"}, "alias recorded, slashes trimmed");
 }
 ```
 
@@ -70,19 +70,19 @@ easier to read).
 | `fail(message)`                                     | Always fails the test                                                                     |
 
 Reach for `equal` most often. `==` compares identity for maps, lists, and objects, so
-`{a: 1} == {a: 1}` is `false`; `assert.equal` compares by value, recursing to any
+`{a: 1} == {a: 1}` is `false`; `assert\equal` compares by value, recursing to any
 depth and ignoring map key order.
 
-`assert.skip(message)` stops the current test and marks it skipped instead of failed
+`assert\skip(message)` stops the current test and marks it skipped instead of failed
 (Go's `t.Skip`). Use it for a case that cannot run in the current environment. The
 runner reports skipped tests apart from failures:
 
 ```buzz
 test "reads the platform keychain" {
     if (os\env("CI") != null) {
-        assert.skip("no keychain in CI");
+        assert\skip("no keychain in CI");
     }
-    assert.notNull(readKey(), "key present");
+    assert\notNull(readKey(), "key present");
 }
 ```
 

@@ -37,9 +37,13 @@ func Inspect(n Node, fn func(Node) bool) {
 			Inspect(s.Body, fn)
 		}
 	case *ForStmt:
-		Inspect(s.Init, fn)
+		for _, n := range s.Init {
+			Inspect(n, fn)
+		}
 		Inspect(s.Cond, fn)
-		Inspect(s.Post, fn)
+		for _, n := range s.Post {
+			Inspect(n, fn)
+		}
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}
@@ -59,6 +63,9 @@ func Inspect(n Node, fn func(Node) bool) {
 	case *ObjectDecl:
 		for i := range s.Fields {
 			Inspect(s.Fields[i].Default, fn)
+		}
+		for i := range s.StaticFields {
+			Inspect(s.StaticFields[i].Default, fn)
 		}
 		for _, m := range s.Methods {
 			Inspect(m, fn)
@@ -122,11 +129,23 @@ func Inspect(n Node, fn func(Node) bool) {
 		if s.Body != nil {
 			Inspect(s.Body, fn)
 		}
-		if s.Catch != nil {
-			Inspect(s.Catch, fn)
+		for _, cl := range s.Catches {
+			if cl.Body != nil {
+				Inspect(cl.Body, fn)
+			}
 		}
 	case *ThrowStmt:
 		Inspect(s.Value, fn)
+	case *OutStmt:
+		Inspect(s.Value, fn)
+	case *BlockExpr:
+		if s.Body != nil {
+			Inspect(s.Body, fn)
+		}
+	case *IfExpr:
+		Inspect(s.Cond, fn)
+		Inspect(s.Then, fn)
+		Inspect(s.Else, fn)
 	case *YieldExpr:
 		Inspect(s.Value, fn)
 	case *FiberExpr:

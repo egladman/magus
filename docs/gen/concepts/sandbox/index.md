@@ -117,7 +117,7 @@ The sandbox and the operation model meet here: **a target's declared needs are i
 
 A target runs a spell with `cwd = project.Dir` and may only walk **down** from there (see [operations.md](operations.md) and the workspace-scope rule). Its legitimate reach is: the project subtree it owns, the caches and system paths in the default footprint, and whatever the workspace has explicitly widened via `sandbox.allow` / `sandbox.env.passthrough`. Anything a target reaches for beyond that set is, by construction, something it did not declare - which is exactly the signal a denial carries. A denied read is not just "access failed"; it is "this tool tried to touch something outside its declared footprint," and that is the supply-chain tell the model is designed to surface.
 
-One boundary sits adjacent to but outside the sandbox policy: **descendant project scope.** A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch's downward walk crosses into a descendant's tree (typically a recursive glob like `prettier --write '**/*.md'` reaching into `api/docs/`), the auditor raises [MGS3001](../reference/codes/sandbox/MGS3001.md). This is **observational**, not enforced: magus does not roll the writes back. It is enforced by convention and audit rather than by landlock, because both trees are inside the workspace and therefore both inside the filesystem allowlist - the kernel cannot tell a parent's writes from a descendant's. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.
+One boundary sits adjacent to but outside the sandbox policy: **descendant project scope.** A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch crosses into a descendant's tree (typically a recursive glob like `prettier --write '**/*.md'` reaching into `api/docs/`), the auditor raises [MGS3001](../reference/codes/sandbox/MGS3001.md) and fails the target. The audit happens after the tool writes, so it cannot roll the change back; it prevents the run from succeeding. Landlock cannot enforce this boundary beforehand because both trees are inside the workspace allowlist. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.
 
 ## Platform reality: two enforcement layers
 
@@ -143,9 +143,9 @@ Because `landlock_restrict_self` is process-global and irreversible, a long-runn
 
 Being explicit about the boundary is part of the threat model:
 
-- **Network egress is audited, not blocked.** A compromised spell with no token in its environment can still reach an arbitrary host. Every request through the built-in `http.*` bindings is recorded at info level with method and URL before it is sent ([MGS2009](../reference/codes/sandbox/MGS2009.md)), including localhost, RFC1918 ranges, and the cloud metadata endpoint (`169.254.169.254`). There is no SSRF allow/deny yet; treat any URL reachable from a magusfile as trusted. A future opt-in network policy is the intended fix.
+- **Network egress is not sandboxed at all.** A compromised spell with no token in its environment can still reach an arbitrary host, including localhost, RFC1918 ranges, and the cloud metadata endpoint (`169.254.169.254`). Treat any URL reachable from a magusfile as trusted. An audit log for the `http.*` bindings used to sit here and was removed: it observed only that one binding, so it saw neither magus's own traffic (self update, remote cache) nor anything a subprocess did, which is where nearly all outbound traffic originates. A record of one narrow slice, presented as network auditing, invites more trust than it earns. An opt-in network policy remains the intended fix, and it has to sit below the subprocess boundary to mean anything.
 - **In-memory secret theft from magus itself.** If magus holds a secret in memory when a spell runs, landlock cannot help; the sandbox confines the tool's filesystem and environment, not magus's own address space.
-- **Descendant-boundary writes** are audited ([MGS3001](../reference/codes/sandbox/MGS3001.md)), not prevented, because they occur inside the workspace where the allowlist already permits writes.
+- **Descendant-boundary writes** fail the target through [MGS3001](../reference/codes/sandbox/MGS3001.md); the audit cannot undo an external tool's prior write.
 
 ## Diagnostic map
 
@@ -161,9 +161,8 @@ Every sandbox violation maps to a boundary described above.
 | [MGS2006](../reference/codes/sandbox/MGS2006.md) PathShimSuspected         | a subprocess likely failed because mise/asdf/direnv vars were stripped                           | heuristic hint                             |
 | [MGS2007](../reference/codes/sandbox/MGS2007.md) ExecDenied                | execve of a binary whose resolved path is outside the exec allowlist                             | binding + kernel; denied                   |
 | [MGS2008](../reference/codes/sandbox/MGS2008.md) DaemonSocketWithheld      | daemon socket withheld from an op subprocess, or re-injected into a recursive `magus` invocation | debug-level note                           |
-| [MGS2009](../reference/codes/sandbox/MGS2009.md) NetEgress                 | outbound request through `http.*` while sandboxed                                                | audited, **not** blocked                   |
 | [MGS2010](../reference/codes/sandbox/MGS2010.md) SandboxPolicyMismatch     | a daemon is asked to serve a workspace outside its applied union                                 | fail closed                                |
-| [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; observational, not rolled back |
+| [MGS3001](../reference/codes/sandbox/MGS3001.md) DescendantBoundaryCrossed | a write-mode walk crossed into a registered descendant project                                   | audit rail; target fails, write not rolled back |
 
 ## Glossary
 

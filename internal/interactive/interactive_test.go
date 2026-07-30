@@ -1,11 +1,11 @@
 package interactive
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

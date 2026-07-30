@@ -29,7 +29,7 @@ func graphVerify(_ context.Context, root string, args []string) error {
 		return err
 	}
 
-	statuses := checkSkillStatuses(*dir)
+	statuses := agentSkills.CheckStatuses(*dir)
 	if len(statuses) == 0 {
 		fmt.Println("agent skills: not installed (run: magus agent install <dir>, e.g. .claude/skills)")
 		return nil

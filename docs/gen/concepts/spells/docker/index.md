@@ -38,7 +38,7 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 import "magus";
 import "magus/spell/docker";
 
-magus.project({ "spells": [docker] });
+magus\project({ "spells": [docker] });
 
 export fun image(ctx: magus\Context, args: [str]) > void {
     docker["docker-build"]({ "args": ["-t", "app:latest", "."] });
@@ -58,7 +58,7 @@ export fun image(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/docker";
 
-magus.project({ "spells": [docker] });
+magus\project({ "spells": [docker] });
 
 export fun image_check(ctx: magus\Context, args: [str]) > void {
     docker["docker-build-check"]({ "args": ["."] });
@@ -78,7 +78,7 @@ export fun image_check(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/docker";
 
-magus.project({ "spells": [docker] });
+magus\project({ "spells": [docker] });
 
 export fun image_buildx(ctx: magus\Context, args: [str]) > void {
     docker["docker-buildx"]({ "args": ["-t", "app:latest", "."] });
@@ -97,7 +97,7 @@ export fun image_buildx(ctx: magus\Context, args: [str]) > void {
 import "magus";
 import "magus/spell/docker";
 
-magus.project({ "spells": [docker] });
+magus\project({ "spells": [docker] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
     docker["hadolint"]();

@@ -21,7 +21,7 @@ what, spell = how, charm = in what manner. See [targets.md](../concepts/targets.
 
 magus normalizes every target name to canonical kebab-case on both sides: when
 a magusfile declares a target and when you reference one, whether on the CLI,
-in a `magus.needs` literal, or in a per-target policy key. `go_build`,
+in a `magus\needs` literal, or in a per-target policy key. `go_build`,
 `goBuild`, and `go-build` all normalize to the same registered target, so any
 spelling reaches it - there is exactly one target, not a table of aliases.
 This does not apply to a spell op after `::` (`go::golangci-lint` matches
@@ -56,7 +56,7 @@ it with `MAGUS_DAEMON_ENABLED=false`. See [daemon.md](../guides/daemon.md).
 
 ## How do I add support for a tool magus does not know?
 
-Write a spell. For a one-off, a magusfile function target calling `os.exec` is
+Write a spell. For a one-off, a magusfile function target calling `os\exec` is
 enough; for shared vocabulary, author a spell whose handler returns a `Command` (or
 a `Service` for a long-running process). `magus init spell` scaffolds one. See
 [spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/editor.md).
@@ -78,7 +78,7 @@ surface; a target is the normal way in. See [operations.md](../concepts/operatio
 
 No. magus operates on your files and your infrastructure. Telemetry is off by
 default and, when enabled, ships to _your_ OTLP collector, not a magus-operated
-backend. The [remote cache](../concepts/remote-cache.md) is your storage. See
+backend. The [remote cache](../concepts/cache/remote.md) is your storage. See
 [telemetry.md](../concepts/telemetry.md).
 
 ## How do I see what a target will actually run before running it?

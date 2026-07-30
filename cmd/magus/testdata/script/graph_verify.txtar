@@ -3,7 +3,8 @@ exec magus graph verify --dir .
 stdout 'not installed'
 
 # after install it reports up to date, per location
-exec magus agent install .claude/skills --agents-md
+exec magus agent install .claude/skills
+exec magus agent install-agents-md
 exec magus graph verify --dir .
 stdout 'agent skills \(.claude/skills\): up to date'
 stdout 'agent skills \(AGENTS.md\): up to date'

@@ -36,6 +36,7 @@ config knowledge.workspaces
 config log.format
 config log.level
 config log.silent
+config log.stream
 config mcp.address
 config mcp.enabled
 config report.filter
@@ -46,6 +47,7 @@ config sandbox.enabled
 config sandbox.env.passthrough
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
+config target_timeout
 config telemetry.enabled
 config telemetry.endpoint
 config telemetry.headers
@@ -108,6 +110,7 @@ subcommand graph
 subcommand init
 subcommand insight
 subcommand ls
+subcommand man
 subcommand run
 subcommand self
 subcommand server

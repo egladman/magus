@@ -2,7 +2,7 @@
 // GitHub Actions Cache, written as an ordinary magus spell. Wire it in a magusfile:
 //
 //   import "spells/github/actions" as github
-//   magus.cache.remote(github)
+//   magus\cache.remote(github)
 //
 // magus knows nothing about GitHub Actions: it speaks only the generic spell
 // contract. It exports the cache contract, functions typed fun(Target, fun(any))
@@ -38,12 +38,13 @@ import "http"
 import "magus/target"
 import "serialize"
 import "os"
+import "std"
 
 export fun mgs_getName() > str { return "actions"; }
 
 // A cache backend exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact), which the remote-cache subsystem detects by name
-// and invokes via magus.cache.remote(github). It declares no mgs_listTargets - a
+// and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a
 // cache backend contributes no operations a target could compose.
 
 // enabled gates the whole backend on running under GitHub Actions. The cache
@@ -60,7 +61,7 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // module for it yet (extracting one needs the embed+register plumbing magus/charm
 // uses). Track for follow-up; keep the two copies in sync.
 fun getenv(name: str) > str {
-    final v = os.env(name);
+    final v = os\env(name);
     if (v == null) { return ""; }
     return "" + v;
 }
@@ -92,7 +93,7 @@ fun rpc(method: str, payload: any) > any {
         "Content-Type": "application/json",
         "Accept": "application/json",
     };
-    return http.post(url, serialize.jsonEncode(payload), headers);
+    return http\post(url, serialize\jsonEncode(payload), headers);
 }
 
 // get_artifact downloads the cache artifact for payload.hash into payload.dest. Returns
@@ -105,12 +106,12 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
     final dest = "" + io["dest"];
     final res = rpc("GetCacheEntryDownloadURL", {"key": cache_key(hash), "version": CACHE_VERSION});
     if (res["status"] != 200) { return false; }
-    final decoded = serialize.jsonDecode(res["body"]);
+    final decoded = serialize\jsonDecode(res["body"]);
     if (!decoded.q("ok").booleanValue()) { return false; }   // ok=false ⇒ miss
     final loc = decoded.q("signedDownloadUrl").stringValue();
     if (loc == "") { return false; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    return http.download(loc, dest, {}) == 200;
+    return http\download(loc, dest, {}) == 200;
 }
 
 // put_artifact uploads the artifact at payload.src for payload.hash. Returns true on
@@ -127,19 +128,114 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
     if (cres["status"] == 409) { return true; }   // another runner already reserved this key
     if (cres["status"] != 200) { return false; }
-    final upload = serialize.jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
+    final upload = serialize\jsonDecode(cres["body"]).q("signedUploadUrl").stringValue();
     if (upload == "") { return true; }             // ok=false with no URL ⇒ entry already exists
 
     // 2. Upload the artifact to Azure as a single Put Blob (chunk_size 0 = whole
     //    file, no Content-Range). Azure returns 201 Created on success.
-    final ures = http.upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
+    final ures = http\upload_chunked("PUT", upload, src, 0, mut {"x-ms-blob-type": "BlockBlob"});
     final ucode = ures[0];
     if (ucode != 201 and ucode != 200) { return false; }
 
     // 3. Commit with the exact byte size. int64 fields are JSON strings in proto3,
     //    so send sizeBytes as a string.
     final fres = rpc("FinalizeCacheEntryUpload",
-        {"key": key, "sizeBytes": "" + http.byteSize(src), "version": CACHE_VERSION});
+        {"key": key, "sizeBytes": "" + http\byteSize(src), "version": CACHE_VERSION});
     if (fres["status"] != 200) { return false; }
-    return serialize.jsonDecode(fres["body"]).q("ok").booleanValue();
+    return serialize\jsonDecode(fres["body"]).q("ok").booleanValue();
+}
+
+// --- CI provider contract ----------------------------------------------------
+//
+// Wired with magus\ci.provider(github), alongside magus\cache.remote(github):
+// one spell per vendor, two contracts. Both gate on the same enabled() above,
+// so outside Actions this whole half is inert.
+//
+// magus core knows none of this syntax. It calls generic verbs (see
+// internal/ci/annotate) and every "::" below lives here, in Buzz.
+
+// escapeData encodes the characters Actions treats as structural in a command's
+// message. A raw newline would end the command early and spill the rest into the
+// log as loose text, and a failure's cause is usually the part after line one.
+// Percent goes first, or it would corrupt the escapes introduced after it.
+fun escapeData(s: str) > str {
+    var acc = s.replace("%", "%25");
+    acc = acc.replace("\r", "%0D");
+    return acc.replace("\n", "%0A");
+}
+
+// escapeProp additionally encodes the separators between properties, so a title
+// containing a comma or colon cannot be read as the start of another property.
+fun escapeProp(s: str) > str {
+    var acc = escapeData(s);
+    acc = acc.replace(":", "%3A");
+    return acc.replace(",", "%2C");
+}
+
+// group_start opens a fold. Actions has no expanded section: ::group:: always
+// starts collapsed. A caller asking for an expanded one wants output the reader
+// must not have to click for, so the group is skipped and the content stays
+// inline. Folding it anyway would be worse - a hidden failure is one nobody sees.
+export fun group_start(target: Target, cb: fun(any)) > bool {
+    final io = {<str, any>};
+    cb(io);
+    final collapsed = io["collapsed"];
+    if (collapsed != true) { return true; }
+    std\print("::group::" + escapeData("" + io["title"]));
+    return true;
+}
+
+// group_end closes the current fold. Actions tracks a single open group, so the
+// id is unused; it is in the contract for providers keyed by section name.
+export fun group_end(target: Target, cb: fun(any)) > bool {
+    std\print("::endgroup::");
+    return true;
+}
+
+// annotate raises a message that surfaces on the pull request, not just the log.
+// Actions has no dedicated code field, so a diagnostic code leads the title where
+// it stays greppable in the annotations list.
+export fun annotate(target: Target, cb: fun(any)) > bool {
+    final io = {<str, any>};
+    cb(io);
+
+    var title = "" + io["title"];
+    final code = "" + io["code"];
+    if (code != "") {
+        if (title == "") { title = code; } else { title = code + " " + title; }
+    }
+
+    var props = "";
+    fun addProp(k: str, v: str) > void {
+        if (v == "") { return; }
+        if (props != "") { props = props + ","; }
+        props = props + k + "=" + escapeProp(v);
+    }
+    fun addNum(k: str, v: any) > void {
+        if (v == null) { return; }
+        final n = "" + v;
+        if (n == "0" or n == "") { return; }
+        if (props != "") { props = props + ","; }
+        props = props + k + "=" + n;
+    }
+
+    addProp("file", "" + io["file"]);
+    addNum("line", io["line"]);
+    addNum("endLine", io["end_line"]);
+    addNum("col", io["col"]);
+    addNum("endColumn", io["end_col"]);
+    addProp("title", title);
+
+    var line = "::" + ("" + io["level"]);
+    if (props != "") { line = line + " " + props; }
+    std\print(line + "::" + escapeData("" + io["message"]));
+    return true;
+}
+
+// quote_prefixes declares the line prefixes that introduce a workflow command.
+// magus captures subprocess output and replays it, so a dependency printing
+// "::error::" would otherwise have the runner execute it and forge annotations.
+// Returned once per run; magus does the per-line matching itself.
+export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
+    return ["::"];
 }

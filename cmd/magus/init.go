@@ -127,11 +127,11 @@ func xdgConfigPath() (string, error) {
 }
 
 // printInitNextSteps prints actionable hints after a successful init.
-// Gated on interactive.Enabled() so MAGUS_HINTS_ENABLED=false silences it.
+// Gated on the user-controlled hints preference, not terminal interactivity.
 // cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
 // was stubbed (false when --global was used); isLocal is true when --local was used.
 func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal bool) {
-	if !interactive.Enabled() {
+	if !interactive.HintsEnabled() {
 		return
 	}
 
@@ -164,8 +164,8 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	// so it does not belong in repo bootstrap - init just says where to look.
 	interactive.Emit(os.Stderr, "")
 	interactive.Emit(os.Stderr, "let an AI agent use this workspace over the daemon (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  magus agent install claude          # install skills (also: opencode, agents, codex)")
-	interactive.Emit(os.Stderr, "  magus config mcp connector create   # mint a token, then point your client at the MCP server")
+	interactive.Emit(os.Stderr, "  magus agent install .agents/skills --agents-md  # Agent Skills + AGENTS.md guidance")
+	interactive.Emit(os.Stderr, "  magus config mcp connector create --name <client>  # mint a token, then configure the client")
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has

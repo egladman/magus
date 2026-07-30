@@ -42,7 +42,7 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 	rightFloat, rightOk := asNumeric(right)
 	if !leftOk || !rightOk {
 		return Null, fmt.Errorf("buzz: cannot apply %q to %s and %s",
-			arithSymbol(op), left.buzzKind(), right.buzzKind())
+			opSymbol(op), left.buzzKind(), right.buzzKind())
 	}
 	return floatArith(op, leftFloat, rightFloat)
 }
@@ -255,6 +255,21 @@ func indexGet(vm *VM, obj, idx Value, optional bool) (Value, error) {
 			return Null, fmt.Errorf("buzz: list index %d out of range (len %d)", i, len(list.Items))
 		}
 		return list.Items[i], nil
+	case tagStr:
+		// Yields a one-character string, matching foreach-over-str. Indexed by RUNE,
+		// not byte, so s[i] lines up with the i-th element foreach would produce.
+		runes := []rune(vm.asStr(obj).V)
+		i, ok := asInt(idx)
+		if !ok {
+			return Null, fmt.Errorf("buzz: str index must be an int, got %s", idx.buzzKind())
+		}
+		if i < 0 || int(i) >= len(runes) {
+			if optional {
+				return Null, nil
+			}
+			return Null, fmt.Errorf("buzz: str index %d out of range (len %d)", i, len(runes))
+		}
+		return StrValue(string(runes[i])), nil
 	case tagMap:
 		m := vm.asMap(obj)
 		if v, ok := m.get(idx.String()); ok {
@@ -321,6 +336,16 @@ func setMember(vm *VM, obj Value, name string, val Value) error {
 			return nil
 		}
 		return fmt.Errorf("buzz: object %s has no field %q", inst.Def.Name, name)
+	case tagObjectDef:
+		// Static fields are the one writable member of a type value, and they carry
+		// no `mut` requirement: the type is shared state by declaration, not an
+		// instance whose mutability the constructor chose.
+		def := vm.asObjectDef(obj)
+		if i := def.staticFieldIndex(name); i >= 0 {
+			def.StaticFields[i].Val = val
+			return nil
+		}
+		return fmt.Errorf("buzz: object %s has no static field %q", def.Name, name)
 	default:
 		return fmt.Errorf("buzz: cannot set field on %s", obj.buzzKind())
 	}
@@ -359,6 +384,11 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 			return m, nil
 		}
 		return Null, nil
+	case tagRange:
+		if m := rngMethod(vm, obj, name); m != Null {
+			return m, nil
+		}
+		return Null, nil
 	case tagObject:
 		instance := vm.asObject(obj)
 		if i := instance.Def.fieldIndex(name); i >= 0 {
@@ -374,21 +404,28 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 		// Member access on a type value resolves a static method (Foo.make): the
 		// unbound closure, callable with no receiver. Instance methods live on
 		// instances, not the type, so they are not resolvable here.
-		if s, ok := vm.asObjectDef(obj).staticMethod(name); ok {
+		def := vm.asObjectDef(obj)
+		if s, ok := def.staticMethod(name); ok {
 			return vm.allocFun(s), nil
+		}
+		if i := def.staticFieldIndex(name); i >= 0 {
+			return def.StaticFields[i].Val, nil
 		}
 		return Null, nil
 	case tagEnumDef:
 		enumDef := vm.asEnumDef(obj)
-		for _, c := range enumDef.Cases {
+		for i, c := range enumDef.Cases {
 			if c == name {
-				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name}), nil
+				return vm.allocEnumVal(&enumValObj{Enum: enumDef.Name, Case: name, Val: enumDef.Values[i]}), nil
 			}
 		}
 		return Null, fmt.Errorf("buzz: enum %s has no case %q", enumDef.Name, name)
 	case tagEnumVal:
-		if name == "name" {
+		switch name {
+		case "name":
 			return StrValue(vm.asEnumVal(obj).Case), nil
+		case "value":
+			return vm.asEnumVal(obj).Val, nil
 		}
 		return Null, nil
 	default:
@@ -413,6 +450,27 @@ func listMethod(vm *VM, list Value, name string) Value {
 	case "len":
 		return DirectValue("list.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(lo.Items))), nil
+		})
+	case "next":
+		// The explicit iterator protocol: next(key) returns the key AFTER key, with
+		// null meaning "start" and a null result meaning "exhausted". It returns keys
+		// rather than values so a caller can index back into the list, which is what
+		// makes it composable with the subscript.
+		return DirectValue("list.next", func(_ context.Context, args []Value) (Value, error) {
+			if len(lo.Items) == 0 {
+				return Null, nil
+			}
+			if len(args) == 0 || args[0].tag() == tagNull {
+				return IntValue(0), nil
+			}
+			i, ok := asInt(args[0])
+			if !ok {
+				return Null, fmt.Errorf("list.next: key must be an int or null, got %s", args[0].buzzKind())
+			}
+			if i < 0 || int(i)+1 >= len(lo.Items) {
+				return Null, nil
+			}
+			return IntValue(i + 1), nil
 		})
 	case "append":
 		return DirectValue("list.append", func(_ context.Context, args []Value) (Value, error) {
@@ -638,8 +696,22 @@ func mapMethod(vm *VM, m Value, name string) Value {
 		})
 	}
 	switch name {
-	case "size":
-		return DirectValue("map.size", func(_ context.Context, _ []Value) (Value, error) {
+	// "len" and "size" are the same count. The checker has always typed map.len as
+	// Int (see inferMember's MapType case) while the VM only answered to "size", so
+	// m.len() type-checked and then died at runtime with "null is not callable" -
+	// the worst shape of bug, since the checker actively vouched for it.
+	case "len", "size":
+		// Builtins otherwise win over stored keys (see the caller), but a map is also
+		// how an object like buffer.Buffer is modelled, and such a type defines its
+		// own len - Buffer's even takes an alignment argument. Yield to a stored entry
+		// rather than shadowing it; "size" keeps the old unconditional behavior since
+		// nothing stores that name.
+		if name == "len" {
+			if _, ok := mp.get("len"); ok {
+				return Null
+			}
+		}
+		return DirectValue("map."+name, func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(mp.Keys))), nil
 		})
 	case "remove":
@@ -986,6 +1058,70 @@ func strMethod(vm *VM, s Value, name string) Value {
 
 // fibMethod returns a bound DirectValue for the named built-in Fiber method,
 // or Null if name is not a known fiber method.
+// rngMethod returns a bound DirectValue for the named range method, or Null if
+// name is not one. Mirrors listMethod/mapMethod.
+//
+// A range runs from Lo TOWARD Hi and stops before it, in either direction, which
+// is what foreach does - so `10..0` yields 10 down to 1 and has length 10. low()
+// and high() report the operands as written, not the smaller and larger of them.
+func rngMethod(vm *VM, r Value, name string) Value {
+	ro := vm.asRange(r)
+	switch name {
+	case "low":
+		return DirectValue("rng.low", func(context.Context, []Value) (Value, error) {
+			return IntValue(ro.Lo), nil
+		})
+	case "high":
+		return DirectValue("rng.high", func(context.Context, []Value) (Value, error) {
+			return IntValue(ro.Hi), nil
+		})
+	case "len":
+		return DirectValue("rng.len", func(context.Context, []Value) (Value, error) {
+			return IntValue(rngLen(ro)), nil
+		})
+	case "invert":
+		return DirectValue("rng.invert", func(context.Context, []Value) (Value, error) {
+			return rangeValue(ro.Hi, ro.Lo), nil
+		})
+	case "toList":
+		return DirectValue("rng.toList", func(context.Context, []Value) (Value, error) {
+			items := make([]Value, 0, rngLen(ro))
+			step := int64(1)
+			if ro.Hi < ro.Lo {
+				step = -1
+			}
+			for i := ro.Lo; i != ro.Hi; i += step {
+				items = append(items, IntValue(i))
+			}
+			return ListValue(items), nil
+		})
+	case "contains":
+		return DirectValue("rng.contains", func(_ context.Context, args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Null, fmt.Errorf("rng.contains: requires a value")
+			}
+			if !args[0].IsInt() {
+				return BoolValue(false), nil
+			}
+			n := args[0].AsInt()
+			if ro.Hi < ro.Lo {
+				return BoolValue(n <= ro.Lo && n > ro.Hi), nil
+			}
+			return BoolValue(n >= ro.Lo && n < ro.Hi), nil
+		})
+	}
+	return Null
+}
+
+// rngLen is the number of values a range yields: the distance between its
+// operands, in either direction.
+func rngLen(ro *rangeObj) int64 {
+	if ro.Hi < ro.Lo {
+		return ro.Lo - ro.Hi
+	}
+	return ro.Hi - ro.Lo
+}
+
 func fibMethod(vm *VM, fib Value, name string) Value {
 	fo := vm.asFib(fib)
 	switch name {
@@ -1023,19 +1159,93 @@ func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, 
 	}
 }
 
-var arithSymbols = [...]string{
-	OpAdd: "+",
-	OpSub: "-",
-	OpMul: "*",
-	OpDiv: "/",
-	OpMod: "%",
+var opSymbols = [...]string{
+	OpAdd:  "+",
+	OpSub:  "-",
+	OpMul:  "*",
+	OpDiv:  "/",
+	OpMod:  "%",
+	OpBAnd: "&",
+	OpBOr:  "|",
+	OpBXor: "^",
+	OpShl:  "<<",
+	OpShr:  ">>",
+	OpBNot: "~",
 }
 
-func arithSymbol(op OpCode) string {
-	if int(op) < len(arithSymbols) && arithSymbols[op] != "" {
-		return arithSymbols[op]
+func opSymbol(op OpCode) string {
+	if int(op) < len(opSymbols) && opSymbols[op] != "" {
+		return opSymbols[op]
 	}
 	return "?"
+}
+
+// execCold runs the opcodes deliberately kept out of Exec's switch — the
+// bitwise family — reached through the switch's existing default arm. See the
+// comment on OpBAnd in opcode.go for why they have no case of their own.
+//
+//go:noinline
+func (vm *VM) execCold(op OpCode) error {
+	switch op {
+	case OpBNot:
+		v := vm.pop()
+		if v.tag() != tagInt {
+			return errCannotBitwise(op, v)
+		}
+		vm.push(IntValue(^int64(v.num())))
+		return nil
+	case OpBAnd, OpBOr, OpBXor, OpShl, OpShr:
+		sp := len(vm.stack)
+		right, left := vm.stack[sp-1], vm.stack[sp-2]
+		// No float promotion, unlike arith: upstream Buzz's bitwise operators are
+		// declared over int alone, so a float operand is an error rather than a
+		// value to truncate.
+		if left.tag() != tagInt {
+			return errCannotBitwise(op, left)
+		}
+		if right.tag() != tagInt {
+			return errCannotBitwise(op, right)
+		}
+		vm.replaceTop2(IntValue(bitwise(op, int64(left.num()), int64(right.num()))))
+		return nil
+	}
+	return errUnknownOpcode(op)
+}
+
+func bitwise(op OpCode, a, b int64) int64 {
+	switch op {
+	case OpBAnd:
+		return a & b
+	case OpBOr:
+		return a | b
+	case OpBXor:
+		return a ^ b
+	case OpShl:
+		return shiftInt(a, b, true)
+	default: // OpShr
+		return shiftInt(a, b, false)
+	}
+}
+
+// shiftInt evaluates a shift by count, left when left is set. It follows
+// upstream Buzz: a negative count shifts the other way, and a count wider than
+// the integer yields 0 — Go would instead panic on a negative count and, for an
+// oversized one, differ from upstream on a negative operand. Upstream caps at
+// its i32 width; gopherbuzz's int is 64-bit, so the cap is 63.
+func shiftInt(a, count int64, left bool) int64 {
+	if count < 0 {
+		if count < -63 {
+			return 0
+		}
+		count, left = -count, !left
+	}
+	if count > 63 {
+		return 0
+	}
+	if left {
+		return a << uint(count)
+	}
+	return a >> uint(count)
 }
 
 // Hot/cold split for Exec's arithmetic and comparison cases [A4].

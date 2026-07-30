@@ -214,9 +214,54 @@ export fun loadReferenceContent(site: Site) > void {
     _refConventions = refDocHtml("conventions.md", site);
 }
 
-export fun renderReferenceDrawer(root: str, site: Site) > str {
+// keepGlossarySections keeps only the <h3 id="..."> term blocks whose anchor is in keep,
+// in document order, and drops everything else. Same scan injectBacklinks uses: a term
+// block runs from its own <h3 id="> to the next <h3 id="> or <h2>.
+fun keepGlossarySections(html: str, keep: {str: bool}) > str {
+    final marker = "<h3 id=\"";
+    var kept = "";
+    var rest = html;
+    var idx = rest.indexOf(marker);
+    while (idx != null) {
+        rest = rest.sub(idx! + marker.len());
+        final q = rest.indexOf("\"");
+        if (q == null) { return kept; }
+        final anchor = rest.sub(0, len: q!);
+        var cut = rest.len();
+        final nextH3 = rest.indexOf(marker);
+        if (nextH3 != null and nextH3! < cut) { cut = nextH3!; }
+        final nextH2 = rest.indexOf("<h2");
+        if (nextH2 != null and nextH2! < cut) { cut = nextH2!; }
+        if (keep[anchor] != null) {
+            kept = kept + marker + rest.sub(0, len: cut);
+        }
+        rest = rest.sub(cut);
+        idx = rest.indexOf(marker);
+    }
+    return kept;
+}
+
+// renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.
+//
+// The drawer used to inline all 47 terms on every page, identically. A reference panel
+// that is the same everywhere answers no question you had on the page you are reading -
+// it is a second copy of /glossary/ that happens to slide out. Scoping it to the terms
+// this page actually uses is what makes opening it worth doing.
+//
+// pageTerms is the forward-built map (see Site): it is complete before the walk starts,
+// so the first page rendered gets the same treatment as the last. A page with no terms
+// falls back to the full glossary rather than an empty drawer - "nothing here" reads as
+// broken, and on a page with no shared vocabulary the whole glossary is the honest answer.
+export fun renderReferenceDrawer(root: str, canonUrl: str, site: Site) > str {
     loadReferenceContent(site);
     var glossary = _refGlossary;
+    final joined = site.pageTerms[canonUrl];
+    if (joined != null and joined! != "") {
+        var keep: {str: bool} = mut {};
+        foreach (a in joined!.split("||")) { keep[a] = true; }
+        final scoped = keepGlossarySections(_refGlossary, keep);
+        if (scoped != "") { glossary = scoped; }
+    }
     while (glossary.indexOf("%%ROOT%%") != null) { glossary = glossary.replace("%%ROOT%%", root); }
     var conventions = _refConventions;
     while (conventions.indexOf("%%ROOT%%") != null) { conventions = conventions.replace("%%ROOT%%", root); }
@@ -268,12 +313,17 @@ export fun renderSiteFooter(root: str, site: Site) > str {
 export fun renderAnnouncementBar(site: Site) > str {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
-    final tmpl = `  <div id="announcement-bar" data-version="{{ver}}">
+    // data-released lets the client expire the bar; the decision cannot be made here.
+    // Comparing against "today" at build time would change the emitted HTML every day
+    // and fail the drift gate on a tree nobody touched. Client-side also means a site
+    // built once and served for months still stops announcing a stale release.
+    final released = site.releases[0].date;
+    final tmpl = `  <div id="announcement-bar" data-version="{{ver}}" data-released="{{released}}">
     <div class="container">
       <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a></span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
 `;
-    return template\render(tmpl, {"ver": ver, "gh": site.config.repoURL});
+    return template\render(tmpl, {"ver": ver, "released": released, "gh": site.config.repoURL});
 }

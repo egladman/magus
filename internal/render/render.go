@@ -315,7 +315,7 @@ func projectGraphIR(out types.GraphOutput) renderGraph {
 		}
 		slices.SortFunc(bucket, func(a, b types.Node) int { return strings.Compare(a.Path, b.Path) })
 		for _, n := range bucket {
-			label := n.Path
+			label := n.Label()
 			if n.BlastRadius > 0 {
 				label += fmt.Sprintf("<br/>BR=%d", n.BlastRadius)
 			}

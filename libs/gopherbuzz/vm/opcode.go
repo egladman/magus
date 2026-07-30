@@ -102,7 +102,10 @@ const (
 	OpInvoke
 
 	// Objects
-	OpNewObject // A = type-name const index; B = override count
+	// A = type-name const index; B = override count. When A is an ObjDecl const
+	// this builds the type rather than an instance: B is then the method count and
+	// C the static-field count.
+	OpNewObject
 
 	// Iteration (foreach)
 	OpIterInit // pop iterable → push iterState
@@ -176,6 +179,22 @@ const (
 	// OpSetField stores into an object field by decl index; same encoding and
 	// inline-cache/fallback discipline as OpGetField. Stores stay checked.
 	OpSetField
+
+	// Bitwise operators (int operands only, no float promotion).
+	//
+	// These deliberately have NO case in Exec's switch: they land on its default
+	// arm, which forwards them to the //go:noinline execCold helper. Exec is one
+	// I-cache-bound function where a new case body costs the whole benchmark
+	// suite 25-55% (README, "Performance design"), and bitwise operators are rare
+	// enough in Buzz source to be worth a call per execution. Keep them numbered
+	// after every opcode Exec does have a case for, so the switch's jump table
+	// ends before them and they fall straight through to default.
+	OpBAnd // &
+	OpBOr  // |
+	OpBXor // ^
+	OpShl  // <<
+	OpShr  // >>
+	OpBNot // ~ (unary)
 )
 
 // OpCheckType operand A: the primitive type to assert. Exported so the compiler

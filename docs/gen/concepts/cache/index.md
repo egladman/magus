@@ -20,7 +20,7 @@ magus's build cache is **content-addressed**: a target's outputs are keyed by th
 SHA-256 of its inputs, so an unchanged target replays its previous outputs instead
 of rerunning. This page is the **local** model: what magus hashes, what invalidates
 a key, what "replay" restores, and where it all lives on disk. The [remote
-cache](remote-cache.md) shares these same artifacts across machines and layers a
+cache](cache/remote.md) shares these same artifacts across machines and layers a
 signed trust model on top; this page is the substrate it references, so we describe
 it once here and link there for the distributed story.
 
@@ -89,10 +89,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-`magus.inputs` adds source globs to that target's cache key; `magus.outputs` adds
+`magus\inputs` adds source globs to that target's cache key; `magus\outputs` adds
 output globs to its snapshot/replay set. So a target's footprint is the **union**
 of three layers: the bound spells' globs, the project-wide `sources`/`outputs`,
-and the target's own `magus.inputs`/`magus.outputs`. Per-target declarations only
+and the target's own `magus\inputs`/`magus\outputs`. Per-target declarations only
 ever _add_ - they never shrink the project-wide baseline (see
 [Granularity](#granularity-project-wide-vs-per-target)).
 
@@ -108,7 +108,7 @@ source: it walks each target body and the helpers it calls by name, collecting t
   used as a value) never enters a key; `magus doctor` flags it as
   [MGS1004](../reference/codes/magusfile/MGS1004.md).
 
-This shares the literal-first discipline of [`magus.needs`](dependencies.md):
+This shares the literal-first discipline of [`magus\needs`](dependencies.md):
 declare the footprint at the target, in literals magus can see.
 
 ## The cache key
@@ -174,9 +174,9 @@ Four controls, at four different scopes:
 
 | Control                                     | Scope                       | Semantics                                                                                                                                                                                                                               |
 | ------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy                  | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs.watch` loop, a service op).                                                                                                                                             |
+| `skip_cache` target policy                  | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
 | `magus run <target> --no-cache`             | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
-| `magus.bust_cache(path?)`                   | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus\bust_cache(path?)`                   | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
 | `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
 | `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run      | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.                                                                                                                                         |
 
@@ -202,7 +202,7 @@ even though `build` only cares about `.go` files. This is deliberately coarse
 `magus run ci` and `magus run build` on the same project invalidate together
 far more often than their names alone would suggest.
 
-Per-target [`magus.inputs`/`magus.outputs`](#per-target-inputs-and-outputs) does
+Per-target [`magus\inputs`/`magus\outputs`](#per-target-inputs-and-outputs) does
 **not** undo this. It _adds_ to a target's footprint; it cannot remove the
 project-wide baseline. Declaring `ctx.inputs("src/**")` on `build` does not stop
 a `Dockerfile` edit from busting it, because the `docker` spell's globs are still
@@ -212,14 +212,14 @@ nothing else declares - not for narrowing below the spell baseline.
 That gives a clean rule for **where to declare a glob**:
 
 - **affects every target** (a shared schema, a project-wide config) -> project-wide
-  `magus.project({sources = [...]})`, declared once;
-- **affects one target** -> `magus.inputs`/`magus.outputs` in that target's body.
+  `magus\project({sources = [...]})`, declared once;
+- **affects one target** -> `magus\inputs`/`magus\outputs` in that target's body.
 
 Declaring the same glob in both layers is a no-op (the union already has it) and
 `magus doctor` flags it as [MGS1005](../reference/codes/magusfile/MGS1005.md). Outputs are
 almost always target-specific (`build` -> `dist/`, `test` -> `coverage/`), so a
 project-wide `outputs` - which makes _every_ target snapshot it - is usually the
-wrong tool; prefer per-target `magus.outputs`.
+wrong tool; prefer per-target `magus\outputs`.
 
 ## Replay: a hit restores outputs, not execution
 
@@ -259,8 +259,8 @@ or a broken `magus clean`, so the model is worth stating once.
 
 | Role                         | Question it answers                            | Scope         | Where it lives                                                                                                            |
 | ---------------------------- | ---------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus.outputs`. |
-| **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus.outputs`.                   |
+| **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus\outputs`. |
+| **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus\outputs`.                   |
 
 The cache role is per-target on purpose. A miss snapshots exactly the outputs in
 that target's `Step`, and a hit replays exactly those - so an output must be
@@ -270,7 +270,7 @@ project-wide is in _every_ cacheable target's `Step.Outputs`, including targets
 that never write it. When one of those unrelated targets gets a cache hit, its
 replay restores the file to whatever it was when _that_ target last ran - so a
 `go-build` hit can silently **revert** a freshly regenerated `MAGUS.md`. Scoping
-the output to its producer with `magus.outputs` means only the producer's hit
+the output to its producer with `magus\outputs` means only the producer's hit
 replays it. Project-wide `outputs` is correct only when every target genuinely
 produces the glob, which is rare - most outputs belong to one generator.
 
@@ -341,7 +341,7 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 
 ## Connecting to the remote cache
 
-Everything above is local to one machine. A [remote cache](remote-cache.md) shares
+Everything above is local to one machine. A [remote cache](cache/remote.md) shares
 these exact artifacts across CI runners: on a **local** miss magus asks the remote
 backend for the artifact keyed by the same `(projectPath, hash)`, and if found
 imports it into the local store so the ordinary hit path replays it - no rebuild.
@@ -354,7 +354,7 @@ that it adds a **signed trust model**: because a replayed artifact injects files
 into a consumer's build, every remote artifact is verified against an Ed25519 trust
 set before it is allowed to replay, and an unsigned or untrusted one falls back to a
 local build. That trust boundary, the backend contract, and CI wiring are covered
-in full in [remote-cache.md](remote-cache.md); this page's model is what it builds
+in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
 
 ## Glossary
@@ -376,8 +376,8 @@ on.
 ## See also
 
 - [spells.md](spells.md): where `needs`/`provides`/`claims` are declared, and what a bound spell contributes.
-- [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus.needs` call each interact with this cache key.
+- [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus\needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `target.result` event that fires on a hit.
 - [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
-- [remote-cache.md](remote-cache.md): sharing these artifacts across machines under a signed trust model.
+- [remote-cache.md](cache/remote.md): sharing these artifacts across machines under a signed trust model.

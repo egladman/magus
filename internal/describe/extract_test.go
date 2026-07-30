@@ -147,7 +147,9 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 	// A bare-literal glob is a same-project input: empty Project (meaning "this target's
 	// own project", filled at resolution), Rel the glob.
 	assert.Equal(t, []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}}, build.Inputs)
-	assert.Equal(t, []string{"dist/**"}, build.Outputs)
+	// Same shape on the outputs side, in the type that carries the OPPOSITE edge: an
+	// empty Project means "this target's own project", filled at resolution.
+	assert.Equal(t, []types.OutputRef{{Glob: "dist/**"}}, build.Outputs)
 	assert.False(t, build.DynamicIO)
 	testNode, _ := nodeByName(g, "test")
 	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, testNode.Inputs)

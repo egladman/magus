@@ -184,7 +184,30 @@ type objectDefObj struct {
 	// Statics are `static fun` methods, dispatched on the type value (Foo.make())
 	// rather than an instance, so they are kept out of the instance vtable above.
 	Statics []methodEntry
-	Env     *Env
+	// StaticFields is the type's own mutable state: one value per `static` field,
+	// read and written through the type value (Foo.next). It makes a def mutable,
+	// which is sound because buildObjectDef allocates a fresh def per execution of
+	// the declaration rather than sharing one across VMs.
+	StaticFields []staticFieldEntry
+	Env          *Env
+}
+
+// staticFieldEntry is one slot of a type's static state. Like methodEntry it is
+// an ordered slice scanned linearly: a type declares a handful of statics, so a
+// name compare over contiguous entries beats a map probe.
+type staticFieldEntry struct {
+	Name string
+	Val  Value
+}
+
+// staticFieldIndex returns the index of static field name, or -1 if absent.
+func (d *objectDefObj) staticFieldIndex(name string) int {
+	for i := range d.StaticFields {
+		if d.StaticFields[i].Name == name {
+			return i
+		}
+	}
+	return -1
 }
 
 // fieldIndex returns the declaration-order index of field name, or -1 if absent.
@@ -228,10 +251,17 @@ func (o *objDeclPayload) heapKind() valueTag { return tagObjDecl }
 type enumDefObj struct {
 	Name  string
 	Cases []string
+	// Values holds each case's `.value`, parallel to Cases: the ordinal for a
+	// plain enum, the case name for an `enum<str>`, or whatever literal the case
+	// assigned. The compiler resolves all three forms, so the VM only reads.
+	Values []Value
 }
 type enumValObj struct {
 	Enum string
 	Case string
+	// Val is the case's `.value`. Stored at construction because the value carries
+	// only names, and recovering it later would mean finding the definition again.
+	Val Value
 }
 type rangeObj struct{ Lo, Hi int64 }
 
@@ -268,7 +298,14 @@ type fibObj struct {
 }
 
 type iterStateObj struct {
-	list     *listObj
+	list *listObj
+	// enumDef holds an enum being iterated; its cases become enum VALUES, so the
+	// loop variable behaves the same as one written Enum.case.
+	enumDef *enumDefObj
+	// strRunes holds a string being iterated, pre-split into runes. Split once at
+	// OpIterInit rather than decoded per step so idx stays a plain index like every
+	// other iterable, and so a multi-byte character counts as one element.
+	strRunes []rune
 	mapObj   *mapObj
 	rng      *rangeObj
 	fib      *fibObj
@@ -345,8 +382,16 @@ func ObjDeclValue(decl *ast.ObjectDecl) Value {
 }
 
 // EnumDefValue creates a Buzz enum-definition value (used by the compiler).
-func EnumDefValue(name string, cases []string) Value {
-	return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases})
+// values holds each case's resolved `.value`, parallel to cases; pass nil for a
+// plain enum, whose cases take their ordinals.
+func EnumDefValue(name string, cases []string, values []Value) Value {
+	if values == nil {
+		values = make([]Value, len(cases))
+		for i := range cases {
+			values[i] = IntValue(int64(i))
+		}
+	}
+	return heapValue(tagEnumDef, &enumDefObj{Name: name, Cases: cases, Values: values})
 }
 
 // NullValue returns the Buzz null value (convenience alias for Null).
@@ -630,6 +675,11 @@ func valuesEqual(a, b Value) bool {
 	case tagEnumVal:
 		ae, be := a.asEnumVal(), b.asEnumVal()
 		return ae.Enum == be.Enum && ae.Case == be.Case
+	case tagRange:
+		// Structural, not by reference: `0..10 == 0..10` has to hold, and a range
+		// is fully described by its two operands.
+		ar, br := a.asRange(), b.asRange()
+		return ar.Lo == br.Lo && ar.Hi == br.Hi
 	case tagUD:
 		return a.AsUD() == b.AsUD() // foreign pointers compare by address
 	default:

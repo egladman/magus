@@ -22,6 +22,7 @@
 //	magus status [flags]                inspect the concurrency pool of a running parent magus
 //	magus doctor                        validate the workspace
 //	magus config <subcommand>           view or update magus configuration
+//	magus memory <subcommand>           manage the durable handoff journal
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
@@ -32,7 +33,6 @@
 // Run any subcommand with -h/--help for its own flag list.
 //
 //go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go -fields-out ../../schema/gen/fields.go -bind-out gen/bind.go -apply-env-out ../../internal/config/gen/env.go
-//go:generate go run ../magus-configdocs -out ../../docs/reference/config.md
 package main
 
 import (
@@ -44,12 +44,10 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/egladman/magus"
@@ -80,7 +78,7 @@ func runCLI() int {
 
 	args := expandVerbosityArgs(os.Args[1:])
 
-	rootCtx, stopSignals := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	rootCtx, stopSignals := watchInterrupts(context.Background())
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
@@ -91,6 +89,10 @@ func runCLI() int {
 		if res.cleanup != nil {
 			res.cleanup()
 		}
+		// Restore the terminal before anything else tears down: an
+		// interrupted run must not hand the shell back with the sticky
+		// error region's scroll margins still set.
+		restoreTerminal()
 		stopSignals()
 	}
 
@@ -153,7 +155,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server);
 		// both analyze source text directly, needing no workspace, config, or daemon.
 		return dispatchProfile{}
-	case "completion", "self":
+	case "completion", "self", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
 		// agent install writes embedded skill files into a repo dir; it needs no
@@ -291,9 +293,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	}
 	// Hints default on when Hints.Enabled is nil.
 	hintsOn := cfg.Hints.Enabled == nil || *cfg.Hints.Enabled
-	interactive.SetEnabled(hintsOn)
+	interactive.SetHintsEnabled(hintsOn)
 
 	global.quiet = extractQuietFlag(args)
+	global.silent = extractSilentFlag(args)
 	if v := extractVerbosityCount(args); v > 0 {
 		global.verbose = verbosity(v)
 	}
@@ -532,6 +535,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
+	case "memory":
+		return memoryCmd(ctx, root, subArgs)
 	case "repl":
 		return replCmd(ctx, root, subArgs)
 	case "server":
@@ -540,6 +545,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return mcpCmd(ctx, subArgs)
 	case "completion":
 		return completion(subArgs)
+	case "man":
+		return manCmd(subArgs)
 	case "init":
 		return initCmd(ctx, root, subArgs)
 	case "agent":
@@ -562,7 +569,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 var knownSubcommands = []string{
 	"ls", "describe", "run", "x", "where", "tail",
 	"affected", "insight", "query", "explain", "path", "refs", "graph", "watch", "status", "doctor",
-	"config", "server", "repl", "completion", "init", "self", "version",
+	"config", "memory", "server", "repl", "completion", "man", "init", "self", "version",
 	"clean", "merge-driver", "buzz", "agent",
 	"help",
 }
@@ -592,10 +599,11 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  config         view or update magus configuration")
 	fmt.Fprintln(os.Stderr, "  server         manage the persistent daemon (start / stop / status; MCP starts with it)")
 	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
-	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (stdlib only; no host bindings)")
+	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (Buzz stdlib + every magus host module)")
 	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
+	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
 	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
-	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skill into a repo (agent install claude)")
+	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skills into a repo (agent install <dir>)")
 	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
 	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
 	fmt.Fprintln(os.Stderr, "  help           show this message")
@@ -605,7 +613,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format (text|json|yaml|name|template=<go-template>)")
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
-	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        increase log verbosity (-v/-vv: debug; -vvv: trace)")
+	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")
 	fmt.Fprintln(os.Stderr, "  --concurrency N      max parallel build steps (0 = config / MAGUS_CONCURRENCY / min(NumCPU,8))")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Pre-subcommand flags (must precede the subcommand):")
@@ -848,9 +856,27 @@ func extractRootFlag(args []string) string {
 	return ""
 }
 
+// extractQuietFlag peeks --quiet/--silent before the main flag parse, because
+// applyDisplay runs during early startup and decides progress suppression from
+// global.quiet. --silent counts here: it is documented as "like --quiet, but
+// ...", and reading only --quiet made -s byte-identical to no flag on a passing
+// run - the flag parse set global.silent long after the display was configured.
 func extractQuietFlag(args []string) bool {
 	for _, a := range args {
-		if a == "-q" || a == "--quiet" || a == "-quiet" {
+		switch a {
+		case "-q", "--quiet", "-quiet", "-s", "--silent", "-silent":
+			return true
+		}
+	}
+	return false
+}
+
+// extractSilentFlag peeks --silent for the same reason, so the bounded-dump and
+// notice-bubbling behavior is configured in the same early pass.
+func extractSilentFlag(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-s", "--silent", "-silent":
 			return true
 		}
 	}
