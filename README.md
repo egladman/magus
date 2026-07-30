@@ -82,7 +82,7 @@ and the graph. A [target](docs/concepts/targets.md) is a unit of work such as bu
 test, or lint. A [spell](docs/concepts/spells.md) is a language adapter that supplies a
 target's operations (the `go` spell provides `go-test`; the `buf` spell provides
 `buf-lint`). A [charm](docs/concepts/charms.md) is a modifier applied to a run, like `rw`
-for read-write or `cd` for a working directory. An [op](docs/concepts/operations.md) is a
+for read-write or `cd` for continuous delivery. An [op](docs/concepts/operations.md) is a
 single tool invocation. Learn the four words and the rest of the surface reads
 the same way.
 
