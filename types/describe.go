@@ -151,6 +151,13 @@ type TargetGraphNode struct {
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
 	// UpdateRef for why magus must neither delete nor restore one.
 	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty"`
+	// Derives are the canonical per-op execution overrides this target declares via
+	// ctx.derive, as sorted "env:K=V" / "cwd:V" strings. They fold into the target's
+	// CACHE KEY: a derived env changes what the tool does, so two runs differing only by
+	// it must not share an entry. Read statically for the same reason inputs are - the
+	// key is computed before the body runs, so a purely runtime derivation could never
+	// reach it. A non-literal derive sets DynamicIO and is rejected at load.
+	Derives []string `json:"derives,omitempty" yaml:"derives,omitempty"`
 	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.

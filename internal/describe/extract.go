@@ -192,6 +192,49 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
+						case "derive":
+							// ctx.derive({env: {...}, cwd: ".."}): canonicalize the literal
+							// overrides into the node so buildStep can fold them into the
+							// cache key. A non-literal value is invisible here, and an
+							// under-declared key is the failure this refuses to cause, so it
+							// trips DynamicIO exactly as a computed ctx.inputs glob does.
+							for _, a := range e.Args {
+								m, ok := a.(*ast.MapExpr)
+								if !ok {
+									continue
+								}
+								recognized++
+								for i, kn := range m.Keys {
+									kl, ok := kn.(*ast.StringLit)
+									if !ok {
+										node.DynamicIO = true
+										continue
+									}
+									switch kl.Val {
+									case "cwd":
+										if lit, ok := m.Values[i].(*ast.StringLit); ok {
+											node.Derives = appendUniqStr(node.Derives, "cwd:"+lit.Val)
+										} else {
+											node.DynamicIO = true
+										}
+									case "env":
+										em, ok := m.Values[i].(*ast.MapExpr)
+										if !ok {
+											node.DynamicIO = true
+											continue
+										}
+										for j, ekn := range em.Keys {
+											ekl, kok := ekn.(*ast.StringLit)
+											evl, vok := em.Values[j].(*ast.StringLit)
+											if !kok || !vok {
+												node.DynamicIO = true
+												continue
+											}
+											node.Derives = appendUniqStr(node.Derives, "env:"+ekl.Val+"="+evl.Val)
+										}
+									}
+								}
+							}
 						case "updates":
 							for _, g := range globs {
 								node.Updates = appendUniqUpdRef(node.Updates, types.UpdateRef{Glob: g})
@@ -282,7 +325,7 @@ func UnreachedIO(source string) []IORef {
 		}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates") {
+			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates" && me.Name != "derive") {
 				return true
 			}
 			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
@@ -327,7 +370,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 		return "", nil, false
 	}
 	switch me.Name {
-	case "inputs", "outputs", "updates":
+	case "inputs", "outputs", "updates", "derive":
 	default:
 		return "", nil, false
 	}
@@ -391,6 +434,14 @@ func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRe
 		return s
 	}
 	return append(s, ref)
+}
+
+// appendUniqStr appends s uniquely, keeping declaration order.
+func appendUniqStr(list []string, v string) []string {
+	if slices.Contains(list, v) {
+		return list
+	}
+	return append(list, v)
 }
 
 // appendUniqUpdRef is appendUniqOutRef for ctx.updates refs.

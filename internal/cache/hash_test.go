@@ -260,3 +260,35 @@ func TestShortHash(t *testing.T) {
 	assert.Equal(t, "abc", shortHash("abc"), "input <= 8 chars returned unchanged")
 	assert.Equal(t, "deadbeef", shortHash("deadbeefcafef00d"), "long input truncated to 8")
 }
+
+// TestDerivedOverridesChangeTheKey is the correctness property behind ctx.derive: a
+// per-op execution override changes what the tool does, so two otherwise identical
+// steps must not share a cache entry. Without it, go["go-test"](ctx.derive({env:
+// {"CGO_ENABLED": "0"}})) would replay a result computed with CGO enabled.
+//
+// Two Steps differing ONLY in Derived, so the assertion cannot pass for an unrelated
+// reason (a different target name or source set would move the key by itself).
+func TestDerivedOverridesChangeTheKey(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{}
+	ctx := context.Background()
+
+	base := Step{ProjectPath: ".", WorkspaceRoot: root}
+	withDerive := base
+	withDerive.Derived = []string{"env:CGO_ENABLED=0"}
+
+	plainKey, err := c.hashStep(ctx, &base)
+	require.NoError(t, err, "hashStep(base)")
+	derivedKey, err := c.hashStep(ctx, &withDerive)
+	require.NoError(t, err, "hashStep(derived)")
+
+	assert.NotEqual(t, plainKey, derivedKey,
+		"a ctx.derive override must change the cache key, or a derived run replays an undecorated result")
+
+	// And it is the VALUE that matters, not merely the presence of an override.
+	other := base
+	other.Derived = []string{"env:CGO_ENABLED=1"}
+	otherKey, err := c.hashStep(ctx, &other)
+	require.NoError(t, err, "hashStep(other)")
+	assert.NotEqual(t, derivedKey, otherKey, "two different derived values must key differently")
+}
