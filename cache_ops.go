@@ -161,9 +161,9 @@ func (m *Magus) ArtifactHistory(ctx context.Context, projectPath, wsPath string)
 
 // MaterializeArtifact writes a cached version to dst, cloning from the store when
 // the filesystem supports reflink.
-func (m *Magus) MaterializeArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+func (m *Magus) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
 	if m.cache == nil {
 		return types.ErrNoCache
 	}
-	return m.cache.MaterializeArtifact(ctx, v, dst)
+	return m.cache.GetArtifact(ctx, v, dst)
 }

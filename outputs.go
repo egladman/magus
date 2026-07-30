@@ -143,7 +143,7 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 	for _, p := range projects {
 		paths = append(paths, p.Path)
 	}
-	return m.cache.Clean(ctx, paths...)
+	return m.cache.Delete(ctx, paths...)
 }
 
 // FindOutputProducer returns the project whose target REGENERATES absPath, or nil when

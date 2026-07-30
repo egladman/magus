@@ -93,11 +93,11 @@ func (c *Cache) ArtifactHistory(ctx context.Context, projectPath, wsPath string)
 	return deduped, nil
 }
 
-// MaterializeArtifact writes v to dst, creating parent directories.
+// GetArtifact writes v to dst, creating parent directories.
 //
 // Content is cloned from the store rather than copied where the filesystem supports
 // reflink (APFS, btrfs, XFS), so comparing a large artifact costs almost nothing.
-func (c *Cache) MaterializeArtifact(ctx context.Context, v ArtifactVersion, dst string) error {
+func (c *Cache) GetArtifact(ctx context.Context, v ArtifactVersion, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

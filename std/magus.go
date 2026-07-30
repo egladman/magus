@@ -158,9 +158,9 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 		return nil // no cache in context (parse mode, tests)
 	}
 	if projectPath == "" {
-		return c.Clean(ctx)
+		return c.Delete(ctx)
 	}
-	return c.Clean(ctx, projectPath)
+	return c.Delete(ctx, projectPath)
 }
 
 // typedMagusSubcommands are the magus subcommands that have a dedicated,

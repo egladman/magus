@@ -515,7 +515,7 @@ func chainFileDiff(ctx context.Context, m *magus.Magus, projectPath, wsPath, wor
 	// Named after the artifact, not "old", so the difftool's own header and the
 	// editor tab both say which file this is.
 	staged := filepath.Join(dir, filepath.Base(wsPath))
-	if err := m.MaterializeArtifact(ctx, *prev, staged); err != nil {
+	if err := m.GetArtifact(ctx, *prev, staged); err != nil {
 		return err
 	}
 

@@ -287,7 +287,7 @@ func TestClean(t *testing.T) {
 
 	_, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
-	require.NoError(t, c.Clean(context.Background(), "test/pkg"), "Clean")
+	require.NoError(t, c.Delete(context.Background(), "test/pkg"), "Clean")
 
 	calls := 0
 	wrapped := func(_ context.Context) error { calls++; return fn(context.Background()) }

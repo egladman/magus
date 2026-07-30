@@ -35,7 +35,7 @@ type manifestEntry struct {
 // evictLRU removes oldest manifests (by CreatedAt) until disk usage is at or
 // below limit bytes. evictMu prevents concurrent goroutines from double-counting
 // freed bytes and over-evicting.
-func (c *Cache) evictLRU(ctx context.Context, limit int64) {
+func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 	if limit <= 0 {
 		return
 	}

@@ -264,12 +264,12 @@ func (c *Cache) Remote() RemoteBackend { return c.remote }
 // it, so those artifacts stay out of the working tree.
 func (c *Cache) Dir() string { return c.dir }
 
-// Fresh reports whether step s would replay from cache rather than run: its inputs hash
+// IsCached reports whether step s would replay from cache rather than run: its inputs hash
 // to a manifest already present locally. It is Run's hash-and-lookup without the
 // execution or the remote fetch - a read-only "is this up to date?" probe (e.g. status
 // reporting whether a project's symbol index reflects current sources). A missing
 // manifest is "not fresh", not an error; only a hashing failure returns one.
-func (c *Cache) Fresh(ctx context.Context, s Step) (bool, error) {
+func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
 	hash, err := c.hashStep(ctx, &s)
 	if err != nil {
 		return false, err
@@ -494,7 +494,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		if c.remote != nil {
 			c.pushToRemote(ctx, s, hash)
 		}
-		c.evictLRU(ctx, c.sizeCap())
+		c.evictOldest(ctx, c.sizeCap())
 	}
 
 	result.Duration = time.Since(start)
@@ -750,7 +750,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 // Clean removes cached manifests for the given project paths (all if none given).
 // Orphaned blobs are GC'd after manifests are deleted.
-func (c *Cache) Clean(ctx context.Context, projectPaths ...string) error {
+func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -955,8 +955,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 }
 
 // GC evicts LRU entries to the size cap and removes unreferenced CAS blobs.
-func (c *Cache) GC(ctx context.Context) error {
-	c.evictLRU(ctx, c.sizeCap())
+func (c *Cache) Evict(ctx context.Context) error {
+	c.evictOldest(ctx, c.sizeCap())
 	return c.gcBlobs(ctx)
 }
 

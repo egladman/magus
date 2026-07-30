@@ -467,7 +467,7 @@ func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolInde
 			// is current).
 			s.Freshness = types.SymbolIndexStale
 			if m.cache != nil {
-				if fresh, ferr := m.cache.Fresh(ctx, m.buildStep(p, symbols.IndexOp)); ferr == nil && fresh {
+				if fresh, ferr := m.cache.IsCached(ctx, m.buildStep(p, symbols.IndexOp)); ferr == nil && fresh {
 					s.Freshness = types.SymbolIndexFresh
 				}
 			}

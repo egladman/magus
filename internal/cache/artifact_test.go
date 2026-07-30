@@ -137,7 +137,7 @@ func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 	v := versions[0]
 	v.Output.Mode = 0o755
 	dst := filepath.Join(t.TempDir(), "nested", "app")
-	require.NoError(t, c.MaterializeArtifact(context.Background(), v, dst))
+	require.NoError(t, c.GetArtifact(context.Background(), v, dst))
 
 	body, err := os.ReadFile(dst)
 	require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestMaterializeArtifactReportsEviction(t *testing.T) {
 	require.NoError(t, os.Remove(c.blobPath(versions[0].Output.Blob)))
 
 	dst := filepath.Join(t.TempDir(), "app")
-	err = c.MaterializeArtifact(context.Background(), versions[0], dst)
+	err = c.GetArtifact(context.Background(), versions[0], dst)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrArtifactMissing)
 	assert.Contains(t, err.Error(), "--no-cache", "the error names the way out")

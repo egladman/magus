@@ -111,7 +111,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	// subtracted — blobRefs for the shared blob drops to 1, not 0 — so
 	// eviction halts after one manifest, leaving the blob and newer manifest intact.
 	total, _ := c.scanManifests()
-	c.evictLRU(context.Background(), total-1)
+	c.evictOldest(context.Background(), total-1)
 
 	surviving := listManifests(t, cdir)
 	require.NotEmpty(t, surviving, "evictLRU removed every manifest; cap was too aggressive for the test")
@@ -162,7 +162,7 @@ func TestEvictLRU_OrphanBlobsCollected(t *testing.T) {
 
 	// Cap to a tiny non-zero value: evictLRU will evict every manifest
 	// since the cache is much larger than 1 byte.
-	c.evictLRU(context.Background(), 1)
+	c.evictOldest(context.Background(), 1)
 
 	assert.Empty(t, listManifests(t, cdir), "want 0 surviving manifests")
 	assert.Equal(t, 0, countBlobs(t, cdir), "want all blobs gc'd")
