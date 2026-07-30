@@ -2357,8 +2357,21 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 }
 
 // buildInterp parses each embedded expression source of an interpolation token.
+//
+// In a BACKTICK string, a brace run that does not parse as an expression is LITERAL
+// text rather than an error. That is what "raw" has to mean for brace-heavy content:
+// magus's own docs engine keeps Mustache templates ({{name}}) in backtick strings,
+// and a zdef declaration block is full of Zig braces. Upstream never interpolates
+// either (its zdefStatement reads the raw token), so the lenient reading keeps both
+// working while a genuine `{expr}` still evaluates. A double-quoted string keeps
+// reporting the error, since nothing there has a reason to hold unparseable braces.
 func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 	expr := &ast.InterpExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}}
+	// Only lexRawString sets Val on an interpolated token (to the verbatim source), so
+	// a non-empty Val is what identifies a backtick string here.
+	raw := t.Val != ""
+	// literal re-emits an interpolation as the source text it was written as.
+	literal := func(text string) { expr.Parts = append(expr.Parts, ast.InterpPart{Lit: "{" + text + "}"}) }
 	for _, part := range t.Parts {
 		if !part.IsExpr {
 			expr.Parts = append(expr.Parts, ast.InterpPart{Lit: part.Text})
@@ -2368,13 +2381,25 @@ func (p *parser) buildInterp(t token.Token) (ast.Node, error) {
 		// parser so strictness is consistent across the program.
 		sub, err := parseModed(part.Text+";", p.strict)
 		if err != nil {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: bad interpolation %q: %w", t.Line, t.Col, part.Text, err)
 		}
 		if len(sub.Stmts) != 1 {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: interpolation must be a single expression: %q", t.Line, t.Col, part.Text)
 		}
 		es, ok := sub.Stmts[0].(*ast.ExprStmt)
 		if !ok {
+			if raw {
+				literal(part.Text)
+				continue
+			}
 			return nil, fmt.Errorf("buzz: line %d:%d: interpolation must be an expression: %q", t.Line, t.Col, part.Text)
 		}
 		expr.Parts = append(expr.Parts, ast.InterpPart{Expr: es.Expr})
