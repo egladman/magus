@@ -119,7 +119,6 @@ nodes and edges added, removed, or changed, which is blast radius as data rather
 than a file list to interpret<!-- /why -->. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-Raw VCS commands stay available for what only the VCS knows - who committed, when,
-in which merge - and the table above covers everything about what the change MEANS.<!-- why -->
-Reaching for `git diff` to answer "what does this affect" is the mistake this skill
-exists to prevent.<!-- /why -->
+Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did.<!-- why --> Reading a raw diff to work out
+what a change affects is the work these verbs already did.<!-- /why -->

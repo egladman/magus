@@ -2,8 +2,8 @@
 title: magus-changes
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-changes]
-skill_full_bytes: 5179
-skill_simple_bytes: 4449
+skill_full_bytes: 5134
+skill_simple_bytes: 4417
 ---
 
 # magus-changes
@@ -145,10 +145,9 @@ nodes and edges added, removed, or changed, which is blast radius as data rather
 than a file list to interpret. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-Raw VCS commands stay available for what only the VCS knows - who committed, when,
-in which merge - and the table above covers everything about what the change MEANS.
-Reaching for `git diff` to answer "what does this affect" is the mistake this skill
-exists to prevent.
+Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did. Reading a raw diff to work out
+what a change affects is the work these verbs already did.
 ```
 
 ## Short form (`--simple`)
@@ -274,8 +273,8 @@ When the ask narrows to "what exactly changed in X", stay on magus surfaces.
 `magus graph diff` is the one to reach for first on a branch review. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-Raw VCS commands stay available for what only the VCS knows - who committed, when,
-in which merge - and the table above covers everything about what the change MEANS.
+Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did.
 ```
 
 </details>

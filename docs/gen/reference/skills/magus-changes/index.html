@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>magus-changes - magus</title>
-  <meta name="description" content="Summarize what merged, changed, or landed recently in a magus workspace.">
+  <meta name="description" content="Summarize what changed in a magus workspace, write it up, or answer a granular diff question.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/skills/magus-changes/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="magus-changes - magus">
-  <meta property="og:description" content="Summarize what merged, changed, or landed recently in a magus workspace.">
+  <meta property="og:description" content="Summarize what changed in a magus workspace, write it up, or answer a granular diff question.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/skills/magus-changes/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -87,16 +87,16 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#write-the-brief" title="Write the brief">Write the brief</a></li><li><a href="#write-the-brief-1" title="Write the brief">Write the brief</a></li></ul>
+        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#write-the-brief" title="Write the brief">Write the brief</a></li><li><a href="#write-a-changelog-entry" title="Write a CHANGELOG entry">Write a CHANGELOG entry</a></li><li><a href="#answer-a-granular-diff-question" title="Answer a granular diff question">Answer a granular diff question</a></li><li><a href="#write-the-brief-1" title="Write the brief">Write the brief</a></li><li><a href="#write-a-changelog-entry-1" title="Write a CHANGELOG entry">Write a CHANGELOG entry</a></li><li><a href="#answer-a-granular-diff-question-1" title="Answer a granular diff question">Answer a granular diff question</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">3 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus-changes">magus-changes</h1>
-<p><progress value="2446" max="2671" aria-label="The --simple permutation is 8% smaller: 2446 of 2671 bytes."></progress><small>The --simple permutation is 8% smaller: 2446 of 2671 bytes.</small></p>
-<p>Summarize what merged, changed, or landed recently in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>. Use for questions such as &quot;what's been merged lately?&quot;, &quot;what features landed recently?&quot;, &quot;catch me up since last week&quot;, or &quot;what changed in this monorepo?&quot; Ground each conclusion in VCS history plus magus <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> and knowledge-<a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> evidence; do not infer features from commit subjects alone.</p>
+<p><progress value="4417" max="5134" aria-label="The --simple permutation is 13% smaller: 4417 of 5134 bytes."></progress><small>The --simple permutation is 13% smaller: 4417 of 5134 bytes.</small></p>
+<p>Summarize what changed in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, write it up, or answer a granular diff question. Use for &quot;what's been merged lately?&quot;, &quot;catch me up since last week&quot;, &quot;add this to the CHANGELOG&quot;, and &quot;what exactly did this branch change?&quot; Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (<a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> diff, <a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> file, <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> --impact/--<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a>) rather than reading a raw diff; do not infer features from commit subjects alone.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
@@ -129,7 +129,7 @@ magus describe file &lt;paths...&gt;
 <p>Ignore generated outputs when identifying the change; <a class="glossary-term" href="../../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> them to their
 declared source and generator instead.
 4. Map the source files to projects and graph entities. Prefer MCP
-<code>magus_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code>, <code>magus_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a></code>, and <code>magus_<a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a>_file</code>; otherwise use:</p>
+<code>magus_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code>, <code>magus_explain</code>, and <code>magus_describe_file</code>; otherwise use:</p>
 <pre><code class="language-sh">magus query &quot;&lt;project or feature terms&gt;&quot;
 magus explain &lt;node&gt;
 magus graph diff --rev &lt;base&gt; -o markdown
@@ -143,7 +143,7 @@ prove that a feature landed.</li>
 <p>Lead with three to seven grouped changes, not every commit. For each item state:</p>
 <ul>
 <li><strong>What landed</strong> - a plain-language feature or behavioral change.</li>
-<li><strong><a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a></strong> - projects and graph entities <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>.</li>
+<li><strong><a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a></strong> - projects and graph entities <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>.</li>
 <li><strong>Evidence</strong> - merge commit(s), source files, and the relevant graph relation.</li>
 <li><strong>Why it matters</strong> - user impact, dependency impact, or an explicit uncertainty.</li>
 <li><strong>Follow-up</strong> - a concrete next command when more detail is useful.</li>
@@ -167,6 +167,77 @@ prove that a feature landed.</li>
 experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
 new command, <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, diagnostic, or workflow.</p>
+<h2 id="write-a-changelog-entry">Write a CHANGELOG entry</h2>
+<p>A brief is for a person catching up; a changelog entry is a durable record. When
+the ask is &quot;add this to the changelog&quot;, match the file's existing shape - Keep a
+Changelog 1.1.0 with SemVer - and append under <code>## [Unreleased]</code>:</p>
+<pre><code class="language-markdown">### Added
+
+- &lt;What a user can now do, in one sentence.&gt; &lt;Why it is the right shape, or what it
+  replaces.&gt; Set `&lt;config.key&gt;` (env `MAGUS_&lt;CONFIG_KEY&gt;`) to &lt;what the toggle does&gt;;
+  &lt;default&gt;.
+</code></pre>
+<p>Rules for an entry, all checkable:</p>
+<ul>
+<li>Name every <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> it adds: the <a class="code-xref" href="../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> key WITH its env var, the CLI flag, the
+<a class="glossary-term" href="../../../glossary/#diagnostic-code" data-def="A stable MGSxxxx identifier attached to a magus warning or error, so it can be referenced and looked up; some are guardrails (see wards), others hard errors.">diagnostic code</a>, the target. A reader upgrades by searching for those strings.</li>
+<li>Section headings are Keep a Changelog's: <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>,
+<code>Removed</code>, <code>Fixed</code>, <code>Security</code>. Do not invent one.</li>
+<li>Write behaviour, not implementation. &quot;The graph indexes the build I/O layer&quot; is an
+entry; &quot;refactored the extractor&quot; is not.</li>
+<li>One entry per user-visible change, not per commit. Squash a fix-up into the entry
+for the thing it fixed up.</li>
+<li><code>CHANGELOG.md</code> is a SOURCE file, not generated - confirm with
+<code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> file CHANGELOG.md</code> if unsure, and edit it directly.</li>
+</ul>
+<h2 id="answer-a-granular-diff-question">Answer a granular diff question</h2>
+<p>When the ask narrows to &quot;what exactly changed in <a class="code-xref" href="../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a>&quot;, stay on magus surfaces: they
+classify and relate, where a raw diff only shows text.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>question</th>
+<th>command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>what did this change do to the domain's shape</td>
+<td><code>magus graph diff --rev &lt;base&gt; -o markdown</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
+</tr>
+<tr>
+<td>is this changed file source or generated output</td>
+<td><code>magus describe file &lt;paths...&gt;</code></td>
+</tr>
+<tr>
+<td>which projects does the change reach</td>
+<td><code><a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --impact</code></td>
+</tr>
+<tr>
+<td>why is THIS <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in the affected set</td>
+<td><code>magus affected --explain &lt;project&gt;</code></td>
+</tr>
+<tr>
+<td>what does one node's neighborhood look like now</td>
+<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a> &lt;node&gt;</code></td>
+</tr>
+<tr>
+<td>where is this symbol defined and used</td>
+<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Find a symbol's definition and references.">magus refs</a> &lt;symbol&gt;</code></td>
+</tr>
+<tr>
+<td>what did a target actually output</td>
+<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output &lt;ref&gt;</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p><code>magus graph diff</code> is the one to reach for first on a branch review: it reports the
+nodes and edges added, removed, or changed, which is blast radius as data rather
+than a file list to interpret. Pair it with <code>magus describe file</code> so a diff of 300
+paths collapses to the handful that are declared sources.</p>
+<p>Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did. Reading a raw diff to work out
+what a change affects is the work these verbs already did.</p>
 <pre><code>
 ## Short form (`--simple`)
 
@@ -213,7 +284,7 @@ hidden coupling, ownership risk, or unusually rising activity.</li>
 <p>Lead with three to seven grouped changes, not every commit. For each item state:</p>
 <ul>
 <li><strong>What landed</strong> - a plain-language feature or behavioral change.</li>
-<li><strong>Where</strong> - projects and graph entities <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>.</li>
+<li><strong>Where</strong> - projects and graph entities affected.</li>
 <li><strong>Evidence</strong> - merge commit(s), source files, and the relevant graph relation.</li>
 <li><strong>Why it matters</strong> - user impact, dependency impact, or an explicit uncertainty.</li>
 <li><strong>Follow-up</strong> - a concrete next command when more detail is useful.</li>
@@ -237,6 +308,72 @@ hidden coupling, ownership risk, or unusually rising activity.</li>
 experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
 new command, target, diagnostic, or workflow.</p>
+<h2 id="write-a-changelog-entry-1">Write a CHANGELOG entry</h2>
+<p>When
+the ask is &quot;add this to the changelog&quot;, match the file's existing shape - Keep a
+Changelog 1.1.0 with SemVer - and append under <code>## [Unreleased]</code>:</p>
+<pre><code class="language-markdown">### Added
+
+- &lt;What a user can now do, in one sentence.&gt; &lt;Why it is the right shape, or what it
+  replaces.&gt; Set `&lt;config.key&gt;` (env `MAGUS_&lt;CONFIG_KEY&gt;`) to &lt;what the toggle does&gt;;
+  &lt;default&gt;.
+</code></pre>
+<p>Rules for an entry, all checkable:</p>
+<ul>
+<li>Name every surface it adds: the config key WITH its env var, the CLI flag, the
+diagnostic code, the target.</li>
+<li>Section headings are Keep a Changelog's: <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>,
+<code>Removed</code>, <code>Fixed</code>, <code>Security</code>. Do not invent one.</li>
+<li>Write behaviour, not implementation.</li>
+<li>One entry per user-visible change, not per commit. Squash a fix-up into the entry
+for the thing it fixed up.</li>
+<li><code>CHANGELOG.md</code> is a SOURCE file, not generated - confirm with
+<code>magus describe file CHANGELOG.md</code> if unsure, and edit it directly.</li>
+</ul>
+<h2 id="answer-a-granular-diff-question-1">Answer a granular diff question</h2>
+<p>When the ask narrows to &quot;what exactly changed in X&quot;, stay on magus surfaces.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>question</th>
+<th>command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>what did this change do to the domain's shape</td>
+<td><code>magus graph diff --rev &lt;base&gt; -o markdown</code></td>
+</tr>
+<tr>
+<td>is this changed file source or generated output</td>
+<td><code>magus describe file &lt;paths...&gt;</code></td>
+</tr>
+<tr>
+<td>which projects does the change reach</td>
+<td><code>magus affected --impact</code></td>
+</tr>
+<tr>
+<td>why is THIS project in the affected set</td>
+<td><code>magus affected --explain &lt;project&gt;</code></td>
+</tr>
+<tr>
+<td>what does one node's neighborhood look like now</td>
+<td><code>magus explain &lt;node&gt;</code></td>
+</tr>
+<tr>
+<td>where is this symbol defined and used</td>
+<td><code>magus <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a> &lt;symbol&gt;</code></td>
+</tr>
+<tr>
+<td>what did a target actually output</td>
+<td><code>magus query output &lt;ref&gt;</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p><code>magus graph diff</code> is the one to reach for first on a branch review. Pair it with <code>magus describe file</code> so a diff of 300
+paths collapses to the handful that are declared sources.</p>
+<p>Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did.</p>
 <pre><code>
 &lt;/details&gt;
 </code></pre>
@@ -252,14 +389,14 @@ new command, target, diagnostic, or workflow.</p>
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../reference/skills/"><span class="related-card-title">Agent skills</span><span class="related-card-desc">Every skill magus installs, in both curated permutations, generated from the embedded bodies.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-insight/"><span class="related-card-title">magus insight</span><span class="related-card-desc">Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.</span></a>
         <a class="related-card" href="../../../guides/integrations/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
-        <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-insight/"><span class="related-card-title">magus insight</span><span class="related-card-desc">Show where a codebase&#39;s attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-changes%22">magus-changes</a></div>
-    
+    <small>Last updated <time datetime="2026-07-30T00:00:11Z">July 30, 2026, 12:00 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/c78aa0860aa42f33bdd27de1970f7b99fbc97167" data-tooltip="c78aa0860aa42f33bdd27de1970f7b99fbc97167" title="c78aa0860aa42f33bdd27de1970f7b99fbc97167">c78aa086</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -309,6 +446,16 @@ distinct-author count (the bus factor), and abandonment. See
 <p>An insight lens: the recent half of the window against the earlier half. A
 positive delta is a rising hotspot; a negative one is cooling. See
 <a href="../../../guides/insight/">insight</a>.</p>
+<h3 id="diagnostic-code">Diagnostic code</h3>
+<p>A stable <code>MGSxxxx</code> identifier attached to a magus warning or error, so it can be
+referenced and looked up; some are guardrails (see <a href="../../../concepts/wards/">wards</a>), others hard
+errors.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>

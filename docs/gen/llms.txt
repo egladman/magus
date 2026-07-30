@@ -171,7 +171,7 @@
 - [Agent skills](https://eli.gladman.cc/magus/reference/skills/index.md): Every skill magus installs, in both curated permutations, generated from the embedded bodies.
 - [magus-architecture](https://eli.gladman.cc/magus/reference/skills/magus-architecture/index.md): Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.
 - [magus-buzz](https://eli.gladman.cc/magus/reference/skills/magus-buzz/index.md): Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in.
-- [magus-changes](https://eli.gladman.cc/magus/reference/skills/magus-changes/index.md): Summarize what merged, changed, or landed recently in a magus workspace.
+- [magus-changes](https://eli.gladman.cc/magus/reference/skills/magus-changes/index.md): Summarize what changed in a magus workspace, write it up, or answer a granular diff question.
 - [magus-docs](https://eli.gladman.cc/magus/reference/skills/magus-docs/index.md): Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL.
 - [magus-memory](https://eli.gladman.cc/magus/reference/skills/magus-memory/index.md): Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions.
 - [magus-query](https://eli.gladman.cc/magus/reference/skills/magus-query/index.md): Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).

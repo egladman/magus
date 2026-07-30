@@ -68,8 +68,9 @@ taken verbatim, newlines included.
 
 The test to apply per sentence: **would a capable reader still do the right
 thing without this?** Yes -> mark it. No -> it is a step, not a rationale;
-leave it unmarked and rewrite it as an imperative. That judgement IS the
-curation; nothing is summarized, and there is no second file to keep in sync.
+leave it unmarked and rewrite it as an imperative. Making that call sentence by
+sentence is the curation. Nothing is summarized, and there is no second file to
+keep in sync.
 
 Rules:
 
