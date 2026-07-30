@@ -11,6 +11,7 @@
 #   GOPHERBUZZ_UPSTREAM_DIR=~/Repos/buzz go test ./libs/gopherbuzz/ -run TestUpstreamConformance -v
 # then add newly-passing files (never remove a line without confirming a
 # real regression).
+any.buzz
 basic-types.buzz
 bitwise.buzz
 block-expression.buzz
@@ -18,6 +19,7 @@ break-continue.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
 composite-assign.buzz
+control-flow.buzz
 dead-branches.buzz
 debug.buzz
 default-arguments.buzz

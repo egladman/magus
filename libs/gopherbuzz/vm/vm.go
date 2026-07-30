@@ -1332,12 +1332,21 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpAs:
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
+			if ins.B == 1 {
+				// `as?` is upstream's CHECKED cast, not a conversion: it yields the value
+				// when it already inhabits the type and null when it does not. Routing it
+				// through buzzCast instead made `12 as? str` answer "12" rather than null,
+				// because that helper coerces. Bare `as` below keeps coercing, which is a
+				// gopherbuzz divergence its own testdata relies on (3.9 as int == 3).
+				if vm.buzzIsType(val, name) {
+					vm.push(val)
+				} else {
+					vm.push(Null)
+				}
+				break
+			}
 			result, err := vm.buzzCast(val, name)
 			if err != nil {
-				if ins.B == 1 { // `as?`: a type mismatch yields null instead of erroring
-					vm.push(Null)
-					break
-				}
 				return Null, err
 			}
 			vm.push(result)

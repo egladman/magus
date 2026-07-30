@@ -1715,7 +1715,13 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if v.Optional {
 			opt = 1
 		}
-		c.chunk.Emit(vmpackage.OpAs, c.nameConst(v.TypeName), opt)
+		// Reduce the annotation to its runtime shape, the same way `is` does above, so
+		// A means one thing regardless of B. `as?` needs it because it is a type TEST
+		// (a `mut ns\Name` annotation has to match a def's bare name); the coercing
+		// bare-`as` path is unaffected, since every name it does not recognise as a
+		// primitive returns the value untouched either way.
+		base, _ := isTypeShape(v.TypeName)
+		c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
 	case *ast.CatchExpr:
 		return c.compileCatchExpr(v)
 	case *ast.YieldExpr:

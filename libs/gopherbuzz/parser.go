@@ -760,6 +760,25 @@ func (p *parser) parseIf() (*ast.IfStmt, error) {
 			return nil, err
 		}
 		bindName = id.Val
+	} else if as, ok := cond.(*ast.AsExpr); ok && !as.Optional && p.check(token.Colon) {
+		// `if (expr as name: Type)` takes the branch only when the cast succeeds, and
+		// binds name to the cast value inside Then. Upstream parses the if-condition
+		// specially (Parser.zig's ifStatement, `.As` branch) so it never builds a cast
+		// node at all; gopherbuzz reaches here having already consumed `as name` as a
+		// cast whose "type" is really the binding identifier, so split the halves back
+		// apart. The form then lowers exactly onto the optional-cast narrowing the `->`
+		// path above already compiles -- `expr as? Type -> name` -- which is why this
+		// needs no new AST, compiler, or checker case.
+		if strings.ContainsAny(as.TypeName, "[]{}?\\(), >") {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected an identifier before ':' in an `as` binding, got the type %q", as.Pos.Line, as.Pos.Col, as.TypeName)
+		}
+		p.advance() // ':'
+		typStr, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		bindName = as.TypeName
+		cond = &ast.AsExpr{Pos: as.Pos, Expr: as.Expr, TypeName: typStr, Optional: true}
 	}
 	if _, err := p.eat(token.RParen); err != nil {
 		return nil, err

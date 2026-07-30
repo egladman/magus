@@ -164,6 +164,24 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			}
 		case *ast.FunDecl:
 			c.define(v.Name, c.funDeclType(v), true)
+		case *ast.DeclStmt:
+			// Hoist top-level variables so a body may reference one declared LATER in
+			// the file -- what upstream calls a placeholder. `test` blocks and function
+			// bodies only run after the whole file has executed, so a forward reference
+			// from inside one is resolved by the time it matters; refusing it statically
+			// is what blocked upstream source that puts its `final` after the tests.
+			//
+			// Only the annotation is trusted here. Inferring the initializer would mean
+			// evaluating expressions whose own dependencies are not collected yet, so an
+			// unannotated placeholder stays Unknown (the tracking-failure sentinel, which
+			// suppresses member-access errors rather than asserting a wrong type). Either
+			// way checkDecl re-defines the name with its precise type when the
+			// declaration itself is reached, so only earlier references see this entry.
+			typ := types.Type(types.Unknown)
+			if v.TypeAnnot != "" {
+				typ = c.resolveAnnot(v.TypeAnnot)
+			}
+			c.define(v.Name, typ, v.IsConst)
 		case *ast.ObjectDecl:
 			c.registerTypeDecls([]ast.Node{v})
 		case *ast.EnumDecl:
