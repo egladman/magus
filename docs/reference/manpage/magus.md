@@ -97,7 +97,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **self**
-: Manage the magus binary (update). See [**magus-self**(1)](magus-self.md).
+: Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
 : Print version, commit, and build date. See [**magus-version**(1)](magus-version.md).

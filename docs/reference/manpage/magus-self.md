@@ -1,16 +1,16 @@
 ---
 title: magus self
-description: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.
-tags: [cli, magus self, self update, updates, versioning, install]
+description: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.
+tags: [cli, magus self, self update, self install-shorthand, updates, versioning, install, mgs]
 ---
 
 # magus-self
 
-Manage the magus binary (update)
+Manage the magus binary (update, install-shorthand)
 
 ## Synopsis
 
-**magus** self update [flags]
+**magus** self \<subcommand\> [flags]
 
 ## Description
 
@@ -18,6 +18,7 @@ Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
 binary can build with -tags noselfupdate to disable the self-update mechanism.
+install-shorthand is available in every build.
 
 To bootstrap a workspace, use: magus init
 
@@ -44,10 +45,21 @@ To bootstrap a workspace, use: magus init
 **--yes**
 : Skip interactive confirmation
 
+### self install-shorthand options
+
+**--dir** *string*
+: Directory for the shorthand (default: the running binary's directory)
+
+**--force**
+: Replace an existing file at the shorthand path
+
 ## Subcommands
 
 **update**
 : Update magus to the latest release
+
+**install-shorthand**
+: Symlink mgs, the magus shorthand, to the running binary
 
 ## Examples
 
@@ -55,6 +67,12 @@ To bootstrap a workspace, use: magus init
 
 ```sh
 magus self update
+```
+
+*Install the mgs shorthand*
+
+```sh
+magus self install-shorthand
 ```
 
 ## See Also

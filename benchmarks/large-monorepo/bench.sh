@@ -38,7 +38,8 @@ RUNS="${BENCH_RUNS:-3}"
 INCR_RUNS="${BENCH_INCR_RUNS:-1}"
 DRY="${BENCH_DRY_RUN:-0}"
 SKIP_VER="${BENCH_SKIP_VERSION_CHECK:-0}"
-SCENARIOS=(${BENCH_SCENARIOS:-S4 S5 S6 S7})
+# Space-separated scenario list; splitting the value into elements is the point.
+read -r -a SCENARIOS <<< "${BENCH_SCENARIOS:-S4 S5 S6 S7}"
 
 # fixture token must be a single word (the aggregator splits filenames on "-").
 FIXTURE="largemono"
@@ -80,7 +81,8 @@ check_versions() {
 # ── per-tool command + cache reset ──────────────────────────────────────────
 # build_cmd <tool> : the build invocation (run with CWD=work/repo)
 build_cmd() {
-    local tool="$1" fam="${tool%%-*}"
+    local tool="$1"
+    local fam="${tool%%-*}"
     case "$fam" in
         magus) echo "${MAGUS} run build --concurrency=$C" ;;
         turbo) echo "$BIN/turbo run build --concurrency=$C --no-daemon" ;;
@@ -106,6 +108,8 @@ hf() { # hf <outfile> <warmup> <runs> <prepare|''> <cmd>
     local out="$1" warmup="$2" runs="$3" prep="$4" cmd="$5"
     mkdir -p "$(dirname "$out")"
     if [[ "$DRY" == "1" ]]; then
+        # The inner quotes are part of the command line being echoed, not this one.
+        # shellcheck disable=SC2016
         echo "[dry-run] hyperfine --warmup $warmup --runs $runs${prep:+ --prepare '$prep'} '$cmd' -> ${out##*/}"
         return
     fi

@@ -14,26 +14,46 @@ Print a shell completion script
 
 ## Description
 
-Print a shell completion script to stdout and append it to your shell's startup file.
+Print a shell completion script to stdout. Every script registers both
+magus and the mgs shorthand.
+
+Completes subcommands, the targets accepted by run and affected, the nouns
+accepted by describe, the lenses accepted by insight, and each subcommand's
+flags. Project paths are completed live by shelling out to magus ls -o name,
+so they track the workspace instead of a baked-in list; outside a workspace
+they are simply empty.
+
+Install differs per shell, and zsh is the one that bites:
+
+bash        source it from ~/.bashrc, which re-reads it from the binary on
+              every new shell and so survives an upgrade:
+                  source \<(magus completion bash)
+  zsh         write it to a directory on $fpath as _magus. The script ends by
+              invoking its own completion function, so sourcing it from
+              ~/.zshrc runs that outside a completion context and registers
+              nothing. Regenerate the file after magus self update.
+  fish        write it to ~/.config/fish/completions/magus.fish, loaded on
+              demand.
+  powershell  append it to $PROFILE.
 
 ## Examples
 
-*Bash*
+*Bash: source from the rc, never goes stale*
 
 ```sh
-magus completion bash >> ~/.bashrc
+echo 'source <(magus completion bash)' >> ~/.bashrc
 ```
 
-*Zsh*
+*Zsh: install onto $fpath (not into ~/.zshrc)*
 
 ```sh
-magus completion zsh >> ~/.zshrc
+magus completion zsh > ~/.zsh/completions/_magus
 ```
 
 *Fish*
 
 ```sh
-magus completion fish >> ~/.config/fish/config.fish
+magus completion fish > ~/.config/fish/completions/magus.fish
 ```
 
 *PowerShell*

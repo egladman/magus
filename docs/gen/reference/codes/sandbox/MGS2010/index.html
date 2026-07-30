@@ -106,7 +106,7 @@ or its policy differs from the union the daemon applied at startup.</p>
 </code></pre>
 <h2 id="why">Why</h2>
 <p>The kernel landlock restriction is process-global and irreversible: once a
-process calls <code>landlock_restrict_<a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a></code>, that confinement holds for its whole
+process calls <code>landlock_restrict_<a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a></code>, that confinement holds for its whole
 lifetime and cannot be relaxed. A daemon that serves many workspaces therefore
 computes the set-union of every declared workspace's sandbox policy at startup
 and applies landlock exactly once.</p>

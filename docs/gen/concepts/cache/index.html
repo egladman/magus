@@ -95,12 +95,12 @@
           <li><a href="../../concepts/workspace/" title="Workspace and projects">Workspace and projects</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#needs-provides-claims-a-targets-cache-footprint" title="needs, provides, claims: a target's cache footprint">needs, provides, claims: a target's cache footprint</a><ul><li><a href="#per-target-inputs-and-outputs" title="Per-target inputs and outputs">Per-target inputs and outputs</a></li></ul></li><li><a href="#the-cache-key" title="The cache key">The cache key</a></li><li><a href="#invalidation-what-busts-a-key" title="Invalidation: what busts a key">Invalidation: what busts a key</a><ul><li><a href="#anti-pattern-a-shared-manifest-as-an-input" title="Anti-pattern: a shared manifest as an input">Anti-pattern: a shared manifest as an input</a></li><li><a href="#the-opposite-failure-tools-outside-the-key-entirely" title="The opposite failure: tools outside the key entirely">The opposite failure: tools outside the key entirely</a></li><li><a href="#opting-out-and-busting" title="Opting out and busting">Opting out and busting</a></li><li><a href="#granularity-project-wide-vs-per-target" title="Granularity: project-wide vs per-target">Granularity: project-wide vs per-target</a></li></ul></li><li><a href="#replay-a-hit-restores-outputs-not-execution" title="Replay: a hit restores outputs, not execution">Replay: a hit restores outputs, not execution</a></li><li><a href="#the-two-roles-of-an-output-maintainer-note" title="The two roles of an output (maintainer note)">The two roles of an output (maintainer note)</a></li><li><a href="#on-disk-just-files" title="On disk: just files">On disk: just files</a></li><li><a href="#connecting-to-the-remote-cache" title="Connecting to the remote cache">Connecting to the remote cache</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#design-intent" title="Design intent">Design intent</a></li><li><a href="#needs-provides-claims-a-targets-cache-footprint" title="needs, provides, claims: a target's cache footprint">needs, provides, claims: a target's cache footprint</a><ul><li><a href="#per-target-inputs-and-outputs" title="Per-target inputs and outputs">Per-target inputs and outputs</a></li></ul></li><li><a href="#the-cache-key" title="The cache key">The cache key</a></li><li><a href="#invalidation-what-busts-a-key" title="Invalidation: what busts a key">Invalidation: what busts a key</a><ul><li><a href="#opting-out-and-busting" title="Opting out and busting">Opting out and busting</a></li><li><a href="#granularity-project-wide-vs-per-target" title="Granularity: project-wide vs per-target">Granularity: project-wide vs per-target</a></li></ul></li><li><a href="#replay-a-hit-restores-outputs-not-execution" title="Replay: a hit restores outputs, not execution">Replay: a hit restores outputs, not execution</a></li><li><a href="#the-two-roles-of-an-output-maintainer-note" title="The two roles of an output (maintainer note)">The two roles of an output (maintainer note)</a></li><li><a href="#on-disk-just-files" title="On disk: just files">On disk: just files</a></li><li><a href="#connecting-to-the-remote-cache" title="Connecting to the remote cache">Connecting to the remote cache</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">19 min read</small>
+    <small class="reading-time" title="Estimated reading time">15 min read</small>
     <article>
 <h1 id="cache-model">Cache model</h1>
 <p>magus's build <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> is <strong>content-addressed</strong>: a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s outputs are keyed by the
@@ -260,86 +260,6 @@ hashed line above yields a new key, and thus a new (empty) <a class="glossary-te
 invalidation is additive. Reverting a change restores the earlier key and replays
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 <a href="#on-disk-just-files">On disk</a>).</p>
-<h3 id="anti-pattern-a-shared-manifest-as-an-input">Anti-pattern: a shared manifest as an input</h3>
-<p>The commonest way to wreck a cache is to reach for the file that pins your tools -
-<code>mise.toml</code>, <code>package.json</code>, <code>go.mod</code>, a lockfile - and declare it an input,
-usually project-wide.</p>
-<p>The intent is right: a tool version really is part of what produced the output, and
-a bump really should invalidate. The result is not. A manifest pins <em>many</em> tools,
-and it moves for reasons unrelated to most of them. Wire it into every project and
-one linter bump rebuilds the entire <a class="code-xref" href="../../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> - in <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>, the difference between an
-affected run and a from-scratch build, for a change that could not have altered
-almost any of it. Do that a few times and people stop trusting the affected set,
-which is the actual loss: a cache nobody believes is worse than no cache.</p>
-<p><strong>Declare what changed, not what contains it.</strong> The blast radius should match the
-tools a project genuinely uses:</p>
-<ul>
-<li><strong>a tool with a version probe</strong> (<code>mgs_getVersionCommand</code>, or
-<code>mgs_getVersionCommands</code> for a spell driving several binaries) contributes
-<code>spell:tool:version</code> to the key of every project binding that spell, and
-<em>nothing</em> to any other. Bumping hadolint moves projects using the docker spell;
-a Go project's key never notices. This is almost always the right answer for an
-external binary.</li>
-<li><strong>a manifest that is genuinely a source</strong> of one project - <code>go.mod</code> for a Go
-project whose build reads it - belongs in that project's <code>sources</code>, where it
-already is. That is not this anti-pattern: the file really does feed those
-targets.</li>
-<li><strong>a pin that reaches one target only</strong> wants a per-target declaration, not a
-project-wide one. <code>magus\inputs</code> in that target's body keeps a sibling target's
-key still.</li>
-</ul>
-<p>If you find yourself adding a manifest to <code>sources</code> to fix a staleness bug, the
-question to ask first is <em>which tool</em> went stale, and whether it can be probed
-instead. A probe invalidates the projects that use the tool. A manifest
-invalidates everyone who happens to live near it.</p>
-<h3 id="the-opposite-failure-tools-outside-the-key-entirely">The opposite failure: tools outside the key entirely</h3>
-<p>Over-invalidating is loud and annoying. Under-invalidating is quiet and much
-worse, and it is the more common default: most build caches key on file contents
-and nothing else, so <strong>the tools themselves are invisible</strong>.</p>
-<p>The failure does not look like a cache bug. A linter upgrades, and suddenly code
-that passed yesterday fails - or worse, code that should fail passes, because the
-verdict was replayed from an entry the old linter wrote. A formatter upgrades and
-a &quot;clean&quot; tree starts failing a drift gate on a file nobody touched. A codegen
-plugin upgrades and the committed output no longer matches what the generator
-would emit, but the generate step is a cache hit, so it never runs to notice.</p>
-<p>What makes it expensive is that every one of those looks like a bug in <em>your</em>
-change. You bisect, you re-run, you blame the flaky test, you diff the branch -
-and the answer was never in the repository at all. Someone's toolchain moved.</p>
-<p>magus keys on the tool versions for this reason. Each spell declares how to ask:</p>
-<pre><code class="language-buzz">export fun mgs_getVersionCommand() &gt; [str] { return [&quot;go&quot;, &quot;version&quot;]; }
-
-// A spell driving more than one binary declares each, so all of them move the key.
-export fun mgs_getVersionCommands() &gt; {str: [str]} {
-    return {&quot;golangci-lint&quot;: [&quot;golangci-lint&quot;, &quot;--version&quot;]};
-}
-</code></pre>
-<p>Their output lands in the key as <code>spell:version</code> and <code>spell:tool:version</code>, so a
-tool that upgrades invalidates exactly the projects that bind that spell - the
-precise middle between the two failures. <code><a class="code-xref" href="../../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> spells</code> reports which
-spells probe.</p>
-<p>A tool pinned by a manifest the project already reads needs no probe: <code>go.mod</code> is
-a source of the go spell, so bumping a <code>go tool</code> pin invalidates on its own. Probes
-are for binaries that live outside the project's declared inputs - a linter from
-PATH, a formatter from a version manager - which is precisely the set nothing else
-would catch.</p>
-<p><strong>Where the declaration lives is the whole point.</strong> Most build systems can express
-this - Nx, for instance, makes tool-version tracking technically possible through
-executors, but shifts the burden entirely to developers to implement it
-consistently. Correctness then depends on each of them remembering, in every
-project, in every repository. One person skips it and that project silently caches
-across toolchains, and the failure surfaces somewhere else entirely.</p>
-<p>magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
-target touched - the probe is a declaration someone wrote by hand, and
-<code>mgs_getVersionCommand</code> is as explicit as it looks. What differs is its
-<strong>location</strong>: it sits on the SPELL, the adapter that already knows it drives
-<code>golangci-lint</code>, rather than being restated by every project that uses one. A
-project binding <code>spells: [go]</code> inherits that declaration the same way it inherits
-the spell's sources and ops.</p>
-<p>So the trade is not magic against discipline. It is declaring a fact once, where
-it is true, instead of once per consumer - the same reason a spell declares its
-<code>needs</code> globs rather than each project re-listing <code>**/*.go</code>.</p>
-<p>Set <code>MAGUS_CACHE_TOOL_VERSION=off</code> to drop probes from keys, or <code>=workspace</code> to
-probe once per workspace instead of per project.</p>
 <h3 id="opting-out-and-busting">Opting out and busting</h3>
 <p>Four controls, at four different scopes:</p>
 <figure class="table-scroll"><table>
@@ -383,7 +303,7 @@ is entirely about what happens to the cache entry afterward (never snapshot vs.
 snapshot-and-refresh). <code>bust_cache</code> and <code>clean --cache</code> both delete entries, at
 different granularities and from different sides of a run. <code>cache.immutable</code> is
 the odd one out: it does not force anything to re-run, it just stops the cache
-from ever writing - the common case is a read-only CI runner or a shared cache
+from ever writing - the common case is a read-only <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> runner or a shared cache
 mirror that must not accumulate local entries.</p>
 <h3 id="granularity-project-wide-vs-per-target">Granularity: project-wide vs per-target</h3>
 <p>A project's <code>Step.Sources</code> is not built per-target from scratch: <code>baseStep</code>
@@ -631,7 +551,7 @@ on.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22provides%22">provides</a><a class="tag" href="../../search/?q=tag%3A%22claims%22">claims</a><a class="tag" href="../../search/?q=tag%3A%22cache-key%22">cache-key</a><a class="tag" href="../../search/?q=tag%3A%22invalidation%22">invalidation</a><a class="tag" href="../../search/?q=tag%3A%22replay%22">replay</a><a class="tag" href="../../search/?q=tag%3A%22content-addressed%22">content-addressed</a></div>
-    <small>Last updated <time datetime="2026-07-29T11:57:48Z">July 29, 2026, 11:57 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/152c53176fb599ba780344dce720450a670830a4" data-tooltip="152c53176fb599ba780344dce720450a670830a4" title="152c53176fb599ba780344dce720450a670830a4">152c5317</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/732bbd9be925829801e7cd84d7eaf95620a7b0be"><code>732bbd9b</code></a> <small><time datetime="2026-07-29T11:56:15Z">Jul 29, 2026</time></small> - run golangci-lint from PATH and probe its version; exempt --version from the raw-tool deny</li><li><a href="https://github.com/egladman/magus/commit/075b20dfd2017e3afcbfbf65240b7bcf5399375f"><code>075b20df</code></a> <small><time datetime="2026-07-29T11:47:35Z">Jul 29, 2026</time></small> - let a spell probe several tools; pin hadolint; document manifest-as-input as a cache anti-pattern</li><li><a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069"><code>5db7b6e6</code></a> <small><time datetime="2026-07-28T23:12:51Z">Jul 28, 2026</time></small> - reorganise the docs tree into sections and regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/53e1f6255815e483ab6e8a4d0746b9decc7837e8"><code>53e1f625</code></a> <small><time datetime="2026-07-28T16:07:00Z">Jul 28, 2026</time></small> - show backslash namespace access in the hand-authored docs</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -725,71 +645,6 @@ duplicating it. See <a href="../../reference/console/">reference/console</a>.</p
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
-<h2 id="command-synopsis-notation">Command synopsis notation</h2>
-<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
-same five marks. This is the whole vocabulary:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>notation</th>
-<th>means</th>
-<th>example</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;value&gt;</code></td>
-<td>required; replace it</td>
-<td><code>magus run &lt;target&gt;</code></td>
-</tr>
-<tr>
-<td><code>[thing]</code></td>
-<td>optional; omit the brackets if you use it</td>
-<td><code>magus ls [flags]</code></td>
-</tr>
-<tr>
-<td><code>&lt;a|b|c&gt;</code></td>
-<td>required, and one of these exact words</td>
-<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
-</tr>
-<tr>
-<td><code>&lt;value&gt;...</code></td>
-<td>repeatable; one or more, space separated</td>
-<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
-</tr>
-<tr>
-<td><code>word[s]</code></td>
-<td>the <code>s</code> is optional - both spellings work</td>
-<td><code>magus describe spell[s]</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
-<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
-command, not that <code>s</code> is a separate thing you can pass.</p>
-<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
-it, one or more paths&quot;:</p>
-<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
-magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
-</code></pre>
-<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
-called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
-<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
-untouched to whatever the target runs:</p>
-<pre><code class="language-sh">magus run test libs/foo -- -run TestX
-</code></pre>
-<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
-<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
-better; they parse identically.</p>
-<p>Some flags take a comma-separated list, which is written as one value. Spaces
-around the commas are trimmed and empty entries are ignored:</p>
-<pre><code class="language-sh">magus status --probe=mcp,liveness
-</code></pre>
-<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
-a pattern is accepted it is always the same three types:</p>
-<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
-magus where --filter type=regex,pattern='^libs/'
-</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

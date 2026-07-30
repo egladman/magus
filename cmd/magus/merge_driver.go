@@ -127,6 +127,40 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 	return choices[idx], nil
 }
 
+// ensureMergeDriver keeps the VCS merge-driver registration in step with the workspace's
+// declared outputs, and is called on the normal run path rather than only from `magus
+// init`.
+//
+// The globs it registers are derived from every project's declared outputs, so they move
+// whenever a project does. Wiring them once at init freezes them: a project that declares
+// an output later never reaches .gitattributes, and a clone that never ran `init --vcs`
+// has no registration at all. Either way the next merge conflicts every generated file by
+// hand, which reads as a merge problem rather than a setup one - so this repairs it
+// quietly instead of waiting to be asked.
+//
+// Best-effort by design: a read-only checkout, an unsupported VCS, or a workspace with no
+// declared outputs are all normal, and none of them should fail the command the user
+// actually ran.
+func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
+	res, err := resolveVCS(ctx, m.Root(), m)
+	if err != nil {
+		return
+	}
+	name := res.Name
+	installer, ok := vcs.Installer(name)
+	if !ok {
+		return
+	}
+	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), workspaceOutputGlobs(m))
+	if err != nil {
+		slog.DebugContext(ctx, "merge-driver: could not refresh registration", slog.String("error", err.Error()))
+		return
+	}
+	if changed {
+		slog.InfoContext(ctx, "merge-driver: refreshed for the workspace's declared outputs", slog.String("vcs", name))
+	}
+}
+
 // mergeDriverRun runs the owning project's generate (or build) target and writes the result.
 // Args: ancestor result other markerSize path (git/hg protocol); exit non-zero falls back to conflict markers.
 func mergeDriverRun(ctx context.Context, root string, args []string) error {

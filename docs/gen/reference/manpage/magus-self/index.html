@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>magus self - magus</title>
-  <meta name="description" content="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">
+  <meta name="description" content="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/manpage/magus-self/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="magus self - magus">
-  <meta property="og:description" content="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">
+  <meta property="og:description" content="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/manpage/magus-self/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -99,7 +99,7 @@
           <li><a href="../../../reference/manpage/magus/" title="magus command">magus command</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a><ul><li><a href="#self-update-options" title="self update options">self update options</a></li></ul></li><li><a href="#subcommands" title="Subcommands">Subcommands</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
+        <ul><li><a href="#synopsis" title="Synopsis">Synopsis</a></li><li><a href="#description" title="Description">Description</a><ul><li><a href="#self-update-options" title="self update options">self update options</a></li><li><a href="#self-install-shorthand-options" title="self install-shorthand options">self install-shorthand options</a></li></ul></li><li><a href="#subcommands" title="Subcommands">Subcommands</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#see-also" title="See Also">See Also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -107,13 +107,14 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-self">magus-self</h1>
-<p>Manage the magus binary (update)</p>
+<p>Manage the magus binary (update, install-shorthand)</p>
 <h2 id="synopsis">Synopsis</h2>
-<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a> update [flags]</p>
+<p><strong>magus</strong> <a class="code-xref" href="./" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a> &lt;subcommand&gt; [flags]</p>
 <h2 id="description">Description</h2>
 <p>Targets for managing the magus binary.</p>
 <p>update is compiled in by default. Package maintainers who own the system
-binary can build with -tags noselfupdate to disable the self-update mechanism.</p>
+binary can build with -tags noselfupdate to disable the self-update mechanism.
+install-shorthand is available in every build.</p>
 <p>To bootstrap a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, use: <a class="code-xref" href="../magus-init/" data-kind="command" data-def="Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">magus init</a></p>
 <h3 id="self-update-options">self update options</h3>
 <dl>
@@ -132,14 +133,26 @@ binary can build with -tags noselfupdate to disable the self-update mechanism.</
 <dt><strong>--yes</strong></dt>
 <dd>Skip interactive confirmation</dd>
 </dl>
+<h3 id="self-install-shorthand-options">self install-shorthand options</h3>
+<dl>
+<dt><strong>--dir</strong> <em>string</em></dt>
+<dd>Directory for the shorthand (default: the running binary's directory)</dd>
+<dt><strong>--force</strong></dt>
+<dd>Replace an existing file at the shorthand <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a></dd>
+</dl>
 <h2 id="subcommands">Subcommands</h2>
 <dl>
 <dt><strong>update</strong></dt>
 <dd>Update magus to the latest release</dd>
+<dt><strong>install-shorthand</strong></dt>
+<dd>Symlink mgs, the magus shorthand, to the running binary</dd>
 </dl>
 <h2 id="examples">Examples</h2>
 <p><em>Update the running binary</em></p>
 <pre><code class="language-sh">magus self update
+</code></pre>
+<p><em>Install the mgs shorthand</em></p>
+<pre><code class="language-sh">magus self install-shorthand
 </code></pre>
 <h2 id="see-also">See Also</h2>
 <p><a href="../magus/"><strong>magus</strong>(1)</a>, <a href="../magus-ls/"><strong>magus-ls</strong>(1)</a>, <a href="../magus-describe/"><strong>magus-describe</strong>(1)</a>, <a href="../magus-run/"><strong>magus-run</strong>(1)</a>, <a href="../magus-x/"><strong>magus-x</strong>(1)</a>, <a href="../magus-where/"><strong>magus-where</strong>(1)</a>, <a href="../magus-tail/"><strong>magus-tail</strong>(1)</a>, <a href="../magus-affected/"><strong>magus-affected</strong>(1)</a>, <a href="../magus-insight/"><strong>magus-insight</strong>(1)</a>, <a href="../magus-graph/"><strong>magus-graph</strong>(1)</a>, <a href="../magus-watch/"><strong>magus-watch</strong>(1)</a>, <a href="../magus-status/"><strong>magus-status</strong>(1)</a>, <a href="../magus-doctor/"><strong>magus-doctor</strong>(1)</a>, <a href="../magus-config/"><strong>magus-config</strong>(1)</a>, <a href="../magus-server/"><strong>magus-server</strong>(1)</a>, <a href="../magus-completion/"><strong>magus-completion</strong>(1)</a>, <a href="../magus-man/"><strong>magus-man</strong>(1)</a>, <a href="../magus-init/"><strong>magus-init</strong>(1)</a>, <a href="../magus-version/"><strong>magus-version</strong>(1)</a></p>
@@ -156,13 +169,13 @@ binary can build with -tags noselfupdate to disable the self-update mechanism.</
     <div class="related-grid">
         <a class="related-card" href="../../../reference/manpage/"><span class="related-card-title">Manpage</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-completion/"><span class="related-card-title">magus completion</span><span class="related-card-desc">Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+self%22">magus self</a><a class="tag" href="../../../search/?q=tag%3A%22self+update%22">self update</a><a class="tag" href="../../../search/?q=tag%3A%22updates%22">updates</a><a class="tag" href="../../../search/?q=tag%3A%22versioning%22">versioning</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a></div>
-    <small>Last updated <time datetime="2026-07-27T03:51:44Z">July 27, 2026, 3:51 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d" data-tooltip="b1b786d34804d09a1e1292b444bb68735a0bea2d" title="b1b786d34804d09a1e1292b444bb68735a0bea2d">b1b786d3</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-self.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-self.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+self%22">magus self</a><a class="tag" href="../../../search/?q=tag%3A%22self+update%22">self update</a><a class="tag" href="../../../search/?q=tag%3A%22self+install-shorthand%22">self install-shorthand</a><a class="tag" href="../../../search/?q=tag%3A%22updates%22">updates</a><a class="tag" href="../../../search/?q=tag%3A%22versioning%22">versioning</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../../search/?q=tag%3A%22mgs%22">mgs</a></div>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-self.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-self.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

@@ -45,10 +45,13 @@
 - [Glossary](https://eli.gladman.cc/magus/glossary/index.md): The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console's own terms - each defined in one line with a pointer to the page that covers it in full.
 - [Guides](https://eli.gladman.cc/magus/guides/index.md): Pages in this section.
 - [Debugging magusfiles](https://eli.gladman.cc/magus/guides/debugging/index.md): Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus\pry() breakpoints mid-target to inspect frames, locals, and state.
-- [Download](https://eli.gladman.cc/magus/guides/download/index.md): Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.
+- [Download](https://eli.gladman.cc/magus/guides/download/index.md): Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.
 - [Run magus in Docker](https://eli.gladman.cc/magus/guides/download/docker/index.md): Pull and run the official magus container images from GHCR - a multi-arch static image and a glibc variant - mounting your workspace, plus how to verify the cosign signature.
 - [Install on Linux](https://eli.gladman.cc/magus/guides/download/linux/index.md): Download, verify, and install the magus binary on Linux (amd64 or arm64) and put it on your PATH - no root, no sudo.
 - [Install on macOS](https://eli.gladman.cc/magus/guides/download/macos/index.md): Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.
+- [Package managers and source builds](https://eli.gladman.cc/magus/guides/download/package-managers/index.md): Install magus through mise via the ubi backend, or build it from source, and the tradeoffs each route makes against the signed-release guarantee.
+- [Shell setup](https://eli.gladman.cc/magus/guides/download/shell-setup/index.md): Set up magus tab-completion for bash, zsh, fish, or PowerShell, and install mgs, the shorthand, as a symlink beside the binary.
+- [Verify a release](https://eli.gladman.cc/magus/guides/download/verify/index.md): Verify a magus release against its Ed25519-signed SHA256SUMS manifest, by hand on first install or with the built-in verifier afterwards.
 - [Install on Windows](https://eli.gladman.cc/magus/guides/download/windows/index.md): Download, verify, and install the magus binary on Windows (amd64) with PowerShell and put it on your PATH.
 - [Getting started](https://eli.gladman.cc/magus/guides/getting-started/index.md): A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.
 - [Integrations](https://eli.gladman.cc/magus/guides/integrations/index.md): Pages in this section.
@@ -160,7 +163,7 @@
 - [magus ls](https://eli.gladman.cc/magus/reference/manpage/magus-ls/index.md): List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.
 - [magus man](https://eli.gladman.cc/magus/reference/manpage/magus-man/index.md): Write magus section 1 man pages from the running binary to a user-selected manpath.
 - [magus run](https://eli.gladman.cc/magus/reference/manpage/magus-run/index.md): Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.
-- [magus self](https://eli.gladman.cc/magus/reference/manpage/magus-self/index.md): Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.
+- [magus self](https://eli.gladman.cc/magus/reference/manpage/magus-self/index.md): Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.
 - [magus server](https://eli.gladman.cc/magus/reference/manpage/magus-server/index.md): Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.
 - [magus status](https://eli.gladman.cc/magus/reference/manpage/magus-status/index.md): Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.
 - [magus tail](https://eli.gladman.cc/magus/reference/manpage/magus-tail/index.md): Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.

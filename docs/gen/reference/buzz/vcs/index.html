@@ -235,7 +235,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="commit">commit</h3>
 <p>Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == &quot;&quot;) rather than for null.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#commit" data-kind="method" data-def="">vcs\commit</a>([rev]) → Commit</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L382" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#commit" data-kind="method" data-def="">vcs\commit</a>([rev]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L382" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -257,7 +257,7 @@
 <p><strong>Returns:</strong> any</p>
 <h3 id="history">history</h3>
 <p>Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#history" data-kind="method" data-def="">vcs\history</a>([limit]) → [Commit]</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L396" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#history" data-kind="method" data-def="">vcs\history</a>([limit]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L396" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -283,7 +283,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="tags">tags</h3>
 <p>Repository tags, newest first. Each is a record {name, date, id}: name as written (&quot;v0.3.0&quot;, no <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a>/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (&quot;v*&quot;); wildcards stop at &quot;/&quot;, so &quot;v*&quot; selects releases and skips a namespaced tag like backup/<a class="code-xref" href="../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> raises rather than reporting &quot;no tags&quot;. Note a shallow or single-branch clone legitimately fetches no tags, so an empty list still means &quot;none present here&quot;, not &quot;none exist&quot;.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#tags" data-kind="method" data-def="">vcs\tags</a>([pattern]) → [Tag]</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L426" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#tags" data-kind="method" data-def="">vcs\tags</a>([pattern]) → any</code> · <a href="https://github.com/egladman/magus/blob/main/std/vcs.go#L426" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -321,12 +321,12 @@
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../reference/skills/magus-query/"><span class="related-card-title">magus-query</span><span class="related-card-desc">Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-30T00:17:23Z">July 30, 2026, 12:17 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/40a6252860e5dd0cf16ec9a798299369e85131dd" data-tooltip="40a6252860e5dd0cf16ec9a798299369e85131dd" title="40a6252860e5dd0cf16ec9a798299369e85131dd">40a62528</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069"><code>5db7b6e6</code></a> <small><time datetime="2026-07-28T23:12:51Z">Jul 28, 2026</time></small> - reorganise the docs tree into sections and regenerate the site</li><li><a href="https://github.com/egladman/magus/commit/a162512638650837a07bc276d8b5d4e5bb5fd7e8"><code>a1625126</code></a> <small><time datetime="2026-07-28T15:08:25Z">Jul 28, 2026</time></small> - document the name a caller types, not the one Go declares</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -366,71 +366,6 @@ so it is the entry point an agent reads first. See
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
-<h2 id="command-synopsis-notation">Command synopsis notation</h2>
-<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
-same five marks. This is the whole vocabulary:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>notation</th>
-<th>means</th>
-<th>example</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;value&gt;</code></td>
-<td>required; replace it</td>
-<td><code>magus run &lt;target&gt;</code></td>
-</tr>
-<tr>
-<td><code>[thing]</code></td>
-<td>optional; omit the brackets if you use it</td>
-<td><code>magus ls [flags]</code></td>
-</tr>
-<tr>
-<td><code>&lt;a|b|c&gt;</code></td>
-<td>required, and one of these exact words</td>
-<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
-</tr>
-<tr>
-<td><code>&lt;value&gt;...</code></td>
-<td>repeatable; one or more, space separated</td>
-<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
-</tr>
-<tr>
-<td><code>word[s]</code></td>
-<td>the <code>s</code> is optional - both spellings work</td>
-<td><code>magus describe spell[s]</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
-<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
-command, not that <code>s</code> is a separate thing you can pass.</p>
-<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
-it, one or more paths&quot;:</p>
-<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
-magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
-</code></pre>
-<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
-called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
-<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
-untouched to whatever the target runs:</p>
-<pre><code class="language-sh">magus run test libs/foo -- -run TestX
-</code></pre>
-<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
-<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
-better; they parse identically.</p>
-<p>Some flags take a comma-separated list, which is written as one value. Spaces
-around the commas are trimmed and empty entries are ignored:</p>
-<pre><code class="language-sh">magus status --probe=mcp,liveness
-</code></pre>
-<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
-a pattern is accepted it is always the same three types:</p>
-<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
-magus where --filter type=regex,pattern='^libs/'
-</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

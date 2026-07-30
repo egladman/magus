@@ -9,6 +9,10 @@
 # completion that is merely generic, and `magus describe targets` fails by design
 # when there is no magusfile to read. The static list is the language-agnostic core
 # every spell provides, so it is never wrong, only incomplete.
+# COMPREPLY=( $(compgen ...) ) is the bash-completion idiom and word splitting is
+# the point; mapfile is bash 4+, and this targets bash 3.2 (macOS).
+# shellcheck disable=SC2207
+
 _magus_targets() {
     local t
     t=$(magus describe targets -o name 2>/dev/null)
@@ -20,10 +24,9 @@ _magus_targets() {
 }
 
 _magus_complete() {
-    local cur prev cmd
+    local cur cmd
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
 
 # magus-utils:subcommands:begin
     local subcommands="ls describe run x where tail affected query explain path refs graph insight watch status clean merge-driver doctor config memory server repl buzz completion man init agent vcs self version help"
@@ -33,7 +36,7 @@ _magus_complete() {
     local graph_subs="deps export stats"
     local config_subs="view set history cache mcp"
     local server_subs="start stop"
-    local self_subs="update"
+    local self_subs="update install-shorthand"
     local shells="bash zsh fish powershell"
     # Verbs chained after --then. `outputs` and `file` read the target's declared
     # outputs; `value` reads what the target returned.

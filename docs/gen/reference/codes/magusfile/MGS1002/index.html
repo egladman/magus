@@ -122,7 +122,7 @@ means one thing across the workspace, the same way a <a class="glossary-term" hr
 <p>The consequence is that a <code>spells/hello</code> placed next to a nested <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, when a
 <code>spells/hello</code> also exists higher up, can never be reached. An author who put it
 there expected it to be used; instead the ancestor silently wins. That is a
-footgun, not a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contradiction, so unlike the kind-coherence wards
+footgun, not a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>-contradiction, so unlike the kind-coherence wards
 (<a href="../../services/MGS5002/">MGS5002</a>, <a href="../../services/MGS5003/">MGS5003</a>) it can be
 acknowledged rather than only fixed.</p>
 <p>Sibling subtrees are not <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>: <code>web/spells/hello</code> and <code>api/spells/hello</code> are

@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>Download - magus</title>
-  <meta name="description" content="Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.">
+  <meta name="description" content="Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/guides/download/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="Download - magus">
-  <meta property="og:description" content="Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.">
+  <meta property="og:description" content="Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/guides/download/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -80,30 +80,72 @@
           <li><a href="../../guides/download/docker/" title="Run magus in Docker">Run magus in Docker</a></li>
           <li><a href="../../guides/download/linux/" title="Install on Linux">Install on Linux</a></li>
           <li><a href="../../guides/download/macos/" title="Install on macOS">Install on macOS</a></li>
+          <li><a href="../../guides/download/package-managers/" title="Package managers and source builds">Package managers and source builds</a></li>
+          <li><a href="../../guides/download/shell-setup/" title="Shell setup">Shell setup</a></li>
+          <li><a href="../../guides/download/verify/" title="Verify a release">Verify a release</a></li>
           <li><a href="../../guides/download/windows/" title="Install on Windows">Install on Windows</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#install" title="Install">Install</a></li><li><a href="#update" title="Update">Update</a></li><li><a href="#verify-a-release" title="Verify a release">Verify a release</a><ul><li><a href="#release-signing-key-ed25519" title="Release signing key (Ed25519)">Release signing key (Ed25519)</a></li></ul></li><li><a href="#shell-completion" title="Shell completion">Shell completion</a></li><li><a href="#mgs-shorthand" title="mgs shorthand">mgs shorthand</a></li><li><a href="#install-prebuilt-binary" title="Install prebuilt binary">Install prebuilt binary</a><ul><li><a href="#a-recommended" title="A. Recommended">A. Recommended</a></li><li><a href="#b-yolo" title="B. Yolo">B. Yolo</a></li></ul></li><li><a href="#mise" title="mise">mise</a><ul><li><a href="#why-not-aqua-or-the-go-backend" title="Why not aqua, or the go backend?">Why not aqua, or the go backend?</a></li></ul></li><li><a href="#build-from-source" title="Build from source">Build from source</a></li><li><a href="#changelog" title="Changelog">Changelog</a></li></ul>
+        <ul><li><a href="#install" title="Install">Install</a><ul><li><a href="#other-ways" title="Other ways">Other ways</a></li></ul></li><li><a href="#next-steps" title="Next steps">Next steps</a></li><li><a href="#update" title="Update">Update</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="download">Download</h1>
-<p>magus ships as a single <a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained binary. Pick your platform for step-by-step install and <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a> setup, then verify the signature before you <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> it.</p>
+<p>magus ships as a single <a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>-contained binary. No runtime, no package manager required.</p>
 <h2 id="install">Install</h2>
-<p>Each platform guide has a copy-paste <code>curl</code> install that pulls the current release, extracts the binary onto your <code>PATH</code>, and points you at verification:</p>
+<pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
+less install.sh
+sh install.sh
+</code></pre>
+<p>Read the script before you <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> it. It downloads the current release, checks the signature, and installs the binary, the <a class="code-xref" href="../../reference/manpage/magus-man/" data-kind="command" data-def="magus man: Write magus section 1 man pages from the running binary to a user-selected manpath.">man</a> pages, and the <a href="shell-setup/#mgs-shorthand"><code>mgs</code> shorthand</a> under <code>~/.local</code>. <code>--dry-run</code> prints the whole plan without writing anything.</p>
+<p>In a hurry, and willing to give a network response your shell? <code>curl ... | sh</code> works too:</p>
+<pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
+</code></pre>
+<h3 id="other-ways">Other ways</h3>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Route</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="linux/">Linux</a></td>
+<td>manual install, amd64 or arm64</td>
+</tr>
+<tr>
+<td><a href="macos/">macOS</a></td>
+<td>manual install, Apple Silicon or Intel</td>
+</tr>
+<tr>
+<td><a href="windows/">Windows</a></td>
+<td>amd64</td>
+</tr>
+<tr>
+<td><a href="docker/">Docker</a></td>
+<td>run in a container instead of installing</td>
+</tr>
+<tr>
+<td><a href="package-managers/">mise</a></td>
+<td>you already manage tool versions with mise</td>
+</tr>
+<tr>
+<td><a href="package-managers/#build-from-source">Build from source</a></td>
+<td>you want a local build, or a <code>noselfupdate</code> build</td>
+</tr>
+</tbody>
+</table></figure>
+<h2 id="next-steps">Next steps</h2>
 <ul>
-<li><a href="linux/">Linux</a> - amd64 or arm64</li>
-<li><a href="macos/">macOS</a> - Apple Silicon or Intel</li>
-<li><a href="windows/">Windows</a> - amd64</li>
-<li><a href="docker/">Docker</a> - run in a container instead of installing a binary (any platform)</li>
+<li><strong><a href="verify/">Verify the release</a></strong> before first run. Every build ships an Ed25519-signed <code>SHA256SUMS</code>; on a first install, verify it by hand rather than with the binary you just downloaded.</li>
+<li><strong><a href="shell-setup/">Set up your shell</a></strong> for tab-<a class="code-xref" href="../../reference/manpage/magus-completion/" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a> (bash, zsh, fish, PowerShell) and the <code>mgs</code> shorthand.</li>
 </ul>
-<p>Prefer a prebuilt binary or a local build? See <a href="#install-prebuilt-binary">Install prebuilt binary</a> and <a href="#build-from-source">Build from source</a>. Already using a <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> manager? See <a href="#mise">mise</a>.</p>
-<p>Every build is published to <a href="https://github.com/egladman/magus/releases" rel="noopener noreferrer" target="_blank" data-external>GitHub Releases</a> alongside its <code>SHA256SUMS</code> manifest and signature. However you install, <a href="#verify-a-release">verify the release</a> first.</p>
 <h2 id="update">Update</h2>
-<p><code><a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">magus self</a> update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../../reference/manpage/magus-self"><code>magus self</code></a>.</p>
+<p><code><a class="code-xref" href="../../reference/manpage/magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">magus self</a> update</code> fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: <a href="../../reference/manpage/magus-self"><code>magus self</code></a>.</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -121,7 +163,7 @@
 <td>Fetch and verify but do not swap</td>
 </tr>
 <tr>
-<td><code>--version v0.4.2</code></td>
+<td><code>--<a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> v0.4.2</code></td>
 <td>Pin to a specific tag</td>
 </tr>
 <tr>
@@ -129,7 +171,7 @@
 <td>Allow downgrade or reinstall</td>
 </tr>
 <tr>
-<td><code>--bin-dir &lt;path&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
+<td><code>--bin-dir &lt;<a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
 <td>Install elsewhere instead of in place</td>
 </tr>
 <tr>
@@ -138,117 +180,8 @@
 </tr>
 </tbody>
 </table></figure>
-<p>Package-maintainer builds compiled with <code>-tags noselfupdate</code> disable this subcommand; fall back to a manual <a href="#install">install</a>.</p>
-<h2 id="verify-a-release">Verify a release</h2>
-<p>Alongside the binary tarballs, each release ships <code>SHA256SUMS</code> (the manifest) and <code>SHA256SUMS.sig</code> (its Ed25519 signature). All artifacts, plus the signing key, are attached to each <a href="https://github.com/egladman/magus/releases" rel="noopener noreferrer" target="_blank" data-external>GitHub release</a>; <a href="../../public">/public/</a> indexes the releases and the machine-readable manifest.</p>
-<p><strong>Already running magus?</strong> Use the built-in verifier:</p>
-<pre><code class="language-sh">magus self update --dry-run
-</code></pre>
-<p>The trust chain runs through your already-trusted binary. Nothing else to do.</p>
-<p><strong>First install - verify by hand.</strong> Do <em>not</em> verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.</p>
-<ol>
-<li>
-<p>Save the key. Either <a href="../../assets/magus-release.pem">download magus-release.pem</a>, or copy the PEM block below into <code>magus-release.pem</code>.</p>
-</li>
-<li>
-<p>Verify the manifest signature (requires OpenSSL 3.0+):</p>
-<pre><code class="language-sh">openssl pkeyutl -verify -pubin -inkey magus-release.pem \
-  -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
-# Signature Verified Successfully
-</code></pre>
-</li>
-<li>
-<p>Only if the signature verifies, check the artifact hash:</p>
-<pre><code class="language-sh">sha256sum -c SHA256SUMS 2&gt;/dev/null | grep magus_
-# macOS: shasum -a 256 -c SHA256SUMS
-</code></pre>
-</li>
-</ol>
-<p>Order matters. Checking a hash against an unverified manifest proves nothing.</p>
-<h3 id="release-signing-key-ed25519">Release signing key (Ed25519)</h3>
-<pre><code class="language-text">-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
------END PUBLIC KEY-----
-</code></pre>
-<p>Raw base64 (32 bytes):</p>
-<pre><code class="language-text">/7uPpvNidN79EoiAk8ajIsJTK8VFAW9JWrSVXey2Z3k=
-</code></pre>
-<p>The key is embedded in every magus binary via <code>//go:embed</code>, so <code>magus self update</code> trusts it transitively. A planned rotation first ships a release signed by the current key that embeds the replacement key; later releases can use the replacement. Older binaries cannot be remotely revoked if the current key is compromised. The maintainer procedure is in the <a href="../../development/contributing">contributing guide</a>.</p>
-<h2 id="shell-completion">Shell completion</h2>
-<pre><code class="language-sh">magus completion &lt;shell&gt;    # bash / zsh / fish / powershell (or pwsh)
-</code></pre>
-<p>See <a href="../../reference/manpage/magus-completion"><code>magus completion</code></a> for the exact source-and-persist recipe per shell.</p>
-<h2 id="mgs-shorthand"><code>mgs</code> shorthand</h2>
-<p>The de facto shorthand for <code>magus</code> is <code>mgs</code>: three left-hand keys, fast to type, and collision-free. Alias it in your shell:</p>
-<pre><code class="language-sh">alias mgs=magus
-</code></pre>
-<p>Or create a symlink:</p>
-<pre><code class="language-sh">ln -s &quot;$(command -v magus)&quot; ~/.local/bin/mgs
-</code></pre>
-<h2 id="install-prebuilt-binary">Install prebuilt binary</h2>
-<h3 id="a-recommended">A. Recommended</h3>
-<pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
-less install.sh
-sh install.sh
-</code></pre>
-<p>Review the script first: it lets you inspect the download, signature verification, and
-installation steps before granting a network response access to your shell.</p>
-<p>The installer selects the static binary by default. Pass <code>--variant dynamic</code> only
-when you specifically need the platform-native build and that release publishes it.</p>
-<h3 id="b-yolo">B. Yolo</h3>
-<pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
-</code></pre>
-<h2 id="mise">mise</h2>
-<p>magus installs through <a href="https://mise.jdx.dev" rel="noopener noreferrer" target="_blank" data-external>mise</a> with no plugin, via its
-<a href="https://mise.jdx.dev/dev-tools/backends/ubi.html" rel="noopener noreferrer" target="_blank" data-external>ubi</a> backend, which pulls the
-GitHub release asset matching your platform:</p>
-<pre><code class="language-bash">mise use -g ubi:egladman/magus@v0.3.0
-</code></pre>
-<p>Pin it per repository by putting it in that repo's <code>mise.toml</code> instead:</p>
-<pre><code class="language-toml">[tools]
-&quot;ubi:egladman/magus&quot; = &quot;v0.3.0&quot;
-</code></pre>
-<p>Three things to know before choosing this route.</p>
-<p><strong>mise owns the version, not <code>magus self update</code>.</strong> Upgrade with <code>mise upgrade</code>.
-Running <code>magus self update</code> on a mise-managed install would replace a binary mise
-believes it controls, and the next <code>mise install</code> would undo it.</p>
-<p><strong>Nothing verifies the release signature.</strong> ubi fetches the asset over HTTPS and
-trusts GitHub; it performs no signature or checksum check of its own. The platform
-installers and <code>magus self update</code> both verify the artifact against the
-Ed25519-signed manifest. If that guarantee matters,
-<a href="#verify-a-release">verify the release</a> by hand afterwards, or use the platform
-installer instead.</p>
-<p><strong>You may get a different binary than the installer hands you.</strong> The installer
-defaults to the static build; ubi resolves to the dynamically linked one <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> a
-release publishes both. <code>darwin/amd64</code> currently ships only a static build, so
-that is what it gets there.</p>
-<h3 id="why-not-aqua-or-the-go-backend">Why not aqua, or the go backend?</h3>
-<p><a href="https://mise.jdx.dev/dev-tools/backends/aqua.html" rel="noopener noreferrer" target="_blank" data-external>aqua</a> is mise's preferred
-backend where a tool is registered, and it is the better <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> long-term because
-the aqua registry carries checksum and signature metadata that ubi has no
-equivalent for. It is not usable yet: magus has no aqua-registry entry, so
-<code>aqua:egladman/magus</code> fails with <code>no aqua-registry found</code>. Getting one is an
-upstream pull request to
-<a href="https://github.com/aquaproj/aqua-registry" rel="noopener noreferrer" target="_blank" data-external>aquaproj/aqua-registry</a>, and it would
-close the verification gap above.</p>
-<p>The <code>go</code> backend resolves and compiles, but do not use it for an install you
-intend to keep:</p>
-<pre><code class="language-bash"># builds, but reports: magus unknown (unknown) built unknown
-mise use -g go:github.com/egladman/magus/cmd/magus@latest
-</code></pre>
-<p><code>go install</code> cannot pass the <code>-ldflags</code> that stamp the version, commit, and build
-date. <code>unknown</code> is not cosmetic - it is the dev-build sentinel magus keys on
-internally to fingerprint an unstamped build, so a go-backend install presents
-itself to magus as a development binary rather than the release it came from.
-Use it to try magus, not to run it.</p>
-<h2 id="build-from-source">Build from source</h2>
-<pre><code class="language-sh">git clone https://github.com/egladman/magus
-cd magus
-go build -o magus ./cmd/magus
-</code></pre>
-<p>Add <code>-tags noselfupdate</code> to disable the self-update subcommand (for distro-packaged builds).</p>
-<h2 id="changelog">Changelog</h2>
-<p>See the <a href="https://github.com/egladman/magus/blob/main/CHANGELOG.md" rel="noopener noreferrer" target="_blank" data-external>CHANGELOG</a>.</p>
+<p>Package-maintainer builds compiled with <code>-tags noselfupdate</code> disable this subcommand; fall back to a manual install.</p>
+<p>Release notes are in the <a href="https://github.com/egladman/magus/blob/main/CHANGELOG.md" rel="noopener noreferrer" target="_blank" data-external>CHANGELOG</a>.</p>
     </article>
     </div>
     </div>
@@ -259,18 +192,11 @@ go build -o magus ./cmd/magus
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../search/?q=tag%3A%22release%22">release</a><a class="tag" href="../../search/?q=tag%3A%22self-update%22">self-update</a><a class="tag" href="../../search/?q=tag%3A%22ed25519%22">ed25519</a><a class="tag" href="../../search/?q=tag%3A%22verify%22">verify</a><a class="tag" href="../../search/?q=tag%3A%22signing%22">signing</a></div>
-    <small>Last updated <time datetime="2026-07-28T23:12:51Z">July 28, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069" data-tooltip="5db7b6e6a7872314693673c15d1271a5e75a8069" title="5db7b6e6a7872314693673c15d1271a5e75a8069">5db7b6e6</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d"><code>b1b786d3</code></a> <small><time datetime="2026-07-27T03:51:44Z">Jul 27, 2026</time></small> - refine CI, agents, and developer experience</li><li><a href="https://github.com/egladman/magus/commit/c3d85ab9feb37d501cd917cacc9c255fcea6beef"><code>c3d85ab9</code></a> <small><time datetime="2026-07-26T22:59:53Z">Jul 26, 2026</time></small> - linting, dep upgrades that ive been putting off</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/download.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/download.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/download.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/download.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="target">Target</h3>
-<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
-may compose a spell's tool-native operations and depend on other targets. See
-<a href="../../concepts/targets/">targets</a>.</p>
-<h3 id="ward">Ward</h3>
-<p>A coded diagnostic that inspects a resolved op and nudges or blocks an
-anti-pattern before it runs. See <a href="../../concepts/wards/">wards</a>.</p>
-<h3 id="ci">CI</h3>
+    <div class="disclosure-body ref-embed"><h3 id="ci">CI</h3>
 <p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
@@ -288,71 +214,6 @@ a silent no-op. See <a href="../../concepts/targets/#the-target-name">targets</a
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
-<h2 id="command-synopsis-notation">Command synopsis notation</h2>
-<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
-same five marks. This is the whole vocabulary:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>notation</th>
-<th>means</th>
-<th>example</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;value&gt;</code></td>
-<td>required; replace it</td>
-<td><code>magus run &lt;target&gt;</code></td>
-</tr>
-<tr>
-<td><code>[thing]</code></td>
-<td>optional; omit the brackets if you use it</td>
-<td><code>magus ls [flags]</code></td>
-</tr>
-<tr>
-<td><code>&lt;a|b|c&gt;</code></td>
-<td>required, and one of these exact words</td>
-<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
-</tr>
-<tr>
-<td><code>&lt;value&gt;...</code></td>
-<td>repeatable; one or more, space separated</td>
-<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
-</tr>
-<tr>
-<td><code>word[s]</code></td>
-<td>the <code>s</code> is optional - both spellings work</td>
-<td><code>magus describe spell[s]</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
-<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
-command, not that <code>s</code> is a separate thing you can pass.</p>
-<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
-it, one or more paths&quot;:</p>
-<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
-magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
-</code></pre>
-<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
-called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
-<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
-untouched to whatever the target runs:</p>
-<pre><code class="language-sh">magus run test libs/foo -- -run TestX
-</code></pre>
-<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
-<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
-better; they parse identically.</p>
-<p>Some flags take a comma-separated list, which is written as one value. Spaces
-around the commas are trimmed and empty entries are ignored:</p>
-<pre><code class="language-sh">magus status --probe=mcp,liveness
-</code></pre>
-<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
-a pattern is accepted it is always the same three types:</p>
-<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
-magus where --filter type=regex,pattern='^libs/'
-</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

@@ -3,6 +3,10 @@
 #
 # Output: ./gen/ (deterministic; same N → byte-identical tree)
 # Writes .bench-leaf-file and .bench-upstream-file alongside gen/.
+
+# This script emits Makefiles, so single-quoted $(VAR) is make syntax to be
+# written literally, not a shell expansion that failed to expand.
+# shellcheck disable=SC2016
 set -euo pipefail
 
 N="${1:-8}"

@@ -20,6 +20,10 @@ func selfCmd(_ context.Context, _ string, args []string) error {
 		case "-h", "--help", "help":
 			selfCmdUsage()
 			return nil
+		case "install-shorthand":
+			// install-shorthand only symlinks mgs to the binary already on disk,
+			// so it stays available in builds that compiled the updater out.
+			return installShorthandCmd(args[1:])
 		}
 	}
 	fs := flag.NewFlagSet("self", flag.ContinueOnError)
@@ -33,8 +37,9 @@ func selfCmd(_ context.Context, _ string, args []string) error {
 }
 
 func selfCmdUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus self update [flags]")
-	fmt.Fprintln(os.Stderr, "  update: not available (magus was compiled with -tags noselfupdate)")
+	fmt.Fprintln(os.Stderr, "Usage: magus self <subcommand> [flags]")
+	fmt.Fprintln(os.Stderr, "  update:            not available (magus was compiled with -tags noselfupdate)")
+	fmt.Fprintln(os.Stderr, "  install-shorthand: symlink mgs to the running binary")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To bootstrap a workspace, use: magus init")
 }

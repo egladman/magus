@@ -5,6 +5,7 @@ import (
 
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/types"
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -182,10 +183,11 @@ func applyWithEvanphx(argv []string, ops []types.PatchOp) ([]string, error) {
 // built-in change.
 var goldenBuiltins = map[string]Descriptor{
 	"bash": {
-		Name:  "bash",
-		Needs: []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
+		Name:       "bash",
+		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
+		IgnoreDirs: []string{"node_modules"},
 		Ops: map[string]types.SpellOp{
-			"shellcheck": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+			"shellcheck": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name node_modules -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
 		},
 	},
 	"buf": {

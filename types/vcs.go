@@ -222,6 +222,10 @@ var ErrVCSUnknown = errors.New("vcs: unknown VCS")
 type MergeDriverInstaller interface {
 	InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error
 	CheckMergeDriver(ctx context.Context, root string) (bool, error)
+	// EnsureMergeDriver re-installs only when the registration is missing or the
+	// declared globs have moved on, reporting whether it changed anything. Callers
+	// run it routinely, so it must be cheap and silent in the steady state.
+	EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error)
 }
 
 // RefreshHookInstaller is an optional capability (sibling of MergeDriverInstaller) for

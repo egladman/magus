@@ -100,7 +100,7 @@ process, captures its stdout and stderr, polls the readiness probe against it, a
 sends the stop command to shut it down. A detached process forks away from magus
 immediately, so all four of those become meaningless - magus is left blocking on a
 launcher that already exited, supervising nothing.</p>
-<p>This is not a style preference; it is a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contradiction between the op's kind
+<p>This is not a style preference; it is a <a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>-contradiction between the op's kind
 (a long-running, supervised service) and its argv (fire-and-forget). So it is an
 error with no flag-level suppression: the resolution is to change the shape, not to
 silence the check.</p>

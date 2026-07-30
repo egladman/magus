@@ -80,6 +80,9 @@
           <li><a href="../../../guides/download/docker/" title="Run magus in Docker">Run magus in Docker</a></li>
           <li><a href="../../../guides/download/linux/" aria-current="page" title="Install on Linux">Install on Linux</a></li>
           <li><a href="../../../guides/download/macos/" title="Install on macOS">Install on macOS</a></li>
+          <li><a href="../../../guides/download/package-managers/" title="Package managers and source builds">Package managers and source builds</a></li>
+          <li><a href="../../../guides/download/shell-setup/" title="Shell setup">Shell setup</a></li>
+          <li><a href="../../../guides/download/verify/" title="Verify a release">Verify a release</a></li>
           <li><a href="../../../guides/download/windows/" title="Install on Windows">Install on Windows</a></li>
         </ul>
         <p class="toc-title">On this page</p>
@@ -91,7 +94,7 @@
     <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="install-on-linux">Install on Linux</h1>
-<p>magus ships as a single <a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-contained binary. Download it with <code>curl</code>, extract it into a <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> directory you own - no root, no <code>sudo</code> - then <a href="../#verify-a-release">verify it</a> before first <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
+<p>magus ships as a single <a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>-contained binary. Download it with <code>curl</code>, extract it into a <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a></code> directory you own - no root, no <code>sudo</code> - then <a href="../verify/">verify it</a> before first <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>.</p>
 <h2 id="quick-install">Quick install</h2>
 <pre><code class="language-sh">VERSION=v0.3.0
 ARCH=amd64            # or arm64 on ARM
@@ -109,7 +112,7 @@ when you need one.</p>
 <pre><code class="language-sh">curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS&quot;
 curl -fLO &quot;https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig&quot;
 </code></pre>
-<p>Then verify the Ed25519 signature <em>first</em>, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in <a href="../#verify-a-release">Verify a release</a>.</p>
+<p>Then verify the Ed25519 signature <em>first</em>, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in <a href="../verify/">Verify a release</a>.</p>
 <h2 id="put-it-on-your-path">Put it on your PATH</h2>
 <p>If <code><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a></code> prints <code>command not found</code>, the install directory is not on your <code>PATH</code>. Add it once, in your shell rc:</p>
 <pre><code class="language-sh"># bash or zsh: append to ~/.bashrc or ~/.zshrc
@@ -118,8 +121,8 @@ export PATH=&quot;$HOME/.local/bin:$PATH&quot;
 <p>Open a new shell afterward, then re-run <code>magus version</code>.</p>
 <h2 id="next-steps">Next steps</h2>
 <ul>
-<li><a href="../#verify-a-release">Verify the release</a> before first run.</li>
-<li>Set up <a href="../#shell-completion">shell completion</a> and the <a href="../#mgs-shorthand"><code>mgs</code> shorthand</a>.</li>
+<li><a href="../verify/">Verify the release</a> before first run.</li>
+<li>Set up <a href="../shell-setup/#shell-completion">shell completion</a>, and add the <a href="../shell-setup/#mgs-shorthand"><code>mgs</code> shorthand</a> with <code><a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">magus self</a> install-shorthand</code>.</li>
 <li>Keep it current with <a href="../#update"><code>magus self update</code></a>.</li>
 </ul>
     </article>
@@ -133,15 +136,15 @@ export PATH=&quot;$HOME/.local/bin:$PATH&quot;
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
-        <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Download a signed release of magus, verify it with the embedded Ed25519 key, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.</span></a>
         <a class="related-card" href="../../../guides/download/macos/"><span class="related-card-title">Install on macOS</span><span class="related-card-desc">Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.</span></a>
         <a class="related-card" href="../../../guides/download/windows/"><span class="related-card-title">Install on Windows</span><span class="related-card-desc">Download, verify, and install the magus binary on Windows (amd64) with PowerShell and put it on your PATH.</span></a>
-        <a class="related-card" href="../../../guides/quickstart/"><span class="related-card-title">Quick start</span><span class="related-card-desc">Everything you need to be productive with magus on one page - install, first target, the output flags, the agent skills and the guard hook - each linking to the page that goes deeper.</span></a>
+        <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22download%22">download</a><a class="tag" href="../../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../../search/?q=tag%3A%22linux%22">linux</a><a class="tag" href="../../../search/?q=tag%3A%22path%22">path</a></div>
-    <small>Last updated <time datetime="2026-07-28T23:12:51Z">July 28, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069" data-tooltip="5db7b6e6a7872314693673c15d1271a5e75a8069" title="5db7b6e6a7872314693673c15d1271a5e75a8069">5db7b6e6</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d"><code>b1b786d3</code></a> <small><time datetime="2026-07-27T03:51:44Z">Jul 27, 2026</time></small> - refine CI, agents, and developer experience</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/download/linux.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/download/linux.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/download/linux.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/download/linux.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -160,71 +163,6 @@ anti-pattern before it runs. See <a href="../../../concepts/wards/">wards</a>.</
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
-<h2 id="command-synopsis-notation">Command synopsis notation</h2>
-<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
-same five marks. This is the whole vocabulary:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>notation</th>
-<th>means</th>
-<th>example</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>&lt;value&gt;</code></td>
-<td>required; replace it</td>
-<td><code>magus run &lt;target&gt;</code></td>
-</tr>
-<tr>
-<td><code>[thing]</code></td>
-<td>optional; omit the brackets if you use it</td>
-<td><code>magus ls [flags]</code></td>
-</tr>
-<tr>
-<td><code>&lt;a|b|c&gt;</code></td>
-<td>required, and one of these exact words</td>
-<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
-</tr>
-<tr>
-<td><code>&lt;value&gt;...</code></td>
-<td>repeatable; one or more, space separated</td>
-<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
-</tr>
-<tr>
-<td><code>word[s]</code></td>
-<td>the <code>s</code> is optional - both spellings work</td>
-<td><code>magus describe spell[s]</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
-<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
-command, not that <code>s</code> is a separate thing you can pass.</p>
-<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
-it, one or more paths&quot;:</p>
-<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
-magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
-</code></pre>
-<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
-called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
-<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
-untouched to whatever the target runs:</p>
-<pre><code class="language-sh">magus run test libs/foo -- -run TestX
-</code></pre>
-<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
-<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
-better; they parse identically.</p>
-<p>Some flags take a comma-separated list, which is written as one value. Spaces
-around the commas are trimmed and empty entries are ignored:</p>
-<pre><code class="language-sh">magus status --probe=mcp,liveness
-</code></pre>
-<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
-a pattern is accepted it is always the same three types:</p>
-<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
-magus where --filter type=regex,pattern='^libs/'
-</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

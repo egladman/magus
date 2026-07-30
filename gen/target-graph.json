@@ -66,9 +66,6 @@
           "outputs": [
             {
               "glob": "manpage/*.1"
-            },
-            {
-              "glob": "internal/manpage/testdata/api.lock"
             }
           ]
         },
@@ -85,15 +82,7 @@
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.",
-          "outputs": [
-            {
-              "glob": "internal/spell/gen/*.bo"
-            },
-            {
-              "glob": "internal/spell/gen/types/*.buzz"
-            }
-          ]
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen)."
         },
         {
           "name": "mocks-generate",
@@ -106,39 +95,9 @@
           ]
         },
         {
-          "name": "skills-generate",
-          "declared": "skills_generate",
-          "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
-          "outputs": [
-            {
-              "glob": ".claude/skills/**"
-            },
-            {
-              "glob": ".agents/skills/**"
-            },
-            {
-              "glob": ".opencode/skills/**"
-            }
-          ]
-        },
-        {
           "name": "config-generate",
           "declared": "config_generate",
-          "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go.",
-          "outputs": [
-            {
-              "glob": "cmd/magus/gen/*.go"
-            },
-            {
-              "glob": "schema/gen/*.go"
-            },
-            {
-              "glob": "internal/config/gen/*.go"
-            },
-            {
-              "glob": "cmd/magus/completions/*"
-            }
-          ]
+          "doc": "Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go."
         },
         {
           "name": "md-generate",
@@ -175,7 +134,6 @@
             "bindings-generate",
             "spells-generate",
             "mocks-generate",
-            "skills-generate",
             "config-generate",
             "md-generate",
             "graph-generate"
@@ -290,7 +248,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -305,6 +263,12 @@
               "spell": "md",
               "ops": [
                 "markdownlint"
+              ]
+            },
+            {
+              "spell": "bash",
+              "ops": [
+                "shellcheck"
               ]
             }
           ]
@@ -333,6 +297,11 @@
             "build",
             "test"
           ]
+        },
+        {
+          "name": "completion-test",
+          "declared": "completion_test",
+          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell."
         },
         {
           "name": "ci-shard",
@@ -516,9 +485,6 @@
             },
             {
               "glob": "concepts/knowledge.md"
-            },
-            {
-              "glob": "reference/skills/*.md"
             }
           ]
         },
@@ -553,7 +519,7 @@
               "target": "lint"
             },
             {
-              "project": "docs/guides/integrations/agents",
+              "project": "guides/integrations/agents",
               "target": "lint"
             }
           ]
@@ -623,7 +589,7 @@
       ],
       "depends_on": [
         ".",
-        "docs/guides/integrations/agents",
+        "guides/integrations/agents",
         "libs/gopherbuzz",
         "libs/textsearch"
       ]

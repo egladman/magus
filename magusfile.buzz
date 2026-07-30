@@ -19,6 +19,7 @@ import "magus/spell/docker";
 import "magus/spell/cosign";
 import "magus/spell/buzz";
 import "magus/spell/md";
+import "magus/spell/bash";
 
 import "badge" as badge;
 
@@ -46,7 +47,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [magusfile, go, buzz, md],
+    "spells": [magusfile, go, buzz, md, bash],
     "targets": {
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -471,8 +472,11 @@ export fun build(ctx: magus\Context, args: [str])  > void {
         ctx.needs(go_build);
     }
 }
-// Formats first, then golangci-lint, go vet, and markdownlint. golangci-lint runs
-// through os.exec to use the tool module rather than the library module.
+// Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.
+// golangci-lint runs through os.exec to use the tool module rather than the library module.
+// shellcheck covers the shell magus SHIPS - the completion script users source into their
+// shell and the install script served at /magus/install - which was unlinted until it broke
+// in a way only a user would have noticed.
 // The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by
 // `magus affected ci` when it's affected - the root does not reach into it.
 export fun lint(ctx: magus\Context, args: [str]) > void {
@@ -483,6 +487,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
         os\exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
     });
     md.markdownlint(ctx);
+    bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):
 // markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all
@@ -493,6 +498,36 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
+}
+
+// Exercises the completion scripts magus SHIPS, each inside the official image for its
+// shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a
+// tool is missing is how the zsh recipe stayed broken - it told users to append a script
+// to ~/.zshrc that registers nothing, and nothing ever ran it to find out.
+//
+// One image per shell, pinned to a major-version tag, and nothing is installed into any
+// of them: each image already carries its shell. There is no magus binary inside, so the
+// checks assert the STATIC candidates; the project completions shell out to `magus ls`
+// and are legitimately empty there.
+//
+// TODO: zsh is uncovered - it has no official image (zshusers/zsh is community-run), so
+// the one shell with a confirmed bug is the one still untested. Revisit if an official
+// image appears, or if a pinned community digest becomes acceptable.
+// TODO: fish is uncovered for the same reason; upstream declined to publish an official
+// image in fish-shell/fish-shell#3440.
+export fun completion_test(ctx: magus\Context, args: [str]) > void {
+    if (os\which("docker") == "") {
+        throw "completion-test needs a docker daemon: it runs each shell's official image";
+    }
+    // dotnet/sdk, not mcr.microsoft.com/powershell: the PowerShell team's own images are
+    // deprecated in MCR, and the SDK image is what Microsoft points at for LTS pwsh.
+    final checks = {
+        "bash:5": "bash hack/completion-checks/bash.sh",
+        "mcr.microsoft.com/dotnet/sdk:8.0": "pwsh -NoProfile -File hack/completion-checks/pwsh.ps1",
+    };
+    foreach (image, cmd in checks) {
+        os\execSh("docker run --rm -v \"$PWD\":/w -w /w " + image + " " + cmd);
+    }
 }
 
 // Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix

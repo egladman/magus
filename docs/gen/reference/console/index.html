@@ -324,7 +324,7 @@ complete network permission, in one line.</p>
 <code>&lt;meta name=&quot;generator&quot; content=&quot;magus&quot;&gt;</code>). Its <code>connect-src</code> clause -
 the directive that governs <code>fetch</code>/<code>XMLHttpRequest</code>/SSE, the ways a page
 could actually exfiltrate data - reads
-<code>connect-src '<a class="code-xref" href="../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>' http://127.0.0.1:* http://[::1]:*</code>: this page's own
+<code>connect-src '<a class="code-xref" href="../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>' http://127.0.0.1:* http://[::1]:*</code>: this page's own
 origin, plus your machine's loopback address, and nothing else.
 <code>default-src 'self'</code> closes the same same-origin-only gap for anything not
 named by a more specific directive.</p>

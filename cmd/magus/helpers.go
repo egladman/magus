@@ -111,6 +111,12 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
 		stop()
+		if magusErr == nil {
+			// Declared outputs are known only once the workspace is open, and they are
+			// what the merge driver registers, so this is the first point that can keep
+			// the registration honest. It is a no-op unless the globs actually moved.
+			ensureMergeDriver(ctx, magusValue)
+		}
 	})
 	if rootOverride != magusRootOverride {
 		panic("loadMagus: called with different rootOverride on second call")

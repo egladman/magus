@@ -53,6 +53,8 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 	switch sub {
 	case "update":
 		return selfUpdateCmd(ctx, rest)
+	case "install-shorthand":
+		return installShorthandCmd(rest)
 	default:
 		selfCmdUsage()
 		return usagef("magus self: unknown subcommand %q (want update)", sub)
@@ -63,7 +65,8 @@ func selfCmdUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus self <subcommand> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  update    update magus to the latest release (replaces running binary)")
+	fmt.Fprintln(os.Stderr, "  update               update magus to the latest release (replaces running binary)")
+	fmt.Fprintln(os.Stderr, "  install-shorthand    symlink mgs to the running binary")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "To bootstrap a workspace, use: magus init")
 	fmt.Fprintln(os.Stderr, "Run 'magus self <subcommand> --help' for subcommand flags.")

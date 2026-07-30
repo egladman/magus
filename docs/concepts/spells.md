@@ -188,6 +188,17 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 **Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
 
+This is the one place magus has two name spaces with different rules, so it is worth stating side by side:
+
+|                  | Target names                                   | Op keys                       |
+| ---------------- | ---------------------------------------------- | ----------------------------- |
+| Matching         | normalized both sides ([how](targets.md#name-normalization-casing--delimiters)) | verbatim                      |
+| `goBuild` finds  | `go-build`                                     | nothing                       |
+| Magusfile call   | `magus run go-build`                           | `go["go-build"]()`            |
+| Dot access       | n/a                                            | only if the key is an identifier |
+
+The practical consequence: a hyphen in a target name costs you nothing, while a hyphen in an op key is what forces subscript notation. That is accepted deliberately (see below) rather than overlooked, because the op key is the tool's own name and magus does not invent a second spelling for it.
+
 ### Explicitness over magic (why `go::go-fmt` stutters)
 
 The full-command convention is enforced even for streamlined toolchains like Go, where `go-build`/`go-test`/`go-fmt` all start with `go`. The result reads with a stutter on the CLI (`magus run go::go-fmt`), and that is **by design**:
