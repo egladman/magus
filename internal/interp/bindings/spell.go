@@ -259,7 +259,7 @@ func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.Inv
 // where ingestion later looks; run outside that path it errors rather than emit an
 // index the graph will never find.
 func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, error) {
-	c := cache.CacheFromContext(ctx)
+	c := cache.FromContext(ctx)
 	if c == nil {
 		return nil, fmt.Errorf("spell: the %q op must run as a magus target so its index lands in the cache", symbols.IndexOp)
 	}

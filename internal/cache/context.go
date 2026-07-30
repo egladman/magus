@@ -48,13 +48,13 @@ func LimiterFromContext(ctx context.Context) *Limiter {
 	return v
 }
 
-// ContextWithCache stores c in ctx for magusfile bindings (e.g. magus.bust_cache).
-func ContextWithCache(ctx context.Context, c *Cache) context.Context {
+// NewContext stores c in ctx for magusfile bindings (e.g. magus.bust_cache).
+func NewContext(ctx context.Context, c *Cache) context.Context {
 	return context.WithValue(ctx, cacheKey{}, c)
 }
 
-// CacheFromContext retrieves the Cache stored by ContextWithCache, or nil.
-func CacheFromContext(ctx context.Context) *Cache {
+// FromContext retrieves the Cache stored by NewContext, or nil.
+func FromContext(ctx context.Context) *Cache {
 	v, _ := ctx.Value(cacheKey{}).(*Cache)
 	return v
 }

@@ -153,7 +153,7 @@ func MagusHasCharm(ctx context.Context, name string) (bool, error) {
 func MagusBustCache(ctx context.Context, projectPath string) error {
 	slog.Warn("magus.bust_cache called - consider modeling the missing input as a Source instead",
 		"project_path", projectPath)
-	c := cache.CacheFromContext(ctx)
+	c := cache.FromContext(ctx)
 	if c == nil {
 		return nil // no cache in context (parse mode, tests)
 	}

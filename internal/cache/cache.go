@@ -448,8 +448,8 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 
 	lp := c.logPath(s.ProjectPath, hash)
-	// ContextWithCache lets spell bindings (magus.bust_cache) reach the active cache.
-	rawOutput, runErr := c.captureRun(ContextWithCache(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
+	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
+	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
 	if runErr != nil {
 		result.Duration = time.Since(start)
 		c.errs.Add(1)
