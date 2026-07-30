@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -10,6 +11,11 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/types"
 )
+
+// errNoCache reports that this workspace was opened read-only (Inspect), so there is
+// no cache to read. Distinct from an empty result: a caller must be able to tell
+// "this artifact has no cached versions" from "there is no store to look in".
+var errNoCache = errors.New("magus: workspace has no cache (opened read-only)")
 
 // LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
 func (m *Magus) LogScope(label, source string) {
@@ -145,4 +151,28 @@ func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) 
 	}
 	_, logPath, err = m.cache.LastEntry(projectPath)
 	return logPath, err
+}
+
+// ArtifactHistory returns every cached version of a declared output under
+// projectPath, newest first, with identical consecutive content collapsed.
+//
+// This reads the content-addressed store, which already held every past run's
+// artifacts; nothing new is persisted to answer it. An Inspect workspace has no
+// cache, so it reports that rather than an empty history - "no versions" and "no
+// store to look in" are different answers and a caller must be able to tell them
+// apart.
+func (m *Magus) ArtifactHistory(projectPath, path string) ([]cache.ArtifactVersion, error) {
+	if m.cache == nil {
+		return nil, errNoCache
+	}
+	return m.cache.ArtifactHistory(projectPath, path)
+}
+
+// MaterializeArtifact writes a cached version's bytes to dst, cloning from the
+// store when the filesystem supports reflink.
+func (m *Magus) MaterializeArtifact(v cache.ArtifactVersion, dst string) error {
+	if m.cache == nil {
+		return errNoCache
+	}
+	return m.cache.MaterializeArtifact(v, dst)
 }

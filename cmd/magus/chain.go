@@ -2,11 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
+	"github.com/egladman/magus/internal/cache"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
@@ -40,9 +45,14 @@ func chainUsage() {
 	fmt.Fprintln(os.Stderr, "  file <path>                      print one artifact's absolute path")
 	fmt.Fprintln(os.Stderr, "  file <path> contents             write its bytes to stdout")
 	fmt.Fprintln(os.Stderr, "  file <path> export --path <dst>  copy it to <dst>")
+	fmt.Fprintln(os.Stderr, "  file <path> history              every cached version: when its bytes changed")
+	fmt.Fprintln(os.Stderr, "  file <path> diff                 compare it against the last cached version")
 	fmt.Fprintln(os.Stderr, "  value                            print what the target returned")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "<path> is workspace-relative, as printed by `outputs`.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "`diff` renders nothing itself: it materializes the cached side and runs your")
+	fmt.Fprintln(os.Stderr, "difftool, from $MAGUS_DIFFTOOL, else $DIFFTOOL, else `git diff --no-index`.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags go BEFORE --then, since everything after it is the verb's:")
 	fmt.Fprintln(os.Stderr, "  magus run build -o json --then outputs")
@@ -103,14 +113,24 @@ func prepareChain(argv []string) (plan chainPlan, proceed bool, err error) {
 			plan.action = rest[1]
 		}
 		switch plan.action {
-		case "", "contents":
+		case "", "contents", "history", "diff":
+			// These take nothing further, so anything trailing is a mistake worth
+			// naming. The commonest is a global flag put after the verb
+			// (`--then file x history -o json`), which the grammar sends to the verb
+			// and which was previously accepted and silently dropped - the same
+			// accepted-and-ignored failure the --then separator exists to avoid.
+			if len(rest) > 2 {
+				chainUsage()
+				return plan, false, usagef("magus run: `file <path> %s` takes no further arguments, got %q "+
+					"(global flags go BEFORE --then)", plan.action, rest[2])
+			}
 		case "export":
 			if plan.dst, err = chainPathFlag(rest[2:], "file export"); err != nil {
 				return plan, false, err
 			}
 		default:
 			chainUsage()
-			return plan, false, usagef("magus run: unknown verb %q after file (want contents or export)", plan.action)
+			return plan, false, usagef("magus run: unknown verb %q after file (want contents, export, history, or diff)", plan.action)
 		}
 	default:
 		chainUsage()
@@ -189,6 +209,10 @@ func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtif
 	abs := filepath.Join(m.Root(), filepath.FromSlash(match.Path))
 
 	switch plan.action {
+	case "history":
+		return chainFileHistory(m, opts, match.Project, match.Path)
+	case "diff":
+		return chainFileDiff(m, match.Project, match.Path, abs)
 	case "contents":
 		f, err := os.Open(abs)
 		if err != nil {
@@ -351,4 +375,128 @@ func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, re
 		return usagef("magus run: %d projects returned a value (%s); the text form is for substituting ONE, so narrow the scope or use -o json",
 			len(withValue), strings.Join(withValue, ", "))
 	}
+}
+
+// artifactVersion is one row of `--then file <p> history`, shaped for -o json.
+type artifactVersion struct {
+	Blob    string `json:"blob"     yaml:"blob"`
+	Size    int64  `json:"size"     yaml:"size"`
+	Target  string `json:"target"   yaml:"target"`
+	Created string `json:"created"  yaml:"created"`
+	Entry   string `json:"entry"    yaml:"entry"`
+}
+
+// chainFileHistory implements `--then file <path> history`: every cached version of
+// that artifact, newest first.
+//
+// The store is content-addressed, so this answers "when did this file's content last
+// actually change" without consulting the VCS - which matters precisely for the files
+// the VCS is a poor witness for. A generated artifact's git history tells you when
+// someone committed a regeneration; this tells you when the bytes changed.
+func chainFileHistory(m *magus.Magus, opts OutputOptions, project, path string) error {
+	versions, err := m.ArtifactHistory(project, path)
+	if err != nil {
+		return err
+	}
+	out := make([]artifactVersion, 0, len(versions))
+	for _, v := range versions {
+		out = append(out, artifactVersion{
+			Blob: v.Blob, Size: v.Size, Target: v.Target,
+			Created: v.CreatedAt.UTC().Format(time.RFC3339), Entry: v.EntryHash,
+		})
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, out)
+	}
+	if len(out) == 0 {
+		// Not an error: an artifact built once and never rebuilt has no history to
+		// show, and neither does one whose versions have been evicted.
+		fmt.Printf("%s: no cached versions\n", path)
+		return nil
+	}
+	for _, v := range out {
+		fmt.Printf("%s  %-12s  %8d  %s\n", v.Created, v.Blob[:min(12, len(v.Blob))], v.Size, v.Target)
+	}
+	return nil
+}
+
+// chainFileDiff implements `--then file <path> diff`: compare the artifact on disk
+// against the most recent DIFFERENT cached version.
+//
+// magus does not render the diff. It materializes the cached side into a temp file
+// and hands both paths to the tool the user already uses, resolved from
+// MAGUS_DIFFTOOL, then DIFFTOOL, then `git diff --no-index`. The emit-never-render
+// rule that keeps a graph renderer out of magus applies here for the same reason: a
+// built-in differ would be a worse version of a tool the user has already chosen.
+func chainFileDiff(m *magus.Magus, project, path, workingCopy string) error {
+	versions, err := m.ArtifactHistory(project, path)
+	if err != nil {
+		return err
+	}
+	// Skip any version whose bytes match what is on disk: diffing a file against
+	// itself prints nothing and reads as "no cached history", which is a different
+	// and wrong conclusion.
+	current, err := os.ReadFile(workingCopy)
+	if err != nil {
+		return err
+	}
+	currentBlob := fmt.Sprintf("%x", sha256.Sum256(current))
+	var prev *cache.ArtifactVersion
+	for i := range versions {
+		if versions[i].Blob != currentBlob {
+			prev = &versions[i]
+			break
+		}
+	}
+	if prev == nil {
+		fmt.Fprintf(os.Stderr, "magus run: %s matches every cached version; nothing to diff\n", path)
+		return nil
+	}
+
+	dir, err := os.MkdirTemp("", "magus-diff-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	// Named after the artifact, not "old", so the difftool's own header and the
+	// editor tab both say which file this is.
+	staged := filepath.Join(dir, filepath.Base(path))
+	if err := m.MaterializeArtifact(*prev, staged); err != nil {
+		return err
+	}
+
+	name, args := difftool()
+	args = append(args, staged, workingCopy)
+	fmt.Fprintf(os.Stderr, "magus run: %s %s (cached %s) vs the working tree\n",
+		path, prev.Short(), prev.CreatedAt.UTC().Format(time.RFC3339))
+	cmd := exec.Command(name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		// A differ exits non-zero to mean "they differ", which is the normal answer
+		// here, not a failure. Only a launch failure is worth reporting.
+		if errors.As(err, &exit) {
+			return nil
+		}
+		return fmt.Errorf("magus run: could not run %q (set MAGUS_DIFFTOOL to a command that takes two paths): %w", name, err)
+	}
+	return nil
+}
+
+// difftool resolves the command to compare two paths with.
+//
+// MAGUS_DIFFTOOL wins so a magus-specific choice is possible; DIFFTOOL is the
+// conventional variable others already set; `git diff --no-index` is the fallback
+// because git is already a hard dependency of a magus workspace, so it is the one
+// differ guaranteed present. The value is split on spaces so `delta --side-by-side`
+// works without a shell.
+func difftool() (string, []string) {
+	for _, env := range []string{"MAGUS_DIFFTOOL", "DIFFTOOL"} {
+		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
+			parts := strings.Fields(v)
+			return parts[0], parts[1:]
+		}
+	}
+	return "git", []string{"diff", "--no-index"}
 }
