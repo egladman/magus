@@ -116,6 +116,11 @@ const (
 	OpIs    // A = type-name const idx; pop value → push bool
 	OpAs    // A = type-name const idx; pop value → push coerced value
 
+	// OpMatchTest pops (subject, condition) → pushes whether the match arm is
+	// selected. It is one opcode rather than compiled-out comparisons because the
+	// rule depends on BOTH operand kinds (see matchTest).
+	OpMatchTest
+
 	// Error handling
 	OpTryBegin // A = catch-handler IP; push catch context onto catchStack
 	OpTryEnd   // pop catch context from catchStack

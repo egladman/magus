@@ -693,6 +693,11 @@ func valuesEqual(a, b Value) bool {
 		// is fully described by its two operands.
 		ar, br := a.asRange(), b.asRange()
 		return ar.Lo == br.Lo && ar.Hi == br.Hi
+	case tagPat:
+		// Structural for the same reason as tagType above: upstream compares pattern
+		// SOURCES, so two separately compiled `$"hello [a-z]+"` literals are equal. The
+		// compiled matcher is derived from the source, so the source is the identity.
+		return a.asPat().src == b.asPat().src
 	case tagUD:
 		return a.AsUD() == b.AsUD() // foreign pointers compare by address
 	default:

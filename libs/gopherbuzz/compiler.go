@@ -143,6 +143,14 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.ExprStmt:
 		collectFuncRefs(v.Expr, inFunc, keep)
+	case *ast.MatchExpr:
+		collectFuncRefs(v.Subject, inFunc, keep)
+		for _, br := range v.Branches {
+			for _, cond := range br.Conds {
+				collectFuncRefs(cond, inFunc, keep)
+			}
+			collectFuncRefs(br.Body, inFunc, keep)
+		}
 	case *ast.BlockStmt:
 		for _, s := range v.Stmts {
 			collectFuncRefs(s, inFunc, keep)
@@ -1142,6 +1150,84 @@ func (c *compiler) compileBlockExpr(v *ast.BlockExpr) error {
 	return nil
 }
 
+// compileMatchExpr lowers `match (subject) { conds -> body, ... }` into a linear
+// chain of tests.
+//
+// The subject is evaluated ONCE into a temp local and re-read for each condition.
+// That is required, not an optimisation: `match (next())` must not advance an
+// iterator per arm, and match.buzz's dynamic-condition test depends on the subject
+// being one fixed value while the conditions are re-evaluated in order.
+//
+// Every arm leaves exactly one value on the stack, so both source forms compile the
+// same way: a block body pushes null (compileMatchBody), and the statement form is
+// an ExprStmt that discards whatever the match produced. Falling off the last arm
+// with no `else` yields null.
+func (c *compiler) compileMatchExpr(v *ast.MatchExpr) error {
+	if err := c.compileExpr(v.Subject); err != nil {
+		return err
+	}
+	c.enterBlock()
+	// An empty name is unreachable from source, so nothing can resolve to the temp.
+	slot := c.defineLocal("")
+	c.chunk.Emit(vmpackage.OpSetLocal, slot, 0)
+
+	var done []int
+	for _, br := range v.Branches {
+		if len(br.Conds) == 0 {
+			// `else` is unconditional, so nothing after it can run.
+			if err := c.compileMatchBody(br.Body); err != nil {
+				return err
+			}
+			done = append(done, c.chunk.EmitJump(vmpackage.OpJump))
+			break
+		}
+		var hit []int
+		for _, cond := range br.Conds {
+			c.chunk.Emit(vmpackage.OpGetLocal, slot, 0)
+			if err := c.compileExpr(cond); err != nil {
+				return err
+			}
+			c.chunk.Emit(vmpackage.OpMatchTest, 0, 0)
+			hit = append(hit, c.chunk.EmitJump(vmpackage.OpJumpTrue))
+		}
+		skip := c.chunk.EmitJump(vmpackage.OpJump)
+		for _, h := range hit {
+			c.chunk.PatchJump(h)
+		}
+		if err := c.compileMatchBody(br.Body); err != nil {
+			return err
+		}
+		done = append(done, c.chunk.EmitJump(vmpackage.OpJump))
+		c.chunk.PatchJump(skip)
+	}
+	// Reached only when no arm matched; dead when an `else` is present.
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	for _, j := range done {
+		c.chunk.PatchJump(j)
+	}
+	c.exitBlock()
+	return nil
+}
+
+// compileMatchBody compiles one arm's body so it leaves exactly one value. A
+// `-> { ... }` block runs its statements in a sibling scope and yields null, which
+// is the same shape compileBlockExpr uses.
+func (c *compiler) compileMatchBody(body ast.Node) error {
+	blk, isBlock := body.(*ast.BlockStmt)
+	if !isBlock {
+		return c.compileExpr(body)
+	}
+	c.enterBlock()
+	for _, s := range blk.Stmts {
+		if err := c.compileStmt(s); err != nil {
+			return err
+		}
+	}
+	c.exitBlock()
+	c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
+	return nil
+}
+
 func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 	// Emit TryBegin with a placeholder for the catch IP.
 	tryBeginIdx := c.chunk.EmitJump(vmpackage.OpTryBegin)
@@ -1729,6 +1815,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// primitive returns the value untouched either way.
 		base, _ := isTypeShape(v.TypeName)
 		c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
+	case *ast.MatchExpr:
+		return c.compileMatchExpr(v)
 	case *ast.CatchExpr:
 		return c.compileCatchExpr(v)
 	case *ast.YieldExpr:

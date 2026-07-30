@@ -257,6 +257,32 @@ type TypeExpr struct {
 	Resolved string
 }
 
+// MatchExpr: `match (subject) { c1, c2 -> body, else -> body, }`.
+//
+// One node serves both the statement and the expression form, because they differ
+// only in whether the produced value is used: a branch body is an expression, or a
+// block when it is written `-> { ... }`. A block body still yields a value (null),
+// so the statement form is just an expression whose value is discarded, and the
+// compiler needs no second code path.
+//
+// Matching is NOT plain equality. Upstream picks the comparison from the condition
+// and subject types: a range condition tests containment, a pattern against a
+// string (or a string against a pattern) tests a regex match, a type value tests
+// `is`, and everything else compares with `==`.
+type MatchExpr struct {
+	Pos
+	Subject  Node
+	Branches []MatchBranch
+}
+
+// MatchBranch is one `conds -> body` arm. Conds is empty for the `else` arm, which
+// is why the arms keep their source order: the else is only reached after every
+// preceding arm failed.
+type MatchBranch struct {
+	Conds []Node
+	Body  Node
+}
+
 // TypeOfExpr: `typeof x`. Buzz's typeof is STATIC - it yields the type the
 // checker inferred for Operand, not a probe of the runtime value, which is why
 // `final list = []` gives `[any]` while `final slist: [str] = []` gives `[str]`
@@ -341,6 +367,12 @@ type MapExpr struct {
 	Keys   []Node // key expressions (string literals or arbitrary exprs)
 	Values []Node
 	Mut    bool
+	// KeyType and ValType hold the explicit annotation from `{<K: V>, ...}`. Like a
+	// list's ElemType they are a static hint only, but ValType has to be recorded
+	// rather than skipped: it is the expected type for each value, which is the only
+	// thing that can tell an inferred enum case which enum it belongs to.
+	KeyType string
+	ValType string
 	// Anon marks the anonymous-object form `.{ field = expr }`, which parses to
 	// a map keyed by the field names. It is not a map literal: the checker types
 	// it against an expected object's fields, not as {K: V}.

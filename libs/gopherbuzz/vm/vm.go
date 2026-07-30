@@ -1329,6 +1329,15 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			// stripped the "?" and reduced the name, so this stays a flag test.
 			vm.push(BoolValue((ins.B == 1 && val.tag() == tagNull) || vm.buzzIsType(val, name)))
 
+		case OpMatchTest:
+			cond := vm.pop()
+			subject := vm.pop()
+			hit, err := vm.matchTest(subject, cond)
+			if err != nil {
+				return Null, err
+			}
+			vm.push(BoolValue(hit))
+
 		case OpAs:
 			name := vm.asStr(f.chunk.Consts[ins.A]).V
 			val := vm.pop()
@@ -2236,6 +2245,57 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 		return vm.asEnumVal(v).Enum == typeName
 	}
 	return false
+}
+
+// matchTest reports whether a match arm whose condition is cond is selected for
+// subject. It mirrors the four special cases upstream's codegen emits before
+// falling back to equality (Codegen.zig generateMatch):
+//
+//   - a RANGE condition against a number tests containment
+//   - a PATTERN condition against a string, and a STRING condition against a
+//     pattern, test a regex match (upstream calls pat.matchAgainst and compares the
+//     result to null, in both directions)
+//   - a TYPE condition against a non-type value tests `is`
+//   - anything else compares with ==
+//
+// Upstream selects the comparison STATICALLY from the checker's types; gopherbuzz
+// selects it here from the runtime tags. The two agree on every case the rules
+// name, and dispatching dynamically is what lets an `any`-typed subject still take
+// the `is` path (match.buzz's "match any").
+func (vm *VM) matchTest(subject, cond Value) (bool, error) {
+	switch {
+	case cond.tag() == tagRange && (subject.tag() == tagInt || subject.tag() == tagFloat):
+		// Half-open, matching rng.contains. Done here rather than through that method
+		// because it rejects a non-int, and upstream matches a double against a range.
+		ro := vm.asRange(cond)
+		n := float64(subject.AsInt())
+		if subject.tag() == tagFloat {
+			n = subject.AsFloat()
+		}
+		lo, hi := float64(ro.Lo), float64(ro.Hi)
+		if hi < lo {
+			return n <= lo && n > hi, nil
+		}
+		return n >= lo && n < hi, nil
+
+	case cond.tag() == tagPat && subject.tag() == tagStr:
+		m, err := vm.asPat(cond).re.FindStringMatch(subject.AsString())
+		return m != nil, err
+
+	case cond.tag() == tagStr && subject.tag() == tagPat:
+		m, err := vm.asPat(subject).re.FindStringMatch(cond.AsString())
+		return m != nil, err
+
+	case cond.tag() == tagType && subject.tag() != tagType:
+		return vm.buzzIsType(subject, cond.TypeName()), nil
+
+	case subject.tag() == tagType && cond.tag() != tagType:
+		// The mirror of the case above (upstream's matchTypeIsValue): when the SUBJECT
+		// is a type, an ordinary condition asks whether that condition inhabits it, so
+		// `match (<str>) { "hello" -> ... }` selects the string arm.
+		return vm.buzzIsType(cond, subject.TypeName()), nil
+	}
+	return valuesEqual(subject, cond), nil
 }
 
 // buzzCast coerces v to the named type.

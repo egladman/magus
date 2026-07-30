@@ -407,15 +407,18 @@ func (c *checker) checkAssign(v *ast.AssignStmt) {
 		if e, found := c.lookup(id.Name); found && e.isConst {
 			c.errorf(id.Pos, "cannot assign to final %q", id.Name)
 		} else if found {
-			rhs := c.infer(v.Value)
+			// The variable's type is the expected type for the value, so `assigned = .en`
+			// resolves against the declaration.
+			rhs := c.inferExpected(v.Value, e.typ)
 			if !types.Compat(rhs, e.typ) {
 				c.errorfc(v.Pos, TypeMismatch, "cannot assign %s to %s", rhs.TypeName(), e.typ.TypeName())
 			}
 			return
 		}
 	}
-	c.infer(v.Target)
-	c.infer(v.Value)
+	// A member or index target: its own type is likewise the expected type for the
+	// value (`mutableList[0] = .it` resolves through the list's element type).
+	c.inferExpected(v.Value, c.infer(v.Target))
 }
 
 func (c *checker) checkReturn(v *ast.ReturnStmt) {
@@ -426,7 +429,10 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 		c.errorf(v.Pos, "void function cannot return a value")
 		return
 	}
-	ret := c.infer(v.Value)
+	// The declared return type is the expected type for the returned expression, so
+	// a value that needs a hint can resolve against it -- `fun f() > Locale { return
+	// .it; }` has nothing else to say which enum `.it` names.
+	ret := c.inferExpected(v.Value, c.retTyp)
 	// Skip return type check for fiber functions (fib<V,R> annotations or *> syntax):
 	// the declared return type in these cases represents the fiber value type, not
 	// the checked function return type.
@@ -749,6 +755,38 @@ func (c *checker) infer(n ast.Node) types.Type {
 		c.infer(v.Lo)
 		c.infer(v.Hi)
 		return types.Rng
+	case *ast.MatchExpr:
+		// The subject's type is the expected type for every condition, which is what
+		// lets a bare enum case appear as one (`match (locale) { .fr -> ... }`), and
+		// the match's own expected type flows into each body, so a branch value can
+		// resolve the same way (`final l: Locale? = match (n) { 1 -> .fr, ... }`).
+		subjTyp := c.infer(v.Subject)
+		want := c.wantType()
+		var result types.Type
+		for _, br := range v.Branches {
+			for _, cond := range br.Conds {
+				c.inferExpected(cond, subjTyp)
+			}
+			// A `-> { ... }` body is a block of STATEMENTS, not an expression: check it in
+			// its own scope (sibling arms must not see each other's locals) and treat it
+			// as yielding null, which is what the compiler pushes for it.
+			bodyTyp := types.Type(types.Null)
+			if blk, isBlock := br.Body.(*ast.BlockStmt); isBlock {
+				c.checkBlock(blk)
+			} else {
+				bodyTyp = c.inferExpected(br.Body, want)
+			}
+			// The first branch that yields something other than null names the match's
+			// type. Optionals are erased in this checker, so a `-> null` arm only makes
+			// the result nullable, which is not tracked separately.
+			if result == nil && bodyTyp != types.Null {
+				result = bodyTyp
+			}
+		}
+		if result == nil {
+			return types.Unknown
+		}
+		return result
 	case *ast.EnumCaseExpr:
 		et := enumOf(c.wantType())
 		if et == nil {
@@ -770,13 +808,16 @@ func (c *checker) infer(n ast.Node) types.Type {
 		c.infer(v.Expr)
 		return c.resolveAnnot(v.TypeName)
 	case *ast.CatchExpr:
-		// `expr catch default` evaluates to expr's success type; infer the default
-		// too so type errors inside it still surface.
+		// `expr catch default` evaluates to expr's success type, which is therefore also
+		// the expected type for the default -- the two are alternatives for one value,
+		// so a default that needs a hint resolves against it (`failLocale() catch .en`).
 		t := c.infer(v.Expr)
-		c.infer(v.Default)
+		c.inferExpected(v.Default, t)
 		return t
 	case *ast.YieldExpr:
-		vt := c.infer(v.Value)
+		// The declared yield type is the expected type for the yielded value, the same
+		// way a return propagates its own -- `*> Locale?` is what resolves `yield .en`.
+		vt := c.inferExpected(v.Value, c.yieldTyp)
 		if c.yieldTyp != nil && !types.Compat(vt, c.yieldTyp) {
 			c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: got %s, want %s", vt.TypeName(), c.yieldTyp.TypeName())
 		}
@@ -839,12 +880,22 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 	// resolve. Inferring one side first costs nothing: an operand that cannot use a
 	// hint ignores it. Only the enum-case shorthand reads it today, and comparing
 	// against a bare case is the shape upstream uses most.
-	left := c.infer(v.Left)
-	right := c.inferExpected(v.Right, left)
-	if left == types.Unknown {
-		// The left side may itself have been the shorthand, with the right naming the
-		// enum; re-infer it now that there is something to resolve against.
+	var left, right types.Type
+	if _, leftIsCase := v.Left.(*ast.EnumCaseExpr); leftIsCase {
+		// A bare case on the LEFT has to wait for the right side to name its enum.
+		// Inferring left-first here would REPORT "cannot infer which enum" before any
+		// hint existed, and the re-infer below cannot retract an emitted error -- which
+		// is what made the reversed comparison `.fr == Locale.fr` fail.
+		right = c.infer(v.Right)
 		left = c.inferExpected(v.Left, right)
+	} else {
+		left = c.infer(v.Left)
+		right = c.inferExpected(v.Right, left)
+		if left == types.Unknown {
+			// The left side may itself have been the shorthand, with the right naming the
+			// enum; re-infer it now that there is something to resolve against.
+			left = c.inferExpected(v.Left, right)
+		}
 	}
 	switch v.Op {
 	case "+":
@@ -1222,6 +1273,18 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 		v.ObjectName = ot.Name
 		return ot
 	}
+	// An explicit `{<K: V>, ...}` annotation on the literal itself decides its type
+	// and is the expected type for the entries, the map counterpart of a list's
+	// ElemType above. It takes precedence over any expected type from the use site,
+	// because the literal said what it is.
+	if v.ValType != "" || v.KeyType != "" {
+		keyTyp, valTyp := c.resolveAnnot(v.KeyType), c.resolveAnnot(v.ValType)
+		for i := range v.Keys {
+			c.inferExpected(v.Keys[i], keyTyp)
+			c.inferExpected(v.Values[i], valTyp)
+		}
+		return &types.MapType{Key: keyTyp, Val: valTyp}
+	}
 	// An annotated map literal passes its declared element types down, so a
 	// nested `.{ ... }` value knows which object it is filling in.
 	if want, ok := c.wantType().(*types.MapType); ok {
@@ -1248,10 +1311,18 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 }
 
 func (c *checker) inferListExpr(v *ast.ListExpr) types.Type {
-	if len(v.Items) == 0 {
-		if v.ElemType != "" {
-			return &types.ListType{Elem: c.resolveAnnot(v.ElemType)}
+	// An explicit `[<T>, ...]` element type is an annotation, so it both decides the
+	// list's type and is the expected type for every element. Propagating it is what
+	// lets an element that needs a hint resolve -- an inferred enum case has no other
+	// way to learn which enum `.it` names.
+	if v.ElemType != "" {
+		elemTyp := c.resolveAnnot(v.ElemType)
+		for _, item := range v.Items {
+			c.inferExpected(item, elemTyp)
 		}
+		return &types.ListType{Elem: elemTyp}
+	}
+	if len(v.Items) == 0 {
 		return &types.ListType{Elem: types.Any}
 	}
 	elemTyp := c.infer(v.Items[0])
@@ -1273,12 +1344,24 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		return types.Any
 	}
 	for i, key := range v.Keys {
-		if _, exists := ot.Fields[key]; !exists {
+		ft, exists := ot.Fields[key]
+		if !exists {
 			c.errorf(v.Pos, "object %s has no field %q", v.TypeName, key)
 		}
-		if i < len(v.Values) {
-			c.infer(v.Values[i])
+		if i >= len(v.Values) {
+			continue
 		}
+		if !exists {
+			c.infer(v.Values[i])
+			continue
+		}
+		// The field's declared type is the expected type for its value, so a value that
+		// needs a hint resolves (`HasLocalField{ locale = .en }`). resolveType, not ft
+		// as-is: buildObjectType fills Fields via types.ParseAnnot, which knows the
+		// primitives but not this checker's named types, so an enum field arrives as a
+		// NamedType the case could never resolve against -- the same reason the
+		// anonymous `.{ ... }` path in inferMapExpr resolves it.
+		c.inferExpected(v.Values[i], c.resolveType(ft))
 	}
 	return ot
 }

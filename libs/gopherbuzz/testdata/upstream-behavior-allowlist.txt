@@ -27,10 +27,12 @@ discarded-value.buzz
 enums.buzz
 for.buzz
 foreach.buzz
+forward-method-placeholders.buzz
 free-identifiers.buzz
 fs.buzz
 generics.buzz
 if-arrow.buzz
+inferred-enum-case.buzz
 inferred-var-type.buzz
 inline-catch.buzz
 inline-if.buzz
@@ -47,6 +49,7 @@ list-map-properties.buzz
 lists.buzz
 long-namespace.buzz
 maps.buzz
+match.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz
