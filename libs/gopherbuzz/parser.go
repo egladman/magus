@@ -1888,7 +1888,15 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			}
 		case token.LParen:
 			t := p.advance()
-			args, names, err := p.parseArgList()
+			// Upstream parses `zdef("lib", "<decls>")` as a STATEMENT (Parser.zig
+			// zdefStatement consumes `( String , String )` itself), so its arguments
+			// never pass through argumentList and the "every argument after the first
+			// must be labeled" rule below cannot apply to them. gopherbuzz keeps zdef an
+			// ordinary call and lowers it in zdef_decl.go instead, which without this
+			// exemption would reject upstream's own FFI source for breaking a rule
+			// upstream does not enforce there.
+			zdefCallee, isIdent := node.(*ast.IdentExpr)
+			args, names, err := p.parseArgList(isIdent && zdefCallee.Name == "zdef")
 			if err != nil {
 				return nil, err
 			}
@@ -1963,7 +1971,11 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 // parseArgList parses call arguments, positional or labeled (upstream Buzz's
 // `name: expr` named arguments — an identifier immediately followed by a
 // colon). The names slice is nil when every argument is positional.
-func (p *parser) parseArgList() ([]ast.Node, []string, error) {
+//
+// statementForm exempts the list from the strict labeling rule, for a callee
+// upstream parses as its own statement rather than as a call (see the zdef note
+// at the call site).
+func (p *parser) parseArgList(statementForm bool) ([]ast.Node, []string, error) {
 	var args []ast.Node
 	var names []string
 	sawName := false
@@ -1988,7 +2000,7 @@ func (p *parser) parseArgList() ([]ast.Node, []string, error) {
 		// against the callee's params is left to the checker (and is impossible for
 		// host bindings), so this enforces only the syntactic rule upstream's parser
 		// applies.
-		if p.strict && len(args) > 0 && name == "" {
+		if p.strict && !statementForm && len(args) > 0 && name == "" {
 			if _, isIdent := arg.(*ast.IdentExpr); !isIdent {
 				pos := ast.NodePos(arg)
 				return nil, nil, fmt.Errorf("buzz: line %d:%d: argument %d must be labeled (name: value) (strict mode)", pos.Line, pos.Col, len(args)+1)

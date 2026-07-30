@@ -864,10 +864,12 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 
 // lexPattern scans a $"..." pattern literal. Unlike a string, backslash escapes
 // are NOT interpreted — the regex source is preserved verbatim (so \d, \w, etc.
-// reach the regex engine intact) — except that a backslash defers the next byte,
-// which both lets a literal \" appear inside the pattern and reaches the engine
-// as \" (which it treats as a literal quote). The opening $ and " are consumed
-// here; scanning stops at the first unescaped ".
+// reach the regex engine intact) — with one exception: \" collapses to a bare ",
+// which is upstream's behaviour (Parser.zig's pattern() runs exactly one
+// replacement, `\"` -> `"`, over the raw token slice before compiling). The
+// backslash still defers the next byte either way, so an escaped delimiter does
+// not terminate the literal. The opening $ and " are consumed here; scanning stops
+// at the first unescaped ".
 func (l *lexer) lexPattern(line, col int) (Token, error) {
 	l.pos++ // $
 	l.col++
@@ -878,14 +880,20 @@ func (l *lexer) lexPattern(line, col int) (Token, error) {
 		r, size := utf8.DecodeRuneInString(l.src[l.pos:])
 		switch r {
 		case '\\':
-			sb.WriteRune(r)
 			l.pos += size
 			l.col += size
 			if l.pos < len(l.src) {
 				r2, s2 := utf8.DecodeRuneInString(l.src[l.pos:])
+				// Only the delimiter escape collapses; every other escape reaches the
+				// regex engine with its backslash intact.
+				if r2 != '"' {
+					sb.WriteRune(r)
+				}
 				sb.WriteRune(r2)
 				l.pos += s2
 				l.col += s2
+			} else {
+				sb.WriteRune(r)
 			}
 		case '"':
 			l.pos++

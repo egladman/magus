@@ -26,6 +26,7 @@ enums.buzz
 for.buzz
 foreach.buzz
 free-identifiers.buzz
+fs.buzz
 generics.buzz
 if-arrow.buzz
 inferred-var-type.buzz
@@ -51,6 +52,7 @@ object-generics.buzz
 objects.buzz
 operators.buzz
 optionals.buzz
+pattern.buzz
 placeholder-cycle.buzz
 placeholder-nested-call.buzz
 range-expression-scope.buzz

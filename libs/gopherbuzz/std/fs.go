@@ -15,6 +15,8 @@ func fsModule() vm.Value {
 	m.MapSet("currentDirectory", fn("fs.currentDirectory", fsCurrentDirectory))
 	m.MapSet("makeDirectory", fn("fs.makeDirectory", fsMakeDirectory))
 	m.MapSet("delete", fn("fs.delete", fsDelete))
+	m.MapSet("deleteFile", fn("fs.deleteFile", fsDeleteFile))
+	m.MapSet("deleteDirectory", fn("fs.deleteDirectory", fsDeleteDirectory))
 	m.MapSet("move", fn("fs.move", fsMove))
 	m.MapSet("list", fn("fs.list", fsList))
 	m.MapSet("exists", fn("fs.exists", fsExists))
@@ -51,6 +53,41 @@ func fsDelete(ctx context.Context, args []vm.Value) (vm.Value, error) {
 	}
 	if err := os.RemoveAll(resolve(ctx, args[0].AsString())); err != nil {
 		return vm.Null, fmt.Errorf("fs.delete: %w", err)
+	}
+	return vm.Null, nil
+}
+
+// fsDeleteFile and fsDeleteDirectory are upstream's two narrow deletes, which
+// gopherbuzz previously covered only with the broader `delete` (RemoveAll) above.
+// Upstream keeps them distinct and refuses the wrong kind of path -- deleteFile
+// maps to Zig's deleteFile, deleteDirectory to deleteDir, which is NOT recursive
+// and fails on a non-empty directory. Matching that means a script that relies on
+// upstream's refusal behaves the same here, so neither is an alias for `delete`.
+func fsDeleteFile(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	if len(args) < 1 || !args[0].IsStr() {
+		return vm.Null, fmt.Errorf("fs.deleteFile: requires a str path argument")
+	}
+	path := resolve(ctx, args[0].AsString())
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return vm.Null, fmt.Errorf("fs.deleteFile: %s is a directory", args[0].AsString())
+	}
+	if err := os.Remove(path); err != nil {
+		return vm.Null, fmt.Errorf("fs.deleteFile: %w", err)
+	}
+	return vm.Null, nil
+}
+
+func fsDeleteDirectory(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	if len(args) < 1 || !args[0].IsStr() {
+		return vm.Null, fmt.Errorf("fs.deleteDirectory: requires a str path argument")
+	}
+	path := resolve(ctx, args[0].AsString())
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		return vm.Null, fmt.Errorf("fs.deleteDirectory: %s is not a directory", args[0].AsString())
+	}
+	// os.Remove, not RemoveAll: upstream's deleteDir refuses a non-empty directory.
+	if err := os.Remove(path); err != nil {
+		return vm.Null, fmt.Errorf("fs.deleteDirectory: %w", err)
 	}
 	return vm.Null, nil
 }
