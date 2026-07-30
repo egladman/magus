@@ -760,6 +760,20 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	// Host-provided synthetic modules (e.g. "magus/extra") resolve before
 	// any filesystem search and bind directly under the import's name.
 	if v, ok := s.syntheticModules[resolvePath]; ok {
+		if imp.Alias == "_" {
+			// `import "buzz:crypto" as _` is upstream's FLAT import: the module's members
+			// land in the importing scope with no prefix, which is how upstream's own
+			// suite calls `hash(...)` and `Buffer.init()`. Binding the module under its
+			// basename instead (what this did before) left those names undefined -- and
+			// undefined in the CHECKER too, since checkShared draws its globals from this
+			// env after imports resolve.
+			for _, k := range v.MapKeys() {
+				if member, ok := v.MapGet(k); ok {
+					s.env.Define(k, member)
+				}
+			}
+			return ImportSynthetic, nil
+		}
 		s.env.Define(boundName, v)
 		return ImportSynthetic, nil
 	}
