@@ -11,6 +11,24 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- `ctx.updates(...)`, a third per-target footprint declaration beside `ctx.inputs` and
+  `ctx.outputs`, for a file a target EDITS rather than produces: a hand-written page with
+  a generated region between markers, a manifest a tool rewrites in place. magus never
+  deletes an update (`magus clean` skips it) and never replays one from a cache snapshot,
+  because the bytes it produced are only part of the file. It folds into the cache key
+  like an input, so editing the prose around a generated region invalidates the target
+  that maintains that region - which declaring the file an output could not do, since an
+  output is excluded from its own source hash. It infers no ordering edge in either
+  direction; declare `ctx.needs` if you need one.
+
+  This closes a real data-loss path. `docs/concepts/spells.md` and
+  `docs/concepts/knowledge.md` are 355- and 570-line hand-written pages carrying a small
+  generated region, and both were declared in `ctx.outputs`: `magus clean docs` deleted
+  them whole, and the next `content-generate` died with `inject spell list: open
+  concepts/spells.md: no such file or directory`. Only git made that recoverable. Both
+  are now declared with `ctx.updates`. `magus clean`'s help no longer describes what it
+  removes as "regenerable build artifacts" either - that was the declaration's claim, not
+  something clean verified.
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
   contributor with `authored` edges to the files they touched, so `explain author:<name>`
   shows what someone maintains and it can be set against a file's declared CODEOWNERS owner

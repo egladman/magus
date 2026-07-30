@@ -351,6 +351,9 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))
 	c.MapSet("outputs", directVal(obs, "ctx.outputs", footprintDecl))
+	// updates is outputs' counterpart for a file the target EDITS rather than produces,
+	// so magus never deletes it and never replays it from a snapshot. See types.UpdateRef.
+	c.MapSet("updates", directVal(obs, "ctx.updates", footprintDecl))
 	c.MapSet("has_charm", directVal(obs, "ctx.has_charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
 	}))

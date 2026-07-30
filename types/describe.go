@@ -147,6 +147,10 @@ type TargetGraphNode struct {
 	// (empty means this target's own). They ADD to the target's snapshot/replay set -
 	// unioned onto the project-wide and spell-contributed globs, never replacing them.
 	Outputs []OutputRef `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	// Updates are the per-target ctx.updates(...) refs: files the target edits in place
+	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
+	// UpdateRef for why magus must neither delete nor restore one.
+	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty"`
 	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.
@@ -188,6 +192,27 @@ type InputRef struct {
 // the owner gains the edge, not the declarer. Sharing one type would let a caller pass
 // an input where an output belongs and silently invert a build order.
 type OutputRef struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Glob    string `json:"glob" yaml:"glob"`
+}
+
+// UpdateRef names one file a target EDITS IN PLACE rather than produces, declared via
+// ctx.updates. Same shape as OutputRef, and a third type for the same reason OutputRef
+// is not InputRef: what magus is allowed to DO with the file differs, and sharing a
+// type would let a caller pass one where the other belongs.
+//
+// An output is a file magus owns end to end, so magus may delete it (magus clean) and
+// restore it wholesale from a cache snapshot. An update is a file magus does NOT own -
+// a hand-written page with a generated region between markers, a lockfile a tool
+// rewrites in place - where only part of the content is the target's to produce.
+// Deleting one destroys authored content that regeneration cannot bring back, and
+// replaying one from a snapshot silently reverts edits made since. So an update is
+// never deleted and never replayed.
+//
+// It is a plain source for cache purposes: because it is NOT in the output set, it is
+// not excluded from the source hash, so editing the authored prose around the generated
+// region correctly invalidates the target that maintains it.
+type UpdateRef struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Glob    string `json:"glob" yaml:"glob"`
 }

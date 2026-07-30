@@ -96,6 +96,31 @@ and the target's own `magus\inputs`/`magus\outputs`. Per-target declarations onl
 ever _add_ - they never shrink the project-wide baseline (see
 [Granularity](#granularity-project-wide-vs-per-target)).
 
+### Files a target edits rather than produces
+
+`ctx.outputs` claims a file magus owns end to end: magus may delete it
+(`magus clean`) and restore it wholesale from a cache snapshot. That is wrong for a
+file the target only edits _part_ of - a hand-written page with a generated region
+between markers, a manifest a tool rewrites in place. Declare those with
+`ctx.updates(...)`:
+
+```buzz
+export fun content_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("reference/buzz/*.md");     // produced whole
+    ctx.updates("concepts/spells.md");      // hand-written page, generated table inside
+}
+```
+
+An update is **never deleted** by `magus clean` and **never replayed** from a
+snapshot, because the bytes magus produced are only part of the file. It still folds
+into the target's cache key exactly as an input does - so editing the prose _around_
+a generated region invalidates the target that maintains that region, which declaring
+the file as an output could not do (an output is excluded from its own source hash).
+
+Unlike `inputs` and `outputs`, an update infers no ordering edge in either direction:
+"I edit one region of a file someone else authored" says nothing about build order.
+Declare `ctx.needs` if you need it.
+
 The globs are read **statically**, before the target runs - a cache hit skips the
 body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the

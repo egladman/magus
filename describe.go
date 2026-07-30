@@ -371,6 +371,30 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
 					}
 				}
+				for _, ref := range n.Updates {
+					owner := ref.Project
+					if owner == "" {
+						owner = p.Path // same-project update: owned by this project
+					} else if r, rerr := file.Resolve(ref.Project, p.Path); rerr == nil {
+						owner = r
+					} else {
+						continue // unresolvable cross ref: drop, as on the input side
+					}
+					if p.TargetUpdates == nil {
+						p.TargetUpdates = map[string][]types.UpdateRef{}
+					}
+					resolved := types.UpdateRef{Project: owner, Glob: ref.Glob}
+					if !slices.Contains(p.TargetUpdates[n.Name], resolved) {
+						p.TargetUpdates[n.Name] = append(p.TargetUpdates[n.Name], resolved)
+					}
+					// No ordering edge either way, unlike inputs and outputs. Both of those
+					// infer one from ownership - "I read you, so I run after" and "I write
+					// your tree, so you run after me" - and neither inference holds for a
+					// file magus does not own: the target rewrites one region of a file
+					// whose other regions someone else authored, which says nothing about
+					// build order. A target that needs ordering declares ctx.needs, where a
+					// reader can see it.
+				}
 			}
 		}
 		if len(extra) > 0 {

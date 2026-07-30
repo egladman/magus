@@ -192,6 +192,16 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
+						case "updates":
+							for _, g := range globs {
+								node.Updates = appendUniqUpdRef(node.Updates, types.UpdateRef{Glob: g})
+							}
+							for _, a := range e.Args {
+								if ref, ok := crossFileArg(a, projectAliases); ok {
+									recognized++
+									node.Updates = appendUniqUpdRef(node.Updates, types.UpdateRef{Project: ref.Project, Glob: ref.Glob})
+								}
+							}
 						}
 						if recognized < len(e.Args) {
 							node.DynamicIO = true
@@ -272,7 +282,7 @@ func UnreachedIO(source string) []IORef {
 		}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || (me.Name != "inputs" && me.Name != "outputs") {
+			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates") {
 				return true
 			}
 			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
@@ -317,7 +327,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 		return "", nil, false
 	}
 	switch me.Name {
-	case "inputs", "outputs":
+	case "inputs", "outputs", "updates":
 	default:
 		return "", nil, false
 	}
@@ -377,6 +387,14 @@ func appendUniqRef(s []types.InputRef, ref types.InputRef) []types.InputRef {
 
 // appendUniqOutRef is appendUniqRef for outputs; OutputRef is likewise comparable.
 func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRef {
+	if slices.Contains(s, ref) {
+		return s
+	}
+	return append(s, ref)
+}
+
+// appendUniqUpdRef is appendUniqOutRef for ctx.updates refs.
+func appendUniqUpdRef(s []types.UpdateRef, ref types.UpdateRef) []types.UpdateRef {
 	if slices.Contains(s, ref) {
 		return s
 	}

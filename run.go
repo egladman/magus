@@ -322,6 +322,18 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, g)
 		}
 	}
+	// Per-target ctx.updates refs fold into Sources exactly as inputs do, and into
+	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
+	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
+	// landing in the source set means editing the authored prose around a generated
+	// region invalidates the target that maintains that region. Declared as an output
+	// instead, the file was excluded from the source hash, so an edit to it could not
+	// invalidate anything.
+	for _, ref := range p.TargetUpdates[target] {
+		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
+			step.Sources = append(step.Sources, g)
+		}
+	}
 	for _, ref := range p.TargetOutputs[target] {
 		owner := ref.Project
 		if owner == "" {
