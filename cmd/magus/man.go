@@ -10,19 +10,21 @@ import (
 )
 
 func manCmd(args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 {
 		manUsage()
-		if len(args) == 0 {
-			return fmt.Errorf("magus man: subcommand required")
-		}
+		return usagef("magus man: subcommand required (want install)")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+		manUsage()
 		return nil
 	}
 	if args[0] != "install" {
 		manUsage()
-		return fmt.Errorf("magus man: unknown subcommand %q", args[0])
+		return usagef("magus man: unknown subcommand %q (want install)", args[0])
 	}
 
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	dir := fs.String("dir", defaultManDir(), "directory for section 1 man pages")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -57,7 +59,7 @@ func defaultManDir() string {
 }
 
 func manUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir DIR]")
+	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir <path>]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Write the man pages embedded in this binary.")
 }

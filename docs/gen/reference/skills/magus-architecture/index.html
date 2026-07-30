@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>magus-architecture - magus</title>
+  <meta name="description" content="Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/skills/magus-architecture/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="magus-architecture - magus">
+  <meta property="og:description" content="Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/skills/magus-architecture/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../../ui-panels.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
+    <div class="container">
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../guides/download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li><a href="../../../reference/">Reference</a></li><li><a href="../../../reference/skills/">Agent skills</a></li><li aria-current="page">magus-architecture</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../../reference/skills/magus-architecture/" aria-current="page" title="magus-architecture">magus-architecture</a></li>
+          <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
+          <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
+          <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
+          <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
+          <li><a href="../../../reference/skills/magus-run/" title="magus-run">magus-run</a></li>
+          <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <article>
+<h1 id="magus-architecture">magus-architecture</h1>
+<p><progress value="3532" max="4510" aria-label="The --simple permutation is 21% smaller: 3532 of 4510 bytes."></progress><small>The --simple permutation is 21% smaller: 3532 of 4510 bytes.</small></p>
+<p>Ground refactoring and structure proposals in the magus <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> instead of intuition. Use when suggesting directory structure, package layout, or <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> boundaries, when deciding <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>'s coupling and churn concentrate.</p>
+<p>Install it, rather than copying from this page:</p>
+<pre><code class="language-sh">magus agent install .claude/skills            # the full form below
+magus agent install .claude/skills --simple   # the short form below
+</code></pre>
+<p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
+<h2 id="full-form">Full form</h2>
+<p>The default: the steps plus the rationale for each.</p>
+<pre><code class="language-markdown"># Architecture decisions from the graph
+
+magus already measured the workspace: what depends on what, what changes
+together, where churn and complexity concentrate, who owns what. Query those
+facts before proposing structure; a proposal that cites graph evidence is
+checkable, one from intuition is vibes.
+
+## Survey before proposing
+
+Run these and read them together:
+
+```sh
+magus graph stats            # god nodes (structural risk), orphans, doc coverage
+magus insight hotspots       # churn x complexity per project, with blast radius
+magus insight affinity       # projects that change together: hidden coupling
+magus insight ownership      # author concentration, bus factor, abandonment
+magus graph deps -o tree     # the declared project DAG
+```
+
+MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+ground. Affinity deserves special weight: two projects that keep changing
+together WITHOUT a declared dependency edge are coupled through the back door -
+either declare the dependency or move the shared concern.
+
+## Sizing a specific refactor
+
+1. Blast radius of a node: `magus explain &lt;node&gt;` shows its edges and how many
+   nodes reach it. A high reached-by count means migration plan, not quick
+   rename.
+2. Fan-in of a symbol: `magus refs &lt;symbol&gt;` lists the defining file and every
+   referencing file:line from the SCIP index. Run it before moving or renaming
+   any exported symbol. (If it reports no match for a symbol that surely
+   exists, the index is likely unbuilt: check `magus status`, then
+   `magus graph build`.)
+3. How two things relate: `magus path &lt;a&gt; &lt;b&gt;` gives the shortest edge chain -
+   use it to test whether a proposed boundary actually separates them.
+4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+   review a move needs.
+
+## Match the existing conventions
+
+Derive the pattern from the graph rather than imposing one: where similar code
+already lives (`magus query kind:&lt;kind&gt; &lt;term&gt;`), which modules import which
+(`relation:imports`), how existing projects segment (`magus graph deps`). A
+suggestion that follows the workspace's own conventions costs less than an
+imported ideal. State the observed convention in the proposal, with the query
+that shows it.
+
+## Audit the domain model itself
+
+The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+names, and boundaries, not just code layout. Census the kinds, then read the
+stats for smells (see the magus-query skill for the query syntax):
+
+```sh
+magus graph stats                    # god nodes, orphans, doc coverage
+for k in project target spell op tool charm module method diagnostic doc file \
+         function symbol import owner; do
+  printf &quot;%-11s %s\n&quot; &quot;$k&quot; &quot;$(magus query &quot;kind:$k&quot; -o json | jq length)&quot;
+done                                  # population per abstraction
+magus explain &quot;&lt;node&gt;&quot;               # compare a kind's edges against a neighbour's
+```
+
+Confirm each smell against the source before acting on it:
+
+- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+  kind, or fold into an attr on an existing one?
+- Two kinds with near-identical population AND edge shape may be one concept
+  under two names. Keep them distinct only if their PROVENANCE differs (the kind
+  doctrine in `types/knowledge.go`): a kind whose every instance is derivable
+  from another kind's attr fails that test and should fold.
+- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+  which; an undeclared-but-available builtin is neither.
+- A NODE LABEL that varies by checkout (a worktree name where a stable module
+  name belongs) is an identity smell, even when the ID is stable.
+
+A kind or edge earns its place only if it answers a question the others cannot;
+prefer folding into an existing mechanism over adding one (pre-1.0: break
+freely). Ground every claim in a query, exactly as for a layout proposal.
+
+## Verify the change
+
+After restructuring, show the impact in graph terms: `magus graph diff --rev
+&lt;base&gt; -o markdown` lists the nodes and edges the change added, removed, or
+altered - blast radius as data, suitable for a PR description. Then run
+`magus affected ci` to prove the affected projects still pass.
+
+## Do not render the graph yourself
+
+magus emits; it does not render. To look at structure, offer an export
+(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
+browser graph tool - do not hand-draw diagrams of what the graph already knows.
+</code></pre>
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># Architecture decisions from the graph
+
+magus already measured the workspace: what depends on what, what changes
+together, where churn and complexity concentrate, who owns what. Query those
+facts before proposing structure.
+
+## Survey before proposing
+
+Run these and read them together:
+
+```sh
+magus graph stats            # god nodes (structural risk), orphans, doc coverage
+magus insight hotspots       # churn x complexity per project, with blast radius
+magus insight affinity       # projects that change together: hidden coupling
+magus insight ownership      # author concentration, bus factor, abandonment
+magus graph deps -o tree     # the declared project DAG
+```
+
+MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+ground. Weight affinity most: changing
+together with no declared edge is back-door coupling.
+
+## Sizing a specific refactor
+
+1. Blast radius of a node: `magus explain &lt;node&gt;` shows its edges and how many
+   nodes reach it.
+2. Fan-in of a symbol: `magus refs &lt;symbol&gt;` lists the defining file and every
+   referencing file:line from the SCIP index. Run it before moving or renaming
+   any exported symbol. No match for a symbol that exists means an unbuilt
+   index: `magus graph build`.
+3. How two things relate: `magus path &lt;a&gt; &lt;b&gt;` gives the shortest edge chain.
+4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+   review a move needs.
+
+## Match the existing conventions
+
+Derive the pattern from the graph rather than imposing one: where similar code
+already lives (`magus query kind:&lt;kind&gt; &lt;term&gt;`), which modules import which
+(`relation:imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
+that shows it.
+
+## Audit the domain model itself
+
+Census the kinds, then read the stats for smells:
+
+```sh
+magus graph stats                    # god nodes, orphans, doc coverage
+for k in project target spell op tool charm module method diagnostic doc file \
+         function symbol import owner; do
+  printf &quot;%-11s %s\n&quot; &quot;$k&quot; &quot;$(magus query &quot;kind:$k&quot; -o json | jq length)&quot;
+done                                  # population per abstraction
+magus explain &quot;&lt;node&gt;&quot;               # compare a kind's edges against a neighbour's
+```
+
+Confirm each smell against the source before acting on it:
+
+- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+  kind, or fold into an attr on an existing one?
+- Two kinds with near-identical population AND edge shape may be one concept
+  under two names. Keep them distinct only if their PROVENANCE differs (the kind
+  doctrine in `types/knowledge.go`).
+- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+  which.
+- A NODE LABEL that varies by checkout (a worktree name where a stable module
+  name belongs) is an identity smell.
+
+A kind or edge earns its place only if it answers a question the others cannot;
+prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
+
+## Verify the change
+
+After restructuring, show the impact in graph terms: `magus graph diff --rev
+&lt;base&gt; -o markdown` lists the nodes and edges the change added, removed, or
+altered. Then run
+`magus affected ci` to prove the affected projects still pass.
+
+## Do not render the graph yourself
+
+magus emits; it does not render. To look at structure, offer an export
+(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
+browser graph tool.
+</code></pre>
+</details>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-next" href="../magus-buzz/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-buzz</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../reference/skills/"><span class="related-card-title">Agent skills</span><span class="related-card-desc">Every skill magus installs, in both curated permutations, generated from the embedded bodies.</span></a>
+        <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../reference/skills/magus-query/"><span class="related-card-title">magus-query</span><span class="related-card-desc">Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).</span></a>
+        <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-architecture%22">magus-architecture</a></div>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../concepts/targets/">targets</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../../../concepts/spells/">spells</a>.</p>
+<h3 id="charm">Charm</h3>
+<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
+runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
+place, and <code>ci</code> always strips it. See <a href="../../../concepts/charms/">charms</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../../../reference/buzz/">the module reference</a>.</p>
+<h3 id="affected">Affected</h3>
+<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
+only over them. See <a href="../../../guides/affected/">affected</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../concepts/targets/#the-target-name">targets</a>.</p>
+<h3 id="knowledge-graph">Knowledge graph</h3>
+<p>The queryable graph of a workspace's spells, targets, docs, and code
+relationships; query it with <code>magus query</code>/<code>explain</code>/<code>path</code>. See
+<a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="insight">Insight</h3>
+<p>The reports magus derives over the graph and history (hotspots, affinity,
+ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
+<h3 id="hotspot">Hotspot</h3>
+<p>An insight lens: edit frequency times complexity, the prime refactoring targets.
+The project view heat-colours the dependency graph by churn; <code>--files</code> ranks
+individual files. See <a href="../../../guides/insight/">insight</a>.</p>
+<h3 id="affinity">Affinity</h3>
+<p>An insight lens: projects that change together (temporal coupling). A pair that
+co-changes without either declaring a dependency on the other is a candidate
+architectural smell. See <a href="../../../guides/insight/">insight</a>.</p>
+<h3 id="ownership">Ownership</h3>
+<p>An insight lens: author concentration - the primary author and their share, the
+distinct-author count (the bus factor), and abandonment. See
+<a href="../../../guides/insight/">insight</a>.</p>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../../reference/buzz/">module reference</a>, the
+<a href="../../../concepts/spells/">spell reference</a>, the <a href="../../../reference/manpage/magus/">man pages</a>, and the
+<a href="../../../reference/config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

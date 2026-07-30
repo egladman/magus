@@ -8,11 +8,14 @@
 $__magus_scriptblock = {
     param($wordToComplete, $commandAst, $cursorPosition)
 
-    $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail', 'affected',
-                   'insight', 'query', 'explain', 'path', 'graph', 'watch',
-                   'status', 'doctor', 'config', 'server', 'repl', 'completion', 'man',
-                   'init', 'self', 'version', 'clean', 'merge-driver', 'buzz', 'help'
-    $verbs         = 'ls', 'build', 'test', 'lint', 'format', 'clean', 'generate', 'ci'
+    # magus-utils:subcommands:begin
+    $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail',
+                   'affected', 'query', 'explain', 'path', 'refs', 'graph',
+                   'insight', 'watch', 'status', 'clean', 'merge-driver', 'doctor',
+                   'config', 'memory', 'server', 'repl', 'buzz', 'completion',
+                   'man', 'init', 'agent', 'vcs', 'self', 'version',
+                   'help'
+    # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
     $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'report'
     $graphSubs     = 'deps', 'export', 'stats'
@@ -21,7 +24,7 @@ $__magus_scriptblock = {
     $selfSubs      = 'update'
     $shells        = 'bash', 'zsh', 'fish', 'powershell'
     $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout',
-                      '--shard', '--n-shards', '--no-flake-retry', '--race', '--step',
+                      '--shard', '--n-shards', '--no-volatility-retry', '--race', '--step',
                       '--no-default-charms'
     $affectedFlags = '--dry-run', '--base', '--stdin', '--null', '--graph', '--upstream',
                       '--depth', '--explain', '--plan', '--max-shards',
@@ -47,6 +50,15 @@ $__magus_scriptblock = {
         try { & magus ls -o name 2>$null } catch { @() }
     }
 
+    # Get-MagusTargets returns the targets this workspace declares, falling back to
+    # the built-in set when the workspace cannot be read (`describe` fails by design
+    # outside one, and completion that vanishes there is worse than a generic list).
+    function Get-MagusTargets {
+        $t = try { & magus describe targets -o name 2>$null } catch { @() }
+        if ($t) { return $t }
+        return 'ls', 'build', 'test', 'lint', 'format', 'clean', 'generate', 'ci'
+    }
+
     # Tokenize the command line (splits on whitespace, respects quotes via CommandAst).
     $tokens = @($commandAst.CommandElements | ForEach-Object { $_.ToString() })
     $tokenCount = $tokens.Count
@@ -65,7 +77,7 @@ $__magus_scriptblock = {
                 return Complete-From $runFlags 'ParameterName'
             }
             if ($atArg2) {
-                return Complete-From $verbs
+                return Complete-From (Get-MagusTargets)
             }
             return Complete-From (Get-MagusProjects)
         }
@@ -74,7 +86,7 @@ $__magus_scriptblock = {
                 return Complete-From $affectedFlags 'ParameterName'
             }
             if ($atArg2) {
-                return Complete-From $verbs
+                return Complete-From (Get-MagusTargets)
             }
         }
         'describe' {

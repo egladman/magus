@@ -28,6 +28,7 @@ import (
 // answered from the document text the editor sends.
 func lspCmd(_ context.Context, args []string) error {
 	fs := flag.NewFlagSet("buzz lsp", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus buzz lsp")
 		fmt.Fprintln(os.Stderr, "")

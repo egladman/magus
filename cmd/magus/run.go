@@ -26,6 +26,23 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return targetUsage()
 	}
 
+	// The chain is split off the RAW args, before anything else touches them.
+	// splitTargetFromArgs partitions flags from positionals and reorders them
+	// (flags first), which would hoist a verb's own --path across the separator and
+	// leave the chain holding a bare flag.
+	args, chainArgs, chained := splitOnThen(args)
+
+	// Parsed before the run, not after it: a typo'd verb used to build the whole
+	// project and only then exit 2 on something checkable up front.
+	var chain chainPlan
+	if chained {
+		var proceed bool
+		var chainErr error
+		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
+			return chainErr
+		}
+	}
+
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
 	// flags + any project args for cmdParse below.
@@ -258,6 +275,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
+	// The sink rides the context down through the fan-out, so collecting return
+	// values needs no signature change anywhere between here and invokeSpell.
+	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	if targetName == "ci" {
 		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
@@ -272,7 +292,18 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	if chained {
+		return runChain(ctx, m, opts, targetName, targets, chain, readReturns(targetName))
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputTemplate:
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName))
+	}
+	return nil
 }
 
 // resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all.
@@ -463,4 +494,90 @@ func parseTarget(s string) (spell, target string) {
 
 type runConfig struct {
 	watchIgnores []types.IgnorePattern
+}
+
+// runArtifact is one file the run produced, with the classification `magus describe
+// file` would give it. Role rides along because "where did the build put it" and "is
+// this thing generated" are the two questions an agent asks in sequence, and
+// answering only the first leaves it to guess the second.
+type runArtifact struct {
+	Path string `json:"path"           yaml:"path"`
+	Glob string `json:"glob"           yaml:"glob"`
+	Role string `json:"role,omitempty" yaml:"role,omitempty"`
+}
+
+// runProject is one project's slice of the run. Artifacts and Value are per
+// project because a run fans out: a single flat list could not say which project
+// produced which file, and a single value would be meaningless for a multi-project
+// run.
+type runProject struct {
+	Path string `json:"path" yaml:"path"`
+	// Value is what the target returned (str or [str]), absent for a `> void`
+	// target. Replayed from the cache entry on a hit, so it is present whether or
+	// not this invocation actually executed the target.
+	Value     any           `json:"value,omitempty"     yaml:"value,omitempty"`
+	Artifacts []runArtifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+}
+
+// runOutput is the structured result of `magus run <target>`.
+type runOutput struct {
+	Target   string       `json:"target"           yaml:"target"`
+	Charms   []string     `json:"charms,omitempty" yaml:"charms,omitempty"`
+	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
+	Count    int          `json:"count"            yaml:"count"`
+	Projects []runProject `json:"projects"         yaml:"projects"`
+}
+
+// emitRunResult renders what a run produced. It is deliberately NOT a second
+// progress stream: -o jsonl already streams events, and this answers the different
+// question of what exists on disk now that the run is done.
+//
+// A dry run reports no artifacts: nothing executed, so any file matching an output
+// glob is left over from a previous run and reporting it would claim this invocation
+// produced it. It DOES report the return value, because a dry run evaluates the
+// target body under a tracing context - the value is real, and omitting it made
+// `-o json` claim "no return value" for a target that had just produced one, while
+// `--then value` printed it.
+func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns) error {
+	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun}
+	projects := m.ResolveProjects(selection)
+	out.Count = len(projects)
+
+	// Artifacts are resolved once for the whole set, then bucketed by owning
+	// project, so the expansion walks each project's globs exactly once.
+	byProject := map[string][]runArtifact{}
+	if !out.DryRun {
+		artifacts, err := m.ResolveTargetOutputs(ctx, projects, target)
+		if err != nil {
+			return err
+		}
+		paths := make([]string, len(artifacts))
+		for i, a := range artifacts {
+			paths[i] = a.Path
+		}
+		roles := m.DescribeFiles(paths)
+		roleOf := make(map[string]string, len(roles.Files))
+		for _, f := range roles.Files {
+			roleOf[f.Path] = f.Role
+		}
+		// Bucket by the project that DECLARED the glob, in one pass. This used to ask
+		// FindOutputProducer inside the per-project loop, which was O(projects x
+		// artifacts) with a workspace walk per pair and - worse - got the nil case
+		// backwards: an artifact no project's tree claimed failed the
+		// `owner.Path != p.Path` guard for every project, so it was reported N times
+		// in an N-project result. The declaring project is already on the artifact and
+		// cannot come back nil.
+		for _, a := range artifacts {
+			byProject[a.ProjectPath] = append(byProject[a.ProjectPath], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
+		}
+	}
+
+	for _, p := range projects {
+		out.Projects = append(out.Projects, runProject{
+			Path:      p.Path,
+			Artifacts: byProject[p.Path],
+			Value:     returns[p.Path],
+		})
+	}
+	return emitFormatted(opts, out)
 }

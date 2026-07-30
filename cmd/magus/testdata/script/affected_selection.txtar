@@ -1,0 +1,106 @@
+# affected runs a target over the set of projects a VCS diff says changed - the
+# entire point of the command over plain `run`. usage.txtar already covers -h,
+# --help, and the bare "a target is required" usage error; this covers the
+# selection logic itself: which projects actually get chosen, and the two
+# documented ways VCS is not available to narrow that set.
+#
+# Everything here uses --dry-run (a global flag) so nothing actually executes -
+# the fixture spells' "acme"/"beta" binaries do not exist on PATH.
+#
+# The VCS diff affected reads counts untracked files, not just committed changes -
+# so the *.v2 staging copies and changed-*.txt stdin fixtures below are gitignored;
+# left untracked they would seed every project regardless of what actually changed.
+
+# With no git repository at all, VCS-driven detection is unavailable and affected
+# falls back to running every project rather than failing the build - a documented
+# fallback, not an error surfaced to the user (contrast insight, which does error
+# with no git repo: affected treats an unusable diff as "run everything").
+exec magus affected list --dry-run
+stderr 'cannot compute affected set'
+stderr '\[dry\] .* list'
+stderr 'proj-b'
+
+# Build a real git history: an initial commit with both projects, tagged "base" so
+# later steps can reference it by a stable name instead of a churny commit SHA,
+# then a second commit that touches only proj-b.
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git add magus.yaml .gitignore magusfile.buzz spells/acme/spell.buzz proj-b/magusfile.buzz proj-b/spells/beta/spell.buzz
+exec git commit -m initial
+exec git tag base
+cp proj-b/spells/beta/spell.buzz.v2 proj-b/spells/beta/spell.buzz
+exec git add proj-b/spells/beta/spell.buzz
+exec git commit -m touch-proj-b
+
+# Selection: only proj-b changed since "base", so only proj-b is dry-run. The root
+# project (spells/acme, untouched) must not appear.
+exec magus affected list --base=base --dry-run
+stderr 'projects: proj-b \(git diff vs base\)'
+stderr '\[dry\] proj-b list'
+! stderr 'projects: 2 projects'
+
+# --stdin reads changed paths from a pipe instead of asking git for a diff - the
+# shape `magus watch | magus affected --stdin build` needs. Feeding it the root
+# project's file selects only the root project; proj-b never comes up.
+stdin changed-root.txt
+exec magus affected list --stdin --dry-run
+stderr '\[dry\] .* list'
+! stderr 'proj-b'
+
+# Feeding it proj-b's file selects only proj-b.
+stdin changed-proj-b.txt
+exec magus affected list --stdin --dry-run
+stderr '\[dry\] proj-b list'
+
+# --impact reports the blast radius of a changeset as structured data; -o json
+# covers affected's support for a structured output format. The "base": "base"
+# field stays stable because base is the tag name, not a commit SHA.
+exec magus affected --impact --base=base -o json
+stdout '"base": "base"'
+stdout '"seed_projects": \[\s*"proj-b"\s*\]'
+stdout '"path": "proj-b"'
+! stdout '"path": "\."'
+
+-- magus.yaml --
+concurrency: 2
+-- .gitignore --
+.magus/
+*.v2
+changed-*.txt
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+-- proj-b/magusfile.buzz --
+import "magus";
+import "spells/beta" as beta;
+magus.project({ "spells": [beta] });
+export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(); }
+-- proj-b/spells/beta/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "beta"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "beta", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+-- proj-b/spells/beta/spell.buzz.v2 --
+import "magus/target";
+export fun mgs_getName() > str { return "beta"; }
+// touched so affected's VCS diff has something to select
+fun lint(target: Target) > Command {
+    return Command{bin = "beta", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
+-- changed-root.txt --
+spells/acme/spell.buzz
+-- changed-proj-b.txt --
+proj-b/spells/beta/spell.buzz

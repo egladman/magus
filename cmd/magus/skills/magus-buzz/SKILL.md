@@ -2,15 +2,17 @@
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
 it as a general-purpose scripting language with the whole magus host surface
-attached. In a magus workspace it is the right reach for a one-off script -
+attached.<!-- why --> In a magus workspace it is the right reach for a one-off script -
 scanning files, reshaping JSON/YAML/TOML, templating, hitting HTTP - because it
 is already installed, it needs no dependency install or virtualenv, and it is
-the same language the workspace's own build logic is written in.
+the same language the workspace's own build logic is written in.<!-- /why --><!-- terse --> Reach for it for a
+one-off script: already installed, no dependency install, same language as the
+workspace's build logic.<!-- /terse -->
 
 ## The smallest thing that runs
 
-Everything is imported by bare name, work goes in a function, and you call it.
-That skeleton plus `magus describe module` covers most scripts:
+Everything is imported by bare name, work goes in a function, and you call it.<!-- why -->
+That skeleton plus `magus describe module` covers most scripts:<!-- /why -->
 
 ```buzz
 import "std";
@@ -38,15 +40,15 @@ magus buzz hello.buzz
 ## Never guess an API: ask
 
 The stdlib is discoverable, and guessing at it is the single biggest source of
-wasted turns. `strings` is case-conversion helpers, NOT Go's strings; JSON is
-`json\stringify` / `json\parse`, not `encode` / `decode`. Look it up:
+wasted turns.<!-- why --> `strings` is case-conversion helpers, NOT Go's strings; JSON is
+`json\stringify` / `json\parse`, not `encode` / `decode`.<!-- /why --> Look it up:
 
 ```sh
 magus describe modules -o name        # every module available to a script
 magus describe module json            # its methods, docs, and SIGNATURES with return types
 ```
 
-This file teaches the fundamentals and nothing more. Escalate deliberately:
+<!-- why -->This file teaches the fundamentals and nothing more. Escalate deliberately:<!-- /why --><!-- terse -->Escalate deliberately:<!-- /terse -->
 
 | question | where |
 | --- | --- |
@@ -54,8 +56,9 @@ This file teaches the fundamentals and nothing more. Escalate deliberately:
 | how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
-Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
-behavior - is documented; search it rather than guessing from this page.
+<!-- why -->Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
+behavior - is documented; search it rather than guessing from this page.<!-- /why --><!-- terse -->Error sets, fibers, generics, the full stdlib and sandbox behavior are all
+documented; search rather than guess.<!-- /terse -->
 
 WRONG: assume `strings\toLower(s)` or `json\encode(v)` exist.
 CORRECT: `magus describe module strings`, then write what it lists.
@@ -65,8 +68,8 @@ not module functions: `"a.buzz".endsWith(".buzz")`, `s.len()`, `list.join(" ")`.
 
 ## Imports
 
-Every module, including the Buzz stdlib, must be imported by BARE name. There is
-no `magus:` or `buzz:` prefix on the host modules.
+Every module, including the Buzz stdlib, must be imported by BARE name.<!-- why --> There is
+no `magus:` or `buzz:` prefix on the host modules.<!-- /why -->
 
 ```buzz
 import "std";                 // print, assert
@@ -76,16 +79,17 @@ import "fs"; import "json";   // host modules
 Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
 `encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
 `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
-`xml`, `yaml`. The `magus` module itself is NOT available here - it needs a
-magusfile's targets, so use it from a magusfile, not a standalone script.
+`xml`, `yaml`. The `magus` module itself is NOT available here<!-- why --> - it needs a
+magusfile's targets<!-- /why -->, so use it from a magusfile, not a standalone script.
 
 ## Two rules that cause most first-try failures
 
 `magus buzz` runs upstream-strict by default.
 
-1. **Control flow is not allowed at the top level.** Declarations and expression
-   statements are; `if`/`while`/`for` are not. Put them in a function and call
-   it. `magus buzz --embedded` relaxes this if you want a throwaway snippet.
+1. **Control flow is not allowed at the top level.**<!-- why --> Declarations and expression
+   statements are; `if`/`while`/`for` are not.<!-- /why --> Put them in a function and call
+   it.<!-- why --> `magus buzz --embedded` relaxes this if you want a throwaway snippet.<!-- /why --><!-- terse -->
+   (`--embedded` relaxes this.)<!-- /terse -->
 2. **Every argument after the first must be labeled.**
 
 ```buzz
@@ -112,11 +116,11 @@ template\render(tpl, data: {"name": "world"});
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
 Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
-`from`, `type`, `double`, `fib`, and the obvious keywords. A fixture that uses
-one fails with a confusing `null is not callable`. Prefix or rename instead.
+`from`, `type`, `double`, `fib`, and the obvious keywords.<!-- why --> A fixture that uses
+one fails with a confusing `null is not callable`.<!-- /why --> Prefix or rename instead.
 
-A raw string is backticks, and it does NOT interpolate `{...}` - use it for
-Mustache templates, regexes, and JSON blobs:
+A raw string is backticks, and it does NOT interpolate `{...}`<!-- why --> - use it for
+Mustache templates, regexes, and JSON blobs<!-- /why -->:
 
 ```buzz
 template\render(`Hello {{name}}!`, data: {"name": "world"});
@@ -140,7 +144,7 @@ main();
 ## Test what you write
 
 Buzz has test blocks, and `magus buzz -t` is the runner. Use them for any script
-worth keeping, and for spell files (which are Buzz too).
+worth keeping, and for spell files<!-- why --> (which are Buzz too)<!-- /why -->.
 
 ```buzz
 import "std"; import "strings";
@@ -158,13 +162,13 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 ## Where Buzz code belongs
 
-- **A one-off** - a standalone `.buzz` file run with `magus buzz`. Nothing is
-  registered; it is a script.
-- **Work the workspace repeats** - a target in `magusfile.buzz`, so it gets
-  caching, sandboxing, and affected tracking. Targets take
+- **A one-off** - a standalone `.buzz` file run with `magus buzz`.<!-- why --> Nothing is
+  registered; it is a script.<!-- /why -->
+- **Work the workspace repeats** - a target in `magusfile.buzz`<!-- why -->, so it gets
+  caching, sandboxing, and affected tracking<!-- /why -->. Targets take
   `(ctx: magus\Context, args: [str])` and receive `magus run <target> -- <args>`
   as that `args` list.
 - **A tool adapter** - a spell, so every project of that type gets the ops.
 
-Prefer a target over a script for anything that will be run more than once: a
-script re-runs from scratch every time, a target replays from cache.
+Prefer a target over a script for anything that will be run more than once<!-- why -->: a
+script re-runs from scratch every time, a target replays from cache<!-- /why -->.

@@ -91,6 +91,7 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1012/" title="MGS1012: cross-project output forms a dependency cycle">MGS1012: cross-project output forms a dependency cycle</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1013/" title="MGS1013: cross-project output glob escapes its owner">MGS1013: cross-project output glob escapes its owner</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1014/" aria-current="page" title="MGS1014: cross-project output was never produced">MGS1014: cross-project output was never produced</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -162,6 +163,7 @@ at what the body actually touched.</li>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../MGS1013/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1013: cross-project output glob escapes its owner</span></a>
+      <a class="page-nav-next" href="../MGS1015/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS1015: cross-project dependency names an unresolvable project</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -175,7 +177,7 @@ at what the body actually touched.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1014%22">MGS1014</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22cross-project%22">cross-project</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22snapshot%22">snapshot</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+    <small>Last updated <time datetime="2026-07-28T23:12:07Z">July 28, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c432ee1d3d890fc92e7612305b8c45ecd2776a5f" data-tooltip="c432ee1d3d890fc92e7612305b8c45ecd2776a5f" title="c432ee1d3d890fc92e7612305b8c45ecd2776a5f">c432ee1d</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -219,6 +221,71 @@ metrics - as opposed to accumulated history. See <a href="../../../../guides/dae
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

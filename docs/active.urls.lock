@@ -162,6 +162,7 @@ guides/integrations/daemon/
 guides/integrations/editor/
 guides/integrations/mcp/
 guides/mcp/
+guides/quickstart/
 guides/testing/
 guides/tips/
 index.html
@@ -274,6 +275,7 @@ reference/codes/magusfile/MGS1011/
 reference/codes/magusfile/MGS1012/
 reference/codes/magusfile/MGS1013/
 reference/codes/magusfile/MGS1014/
+reference/codes/magusfile/MGS1015/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -327,6 +329,16 @@ reference/manpage/magus-watch/
 reference/manpage/magus-where/
 reference/manpage/magus-x/
 reference/manpage/magus/
+reference/skills/
+reference/skills/magus-architecture/
+reference/skills/magus-buzz/
+reference/skills/magus-changes/
+reference/skills/magus-context-audit/
+reference/skills/magus-docs/
+reference/skills/magus-memory/
+reference/skills/magus-query/
+reference/skills/magus-run/
+reference/skills/magus-vcs/
 remote-cache/
 sandbox/
 services/

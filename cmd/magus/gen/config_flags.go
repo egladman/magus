@@ -73,7 +73,6 @@ var ConfigFlags = []ConfigFlag{
 	{"target-timeout", "MAGUS_TARGET_TIMEOUT", "duration"},
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
 	{"dry-run", "MAGUS_DRY_RUN", "bool"},
-	{"assume-interactive", "MAGUS_ASSUME_INTERACTIVE", "bool"},
 	{"", "MAGUS_DEFAULT_CHARMS", "stringslice"},
 	{"sandbox-enabled", "MAGUS_SANDBOX_ENABLED", "bool"},
 	{"", "MAGUS_SANDBOX_ENV_PASSTHROUGH", "stringslice"},
@@ -132,6 +131,5 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
-	fs.BoolVar(&cfg.AssumeInteractive, "assume-interactive", cfg.AssumeInteractive, "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
 }

@@ -134,6 +134,14 @@ var reservedIdents = map[string]bool{
 	"int": true, "str": true, "bool": true, "void": true,
 }
 
+// IsReservedIdent reports whether name is a word upstream Buzz reserves, so it
+// cannot be used as a plain binding name. A code GENERATOR emitting Buzz needs
+// this: a Go field named Type mirrors to a field named `type`, which does not
+// parse, and the generator has to reach for a free identifier (@"type") instead.
+// Exported so there is one list rather than a copy that silently drifts from the
+// parser's.
+func IsReservedIdent(name string) bool { return reservedIdents[name] }
+
 // eatBindingIdent consumes an identifier used as a binding name and rejects any
 // upstream-reserved word (strict parity with upstream Buzz).
 func (p *parser) eatBindingIdent() (token.Token, error) {
@@ -227,6 +235,13 @@ func (p *parser) parseStmt() (ast.Node, error) {
 	if t.Kind == token.Ident && t.Val == "test" &&
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
+	}
+	// `extern fun name(...) > T;` declares a native function's SIGNATURE with no
+	// body - how upstream types its stdlib (src/lib/*.buzz). Contextual like
+	// `test`: `extern` is a reserved word, so it can never be a binding name, but
+	// it stays an ordinary identifier in every position other than this one.
+	if t.Kind == token.Ident && t.Val == "extern" && p.peekAt(1).Kind == token.Fun {
+		return p.parseExternFunDecl()
 	}
 	// `out expr;` leaves the enclosing block expression. Contextual like `test`:
 	// outside a `from` block `out` stays an ordinary identifier, so the check is
@@ -1210,11 +1225,36 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
 	}
-	fr, err := p.parseFunRest()
+	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
 	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
+}
+
+// parseExternFunDecl parses `extern fun name(params) > T;` - the signature of a
+// function the HOST implements, with a semicolon where a body would be. It is
+// how upstream Buzz gives its native stdlib types (`export extern fun
+// dump(value: any) > void;`), and the same declaration types magus's host
+// modules: the checker gets a real signature instead of Unknown, and the runtime
+// resolves the name against the binding the host already installed.
+func (p *parser) parseExternFunDecl() (*ast.FunDecl, error) {
+	t := p.advance() // `extern`
+	if _, err := p.eat(token.Fun); err != nil {
+		return nil, err
+	}
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.skipTypeParams(); err != nil {
+		return nil, err
+	}
+	fr, err := p.parseFunRest(true)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, IsExtern: true, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot, Doc: t.Doc}, nil
 }
 
 // parseTestDecl parses `test "name" { body }`. The name is a string literal, as
@@ -1402,7 +1442,7 @@ func (p *parser) parseBlock() (*ast.BlockStmt, error) {
 
 // ---- expression precedence climbing ----
 
-func (p *parser) parseExpr() (ast.Node, error) { return p.parseCoalesce() }
+func (p *parser) parseExpr() (ast.Node, error) { return p.parseOr() }
 
 // parseRange sits between comparison and additive, so `..` binds TIGHTER than
 // `==`: upstream writes `range == 0..10`, which at a looser precedence would
@@ -1423,14 +1463,23 @@ func (p *parser) parseRange() (ast.Node, error) {
 	return left, nil
 }
 
+// parseCoalesce parses `??` at upstream Buzz's Precedence.NullCoalescing, which
+// sits BETWEEN Term (`+`/`-`) and Bitwise - so `sum + resume f ?? 0` is
+// `sum + (resume f ?? 0)`, not `(sum + resume f) ?? 0`.
+//
+// It used to sit above `or`, looser than every binary operator, which made the
+// upstream idiom "coalesce a nullable right where it is used" a runtime error:
+// the `+` saw the null before the `??` could replace it
+// (tests/behavior/generics.buzz, "Generic with fibers"). `typeof` shares this
+// level upstream and belongs here too when it lands.
 func (p *parser) parseCoalesce() (ast.Node, error) {
-	left, err := p.parseOr()
+	left, err := p.parseBitwise()
 	if err != nil {
 		return nil, err
 	}
 	for p.check(token.Coalesce) {
 		t := p.advance()
-		right, err := p.parseOr()
+		right, err := p.parseBitwise()
 		if err != nil {
 			return nil, err
 		}
@@ -1552,7 +1601,7 @@ func (p *parser) parseComparison() (ast.Node, error) {
 }
 
 func (p *parser) parseAdditive() (ast.Node, error) {
-	left, err := p.parseBitwise()
+	left, err := p.parseCoalesce()
 	if err != nil {
 		return nil, err
 	}
@@ -1562,7 +1611,7 @@ func (p *parser) parseAdditive() (ast.Node, error) {
 		if t.Kind == token.Minus {
 			op = "-"
 		}
-		right, err := p.parseBitwise()
+		right, err := p.parseCoalesce()
 		if err != nil {
 			return nil, err
 		}
@@ -1652,6 +1701,31 @@ func (p *parser) parseMultiplicative() (ast.Node, error) {
 }
 
 func (p *parser) parseUnary() (ast.Node, error) {
+	// `<T>` in PREFIX position is a type used as a value. Upstream gives Less both
+	// a prefix handler (typeExpression) and an infix one (comparison); reaching
+	// this function at all means nothing preceded the `<`, so it cannot be the
+	// comparison operator and the two uses never compete.
+	if p.check(token.Lt) {
+		t := p.advance()
+		annot, err := p.readType()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.eat(token.Gt); err != nil {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected '>' after the type in a type expression", t.Line, t.Col)
+		}
+		return &ast.TypeExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Annot: annot}, nil
+	}
+	// `typeof x`. A reserved word rather than a token kind, so match it the same
+	// contextual way `extern fun` is matched.
+	if p.peek().Kind == token.Ident && p.peek().Val == "typeof" && !p.peek().Raw {
+		t := p.advance()
+		operand, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.TypeOfExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Operand: operand}, nil
+	}
 	// `mut` marks a list, map, or object literal as mutable. Collections are
 	// immutable by default in Buzz; only a mut value may be mutated in place.
 	if p.check(token.Mut) {
@@ -2062,7 +2136,7 @@ func (p *parser) parseFunExpr() (*ast.FunExpr, error) {
 	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
 	}
-	fr, err := p.parseFunRest()
+	fr, err := p.parseFunRest(false)
 	if err != nil {
 		return nil, err
 	}
@@ -2082,7 +2156,8 @@ type funRest struct {
 }
 
 // parseFunRest parses the shared tail of a function: (params) rettype *> yieldtype { body }.
-func (p *parser) parseFunRest() (funRest, error) {
+// With extern set the tail ends at a `;` instead of a body, and out.body stays nil.
+func (p *parser) parseFunRest(extern bool) (funRest, error) {
 	var out funRest
 	if _, err := p.eat(token.LParen); err != nil {
 		return funRest{}, err
@@ -2177,6 +2252,14 @@ func (p *parser) parseFunRest() (funRest, error) {
 		if out.yieldAnnot != "void" && !strings.HasSuffix(out.yieldAnnot, "?") {
 			return funRest{}, fmt.Errorf("buzz: line %d:%d: expected optional type or void for fiber yield type, got %q", ya.Line, ya.Col, out.yieldAnnot)
 		}
+	}
+	// An extern declaration stops here: the semicolon stands where a body would be,
+	// and the implementation comes from the host rather than from this source.
+	if extern {
+		if _, err := p.eat(token.Semicolon); err != nil {
+			return funRest{}, err
+		}
+		return out, nil
 	}
 	// Expression-body function: `fun f(x: int) > int => expr;` desugars to a
 	// block that returns expr, matching upstream Buzz's arrow-body sugar. It

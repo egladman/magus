@@ -65,7 +65,7 @@ func writeYAML(w io.Writer, v any) error {
 func writeJSONL(w io.Writer, v any) error {
 	enc := codec.NewEncoder(w)
 	rv := reflect.ValueOf(v)
-	if rv.Kind() == reflect.Ptr {
+	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
 	}
 	if rv.Kind() == reflect.Struct {
@@ -125,7 +125,19 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 
 // writeTemplate executes a Go text/template body against v. The template sees the
 // SAME shape as -o json: field names are the json-tag keys ({{.path}}), NOT the
-// PascalCase Go struct fields. We guarantee that by first normalizing v through the
+// PascalCase Go struct fields.
+//
+// That choice is deliberate and is the kubectl -o go-template model rather than
+// docker --format's. -o json is the reference a template is authored against: a
+// reader runs the command with -o json, sees "cache_key", and writes {{.cache_key}}.
+// Binding to Go identifiers instead would name fields that appear in NO other output
+// format, leaving nothing to read them off, and would couple user templates to
+// internal field names so a rename breaks them silently. The json tags are already a
+// versioned wire contract; Go identifiers are not.
+//
+// The cost, accepted: the round-trip coerces numbers to float64 (see below), and a
+// caller who types the Go casing gets an error rather than a guess. Bare -o template
+// lists the available fields, and the execute error points at it. We guarantee that by first normalizing v through the
 // codec (marshal to JSON, then unmarshal into a plain any), so the template ranges
 // over map[string]any / []any exactly as -o json renders it. This makes -o json a
 // faithful reference for authoring templates (the kubectl -o go-template model), and
@@ -136,7 +148,12 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 // Excluded: env/expandenv, now/date/uuidv4, crypto, getHostByName, fail.
 // No trailing newline is appended (templates control whitespace, matching kubectl -o go-template).
 func writeTemplate(w io.Writer, v any, body string) error {
-	t, err := template.New("output").Funcs(templateFuncs()).Parse(body)
+	// missingkey=error, because the data is a map keyed by JSON TAG and the default
+	// is to render a misspelled key as "<no value>" and exit 0. A caller who writes
+	// {{.Name}} instead of {{.name}} - the Go field name rather than the wire name -
+	// otherwise gets empty output and a success status, which is the worst outcome for
+	// the machine-readable format an agent scripts against.
+	t, err := template.New("output").Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
@@ -145,7 +162,12 @@ func writeTemplate(w io.Writer, v any, body string) error {
 		return fmt.Errorf("shape template data: %w", err)
 	}
 	if err := t.Execute(w, shaped); err != nil {
-		return fmt.Errorf("execute template: %w", err)
+		// Names the contract AND the exact way to see it. A template error that only
+		// says "no entry for key" leaves the reader guessing at casing, which is the
+		// state this whole path was in when it rendered nothing and exited 0.
+		return fmt.Errorf("execute template: %w\n"+
+			"  template fields are the -o json names, not the Go field names: .name, not .Name\n"+
+			"  to list every field this command exposes, rerun it with a bare -o template (no '=' and no body)", err)
 	}
 	return nil
 }
@@ -282,7 +304,7 @@ func writeFieldBlock(w io.Writer, t reflect.Type) []reflect.Type {
 
 // structType dereferences pointers and returns rt when it is a struct, else nil.
 func structType(rt reflect.Type) reflect.Type {
-	for rt != nil && rt.Kind() == reflect.Ptr {
+	for rt != nil && rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	if rt == nil || rt.Kind() != reflect.Struct {
@@ -296,7 +318,7 @@ func structType(rt reflect.Type) reflect.Type {
 func elemType(rt reflect.Type) reflect.Type {
 	for rt != nil {
 		switch rt.Kind() {
-		case reflect.Ptr, reflect.Slice, reflect.Array, reflect.Map:
+		case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
 			rt = rt.Elem()
 		default:
 			return rt
@@ -328,7 +350,7 @@ func jsonFieldKey(f reflect.StructField) string {
 // so the listing reads like the json shape rather than Go's fully-qualified names.
 func typeLabel(rt reflect.Type) string {
 	switch rt.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return "*" + typeLabel(rt.Elem())
 	case reflect.Slice, reflect.Array:
 		return "[]" + typeLabel(rt.Elem())

@@ -16,6 +16,12 @@ import (
 // are candidates for this same subcommand later.
 func graphVerify(_ context.Context, root string, args []string) error {
 	fset := flag.NewFlagSet("graph verify", flag.ContinueOnError)
+	// The display flags belong on EVERY command, not only the ones that render a
+	// result. A flag that works in most places is worse than one that works
+	// nowhere: an agent told to always pass -s hits `flag provided but not
+	// defined` here, learns the flag is unreliable, and stops using it - so the
+	// whole convention decays from one gap.
+	bindDisplayFlags(fset)
 	strict := fset.Bool("strict", false, "exit non-zero when any drift is found (CI guard)")
 	dir := fset.String("dir", root, "repo directory to check")
 	fset.Usage = func() {

@@ -1,0 +1,96 @@
+# The exit-code contract, asserted across every command that takes a subcommand.
+#
+#   0  the command did what was asked - an explicit -h/--help included
+#   1  the command was invoked correctly and the WORK failed
+#   2  the invocation itself was wrong; nothing was attempted
+#
+# 2 matches Go's own flag package and the Unix convention, and it was already what
+# magus returned when a request could not be carried out as stated (an unresolvable
+# `path` node, an ambiguous `where`, `tail` with no terminal).
+#
+# It had drifted badly. The SAME mistake - forgetting the subcommand - exited 0 from
+# `config`, `self` and `merge-driver`, 1 from `man` and `completion`, while `self
+# <unknown>` exited 2. Nothing scripting magus could branch on. The cause was uniform:
+# every dispatcher wrote `if len(args) == 0 || args[0] == "-h"`, collapsing "you gave
+# me nothing" into "you asked for help".
+#
+# This script is per-command on purpose. A shared helper would let a command opt out of
+# the convention silently; naming each one means adding a subcommand to magus without
+# joining the convention shows up here as a failure.
+
+# -- an explicit help request is a SATISFIED request: exit 0 -------------------
+exec magus config -h
+exec magus server -h
+exec magus man --help
+exec magus self --help
+exec magus merge-driver -h
+exec magus completion --help
+exec magus agent -h
+
+# -- no subcommand at all is a USAGE ERROR: exit 2 -----------------------------
+# Each names what was wanted rather than only reporting that something is missing.
+! exec magus config
+stderr 'subcommand required'
+stderr 'want view, set, history, cache, or mcp'
+
+! exec magus server
+stderr 'target required'
+stderr 'want start, stop, or job'
+
+! exec magus man
+stderr 'subcommand required'
+stderr 'want install'
+
+! exec magus self
+stderr 'subcommand required'
+stderr 'want update'
+
+! exec magus completion
+stderr 'shell name required'
+
+# merge-driver is the sharp one: 0 is how a merge driver tells git the conflict was
+# resolved, so returning it for a run that did nothing was actively the wrong signal.
+! exec magus merge-driver
+stderr 'expected 5 arguments'
+
+# -- an unknown subcommand is the same class of error: exit 2 ------------------
+! exec magus config bogus
+stderr 'unknown subcommand "bogus"'
+! exec magus server bogus
+stderr 'unknown target "bogus"'
+! exec magus man bogus
+stderr 'unknown subcommand "bogus"'
+! exec magus self bogus
+stderr 'unknown subcommand "bogus"'
+! exec magus completion bogus
+stderr 'unsupported shell "bogus"'
+! exec magus agent bogus
+stderr 'unknown subcommand "bogus"'
+
+# Nested dispatchers follow it too, and each used to print its message TWICE - once
+# directly to stderr, once again via the returned error.
+! exec magus config cache bogus
+stderr 'unknown subcommand "bogus"'
+! exec magus config mcp bogus
+stderr 'unknown subcommand "bogus"'
+
+# -- a wrong argument count is a usage error, not a work failure ---------------
+! exec magus config set concurrency 4
+stderr 'requires one argument in key=<key>,value=<value> form'
+! exec magus merge-driver onlyonearg
+stderr 'expected 5 arguments'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

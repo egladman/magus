@@ -17,17 +17,37 @@ import "lib/date" as _;
 // Footer crediting the last commit that touched a page's source, falling back to HEAD for
 // a not-yet-committed file. Keying off the file's own history means a page changes when its
 // source does, not when any commit lands.
+// renderCommitFooter builds the provenance strip for one page, keyed to the commit
+// that last changed THAT PAGE's content - never to HEAD.
+//
+// The HEAD fallback this replaced was the single largest source of generated-docs
+// churn: 132 of 163 pages have no hand-written source under docs/ (the diagnostic
+// codes, the Buzz reference, the manpages, the spell pages are all rendered from Go
+// source), so every one of them stamped whatever HEAD happened to be and rewrote on
+// any commit that triggered a regeneration. 132 files of noise in every future diff,
+// and a drift gate that failed for no reason. The old remedy was a hand-listed
+// exception for three pages, which is the same fix applied to 2% of the cases.
+//
+// So the lookup walks two keys before giving up, both already present in the single
+// git-log pass buildCommits makes:
+//
+//  1. the page's SOURCE under docs/ - a hand-written page's own last edit;
+//  2. the page's committed OUTPUT under gen/ - for a generated page, the last commit
+//     in which its rendered content actually changed.
+//
+// Neither hit means the page is genuinely new (nothing has committed it yet), and the
+// honest answer there is to say nothing: attributing it to HEAD claims the page
+// changed in a commit that never touched it, which is both false and the drift bug.
 export fun renderCommitFooter(path: str, site: Site) > str {
-    var cFull = site.metaFull;
-    var cShort = site.metaShort;
-    var cStamp = site.metaStamp;
-    final rec = site.metaCommits[site.metaPrefix + path];
-    if (rec != null) {
-        final parts = rec.split("|");
-        cFull = parts[0];
-        cShort = parts[1];
-        cStamp = parts[2];
+    var rec = site.metaCommits[site.metaPrefix + path];
+    if (rec == null) {
+        rec = site.metaCommits[site.metaPrefix + site.outDir + "/" + path];
     }
+    if (rec == null) { return ""; }
+    final parts = rec.split("|");
+    final cFull = parts[0];
+    final cShort = parts[1];
+    final cStamp = parts[2];
     // "Last updated" line: always-visible provenance. A <small> paragraph so Pico's
     // typography sets the muted look, no custom classes. One inline line (no newlines).
     var line = template\render(`<small>Last updated <time datetime="{{stampAttr}}">{{stampDisplay}}</time> (<a href="{{gh}}/commit/{{full}}" data-tooltip="{{full}}" title="{{full}}">{{short}}</a>)</small>`,

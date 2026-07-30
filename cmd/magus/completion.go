@@ -22,13 +22,14 @@ var completionPowerShell string
 
 func completion(args []string) error {
 	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = completionUsage
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
 		completionUsage()
-		return fmt.Errorf("magus completion: shell name required (bash, zsh, fish, or powershell)")
+		return usagef("magus completion: shell name required (bash, zsh, fish, or powershell)")
 	}
 	switch fs.Arg(0) {
 	case "bash":
@@ -45,7 +46,7 @@ func completion(args []string) error {
 		return err
 	default:
 		completionUsage()
-		return fmt.Errorf("magus completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
+		return usagef("magus completion: unsupported shell %q (choose: bash, zsh, fish, powershell)", fs.Arg(0))
 	}
 }
 

@@ -105,6 +105,7 @@ func (v Value) asIterState() *iterStateObj { return objAs[*iterStateObj](v, "ite
 func (v Value) asRange() *rangeObj         { return objAs[*rangeObj](v, "range") }
 func (v Value) asFib() *fibObj             { return objAs[*fibObj](v, "fib") }
 func (v Value) asPat() *patObj             { return objAs[*patObj](v, "pat") }
+func (v Value) asType() *typeObj           { return objAs[*typeObj](v, "type") }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return objAs[*objDeclPayload](v, "objectdecl").ObjectDecl }

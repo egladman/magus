@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	runPkg "github.com/egladman/magus/internal/proc/run"
 )
 
 // newMutableCache opens a mutable cache at <tmp>/.magus and

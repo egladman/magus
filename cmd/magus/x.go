@@ -39,9 +39,11 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 		return err
 	}
 
-	if !isInteractiveTTY() && !globalCfg.AssumeInteractive {
+	// No override: x draws a picker and reads keystrokes, so without a terminal
+	// there is nothing for it to do. A config key that claims otherwise only
+	// moves the failure later, into a redraw against a pipe.
+	if !isInteractiveTTY() {
 		fmt.Fprintf(os.Stderr, "magus: x requires an interactive terminal; use `%s` instead\n", clihint.Run.With("<target>", "<project>"))
-		fmt.Fprintln(os.Stderr, "       (set assume_interactive: true in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override)")
 		return errSilent{exitCode: 2}
 	}
 

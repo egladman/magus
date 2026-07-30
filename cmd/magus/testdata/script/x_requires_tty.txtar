@@ -1,0 +1,45 @@
+# magus x draws a picker and reads keystrokes, so without a terminal there is
+# nothing for it to do. Unlike `magus tail`, there is no half of x that works
+# headless, which is why its refusal points at `magus run` rather than at a flag.
+#
+# There used to be an assume_interactive override advertised here, and it never
+# worked: lifting the outer gate only moved the failure a few lines later, into
+# the picker's own TTY check. An escape hatch that cannot reach a working state
+# is worse than none, because a caller spends time trying it. It is gone.
+
+# No terminal: refused with the remedy that actually works, exit 2.
+! exec magus x
+stderr 'magus: x requires an interactive terminal; use `magus run <target> <project>` instead'
+
+# The refusal must not advertise a knob that no longer exists.
+! stderr 'assume_interactive'
+! stderr 'MAGUS_ASSUME_INTERACTIVE'
+
+exec magus x -h
+stderr 'Usage: magus x \[filter\.\.\.\]'
+stderr 'Requires an interactive terminal'
+stderr 'for scripts use `magus run`'
+
+# Setting the retired key in magus.yaml changes nothing - it is not a config
+# field any more, so it is inert rather than silently re-enabling a broken path.
+cp magus.yaml.assume magus.yaml
+! exec magus x
+stderr 'magus: x requires an interactive terminal'
+
+-- magus.yaml --
+concurrency: 2
+-- magus.yaml.assume --
+concurrency: 2
+assume_interactive: true
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

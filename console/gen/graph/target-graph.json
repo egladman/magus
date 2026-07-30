@@ -64,7 +64,12 @@
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
           "outputs": [
-            "manpage/*.1"
+            {
+              "glob": "manpage/*.1"
+            },
+            {
+              "glob": "internal/manpage/testdata/api.lock"
+            }
           ]
         },
         {
@@ -72,33 +77,74 @@
           "declared": "bindings_generate",
           "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
           "outputs": [
-            "host/gen/*.go"
+            {
+              "glob": "host/gen/*.go"
+            }
           ]
         },
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen)."
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.",
+          "outputs": [
+            {
+              "glob": "internal/spell/gen/*.bo"
+            },
+            {
+              "glob": "internal/spell/gen/types/*.buzz"
+            }
+          ]
         },
         {
           "name": "mocks-generate",
           "declared": "mocks_generate",
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
           "outputs": [
-            "**/gen/mocks/*.go"
+            {
+              "glob": "**/gen/mocks/*.go"
+            }
+          ]
+        },
+        {
+          "name": "skills-generate",
+          "declared": "skills_generate",
+          "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
+          "outputs": [
+            {
+              "glob": ".claude/skills/**"
+            },
+            {
+              "glob": ".agents/skills/**"
+            },
+            {
+              "glob": ".opencode/skills/**"
+            }
           ]
         },
         {
           "name": "config-generate",
           "declared": "config_generate",
-          "doc": "Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go."
+          "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go.",
+          "outputs": [
+            {
+              "glob": "cmd/magus/gen/*.go"
+            },
+            {
+              "glob": "schema/gen/*.go"
+            },
+            {
+              "glob": "internal/config/gen/*.go"
+            }
+          ]
         },
         {
           "name": "md-generate",
           "declared": "md_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "outputs": [
-            "MAGUS.md"
+            {
+              "glob": "MAGUS.md"
+            }
           ]
         },
         {
@@ -106,12 +152,17 @@
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
           "outputs": [
-            "gen/*.json"
+            {
+              "glob": "gen/*.json"
+            }
           ]
         },
         {
           "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout and, in GitHub Actions, appends it to the job step summary."
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
+          "charms": [
+            "gha"
+          ]
         },
         {
           "name": "generate",
@@ -121,6 +172,7 @@
             "bindings-generate",
             "spells-generate",
             "mocks-generate",
+            "skills-generate",
             "config-generate",
             "md-generate",
             "graph-generate"
@@ -145,7 +197,9 @@
             }
           ],
           "outputs": [
-            "dist/*"
+            {
+              "glob": "dist/*"
+            }
           ]
         },
         {
@@ -253,12 +307,6 @@
           ]
         },
         {
-          "name": "security",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
           "name": "format",
           "doc": "Regenerates, then formats Go and tidies `go.mod`.",
           "dependencies": [
@@ -279,7 +327,6 @@
           "doc": "Runs the CI gates through their declared dependencies.",
           "dependencies": [
             "lint",
-            "security",
             "build",
             "test"
           ]
@@ -398,6 +445,7 @@
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
           "dependencies": [
+            "preflight",
             "lint",
             "test",
             "build"
@@ -448,12 +496,24 @@
             }
           ],
           "outputs": [
-            "reference/buzz/*.md",
-            "reference/config.md",
-            "concepts/spells/*.md",
-            "concepts/spells.md",
-            "reference/manpage/*.md",
-            "concepts/knowledge.md"
+            {
+              "glob": "reference/buzz/*.md"
+            },
+            {
+              "glob": "reference/config.md"
+            },
+            {
+              "glob": "concepts/spells/*.md"
+            },
+            {
+              "glob": "concepts/spells.md"
+            },
+            {
+              "glob": "reference/manpage/*.md"
+            },
+            {
+              "glob": "concepts/knowledge.md"
+            }
           ]
         },
         {
@@ -484,6 +544,10 @@
           "cross_dependencies": [
             {
               "project": "libs/textsearch",
+              "target": "lint"
+            },
+            {
+              "project": "docs/guides/integrations/agents",
               "target": "lint"
             }
           ]
@@ -553,8 +617,33 @@
       ],
       "depends_on": [
         ".",
+        "docs/guides/integrations/agents",
         "libs/gopherbuzz",
         "libs/textsearch"
+      ]
+    },
+    {
+      "path": "docs/guides/integrations/agents",
+      "name": "docs/guides/integrations/agents",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "lint",
+          "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the anchor `magus affected ci` keys off.",
+          "dependencies": [
+            "lint"
+          ]
+        }
       ]
     },
     {
@@ -743,6 +832,13 @@
           "name": "pgo-generate",
           "declared": "pgo_generate",
           "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
+        },
+        {
+          "name": "conformance",
+          "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
+          "dependencies": [
+            "preflight"
+          ]
         }
       ]
     },

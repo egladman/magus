@@ -167,10 +167,17 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void {
 // stay owned here at the root, NOT in the docs project. The docs project owns the
 // Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the
 // same internal/manpage registry by cmd/magus-manpage (see its -format flag).
+//
+// It also refreshes api.lock, the drift-gated snapshot of the public CLI surface,
+// because that is serialized from the SAME registry - the two can only disagree if
+// one is regenerated without the other. It had no producing target at all before,
+// so TestAPIUpToDate's remedy was a raw `go generate` that `magus run generate`
+// never performed.
 export fun man_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("manpage/*.1");
+    ctx.outputs("manpage/*.1", "internal/manpage/testdata/api.lock");
     fs\makeDirectory("manpage");
     os\exec("go", ["run", "./cmd/magus-manpage", "-format", "roff", "-out", "manpage"]);
+    os\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
 // Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
@@ -179,8 +186,15 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen).
+// Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the
+// Buzz value-type mirrors (internal/spell/gen/types), both driven by the
+// go:generate directives in internal/spell.
+//
+// Both trees are declared: undeclared, magus classified them as ordinary source,
+// so `magus describe file` told a reader a generated file was safe to hand-edit
+// and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz");
     os\exec("go", ["generate", "./internal/spell/..."]);
 }
 
@@ -192,8 +206,34 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["tool", "mockery"]);
 }
 
-// Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.
+// Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
+//
+// The installed copies are GENERATED, and declaring them says so: without this
+// they classified as ordinary source, so `magus describe file .claude/skills/...`
+// reported a hand-editable file and the agent guard stayed silent on the one edit
+// that is always wrong. CLAUDE.md has said "edit the sources, not the installed
+// copies" all along; this is the declaration that makes the tooling say it too.
+//
+// AGENTS.md is deliberately NOT declared. Only its marked section is managed -
+// bytes outside the markers are hand-owned - so calling the whole file generated
+// would tell a reader never to edit a file they are meant to edit. `magus graph
+// verify` still checks that section's stamp.
+export fun skills_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs(".claude/skills/**", ".agents/skills/**", ".opencode/skills/**");
+    magus\cmd(["agent", "install", ".claude/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install", ".agents/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install", ".opencode/skills", "--force"], {"quiet": true});
+    magus\cmd(["agent", "install-agents-md"], {"quiet": true});
+}
+
+// Regenerates the CLI config-flag plumbing from internal/config/config.go. One
+// generator invocation, four trees: the flag/bind plumbing beside the CLI, the
+// schema field list, and the env applier next to config itself. All four are
+// declared - undeclared they classified as ordinary source, so magus told a
+// reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
+                "cmd/magus/completions/*");
     os\exec("go", ["generate", "./cmd/magus/..."]);
 }
 

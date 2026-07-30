@@ -18,6 +18,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// magusfileSpellName is the spell that dispatches a magusfile's own exported
+// targets. It is bound implicitly for every project (see the "spells" handling
+// below), so a magusfile's targets run whether or not the author lists it.
+const magusfileSpellName = "magusfile"
+
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
 	"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
@@ -136,6 +141,9 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithExclusive())
 		}
 	}
+	// declaredMagusfileSpell tracks whether the author listed the magusfile spell
+	// themselves, so the implicit bind below does not double-register it.
+	declaredMagusfileSpell := false
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins
@@ -169,7 +177,25 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				len(sp.DeclarationDirGlobs()) == 0 {
 				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
 			}
+			if name == magusfileSpellName {
+				declaredMagusfileSpell = true
+			}
 			opts = append(opts, workspace.WithRegisteredSpell(name))
+		}
+		// The magusfile spell is bound whether or not it was listed. It is not a
+		// language adapter you opt into like go or buf - it is what makes the file
+		// you are writing runnable at all, so listing it should never have been the
+		// author's job. Before this, declaring ANY spell replaced the default set and
+		// dropped it, and the project's own targets stopped dispatching: the run
+		// resolved each name against the bound spells, found no op, treated the miss
+		// as a fan-out skip, and reported [pass] having executed nothing. This repo's
+		// own proto project (spells: [buf]) had three no-op targets that way,
+		// including the ci anchor that `magus affected ci` gates on.
+		//
+		// Appended last so the FIRST declared spell stays the primary (p.Spell is set
+		// by the first binding), keeping `magus ls` and the graph labels unchanged.
+		if !declaredMagusfileSpell {
+			opts = append(opts, workspace.WithRegisteredSpell(magusfileSpellName))
 		}
 	}
 	if wv, ok := v.MapGet("watch_ignore"); ok && wv.IsMap() {

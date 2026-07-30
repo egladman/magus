@@ -1,0 +1,80 @@
+# `--then file <p> history` and `--then file <p> diff` read the content-addressed
+# store, which already held every past run's artifacts. Nothing new is persisted to
+# answer either one; this is a capability that was built and never exposed.
+#
+# The pair answers a question the VCS answers badly for generated files: git tells
+# you when someone committed a regeneration, this tells you when the BYTES changed.
+
+# One run: one cached version.
+exec magus run bundle:rw -s --then file dist/app.txt history
+stdout 'bundle'
+stdout '\d{4}-\d{2}-\d{2}T'
+
+# -o json carries the blob, size, target and entry, for scripting a comparison.
+exec magus run bundle:rw -s -o json --then file dist/app.txt history
+stdout '"blob":'
+stdout '"target": "bundle"'
+stdout '"entry":'
+
+# A global flag AFTER the verb is a usage error, not a silently dropped flag.
+# Everything after --then belongs to the verb, so `-o json` there reaches history,
+# which takes no arguments - the accepted-and-ignored failure the separator exists
+# to prevent.
+! exec magus run bundle:rw -s --then file dist/app.txt history -o json
+stderr 'takes no further arguments'
+stderr 'global flags go BEFORE --then'
+
+# With only one cached version, the working tree IS that version, so there is
+# genuinely nothing to compare. Saying so beats running a differ over two identical
+# files and letting the reader infer it from empty output.
+# txtar writes files 0644, so the stub needs the executable bit.
+chmod 0755 stub-diff
+env MAGUS_DIFFTOOL=$WORK/stub-diff
+exec magus run bundle:rw -s --then file dist/app.txt diff
+stderr 'nothing to diff'
+
+# Change what the target emits and run again: now two versions exist.
+cp changed.buzz magusfile.buzz
+exec magus run bundle:rw -s
+exec magus run bundle:rw -s --then file dist/app.txt history
+stdout -count=2 'bundle'
+
+# diff renders nothing itself: it materializes the cached side and runs the tool
+# named by MAGUS_DIFFTOOL. The stub only echoes its argument count, which proves the
+# delegation without depending on any differ's output format.
+exec magus run bundle:rw -s --then file dist/app.txt diff
+stderr 'vs the working tree'
+stdout 'stub-diff saw 2 paths'
+
+# An unknown sub-verb names the whole set rather than only what failed.
+! exec magus run bundle:rw -s --then file dist/app.txt bogus
+stderr 'want contents, export, hash, history, or diff'
+
+# hash prints the content hash of what is on disk: the same sha256 the store keys
+# blobs by, so it can be set against any row of history without materializing.
+exec magus run bundle:rw -s --then file dist/app.txt hash
+stdout '^[0-9a-f]{64}$'
+
+# history on a path the target does not produce is a usage error naming what it does.
+! exec magus run bundle:rw -s --then file nope.txt history
+stderr 'is not an artifact of this target'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "os";
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
+}
+-- changed.buzz --
+import "magus";
+import "os";
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo changed > dist/app.txt"]);
+}
+-- stub-diff --
+#!/bin/sh
+echo "stub-diff saw $# paths"

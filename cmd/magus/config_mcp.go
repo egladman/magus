@@ -17,6 +17,7 @@ import (
 
 func configMCPCmd(args []string) error {
 	fs := flag.NewFlagSet("config mcp", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -50,14 +51,14 @@ func configMCPCmd(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp: unknown subcommand %q", sub)
+		return usagef("magus config mcp: unknown subcommand %q", sub)
 	}
 }
 
 func configMCPToken(args []string) error {
 	fs := flag.NewFlagSet("config mcp token", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp token <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -94,14 +95,14 @@ func configMCPToken(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp token: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp token: unknown subcommand %q", sub)
+		return usagef("magus config mcp token: unknown subcommand %q", sub)
 	}
 }
 
 func configMCPTokenGenerate(args []string) error {
 	fs := flag.NewFlagSet("config mcp token generate", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	force := fs.Bool("force", false, "Overwrite an existing token (rotation)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp token generate [--force]")
@@ -195,6 +196,7 @@ func configMCPTokenStatus(args []string) error {
 
 func configMCPConnector(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -229,14 +231,14 @@ func configMCPConnector(args []string) error {
 		fs.Usage()
 		return nil
 	default:
-		fmt.Fprintf(os.Stderr, "magus config mcp connector: unknown subcommand %q\n\n", sub)
 		fs.Usage()
-		return fmt.Errorf("magus config mcp connector: unknown subcommand %q", sub)
+		return usagef("magus config mcp connector: unknown subcommand %q", sub)
 	}
 }
 
 func configMCPConnectorCreate(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector create", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	name := fs.String("name", "", "Name for this connector token (default: connector-N)")
 	expires := fs.String("expires", "", `Lifetime: a duration like 90d or 48h, or "never" (default 90d)`)
 	fs.Usage = func() {
@@ -323,6 +325,7 @@ func configMCPConnectorList(args []string) error {
 
 func configMCPConnectorRevoke(args []string) error {
 	fs := flag.NewFlagSet("config mcp connector revoke", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config mcp connector revoke <name|fingerprint>")
 		fmt.Fprintln(os.Stderr, "")

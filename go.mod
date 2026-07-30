@@ -44,7 +44,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/gofrs/flock v0.13.0
+require (
+	github.com/gofrs/flock v0.13.0
+	mvdan.cc/sh/v3 v3.13.1
+)
 
 require (
 	github.com/brunoga/deep v1.2.4 // indirect

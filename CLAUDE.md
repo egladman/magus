@@ -42,9 +42,29 @@ ci:rw`, and `generate` writes its output locally. CI strips the default
 
 ## Which magus binary
 
-Locally, run HEAD: `go build -o /tmp/magus ./cmd/magus` once per session and
-use that (or `go run ./cmd/magus <cmd>` for a one-off). Do not expect a release
-binary on PATH.
+Locally, run HEAD with `go run ./cmd/magus <cmd>`. It compiles fresh each
+invocation (slow as a loop, fine for a command) and is NOT denied by the guard.
+Do not expect a release binary on PATH.
+
+`magus run build .` is the intended one-shot-per-session build, and it writes
+`./magus` at the repo root - but it currently ABORTS on MGS3001 before reaching
+its `go build` step (see the known-breakage note below), so treat it as
+unavailable until that is fixed. If a `./magus` is already present and newer than
+the tree (`magus doctor` reports this as the "guard binary" check), it is fine to
+keep using.
+
+`go build` is DENIED by the agent guard at every output path, including the
+`-o /tmp/magus` form this file used to recommend. Producing a binary is a write,
+and writes go through magus - the toolchain verb is what has to change, not the
+destination. `magus run go::go-build .` is the one-op form when the whole build
+target is too broad.
+
+Known unrelated breakage: `magus run test .` currently fails to link with
+`fingerprint mismatch: github.com/egladman/magus ... import from
+.../cmd/magus expecting ...`. It is NOT a poisoned build cache - it survives
+`go clean -cache` - and it is not caused by raw builds. `magus run go::go-test .`
+passes, so the difference is in the `test` target's `-race -covermode=atomic`
+composition. Unresolved.
 
 The compatibility contract lives in CI: `setup-magus` runs the pinned,
 checksum-verified release against this repo's magusfile. If `magusfile.buzz`
@@ -76,8 +96,9 @@ deliberately instead:
 
 - One-off HEAD check: `go run ./cmd/magus <cmd>` (compiles fresh each invocation;
   fine for a single command, slow as a loop).
-- Exercising a change repeatedly: `go build -o /tmp/magus ./cmd/magus` once, then
-  run `/tmp/magus ...`; rebuild when you change the code, not when any file moves.
+- Exercising a change repeatedly: `magus run build .` once, then run `./magus ...`;
+  rebuild when you change the code, not when any file moves. Blocked on MGS3001
+  right now - see "Which magus binary" above.
 - The daemon: restart it (stop + start) after a rebuild to pick up new code.
 
 ## Layout
@@ -111,8 +132,9 @@ deliberately instead:
 - No emojis anywhere: code, output, commits, docs.
 - User-facing message strings are plain ASCII (no em-dashes, curly quotes);
   code comments are exempt. Docs frontmatter is plain ASCII too.
-- Never hand-edit generated files (`gen/` dirs, `*.gen.buzz`, `MAGUS.md`,
-  `docs/gen/`); change the source of truth and regenerate.
+- Never hand-edit generated files (`gen/` dirs, `MAGUS.md`, `docs/gen/`); change
+  the source of truth and regenerate. Generated output lives in a `gen/` dir and
+  carries no extra suffix - the directory is the signal.
 - Docs site follows classless Pico: semantic HTML, minimal custom classes,
   no inline styles.
 - Language-level changes in `gopherbuzz/` must match upstream Buzz behavior.

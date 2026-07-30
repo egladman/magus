@@ -8,6 +8,19 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
+// DELIBERATE DIVERGENCE from upstream, do not "fix" this.
+//
+// buzz declares pi in src/lib/math.buzz as the 14-digit literal
+// `3.1415926535898`, which is not the nearest double to π. gopherbuzz uses Go's
+// math.Pi instead: correct arithmetic beats bug-for-bug parity on a numeric
+// constant, and adopting the truncated literal would make every trig result in
+// every magusfile measurably worse to satisfy one assertion.
+//
+// The cost is that upstream's tests/behavior/math.buzz cannot pass - it asserts
+// `math.deg(2.0) == 114.59155902616439`, the value the truncated pi produces,
+// where full precision gives 114.59155902616465. That file is intentionally
+// absent from the conformance allowlist; it is not an unimplemented feature.
+
 // mathModule builds the "math" module matching Buzz's math reference:
 // https://buzz-lang.dev/0.5.0/reference/std/math.html
 func mathModule() vm.Value {

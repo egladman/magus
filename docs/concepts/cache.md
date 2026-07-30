@@ -193,6 +193,103 @@ invalidation is additive. Reverting a change restores the earlier key and replay
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
 
+### Anti-pattern: a shared manifest as an input
+
+The commonest way to wreck a cache is to reach for the file that pins your tools -
+`mise.toml`, `package.json`, `go.mod`, a lockfile - and declare it an input,
+usually project-wide.
+
+The intent is right: a tool version really is part of what produced the output, and
+a bump really should invalidate. The result is not. A manifest pins _many_ tools,
+and it moves for reasons unrelated to most of them. Wire it into every project and
+one linter bump rebuilds the entire graph - in CI, the difference between an
+affected run and a from-scratch build, for a change that could not have altered
+almost any of it. Do that a few times and people stop trusting the affected set,
+which is the actual loss: a cache nobody believes is worse than no cache.
+
+**Declare what changed, not what contains it.** The blast radius should match the
+tools a project genuinely uses:
+
+- **a tool with a version probe** (`mgs_getVersionCommand`, or
+  `mgs_getVersionCommands` for a spell driving several binaries) contributes
+  `spell:tool:version` to the key of every project binding that spell, and
+  _nothing_ to any other. Bumping hadolint moves projects using the docker spell;
+  a Go project's key never notices. This is almost always the right answer for an
+  external binary.
+- **a manifest that is genuinely a source** of one project - `go.mod` for a Go
+  project whose build reads it - belongs in that project's `sources`, where it
+  already is. That is not this anti-pattern: the file really does feed those
+  targets.
+- **a pin that reaches one target only** wants a per-target declaration, not a
+  project-wide one. `magus\inputs` in that target's body keeps a sibling target's
+  key still.
+
+If you find yourself adding a manifest to `sources` to fix a staleness bug, the
+question to ask first is _which tool_ went stale, and whether it can be probed
+instead. A probe invalidates the projects that use the tool. A manifest
+invalidates everyone who happens to live near it.
+
+### The opposite failure: tools outside the key entirely
+
+Over-invalidating is loud and annoying. Under-invalidating is quiet and much
+worse, and it is the more common default: most build caches key on file contents
+and nothing else, so **the tools themselves are invisible**.
+
+The failure does not look like a cache bug. A linter upgrades, and suddenly code
+that passed yesterday fails - or worse, code that should fail passes, because the
+verdict was replayed from an entry the old linter wrote. A formatter upgrades and
+a "clean" tree starts failing a drift gate on a file nobody touched. A codegen
+plugin upgrades and the committed output no longer matches what the generator
+would emit, but the generate step is a cache hit, so it never runs to notice.
+
+What makes it expensive is that every one of those looks like a bug in _your_
+change. You bisect, you re-run, you blame the flaky test, you diff the branch -
+and the answer was never in the repository at all. Someone's toolchain moved.
+
+magus keys on the tool versions for this reason. Each spell declares how to ask:
+
+```buzz
+export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
+
+// A spell driving more than one binary declares each, so all of them move the key.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {"golangci-lint": ["golangci-lint", "--version"]};
+}
+```
+
+Their output lands in the key as `spell:version` and `spell:tool:version`, so a
+tool that upgrades invalidates exactly the projects that bind that spell - the
+precise middle between the two failures. `magus describe spells` reports which
+spells probe.
+
+A tool pinned by a manifest the project already reads needs no probe: `go.mod` is
+a source of the go spell, so bumping a `go tool` pin invalidates on its own. Probes
+are for binaries that live outside the project's declared inputs - a linter from
+PATH, a formatter from a version manager - which is precisely the set nothing else
+would catch.
+
+**Where the declaration lives is the whole point.** Most build systems can express
+this - Nx, for instance, makes tool-version tracking technically possible through
+executors, but shifts the burden entirely to developers to implement it
+consistently. Correctness then depends on each of them remembering, in every
+project, in every repository. One person skips it and that project silently caches
+across toolchains, and the failure surfaces somewhere else entirely.
+
+magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
+target touched - the probe is a declaration someone wrote by hand, and
+`mgs_getVersionCommand` is as explicit as it looks. What differs is its
+**location**: it sits on the SPELL, the adapter that already knows it drives
+`golangci-lint`, rather than being restated by every project that uses one. A
+project binding `spells: [go]` inherits that declaration the same way it inherits
+the spell's sources and ops.
+
+So the trade is not magic against discipline. It is declaring a fact once, where
+it is true, instead of once per consumer - the same reason a spell declares its
+`needs` globs rather than each project re-listing `**/*.go`.
+
+Set `MAGUS_CACHE_TOOL_VERSION=off` to drop probes from keys, or `=workspace` to
+probe once per workspace instead of per project.
+
 ### Opting out and busting
 
 Four controls, at four different scopes:

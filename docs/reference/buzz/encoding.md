@@ -113,7 +113,7 @@ Decode a percent-encoded URL query component; errors on malformed input.
 
 Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.
 
-**Signature:** `encoding\parseUrl(raw_url) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/encoding.go#L158)
+**Signature:** `encoding\parseUrl(raw_url) → URL` · [source](https://github.com/egladman/magus/blob/main/std/encoding.go#L158)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

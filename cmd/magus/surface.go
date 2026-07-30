@@ -1,0 +1,64 @@
+package main
+
+// subcommand is one entry in magus's top-level surface.
+type subcommand struct {
+	Name  string
+	Short string // the one-line description shown by `magus help`
+}
+
+// subcommands is the SINGLE source of truth for magus's top-level surface, in the
+// order `magus help` lists them.
+//
+// Three copies of this list used to exist and all three had drifted: usage() had the
+// descriptions, knownSubcommands had the names for did-you-mean matching, and the four
+// completion scripts each had their own. `memory` reached knownSubcommands but never
+// usage(), so the dispatcher accepted and suggested a command `magus help` did not
+// list; `refs`, `memory` and `agent` reached neither completion script.
+//
+// magus-utils reads this declaration to generate the completion scripts, so a
+// subcommand added here shows up in help, in did-you-mean, and in every shell without
+// anyone remembering to update five files.
+//
+//go:generate go run ../magus-utils completions -surface surface.go -out completions
+var subcommands = []subcommand{
+	{Name: "ls", Short: "list all discovered projects"},
+	{Name: "describe", Short: "define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)"},
+	{Name: "run", Short: "run a target for selected projects"},
+	{Name: "x", Short: "interactive shorthand: pick project + target (TTY only)"},
+	{Name: "where", Short: "print the absolute path of a project (fuzzy match)"},
+	{Name: "tail", Short: "stream the most recent cached log for cwd project"},
+	{Name: "affected", Short: "run a target for VCS-diff affected projects"},
+	{Name: "query", Short: "search the knowledge graph and show a node's neighborhood"},
+	{Name: "explain", Short: "show one knowledge-graph node: its edges, provenance, blast radius"},
+	{Name: "path", Short: "show the shortest path between two knowledge-graph nodes"},
+	{Name: "refs", Short: "list where an ingested code symbol is defined and referenced"},
+	{Name: "graph", Short: "the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)"},
+	{Name: "insight", Short: "VCS-history analytics: hotspots, affinity, ownership, trend, volatility"},
+	{Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
+	{Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
+	{Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
+	{Name: "merge-driver", Short: "VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)"},
+	{Name: "doctor", Short: "validate the workspace"},
+	{Name: "config", Short: "view or update magus configuration"},
+	{Name: "memory", Short: "durable cross-session project memory (list, get, put, delete, verify)"},
+	{Name: "server", Short: "manage the persistent daemon (start / stop / status; MCP starts with it)"},
+	{Name: "repl", Short: "open an interactive Buzz interpreter"},
+	{Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
+	{Name: "completion", Short: "print a shell completion script (bash, zsh, fish)"},
+	{Name: "man", Short: "install the man pages embedded in this binary"},
+	{Name: "init", Short: "bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)"},
+	{Name: "agent", Short: "install the knowledge-graph agent skills into a repo (agent install <dir>)"},
+	{Name: "vcs", Short: "stage a change by what the workspace declares (vcs add), instead of git add -A"},
+	{Name: "self", Short: "manage the magus binary (self update / install)"},
+	{Name: "version", Short: "print version, commit, and build date"},
+	{Name: "help", Short: "show this message"},
+}
+
+// knownSubcommands is the dispatcher's set, derived so it cannot disagree with help.
+var knownSubcommands = func() []string {
+	names := make([]string, 0, len(subcommands))
+	for _, s := range subcommands {
+		names = append(names, s.Name)
+	}
+	return names
+}()

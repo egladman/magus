@@ -74,9 +74,10 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	}
 	// The reserved `.file(rel)` member: a general cross-project path resolver, not a
 	// target. It returns the authoritative WORKSPACE-relative path of a file in the
-	// imported project, resolved with the SAME file.Resolve formula the static extractor
-	// uses so a ctx.inputs(<alias>.file(...)) declaration agrees between static
-	// analysis and runtime. The returned path is a usable value: pass it to ctx.inputs
+	// imported project, resolved with the SAME file.ResolveImport formula describe.go
+	// applies to the extracted ref, so a ctx.inputs(<alias>.file(...)) declaration agrees
+	// between static analysis and runtime. (The extractor itself stores the path as
+	// written and never resolves; resolution happens in describe.go.) The returned path is a usable value: pass it to ctx.inputs
 	// to declare a cross-project input, or use it directly (e.g. an exec argv). It
 	// registers nothing itself.
 	// Set after the target loop so it reserves the name even if a target is called file.
@@ -96,7 +97,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 		if err != nil {
 			return vm.StrValue(path.Clean(joined)), nil //nolint:nilerr // best-effort: degrade to the cleaned path rather than aborting the target
 		}
-		resolved, err := file.Resolve(joined, filepath.ToSlash(callerRel))
+		resolved, err := file.ResolveImport(joined, filepath.ToSlash(callerRel))
 		if err != nil {
 			// Match the static extractor's best-effort drop and the branches above:
 			// degrade to the cleaned path rather than aborting the target at runtime.

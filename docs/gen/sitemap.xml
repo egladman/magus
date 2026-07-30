@@ -54,6 +54,7 @@
   <url><loc>https://eli.gladman.cc/magus/guides/integrations/daemon/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/guides/integrations/editor/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/guides/integrations/mcp/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/guides/quickstart/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/guides/testing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/guides/tips/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/</loc></url>
@@ -114,6 +115,7 @@
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1012/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1013/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1014/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1015/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/MGS8001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/MGS8002/</loc></url>
@@ -166,4 +168,14 @@
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-where/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-x/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-architecture/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-buzz/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-changes/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-context-audit/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-docs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-memory/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-query/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-run/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-vcs/</loc></url>
 </urlset>

@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"maps"
+	"sort"
 )
 
 // SpellDriver is implemented by both spells (*Spell) and MCP tools.
@@ -55,6 +56,12 @@ type Spell struct {
 	serviceView  func(target string) (view *ServiceView, ok bool)
 	dependsOn    func(dir string) []string
 	versionProbe func(ctx context.Context, dir string) (string, error)
+	// versionProbes are ADDITIONAL named probes (tool name -> probe) for a spell
+	// that drives more than one binary. Kept separate from versionProbe so the
+	// unnamed one keeps its existing cache-key spelling (spell:version); folding
+	// it in as a named entry would rewrite every key in every workspace and
+	// invalidate every cache entry for a change that alters no behaviour.
+	versionProbes map[string]func(ctx context.Context, dir string) (string, error)
 }
 
 // Name implements SpellDriver.
@@ -169,16 +176,43 @@ func (s *Spell) DependsOn(dir string) []string {
 	return s.dependsOn(dir)
 }
 
-// HasVersionProbe reports whether a toolchain-version probe is set.
-func (s *Spell) HasVersionProbe() bool { return s.versionProbe != nil }
+// HasVersionProbe reports whether ANY toolchain-version probe is set, named or not.
+func (s *Spell) HasVersionProbe() bool {
+	return s.versionProbe != nil || len(s.versionProbes) > 0
+}
 
-// ProbeVersion returns the spell's toolchain version string for dir.
-// Returns "" when no probe is set.
+// ProbeVersion returns the spell's primary toolchain version string for dir.
+// Returns "" when no unnamed probe is set.
 func (s *Spell) ProbeVersion(ctx context.Context, dir string) (string, error) {
 	if s.versionProbe == nil {
 		return "", nil
 	}
 	return s.versionProbe(ctx, dir)
+}
+
+// VersionProbeNames returns the NAMED probes' tool names, sorted, so a caller
+// iterates them deterministically. The unnamed primary probe is not included; it
+// is reached through ProbeVersion.
+func (s *Spell) VersionProbeNames() []string {
+	if len(s.versionProbes) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(s.versionProbes))
+	for name := range s.versionProbes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ProbeVersionOf runs the named probe for dir. Returns "" when no such probe is
+// set, matching ProbeVersion's shape.
+func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, error) {
+	fn, ok := s.versionProbes[name]
+	if !ok {
+		return "", nil
+	}
+	return fn(ctx, dir)
 }
 
 // SpellOption configures NewSpell.
@@ -272,6 +306,18 @@ func WithSpellDependsOn(fn func(dir string) []string) SpellOption {
 // WithVersionProbe sets the toolchain version probe; the result mixes into the cache key.
 func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) SpellOption {
 	return func(s *Spell) { s.versionProbe = fn }
+}
+
+// WithVersionProbeNamed registers an ADDITIONAL probe under a tool name, for a
+// spell driving more than one binary (buf also runs protoc-gen-go; go also runs
+// gofmt and mockery). Each contributes its own cache-key entry.
+func WithVersionProbeNamed(name string, fn func(ctx context.Context, dir string) (string, error)) SpellOption {
+	return func(s *Spell) {
+		if s.versionProbes == nil {
+			s.versionProbes = map[string]func(ctx context.Context, dir string) (string, error){}
+		}
+		s.versionProbes[name] = fn
+	}
 }
 
 func WithDeclarationFiles(files ...string) SpellOption {

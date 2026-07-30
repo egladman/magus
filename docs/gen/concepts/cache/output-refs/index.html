@@ -95,12 +95,12 @@
           <li><a href="../../../concepts/workspace/" title="Workspace and projects">Workspace and projects</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-output-ref" title="Retrieval: magus query output &lt;ref&gt;">Retrieval: magus query output &lt;ref&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li><li><a href="#diagnostics" title="Diagnostics">Diagnostics</a></li></ul>
+        <ul><li><a href="#the-ref-line-is-always-there" title="The ref line is always there">The ref line is always there</a></li><li><a href="#retrieval-magus-query-output-ref" title="Retrieval: magus query output &lt;ref&gt;">Retrieval: magus query output &lt;ref&gt;</a></li><li><a href="#tips-and-tricks" title="Tips and tricks">Tips and tricks</a></li><li><a href="#the-log-viewer" title="The log viewer">The log viewer</a></li><li><a href="#for-agents-and-mcp" title="For agents and MCP">For agents and MCP</a></li><li><a href="#how-refs-are-stored" title="How refs are stored">How refs are stored</a></li><li><a href="#diagnostics" title="Diagnostics">Diagnostics</a></li><li><a href="#the-artifact-twin-history-and-diff" title="The artifact twin: history and diff">The artifact twin: history and diff</a><ul><li><a href="#diff-delegates-it-does-not-render" title="diff delegates; it does not render">diff delegates; it does not render</a></li><li><a href="#two-answers-that-are-not-failures" title="Two answers that are not failures">Two answers that are not failures</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="target-output-references">Target output references</h1>
 <p>A pretty <code><a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> interleaves magus's own <a class="code-xref" href="../../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a> lines with each <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s real
@@ -213,6 +213,48 @@ stored output, so the lookup is ambiguous.</li>
 <li><a href="../../../reference/codes/outputref/MGS8003/">MGS8003</a>: <code>magus query output</code> was given an argument
 that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a stored output.</li>
 </ul>
+<h2 id="the-artifact-twin-history-and-diff">The artifact twin: history and diff</h2>
+<p>An output ref reaches a past run's captured <strong>log</strong>. The same store also still holds
+that run's <strong>artifacts</strong>, because the cache is content-addressed: blobs under <code>cas/</code>
+keyed by their sha256, referenced by one manifest per cache entry. Every earlier
+<a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> of a declared output is therefore still on disk and addressable, until
+eviction reclaims it.</p>
+<p>Two chain verbs expose that:</p>
+<pre><code class="language-sh">magus run build --then file dist/app history   # every cached version of that artifact
+magus run build --then file dist/app diff      # compare it against the last cached version
+</code></pre>
+<p><code>history</code> answers a question the VCS answers badly for generated files. Git tells you
+when someone committed a regeneration; this tells you when the <strong>bytes</strong> changed:</p>
+<pre><code>2026-07-30T00:35:44Z  81db67b6a570      412  build
+2026-07-30T00:12:09Z  2d27fbdf4e8c      412  build
+</code></pre>
+<p>Runs that produced identical bytes collapse to one row, and the row kept is the
+earliest of the run, because the useful question is when content first appeared
+rather than when it was last re-confirmed. Add <code>-o json</code> (before <code>--then</code>) for the
+blob, size, target and cache entry, so a script can compare them itself.</p>
+<h3 id="diff-delegates-it-does-not-render">diff delegates; it does not render</h3>
+<p><code>diff</code> materializes the cached side into a temporary file and runs <strong>your</strong> difftool,
+resolved in order from <code>$MAGUS_DIFFTOOL</code>, then <code>$DIFFTOOL</code>, then <code>git diff --no-index</code> (git is already a hard dependency of a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, so it is the one
+differ guaranteed to be present). The value is split on spaces, so a tool with flags
+works without a shell:</p>
+<pre><code class="language-sh">MAGUS_DIFFTOOL=&quot;delta --side-by-side&quot; magus run build --then file dist/app diff
+MAGUS_DIFFTOOL=&quot;difft&quot;                magus run build --then file dist/app diff
+</code></pre>
+<p>magus emits and does not render, exactly as it refuses to draw the <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a>.
+A built-in differ would be a worse version of the tool you already chose.</p>
+<p>Materializing clones from the store rather than copying wherever the filesystem
+supports it (APFS, btrfs, XFS), so comparing a large artifact costs almost nothing.</p>
+<h3 id="two-answers-that-are-not-failures">Two answers that are not failures</h3>
+<ul>
+<li><strong>&quot;matches every cached version; nothing to diff.&quot;</strong> The working tree is the only
+content the store has for that <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>. Running a differ over two identical files and
+leaving you to infer that from empty output would be worse.</li>
+<li><strong>&quot;artifact blob evicted.&quot;</strong> The store evicts least-recently-used blobs, so a
+version can be listed from a surviving manifest and still have no bytes behind it.
+This is reported rather than shown as an empty diff, because an empty diff reads as
+&quot;unchanged&quot; - the most misleading answer available. Re-run the target with
+<code>--no-cache</code> to regenerate it.</li>
+</ul>
     </article>
     </div>
     </div>
@@ -231,11 +273,14 @@ that is not a well-formed <code>ref&lt;hex&gt;</code> id, so it cannot name a st
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22output%22">output</a><a class="tag" href="../../../search/?q=tag%3A%22ref%22">ref</a><a class="tag" href="../../../search/?q=tag%3A%22logs%22">logs</a><a class="tag" href="../../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../../search/?q=tag%3A%22failure%22">failure</a><a class="tag" href="../../../search/?q=tag%3A%22debugging%22">debugging</a><a class="tag" href="../../../search/?q=tag%3A%22clipboard%22">clipboard</a><a class="tag" href="../../../search/?q=tag%3A%22mcp%22">mcp</a><a class="tag" href="../../../search/?q=tag%3A%22agent%22">agent</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:40:24Z">July 30, 2026, 12:40 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/22672f4b45a075e20b1763a34c094b95c5082426" data-tooltip="22672f4b45a075e20b1763a34c094b95c5082426" title="22672f4b45a075e20b1763a34c094b95c5082426">22672f4b</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069"><code>5db7b6e6</code></a> <small><time datetime="2026-07-28T23:12:51Z">Jul 28, 2026</time></small> - reorganise the docs tree into sections and regenerate the site</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/cache/output-refs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/cache/output-refs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="project">Project</h3>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
 caching, scheduling, and dependency tracking. See <a href="../../../concepts/workspace/">workspace</a>.</p>
 <h3 id="target">Target</h3>
@@ -273,6 +318,71 @@ relationships; query it with <code>magus query</code>/<code>explain</code>/<code
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

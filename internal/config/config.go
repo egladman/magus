@@ -13,23 +13,23 @@ import (
 
 // Config is the top-level magus configuration.
 type Config struct {
-	Cache      Cache      `yaml:"cache"`
-	CI         CI         `yaml:"ci"`
-	Volatility Volatility `yaml:"volatility"`
-	Graph      Graph      `yaml:"graph"`
-	Watch      Watch      `yaml:"watch"`
-	Telemetry  Telemetry  `yaml:"telemetry"`
-	Daemon     Daemon     `yaml:"daemon"`
-	VCS        VCS        `yaml:"vcs"`
-	MCP        MCP        `yaml:"mcp"`
-	Console    Console    `yaml:"console"`
-	Report     Report     `yaml:"report"`
-	Log        Log        `yaml:"log"`
-	Hints      Hints      `yaml:"hints"`
-	Knowledge  Knowledge  `yaml:"knowledge"`
+	Cache      Cache      `json:"cache" yaml:"cache"`
+	CI         CI         `json:"ci" yaml:"ci"`
+	Volatility Volatility `json:"volatility" yaml:"volatility"`
+	Graph      Graph      `json:"graph" yaml:"graph"`
+	Watch      Watch      `json:"watch" yaml:"watch"`
+	Telemetry  Telemetry  `json:"telemetry" yaml:"telemetry"`
+	Daemon     Daemon     `json:"daemon" yaml:"daemon"`
+	VCS        VCS        `json:"vcs" yaml:"vcs"`
+	MCP        MCP        `json:"mcp" yaml:"mcp"`
+	Console    Console    `json:"console" yaml:"console"`
+	Report     Report     `json:"report" yaml:"report"`
+	Log        Log        `json:"log" yaml:"log"`
+	Hints      Hints      `json:"hints" yaml:"hints"`
+	Knowledge  Knowledge  `json:"knowledge" yaml:"knowledge"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
-	Concurrency int `yaml:"concurrency" validate:"gte=0" cli:"short=j"`
+	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
 
 	// TargetTimeout bounds how long any single target may run before magus
 	// cancels it. Zero, the default, means no limit.
@@ -45,31 +45,29 @@ type Config struct {
 	// slowest legitimate target, not near it, or a long compile becomes a
 	// timeout. Off by default for exactly that reason - a wrong value here
 	// fails builds that were fine.
-	TargetTimeout time.Duration `yaml:"target_timeout"`
+	TargetTimeout time.Duration `json:"target_timeout" yaml:"target_timeout"`
 
 	// HistoryPath is the path to the runtime-history JSON used by volatility detection,
 	// CI forecaster, graph timing, and bisect. Defaults to $XDG_STATE_HOME/magus/history/v1.json.
-	HistoryPath string `yaml:"history_path"`
+	HistoryPath string `json:"history_path" yaml:"history_path"`
 
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.
-	DryRun bool `yaml:"dry_run" cli:"short=u"`
+	DryRun bool `json:"dry_run" yaml:"dry_run" cli:"short=u"`
 
-	// AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.
-	AssumeInteractive bool `yaml:"assume_interactive"`
 
 	// DefaultCharms are execution charms applied to every `magus run` / `magus x` by
 	// default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run
 	// :charms stack on top. The ci anchor still strips "rw" (RunCI), so a local
 	// `magus run ci` stays read-only; --no-default-charms ignores these for one run.
 	// `magus affected` does not apply them, so CI stays read-only unless explicit.
-	DefaultCharms []string `yaml:"default_charms"`
+	DefaultCharms []string `json:"default_charms" yaml:"default_charms"`
 
 	// Sandbox confines subprocesses and spells to the workspace + allowlist using Linux landlock (≥5.13)
 	// when available, with binding-level fallback. See SandboxConfig for allowlist and env knobs.
-	Sandbox SandboxConfig `yaml:"sandbox"`
+	Sandbox SandboxConfig `json:"sandbox" yaml:"sandbox"`
 
 	// Spells configures workspace spell resolution (the import walk and its wards).
-	Spells SpellsConfig `yaml:"spells"`
+	Spells SpellsConfig `json:"spells" yaml:"spells"`
 }
 
 // SpellsConfig holds workspace-level spell settings.
@@ -79,22 +77,22 @@ type SpellsConfig struct {
 	// spell in a nested project is normally a dead footgun and blocks the run. Listing
 	// its import path here with a reason permits the shadow deliberately. `magus
 	// doctor` flags an entry whose shadow no longer exists, so stale reasons are pruned.
-	AllowShadow []ShadowAck `yaml:"allow_shadow"`
+	AllowShadow []ShadowAck `json:"allow_shadow" yaml:"allow_shadow"`
 }
 
 // ShadowAck acknowledges one intentional spell shadow. Name is the import path the
 // shadow is keyed by (e.g. "spells/hello"); Reason is required so the intent is
 // auditable, matching the acknowledged-suppression pattern used elsewhere.
 type ShadowAck struct {
-	Name   string `yaml:"name"`
-	Reason string `yaml:"reason" validate:"required"`
+	Name   string `json:"name" yaml:"name"`
+	Reason string `json:"reason" yaml:"reason" validate:"required"`
 }
 
 // SandboxConfig is the per-workspace sandbox policy.
 type SandboxConfig struct {
-	Enabled bool               `yaml:"enabled"` // master switch; equivalent to MAGUS_SANDBOX_ENABLED=1
-	Allow   []SandboxAllowPath `yaml:"allow"`   // extra {path, mode} entries extending the filesystem allowlist
-	Env     SandboxEnv         `yaml:"env"`     // env-var passthrough rules
+	Enabled bool               `json:"enabled" yaml:"enabled"` // master switch; equivalent to MAGUS_SANDBOX_ENABLED=1
+	Allow   []SandboxAllowPath `json:"allow" yaml:"allow"`     // extra {path, mode} entries extending the filesystem allowlist
+	Env     SandboxEnv         `json:"env" yaml:"env"`         // env-var passthrough rules
 }
 
 // SandboxAllowPath is one extra filesystem allowlist entry. Mode is "ro" or "rw"; other values emit MGS2004.
@@ -102,27 +100,27 @@ type SandboxAllowPath struct {
 	// Name is a free-form label for the entry. It is ignored by the sandbox; it
 	// exists so `magus config set sandbox.allow.<name>.path=…` can address the
 	// entry by name (the same convention used for other slice-of-struct config).
-	Name string `yaml:"name,omitempty"`
-	Path string `yaml:"path"`
-	Mode string `yaml:"mode" validate:"omitempty,oneof=ro rw"`
+	Name string `json:"name,omitempty" yaml:"name,omitempty"`
+	Path string `json:"path" yaml:"path"`
+	Mode string `json:"mode" yaml:"mode" validate:"omitempty,oneof=ro rw"`
 }
 
 // SandboxEnv controls per-child env passthrough when the sandbox is active.
 type SandboxEnv struct {
 	// Passthrough adds names/globs (e.g. "MISE_*") to the built-in env allowlist.
-	Passthrough []string `yaml:"passthrough"`
+	Passthrough []string `json:"passthrough" yaml:"passthrough"`
 }
 
 // Log controls log output.
 type Log struct {
-	Format string `yaml:"format" validate:"omitempty,oneof=pretty plain text json"` // pretty|plain|text|json
+	Format string `json:"format" yaml:"format" validate:"omitempty,oneof=pretty plain text json"` // pretty|plain|text|json
 	// Level is the minimum log level; "trace" also enables the startup timing table.
-	Level string `yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
+	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project
 	// dump (tail + path to the full log) and bubbles up only lines a target marks as a
 	// notice ("magus:notice:"). Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
-	Silent *bool `yaml:"silent"`
+	Silent *bool `json:"silent" yaml:"silent"`
 	// Stream shows every target's subprocess output live and interleaved, instead of
 	// withholding a passing target's output until it fails. This is deliberately NOT
 	// derived from Level: what gets logged and whether a target's own output is
@@ -130,7 +128,7 @@ type Log struct {
 	// people with a wall of concurrent output when they wanted a little more detail.
 	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
-	Stream *bool `yaml:"stream"`
+	Stream *bool `json:"stream" yaml:"stream"`
 }
 
 // IsSilent reports whether silent output mode is enabled.
@@ -146,7 +144,7 @@ type Hints struct {
 	// to stderr. Defaults to true. Set hints.enabled: false in magus.yaml or
 	// MAGUS_HINTS_ENABLED=false to suppress all hint output.
 	// Pointer to distinguish "not set" from explicit false.
-	Enabled *bool `yaml:"enabled"`
+	Enabled *bool `json:"enabled" yaml:"enabled"`
 }
 
 // LevelTrace is magus's most-verbose log level (one step below slog.LevelDebug).
@@ -166,49 +164,49 @@ func (l Log) SlogLevel() slog.Level {
 
 // Cache controls the content-addressed build cache.
 type Cache struct {
-	Dir       string      `yaml:"dir"`                      // override default cache location (.magus/ in workspace root)
-	Immutable bool        `yaml:"immutable"`                // true = read-only replay; default (false) writes new artifacts
-	SizeMB    int         `yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
-	Remote    CacheRemote `yaml:"remote"`                   // settings specific to a shared remote cache backend
+	Dir       string      `json:"dir" yaml:"dir"`                          // override default cache location (.magus/ in workspace root)
+	Immutable bool        `json:"immutable" yaml:"immutable"`              // true = read-only replay; default (false) writes new artifacts
+	SizeMB    int         `json:"size_mb" yaml:"size_mb" validate:"gte=0"` // disk cap in MB (binary); 0 = unlimited
+	Remote    CacheRemote `json:"remote" yaml:"remote"`                    // settings specific to a shared remote cache backend
 }
 
 // CacheRemote holds settings that apply only to a remote cache backend (wired via
 // magus.cache.remote in the magusfile). The backend binding is code, so it stays
 // in the magusfile; everything here is declarative policy.
 type CacheRemote struct {
-	TrustedKeys []string `yaml:"trusted_keys"` // base64 Ed25519 public keys a remote artifact must be signed by; required when a backend is wired
+	TrustedKeys []string `json:"trusted_keys" yaml:"trusted_keys"` // base64 Ed25519 public keys a remote artifact must be signed by; required when a backend is wired
 	// Insecure disables remote-cache signature verification: unsigned artifacts are
 	// imported and produced with no trust set. A shared cache without signing is a
 	// supply-chain hazard — use only for trusted single-repo CI, or to validate a
 	// backend before minting keys. When true, trusted_keys is not required.
-	Insecure bool `yaml:"insecure"`
+	Insecure bool `json:"insecure" yaml:"insecure"`
 }
 
 // CI controls CI fan-out behaviour.
 type CI struct {
-	MaxShards        int `yaml:"max_shards" validate:"shard_count"`   // max parallel shards; -1 = unlimited
-	RunnerPoolBudget int `yaml:"runner_pool_budget" validate:"gte=0"` // GHA matrix-level concurrency cap; 0 = no cap
+	MaxShards        int `json:"max_shards" yaml:"max_shards" validate:"shard_count"`           // max parallel shards; -1 = unlimited
+	RunnerPoolBudget int `json:"runner_pool_budget" yaml:"runner_pool_budget" validate:"gte=0"` // GHA matrix-level concurrency cap; 0 = no cap
 }
 
 // Volatility controls volatility detection and auto-retry for test runs.
 type Volatility struct {
-	Enabled          bool    `yaml:"enabled"`
-	BootstrapSamples int     `yaml:"bootstrap_samples" validate:"gte=0"` // outcomes below which all failures retry once
-	MinSamples       int     `yaml:"min_samples" validate:"gte=0"`       // minimum outcomes before Wilson-score gates retry
-	Threshold        float64 `yaml:"threshold" validate:"gte=0,lte=1"`   // Wilson lower-bound above which a project+target is volatile
-	AnnotateGHA      bool    `yaml:"annotate_gha"`                       // emit ::warning annotations and GITHUB_STEP_SUMMARY table
+	Enabled          bool    `json:"enabled" yaml:"enabled"`
+	BootstrapSamples int     `json:"bootstrap_samples" yaml:"bootstrap_samples" validate:"gte=0"` // outcomes below which all failures retry once
+	MinSamples       int     `json:"min_samples" yaml:"min_samples" validate:"gte=0"`             // minimum outcomes before Wilson-score gates retry
+	Threshold        float64 `json:"threshold" yaml:"threshold" validate:"gte=0,lte=1"`           // Wilson lower-bound above which a project+target is volatile
+	AnnotateGHA      bool    `json:"annotate_gha" yaml:"annotate_gha"`                            // emit ::warning annotations and GITHUB_STEP_SUMMARY table
 }
 
 // Watch controls magus watch defaults.
 type Watch struct {
 	// Ignore adds patterns (glob or {type,pattern}) beyond workspace builtins and --ignore flags.
-	Ignore []types.IgnorePattern `yaml:"ignore" validate:"dive"`
+	Ignore []types.IgnorePattern `json:"ignore" yaml:"ignore" validate:"dive"`
 }
 
 // MCP controls the Model Context Protocol server.
 type MCP struct {
-	Enabled *bool  `yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
-	Address string `yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
+	Enabled *bool  `json:"enabled" yaml:"enabled"`                                  // pointer distinguishes unset from explicit false
+	Address string `json:"address" yaml:"address" validate:"omitempty,mcp_address"` // host:port; default 127.0.0.1:7391
 }
 
 // DefaultConsoleURL is the hosted console base URL, used as the Console.URL default and as the
@@ -220,12 +218,12 @@ const DefaultConsoleURL = "https://eli.gladman.cc/magus/console/"
 // the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1 JobService
 // for triggering maintenance jobs (the daemon's one mutating surface). Loopback only; bearer auth.
 type Console struct {
-	Enabled *bool `yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
+	Enabled *bool `json:"enabled" yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
 	// URL is the base URL of the hosted console (with a trailing slash, without
 	// a trailing "graph/"). Deep-link helpers append their sub-path to it, e.g.
 	// the Graph Explorer base is this value + "graph/". Defaults to the canonical
 	// hosted console at https://eli.gladman.cc/magus/console/.
-	URL string `yaml:"url"`
+	URL string `json:"url" yaml:"url"`
 }
 
 // Daemon controls the proc server's listen address and multi-workspace behaviour.
@@ -235,18 +233,18 @@ type Daemon struct {
 	// invocation never discovers or adopts it and hosts its own per-process pool.
 	// Recursive magus calls still forward over a per-process socket to share the
 	// concurrency budget - only the SHARED daemon is opted out of.
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// Address is the unix:// socket the parent listens on; empty auto-generates one.
-	Address string `yaml:"address" validate:"omitempty,magus_endpoint"`
+	Address string `json:"address" yaml:"address" validate:"omitempty,magus_endpoint"`
 	// IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.
-	IdleTTL time.Duration `yaml:"idle_ttl"`
+	IdleTTL time.Duration `json:"idle_ttl" yaml:"idle_ttl"`
 	// Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.
-	Socket string `yaml:"socket"`
+	Socket string `json:"socket" yaml:"socket"`
 	// Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox
 	// policies and rejects out-of-list workspaces (MGS2010).
-	Workspaces []string `yaml:"workspaces"`
+	Workspaces []string `json:"workspaces" yaml:"workspaces"`
 	// Maintenance configures the daemon's built-in background maintenance scheduler.
-	Maintenance Maintenance `yaml:"maintenance"`
+	Maintenance Maintenance `json:"maintenance" yaml:"maintenance"`
 }
 
 // Maintenance sets how often the daemon runs each low-key background maintenance job on its own.
@@ -257,25 +255,25 @@ type Daemon struct {
 // survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
-	RotateActivities time.Duration `yaml:"rotate_activities"` // trim the activity trail; default 30d (a slow safety net; the trail is already write-bounded)
-	RotateLogs       time.Duration `yaml:"rotate_logs"`       // trim the run-log journals; default 7d (their only bound, so weekly)
-	SyncGraph        time.Duration `yaml:"sync_graph"`        // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 30d (a slow safety net; the trail is already write-bounded)
+	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
+	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)
 }
 
 // VCS controls VCS-driven affected detection.
 type VCS struct {
-	Enabled *bool  `yaml:"enabled"` // false = fall back to all projects; pointer distinguishes unset
-	Name    string `yaml:"name"`    // pin VCS by name (git/hg/jj); empty = autodetect
+	Enabled *bool  `json:"enabled" yaml:"enabled"` // false = fall back to all projects; pointer distinguishes unset
+	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
-	BaseRef string `yaml:"base_ref"`
+	BaseRef string `json:"base_ref" yaml:"base_ref"`
 }
 
 // Graph sets defaults for the graph subcommand.
 type Graph struct {
-	Direction string `yaml:"direction" validate:"omitempty,oneof=downstream upstream"` // "downstream" or "upstream"
-	Spell     string `yaml:"spell"`                                                    // filter to a single spell
-	Depth     int    `yaml:"depth" validate:"gte=0"`                                   // 0 = unlimited
-	Roots     string `yaml:"roots"`                                                    // comma-separated starting nodes
+	Direction string `json:"direction" yaml:"direction" validate:"omitempty,oneof=downstream upstream"` // "downstream" or "upstream"
+	Spell     string `json:"spell" yaml:"spell"`                                                        // filter to a single spell
+	Depth     int    `json:"depth" yaml:"depth" validate:"gte=0"`                                       // 0 = unlimited
+	Roots     string `json:"roots" yaml:"roots"`                                                        // comma-separated starting nodes
 }
 
 // Knowledge configures the cross-workspace knowledge graph.
@@ -285,13 +283,13 @@ type Knowledge struct {
 	// loaded and its node IDs are namespaced by the workspace ("<name>//<id>") so
 	// IDs from different repos cannot collide. Empty means --global covers only the
 	// current workspace.
-	Workspaces []string `yaml:"workspaces"`
+	Workspaces []string `json:"workspaces" yaml:"workspaces"`
 	// MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When
 	// exceeded after a build, least-recently-used shard files are evicted; an evicted
 	// shard is restored from the remote cache or rebuilt on the next query. 0
 	// (default) is unlimited - the store self-reconciles deleted projects, so a cap
 	// mainly bounds transient bloat.
-	MaxSizeMB int `yaml:"max_size_mb" validate:"gte=0"`
+	MaxSizeMB int `json:"max_size_mb" yaml:"max_size_mb" validate:"gte=0"`
 	// Symbols overrides symbol ingestion for specific projects. Ingestion is normally
 	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust - any
 	// spell exposing the reserved `scip` op) is ingested from its cached index with no
@@ -300,19 +298,19 @@ type Knowledge struct {
 	// not come from a magus `scip` op. A declared (or derived) index that does not exist
 	// yet (the scip target has not run) is simply skipped, so the shard appears once the
 	// index is built.
-	Symbols []SymbolIndex `yaml:"symbols"`
+	Symbols []SymbolIndex `json:"symbols" yaml:"symbols"`
 	// VCS enables folding git history metadata (last-commit SHA and time, commit
 	// count) onto file nodes as a @vcs shard. Opt-in and best-effort: disabled by
 	// default, and a non-git workspace simply yields no shard. The history scan is
 	// bounded and cached against HEAD, so it runs at build time on a commit change,
 	// never per query.
-	VCS VCSConfig `yaml:"vcs"`
+	VCS VCSConfig `json:"vcs" yaml:"vcs"`
 	// SymbolIndexing configures the daemon's background auto-indexing: it runs each
 	// symbol-capable project's `scip` op for you when its sources change, so symbols
 	// stay fresh with no manual `magus run ::scip`. ON by default in the daemon (a
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
-	SymbolIndexing SymbolIndexingConfig `yaml:"symbol_indexing"`
+	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
 }
 
 // SymbolIndexingConfig tunes daemon background symbol auto-indexing (see
@@ -321,47 +319,47 @@ type SymbolIndexingConfig struct {
 	// Disabled opts out of background auto-indexing. Auto-indexing is on by default
 	// in the daemon, so this is the switch to turn it off (e.g. the indexers are not
 	// installed and you index in CI instead).
-	Disabled bool `yaml:"disabled"`
+	Disabled bool `json:"disabled" yaml:"disabled"`
 	// QuietSeconds is how long a project's sources must be quiet after the last change
 	// before it is re-indexed, so a burst of edits coalesces into one run. 0 uses a
 	// built-in default.
-	QuietSeconds int `yaml:"quiet_seconds" validate:"gte=0"`
+	QuietSeconds int `json:"quiet_seconds" yaml:"quiet_seconds" validate:"gte=0"`
 	// MinIntervalSeconds is the minimum time between re-index runs for one project, a
 	// ceiling on how often the indexer fires however often files change. 0 uses a
 	// built-in default.
-	MinIntervalSeconds int `yaml:"min_interval_seconds" validate:"gte=0"`
+	MinIntervalSeconds int `json:"min_interval_seconds" yaml:"min_interval_seconds" validate:"gte=0"`
 }
 
 // VCSConfig configures git-history ingestion into the @vcs shard (see Knowledge.VCS).
 type VCSConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// MaxCommits bounds the history walk to the most recent N commits. 0 uses a
 	// built-in default; a small value keeps the scan fast on a large repo at the cost
 	// of undercounting commits for long-lived files.
-	MaxCommits int `yaml:"max_commits" validate:"gte=0"`
+	MaxCommits int `json:"max_commits" yaml:"max_commits" validate:"gte=0"`
 	// Authorship includes the `author` nodes and `authored` edges (who touched which
 	// files) in the graph. Defaults to ON (nil = on): authorship is context that helps
 	// an agent, and the edges are already bounded by MaxCommits. Set false to keep only
 	// the per-file vcs_* attrs and omit the author layer.
-	Authorship *bool `yaml:"authorship"`
+	Authorship *bool `json:"authorship" yaml:"authorship"`
 }
 
 // SymbolIndex declares one project's SCIP index for symbol ingestion.
 type SymbolIndex struct {
-	Project string `yaml:"project"` // workspace-relative project path the symbols belong to
-	Index   string `yaml:"index"`   // workspace-relative path to the .scip index file
+	Project string `json:"project" yaml:"project"` // workspace-relative project path the symbols belong to
+	Index   string `json:"index" yaml:"index"`     // workspace-relative path to the .scip index file
 }
 
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.
 // When Enabled, magus connects to the OTLP collector you configure and sends data there only.
 type Telemetry struct {
-	Enabled     bool              `yaml:"enabled"`
-	Endpoint    string            `yaml:"endpoint"`                                      // host:port; required when Enabled
-	Protocol    string            `yaml:"protocol" validate:"omitempty,oneof=grpc http"` // "grpc" or "http"
-	Insecure    bool              `yaml:"insecure"`                                      // disable TLS
-	ServiceName string            `yaml:"service_name"`                                  // resource attribute service.name
-	SampleRatio float64           `yaml:"sample_ratio" validate:"gte=0,lte=1"`           // head-based sampling ratio; 1.0 = all
-	Headers     map[string]string `yaml:"headers"`                                       // static OTLP request headers
+	Enabled     bool              `json:"enabled" yaml:"enabled"`
+	Endpoint    string            `json:"endpoint" yaml:"endpoint"`                                      // host:port; required when Enabled
+	Protocol    string            `json:"protocol" yaml:"protocol" validate:"omitempty,oneof=grpc http"` // "grpc" or "http"
+	Insecure    bool              `json:"insecure" yaml:"insecure"`                                      // disable TLS
+	ServiceName string            `json:"service_name" yaml:"service_name"`                              // resource attribute service.name
+	SampleRatio float64           `json:"sample_ratio" yaml:"sample_ratio" validate:"gte=0,lte=1"`       // head-based sampling ratio; 1.0 = all
+	Headers     map[string]string `json:"headers" yaml:"headers"`                                        // static OTLP request headers
 }
 
 // EnvVarDoc documents one MAGUS_* environment variable.
@@ -375,7 +373,7 @@ type EnvVarDoc struct {
 // Report controls JSONL event emission for magus run.
 type Report struct {
 	// Filter restricts event types via +type/-type/bare terms; any "+" sets default-deny.
-	Filter []string `yaml:"filter"`
+	Filter []string `json:"filter" yaml:"filter"`
 }
 
 func boolPtr(v bool) *bool { return &v }
@@ -415,7 +413,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_ADDRESS", "daemon.address", "", "Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket"},
 		{"MAGUS_DAEMON_IDLE_TTL", "daemon.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace daemon; e.g. \"6h\", \"30m\""},
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
-		{"MAGUS_ASSUME_INTERACTIVE", "assume_interactive", "false", "When 1 or true, assume an interactive terminal even if detection says otherwise"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},

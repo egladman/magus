@@ -95,7 +95,7 @@ var Vcs = Module{
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{Type: TypeAny, Record: "Commit"}},
 			Impl:    VcsCommit,
 		},
 		{
@@ -104,7 +104,7 @@ var Vcs = Module{
 			Args: []Arg{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{Type: TypeAny, Record: "[Commit]"}},
 			Impl:    VcsHistory,
 		},
 		{
@@ -119,7 +119,7 @@ var Vcs = Module{
 			Args: []Arg{
 				{Name: "pattern", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAny}},
+			Returns: []Ret{{Type: TypeAny, Record: "[Tag]"}},
 			Impl:    VcsTags,
 		},
 		{

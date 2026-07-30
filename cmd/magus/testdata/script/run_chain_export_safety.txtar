@@ -1,0 +1,63 @@
+# copyArtifact had four ways to destroy or corrupt data, all found by review, all
+# from the same root cause: it opened the destination with O_TRUNC and wrote in
+# place. Writing a temp file beside dst and renaming it into position fixes every
+# one of them, so they are pinned together here.
+#
+# The first is the reason this file exists. `--then outputs export --path .` from
+# the workspace root makes dst == src, and truncate-then-read emptied every artifact
+# it claimed to have copied - while printing the path and exiting 0.
+
+exec magus run bundle:rw
+grep 'PRECIOUS-ARTIFACT-DATA' dist/a.txt
+
+# 1. dst == src. The artifact must survive being exported onto itself.
+exec magus run bundle:rw --then outputs export --path .
+exists dist/a.txt
+grep 'PRECIOUS-ARTIFACT-DATA' dist/a.txt
+
+# 2. A symlink sitting at dst must be REPLACED, not written through. It can be
+# planted by an earlier run or by a shared CI export directory, and following it
+# writes the artifact somewhere the user never named.
+mkdir sym/dist
+symlink sym/dist/a.txt -> ../../outside.txt
+exec magus run bundle:rw --then outputs export --path sym
+grep 'DO-NOT-OVERWRITE' outside.txt
+grep 'PRECIOUS-ARTIFACT-DATA' sym/dist/a.txt
+
+# 3. The source's mode is applied even when dst already exists. O_CREATE only
+# applies its mode when it actually CREATES, so exporting over an existing file kept
+# the old permissions and an exported binary silently lost +x - which is exactly the
+# use case `magus run build --then file dist/magus export --path ./out/magus` is for.
+mkdir mode/dist
+cp stale.txt mode/dist/a.txt
+chmod 0600 mode/dist/a.txt
+exec magus run bundle:rw --then outputs export --path mode
+exec test -x mode/dist/a.txt
+
+# 4. No temp file is left behind on the success path.
+! exists sym/dist/.magus-export-tmp
+exec sh -c 'ls -a mode/dist | grep -c magus-export || true'
+stdout '^0$'
+
+-- outside.txt --
+DO-NOT-OVERWRITE
+-- stale.txt --
+stale
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "os";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    // Executable on purpose: the +x is what case 3 asserts survives an export over
+    // an existing, non-executable destination.
+    os\exec("sh", ["-c", "mkdir -p dist && echo PRECIOUS-ARTIFACT-DATA > dist/a.txt && chmod 755 dist/a.txt"]);
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

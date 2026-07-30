@@ -475,6 +475,26 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 				memo[key] = v
 			}
 			vers = append(vers, s.Name()+":"+v)
+			// Named probes contribute spell:tool:version, so a spell driving several
+			// binaries records each. Sorted by VersionProbeNames, and memoized on the
+			// same (spell, dir, tool) basis as the primary, so N tools cost N spawns
+			// per project per run rather than N per target.
+			for _, tool := range s.VersionProbeNames() {
+				tk := key + "\x00" + tool
+				tv, ok := memo[tk]
+				if !ok {
+					probed, err := s.ProbeVersionOf(ctx, tool, dir)
+					if err != nil {
+						slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
+							slog.String("spell", s.Name()), slog.String("tool", tool),
+							slog.String("dir", dir), slog.String("err", err.Error()))
+						probed = "UNPROBED"
+					}
+					tv = probed
+					memo[tk] = tv
+				}
+				vers = append(vers, s.Name()+":"+tool+":"+tv)
+			}
 		}
 		if len(vers) > 0 {
 			out[p.Path] = vers
@@ -497,6 +517,13 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if len(opts.ExtraArgs) > 0 {
 		ctx = project.WithExtraArgs(ctx, opts.ExtraArgs)
 	}
+
+	// Every dispatch funnels through here, which is why the return sink is installed
+	// here and not at the CLI: the cache snapshots a target's return value off this
+	// sink, so an entry point without one persists Value: nil into a durable entry.
+	// A caller that wants to READ the values back (the run and affected commands)
+	// installs its own first, and this leaves it alone.
+	ctx = types.EnsureReturnCapture(ctx)
 
 	if opts.DryRun {
 		// Deep dry run: evaluate each target body under a tracing context, so
@@ -994,14 +1021,24 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	req := types.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
-		_, err := s.Invoke(ctx, req)
+		resp, err := s.Invoke(ctx, req)
+		if err == nil {
+			types.RecordReturn(ctx, p.Path, name, resp.Data)
+		}
 		return err
 	}
 
 	volatileTarget := s.Name() + "/" + name
 	affected := rt.IsAffected(p.Path)
 	start := time.Now()
-	_, err := s.Invoke(ctx, req)
+	resp, err := s.Invoke(ctx, req)
+	// Only a SUCCESSFUL invocation's value is recorded. A failed attempt is not
+	// snapshotted, so its value has no consumer, and recording it would survive
+	// the retry below: a first attempt that failed after returning a value would
+	// leave that value behind for a second attempt that succeeded returning none.
+	if err == nil {
+		types.RecordReturn(ctx, p.Path, name, resp.Data)
+	}
 	result := "pass"
 	attempts := 1
 	decision := volatility.Decision{}
@@ -1009,7 +1046,10 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Sp
 	if err != nil {
 		decision = rt.Decide(p.Path, volatileTarget, affected)
 		if decision.Retry {
-			_, err2 := s.Invoke(ctx, req)
+			resp2, err2 := s.Invoke(ctx, req)
+			if err2 == nil {
+				types.RecordReturn(ctx, p.Path, name, resp2.Data)
+			}
 			attempts = 2
 			if err2 == nil {
 				result = "volatile"

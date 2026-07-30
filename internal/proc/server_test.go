@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	json "github.com/egladman/magus/internal/codec"
 )
 
 func newJobService(handler func(ctx context.Context, args []string) error) *service {

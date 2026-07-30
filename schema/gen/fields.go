@@ -445,14 +445,6 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.",
 	},
 	{
-		GoPath:   "AssumeInteractive",
-		YamlPath: "assume_interactive",
-		EnvVar:   "MAGUS_ASSUME_INTERACTIVE",
-		Flag:     fieldtype.FlagNames{Long: "assume-interactive"},
-		Kind:     fieldtype.KindBool,
-		Usage:    "MAGUS_ASSUME_INTERACTIVE: AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.",
-	},
-	{
 		GoPath:   "DefaultCharms",
 		YamlPath: "default_charms",
 		EnvVar:   "MAGUS_DEFAULT_CHARMS",

@@ -25,6 +25,7 @@ var spellHandleRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 // example instead of a blank file and a hunt through docs/spells.md.
 func initSpellCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("init spell", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	force := fs.Bool("force", false, "Overwrite an existing spell.buzz")
 	dir := fs.String("dir", "spells", "Parent directory the spell package is created under")
 	fs.Usage = func() {

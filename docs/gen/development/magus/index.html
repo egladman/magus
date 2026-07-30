@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
+        <ul><li><a href="#route-by-question" title="Route by question">Route by question</a></li><li><a href="#quick-start" title="Quick start">Quick start</a></li><li><a href="#query-first" title="Query first">Query first</a></li><li><a href="#project-magus" title="Project: magus">Project: magus</a></li><li><a href="#project-cmdmagusstarter" title="Project: cmd/magus/starter">Project: cmd/magus/starter</a></li><li><a href="#project-console" title="Project: console">Project: console</a></li><li><a href="#project-docs" title="Project: docs">Project: docs</a></li><li><a href="#project-docsguidesintegrationsagents" title="Project: docs/guides/integrations/agents">Project: docs/guides/integrations/agents</a></li><li><a href="#project-libsdiag" title="Project: libs/diag">Project: libs/diag</a></li><li><a href="#project-libsgopherbuzz" title="Project: libs/gopherbuzz">Project: libs/gopherbuzz</a></li><li><a href="#project-libstextsearch" title="Project: libs/textsearch">Project: libs/textsearch</a></li><li><a href="#project-proto" title="Project: proto">Project: proto</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -125,7 +125,7 @@ magus run &lt;target&gt;:&lt;charm&gt;  # change HOW it runs (e.g. lint:rw)
 <p>Unfamiliar with a term? See the <a href="https://eli.gladman.cc/magus/glossary/" rel="noopener noreferrer" target="_blank" data-external>Glossary</a>.</p>
 <p>Need the detail this index leaves out? Run <code>magus describe target &lt;name&gt;</code> for a target's fully-evaluated dispatch plan (sources, outputs, spells, command, policy), and <code>magus describe mcp-tools</code> for the tools this workspace exposes to AI agents.</p>
 <h2 id="query-first">Query first</h2>
-<p>This workspace has a knowledge graph of <strong>2137 nodes</strong> and <strong>4665 edges</strong> (schema v6). Query it instead of grepping:</p>
+<p>This workspace has a knowledge graph of <strong>2200 nodes</strong> and <strong>4887 edges</strong> (schema v7). Query it instead of grepping:</p>
 <pre><code class="language-sh">magus query &quot;&lt;terms&gt;&quot;       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
 magus explain &lt;node&gt;        # one node: its edges, provenance, blast radius
 magus path &lt;a&gt; &lt;b&gt;          # how two nodes connect
@@ -144,15 +144,15 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>project</td>
-<td style="text-align:right">8</td>
+<td style="text-align:right">9</td>
 <td><code>magus query kind:project</code></td>
 <td><code>magus</code>, <code>docs</code>, <code>libs/gopherbuzz</code></td>
 </tr>
 <tr>
 <td>target</td>
-<td style="text-align:right">78</td>
+<td style="text-align:right">83</td>
 <td><code>magus query kind:target</code></td>
-<td><code>content-generate</code>, <code>generate</code>, <code>image-build</code></td>
+<td><code>content-generate</code>, <code>skills-generate</code>, <code>generate</code></td>
 </tr>
 <tr>
 <td>spell</td>
@@ -168,9 +168,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>tool</td>
-<td style="text-align:right">13</td>
+<td style="text-align:right">14</td>
 <td><code>magus query kind:tool</code></td>
-<td><code>sh</code>, <code>go</code>, <code>pnpm</code></td>
+<td><code>sh</code>, <code>pnpm</code>, <code>go</code></td>
 </tr>
 <tr>
 <td>charm</td>
@@ -186,43 +186,43 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>method</td>
-<td style="text-align:right">154</td>
+<td style="text-align:right">158</td>
 <td><code>magus query kind:method</code></td>
 <td><code>archive.compress</code>, <code>archive.uncompress</code>, <code>charm.after</code></td>
 </tr>
 <tr>
 <td>diagnostic</td>
-<td style="text-align:right">40</td>
+<td style="text-align:right">46</td>
 <td><code>magus query kind:diagnostic</code></td>
 <td><code>MGS2001</code>, <code>MGS4001</code>, <code>MGS5002</code></td>
 </tr>
 <tr>
 <td>doc</td>
-<td style="text-align:right">198</td>
+<td style="text-align:right">226</td>
 <td><code>magus query kind:doc</code></td>
 <td><code>docs/reference/manpage/magus-doctor.md</code>, <code>docs/reference/manpage/magus-affected.md</code>, <code>docs/reference/manpage/magus-run.md</code></td>
 </tr>
 <tr>
 <td>dir</td>
-<td style="text-align:right">109</td>
+<td style="text-align:right">126</td>
 <td><code>magus query kind:dir</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum</code>, <code>std/examples/fs</code>, <code>docs/reference/buzz</code></td>
 </tr>
 <tr>
 <td>file</td>
-<td style="text-align:right">229</td>
+<td style="text-align:right">218</td>
 <td><code>magus query kind:file</code></td>
 <td><code>libs/gopherbuzz/examples/bubblegum/config.buzz</code>, <code>libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz</code>, <code>magusfile.buzz</code></td>
 </tr>
 <tr>
 <td>function</td>
-<td style="text-align:right">1096</td>
+<td style="text-align:right">1106</td>
 <td><code>magus query kind:function</code></td>
 <td><code>sel</code>, <code>sendObject</code>, <code>send</code></td>
 </tr>
 <tr>
 <td>import</td>
-<td style="text-align:right">115</td>
+<td style="text-align:right">117</td>
 <td><code>magus query kind:import</code></td>
 <td><code>std</code>, <code>magus</code>, <code>fs</code></td>
 </tr>
@@ -246,9 +246,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tbody>
 <tr>
 <td>.</td>
-<td style="text-align:right">25</td>
+<td style="text-align:right">26</td>
 <td><code>magus query project:.</code></td>
-<td><code>generate</code>, <code>image-build</code>, <code>format</code></td>
+<td><code>skills-generate</code>, <code>generate</code>, <code>image-build</code></td>
 </tr>
 <tr>
 <td>cmd/magus/starter</td>
@@ -269,6 +269,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <td><code>content-generate</code>, <code>generate</code>, <code>ci</code></td>
 </tr>
 <tr>
+<td>docs/guides/integrations/agents</td>
+<td style="text-align:right">3</td>
+<td><code>magus query project:docs/guides/integrations/agents</code></td>
+<td><code>lint</code>, <code>ci</code>, <code>preflight</code></td>
+</tr>
+<tr>
 <td>libs/diag</td>
 <td style="text-align:right">8</td>
 <td><code>magus query project:libs/diag</code></td>
@@ -276,7 +282,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td>libs/gopherbuzz</td>
-<td style="text-align:right">9</td>
+<td style="text-align:right">10</td>
 <td><code>magus query project:libs/gopherbuzz</code></td>
 <td><code>build</code>, <code>format</code>, <code>generate</code></td>
 </tr>
@@ -385,15 +391,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 <tr>
 <td><code>spells-generate</code></td>
-<td>Regenerates the compiled built-in spell bytecode (internal/spell/gen).</td>
+<td>Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.</td>
 </tr>
 <tr>
 <td><code>mocks-generate</code></td>
 <td>Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.</td>
 </tr>
 <tr>
+<td><code>skills-generate</code></td>
+<td>Reinstalls the agent skills from their embedded sources in cmd/magus/skills.</td>
+</tr>
+<tr>
 <td><code>config-generate</code></td>
-<td>Regenerates the CLI config-flag plumbing (cmd/magus/gen) from internal/config/config.go.</td>
+<td>Regenerates the CLI config-flag plumbing from internal/config/config.go.</td>
 </tr>
 <tr>
 <td><code>md-generate</code></td>
@@ -546,6 +556,29 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 </tr>
 </tbody>
 </table></figure>
+<h2 id="project-docsguidesintegrationsagents">Project: docs/guides/integrations/agents</h2>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lint</code></td>
+<td>lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no <code>any</code>, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).</td>
+</tr>
+<tr>
+<td><code>ci</code></td>
+<td>'ci' is the anchor <code>magus affected ci</code> keys off.</td>
+</tr>
+<tr>
+<td><code>preflight</code></td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
 <h2 id="project-libsdiag">Project: libs/diag</h2>
 <figure class="table-scroll"><table>
 <thead>
@@ -625,6 +658,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 <tr>
 <td><code>pgo-generate</code></td>
 <td>Regenerates default.pgo, the Buzz VM's PGO profile.</td>
+</tr>
+<tr>
+<td><code>conformance</code></td>
+<td>Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).</td>
 </tr>
 <tr>
 <td><code>preflight</code></td>
@@ -933,6 +970,71 @@ for magusfile authors.
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

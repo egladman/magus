@@ -3,6 +3,7 @@ package knowledge
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -60,8 +61,7 @@ func TestInputFingerprintRetainsSkippedShard(t *testing.T) {
 	vcs := Shard{Name: "@vcs", Nodes: []types.KnowledgeNode{
 		{ID: "file:a.go", Kind: types.KindFile, Source: "a.go", Attrs: map[string]string{"vcs_last_author": "Ada"}},
 	}}
-	fp, err := fingerprintShardContent(vcs)
-	require.NoError(t, err)
+	fp := fingerprintShardContent(vcs)
 
 	// Build 1: produce @vcs, keyed by input fingerprint "head1".
 	g1, err := store.Sync(ctx, []Shard{vcs}, map[string]string{"@vcs": fp}, map[string]string{"@vcs": "head1"}, false)
@@ -356,4 +356,78 @@ func shardsDirSize(t *testing.T, cacheDir string) int64 {
 		total += info.Size()
 	}
 	return total
+}
+
+// benchStore builds a graph on disk once and returns a Store pointed at it, so a
+// read benchmark measures reading rather than the build that produced it.
+func benchStore(b *testing.B, nProjects int) (*Store, int64) {
+	b.Helper()
+	cacheDir := filepath.Join(b.TempDir(), ".magus")
+	if _, err := Build(context.Background(), cacheDir, BuildOptions{}, syntheticInputs(nProjects, 8), nil); err != nil {
+		b.Fatal(err)
+	}
+	var onDisk int64
+	dir := StoreDir(cacheDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		b.Fatal(err)
+	}
+	for _, e := range entries {
+		if fi, err := e.Info(); err == nil {
+			onDisk += fi.Size()
+		}
+	}
+	return NewStore(cacheDir, false, 0, nil, nil), onDisk
+}
+
+// BenchmarkStoreLoad measures a warm read of an already-built graph.
+//
+// Its absence is why a superlinear cost stayed invisible: Load allocates a Go map
+// per node and edge to materialize the graph, so throughput FALLS as the workspace
+// grows (134 MB/s at 2k projects, 79 MB/s at 50k) and the wall time reaches ~5 s.
+// SetBytes is on the shard bytes so the report is throughput, which is the number
+// that exposes the degradation - a plain ns/op just looks bigger for a bigger input.
+//
+// Note for anyone reading a profile from this: Store.Load has no production caller
+// today. Every command goes through Build, which re-assembles from source. That
+// makes this benchmark a measure of the READ path a future
+// skip-assembly-when-unchanged change would start exercising, not of current
+// per-command cost.
+func BenchmarkStoreLoad(b *testing.B) {
+	for _, n := range []int{200, 2000} {
+		b.Run(fmt.Sprintf("p%d", n), func(b *testing.B) {
+			store, onDisk := benchStore(b, n)
+			b.SetBytes(onDisk)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				g, err := store.Load(context.Background())
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(g.Nodes()) == 0 {
+					b.Fatal("loaded an empty graph")
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkStoreSync measures the write side: fingerprint, compare, and persist the
+// shards that changed. This is the path every magus command actually pays, unlike
+// Load, so it is the one to watch when judging a format or fingerprint change.
+func BenchmarkStoreSync(b *testing.B) {
+	in := syntheticInputs(200, 8)
+	shards := AssembleShards(in)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		cacheDir := filepath.Join(b.TempDir(), ".magus")
+		store := NewStore(cacheDir, false, 0, nil, nil)
+		b.StartTimer()
+		if _, err := store.Sync(context.Background(), shards, nil, nil, false); err != nil {
+			b.Fatal(err)
+		}
+	}
 }

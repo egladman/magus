@@ -36,14 +36,14 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    MagusCmd,
 		},
 		{
 			Name:    "ls",
 			Doc:     "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ProjectsOutput"}},
 			Impl:    MagusLs,
 		},
 		{
@@ -52,14 +52,14 @@ var Magus = Module{
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "AffectedResult"}},
 			Impl:    MagusAffected,
 		},
 		{
 			Name:    "graph",
 			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "GraphView"}},
 			Impl:    MagusGraph,
 		},
 		{
@@ -78,7 +78,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    MagusRun,
 		},
 		{
@@ -88,7 +88,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    MagusDescribe,
 		},
 		{
@@ -98,7 +98,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    MagusInsight,
 		},
 		{
@@ -108,7 +108,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    MagusDoctor,
 		},
 		{

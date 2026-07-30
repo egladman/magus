@@ -28,6 +28,37 @@ message Status {
   repeated Run runs = 4;         // runs the daemon is executing right now (adopted dispatches)
   repeated Service services = 5; // long-running shared services the daemon is hosting right now
   BuildInfo build = 6;           // the running daemon's build identity
+  repeated Lock locks = 7;       // per-project workspace locks held right now
+}
+
+// Lock is one held per-project workspace lock and the process holding it.
+//
+// A held lock is the NORMAL state of a mutating run, so this is state and never a
+// fault: it must not fail a readiness or liveness check, because a run queued behind
+// a peer is waiting correctly and restarting it only sends it to the back of the
+// queue. It is on the wire because an OS file lock carries no identity of its own, so
+// without the holder a blocked run is indistinguishable from a hung one - and a lock
+// is held for exactly as long as its holder lives, which means one held by a process
+// nobody remembers starting blocks everything else silently and forever.
+message Lock {
+  string project = 1;                            // workspace-relative path; "." is the root
+  int32 pid = 2;                                 // holder's process id
+  string command = 3;                            // holder's argv, for recognising what it is
+  string dir = 4;                                // holder's working directory; a path that no longer exists means abandoned
+  google.protobuf.Timestamp acquire_time = 5;    // when the holder took it; age is the signal a human reads
+  repeated LockWaiter waiters = 6;               // processes blocked on this lock right now
+  int32 stale_after_seconds = 7;                 // when to read this holder as possibly abandoned rather than busy
+}
+
+// LockWaiter is one process blocked on a lock. A holder answers "who is working"; a
+// waiter answers "who is stalled because of it", which is the question anyone looking
+// at a queue that is not moving is actually asking. Transient by nature, so a snapshot.
+message LockWaiter {
+  string project = 1;                  // reserved for a flattened view; empty inside Lock
+  int32 pid = 2;
+  string command = 3;
+  string dir = 4;
+  google.protobuf.Timestamp wait_time = 5; // when it began waiting
 }
 
 // BuildInfo identifies the running magus binary: the version tag, the commit it was built
@@ -57,13 +88,19 @@ message Run {
 // carries its output reference and wall-clock duration.
 message TargetRun {
   // State is where a target sits in its lifecycle.
+  // Values carry the STATE_ prefix because protobuf enum values share their
+  // PARENT's scope, so an unprefixed CACHED would collide with any other enum
+  // declaring the same name in this package. STATE_UNSPECIFIED always followed the
+  // convention; the rest did not, which buf's ENUM_VALUE_PREFIX rule caught once
+  // proto's lint target started running. Renaming a value leaves the wire
+  // untouched - encoding is by number, and these are unchanged.
   enum State {
     STATE_UNSPECIFIED = 0;
-    QUEUED = 1;   // scheduled, not yet started
-    RUNNING = 2;  // a subprocess is executing
-    PASSED = 3;   // finished successfully
-    FAILED = 4;   // finished with an error
-    CACHED = 5;   // satisfied from cache (no work run)
+    STATE_QUEUED = 1;   // scheduled, not yet started
+    STATE_RUNNING = 2;  // a subprocess is executing
+    STATE_PASSED = 3;   // finished successfully
+    STATE_FAILED = 4;   // finished with an error
+    STATE_CACHED = 5;   // satisfied from cache (no work run)
   }
   string project = 1;                         // repo-relative project path
   string target = 2;                          // target name (as the CLI spells it)

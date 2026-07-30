@@ -48,12 +48,13 @@ func Decode(src Obj) (Descriptor, error) {
 	}
 	language, _ := src.Str("language")
 	m := Descriptor{
-		Name:       name,
-		Claims:     src.Strs("claims"),
-		IgnoreDirs: src.Strs("ignore_dirs"),
-		VersionCmd: src.Strs("version_cmd"),
-		Language:   language,
-		Opaque:     src.Bool("opaque"),
+		Name:        name,
+		Claims:      src.Strs("claims"),
+		IgnoreDirs:  src.Strs("ignore_dirs"),
+		VersionCmd:  src.Strs("version_cmd"),
+		VersionCmds: decodeVersionCmds(src),
+		Language:    language,
+		Opaque:      src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs", "")
@@ -197,4 +198,31 @@ func decodeCommand(spellName, opName string, o Obj) (types.Command, error) {
 		c.Charms = cm
 	}
 	return c, nil
+}
+
+// decodeVersionCmds reads the named additional version probes, tool name to argv.
+// It uses only Obj/Keys/Strs, so a second authoring backend implementing Obj gets
+// this field for free rather than needing a new method on the interface.
+//
+// An entry with an empty argv is dropped rather than kept as a probe that could
+// never run: a spell naming a tool it cannot version is a declaration bug, and
+// carrying it would put a permanent "UNPROBED" into every cache key for that
+// project - noise that never resolves.
+func decodeVersionCmds(src Obj) map[string][]string {
+	rec, ok := src.Obj("version_cmds")
+	if !ok {
+		return nil
+	}
+	var out map[string][]string
+	for _, tool := range rec.Keys() {
+		argv := rec.Strs(tool)
+		if len(argv) == 0 {
+			continue
+		}
+		if out == nil {
+			out = map[string][]string{}
+		}
+		out[tool] = argv
+	}
+	return out
 }

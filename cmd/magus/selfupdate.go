@@ -41,7 +41,11 @@ const selfUpdateCompiled = true
 
 // selfCmd is the dispatcher for `magus self <subcommand>`.
 func selfCmd(ctx context.Context, _ string, args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 {
+		selfCmdUsage()
+		return usagef("magus self: subcommand required (want update)")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		selfCmdUsage()
 		return nil
 	}
@@ -50,9 +54,8 @@ func selfCmd(ctx context.Context, _ string, args []string) error {
 	case "update":
 		return selfUpdateCmd(ctx, rest)
 	default:
-		fmt.Fprintf(os.Stderr, "magus self: unknown subcommand %q\n\n", sub)
 		selfCmdUsage()
-		return errSilent{exitCode: 2}
+		return usagef("magus self: unknown subcommand %q (want update)", sub)
 	}
 }
 
@@ -82,6 +85,7 @@ func selfCmdUsage() {
 // release.
 func selfUpdateCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus self update [flags]")
 		fmt.Fprintln(os.Stderr, "")

@@ -874,3 +874,229 @@ fun probe() > str {
 }`)
 	assert.Equal(t, "ok", v.AsString(), "a dot before an identifier is still member access")
 }
+
+// TestParity_ExternFunDeclaresASignature covers `extern fun name(...) > T;`, the
+// body-less forward declaration upstream uses to give its NATIVE stdlib types
+// (src/lib/debug.buzz: `export extern fun dump(value: any) > void;`). Before it,
+// `extern` was a reserved word the parser knew only well enough to refuse as a
+// binding name, so every host-provided function typed as Unknown.
+//
+// It emits no code by design: the implementation is whatever the host already
+// bound to that name, so a declaration must not shadow it with an empty closure.
+func TestParity_ExternFunDeclaresASignature(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	require.NoError(t, s.Exec(context.Background(), `
+extern fun native(n: int) > str;
+export extern fun exported(value: any) > void;
+
+fun probe() > int { return 1; }`), "a body-less extern declaration parses")
+
+	_, bound := s.Globals()["native"]
+	assert.False(t, bound, "an extern declaration must not bind a value: the host owns the implementation")
+}
+
+// TestParity_ExternReturnTypeIsChecked is the reason the declaration exists. The
+// signature has to reach call sites, or it is decoration: a host call's result
+// must type as its declared return, not as Unknown.
+func TestParity_ExternReturnTypeIsChecked(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+extern fun native(n: int) > str;
+fun probe() > int { return native(1); }`)
+	require.Error(t, err, "the declared return type must reach the call site")
+	assert.Contains(t, err.Error(), "return type mismatch")
+}
+
+// TestParity_ExternRejectsABody pins the shape: `extern` means the
+// implementation is elsewhere, so a body is a contradiction rather than an
+// extra. Catching it at the parser keeps the compiler's "extern emits nothing"
+// rule from silently discarding real code.
+func TestParity_ExternRejectsABody(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `
+extern fun native(n: int) > str { return "x"; }
+fun probe() > int { return 1; }`)
+	require.Error(t, err, "an extern declaration must not carry a body")
+}
+
+// TestParity_ExternStaysAnOrdinaryIdentifier guards the contextual lookahead:
+// `extern` introduces a declaration only when `fun` follows it. Upstream reserves
+// the word from BINDING positions (so an object field named extern is rightly
+// refused) while leaving the non-binding ones open, and the new lookahead must
+// not narrow that further.
+func TestParity_ExternStaysAnOrdinaryIdentifier(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final m = {"extern": "key"};
+    return m["extern"] ?? "missing";
+}`)
+	assert.Equal(t, "key", v.AsString(), "`extern` is only a keyword directly before `fun`")
+}
+
+// TestParity_MapMerge covers `{...} + {...}`, the map counterpart of list
+// concatenation (upstream tests/behavior/composite-assign.buzz). The checker
+// rejected it outright before, so `m += {...}` could not compile.
+func TestParity_MapMerge(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final a = {"one": 1};
+    final b = {"one": 9, "two": 2};
+    final m = a + b;
+    return "{m.size()}/{m["one"] ?? 0}/{a.size()}";
+}`)
+	// Right wins the duplicate key, and the left operand is untouched: `+` is an
+	// expression, so it must copy rather than mutate in place.
+	assert.Equal(t, "2/9/1", v.AsString(), "map merge takes the right operand's value and leaves the left alone")
+}
+
+// TestParity_FloatModulo covers `%` on doubles, which raised "not supported for
+// float operands". Upstream's composite-assign.buzz asserts `4.0 %= 2.0` is 0,
+// so this is fmod, not an integer-only operator.
+func TestParity_FloatModulo(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > double {
+    var b = 4.0;
+    b %= 2.0;
+    return b + (5.5 % 2.0);
+}`)
+	assert.InDelta(t, 1.5, v.AsFloat(), 1e-9, "4.0 % 2.0 is 0.0 and 5.5 % 2.0 is 1.5")
+}
+
+// TestParity_ModuloByZeroReports guards the divisor check added alongside float
+// modulo: math.Mod would return NaN, which would propagate silently instead of
+// reporting where it went wrong.
+func TestParity_ModuloByZeroReports(t *testing.T) {
+	s := buzz.NewSession(context.Background())
+	t.Cleanup(func() { _ = s.Close() })
+	err := s.Exec(context.Background(), `fun probe() > double { return 5.5 % 0.0; }
+final __r = probe();`)
+	require.Error(t, err, "a zero divisor must report, not yield NaN")
+	assert.Contains(t, err.Error(), "modulo by zero")
+}
+
+// TestParity_NullCoalescingBindsTighterThanTerm pins `??` at upstream's
+// Precedence.NullCoalescing, which sits between Term (`+`/`-`) and Bitwise.
+// gopherbuzz had it above `or`, looser than every binary operator, so the
+// upstream idiom of coalescing a nullable where it is used raised at runtime:
+// the `+` saw the null before `??` could replace it.
+func TestParity_NullCoalescingBindsTighterThanTerm(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final n: int? = null;
+    return 1 + n ?? 0;
+}`)
+	assert.Equal(t, int64(1), v.AsInt(), "`1 + n ?? 0` is `1 + (n ?? 0)`")
+}
+
+// TestParity_NullCoalescingStillLooserThanBitwise pins the other side of the
+// level: moving `??` down must not push it past Bitwise.
+func TestParity_NullCoalescingStillLooserThanBitwise(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    final n: int? = null;
+    return n ?? 1 | 2;
+}`)
+	assert.Equal(t, int64(3), v.AsInt(), "`n ?? 1 | 2` is `n ?? (1 | 2)`")
+}
+
+// TestParity_TypeValues covers `<T>` and `typeof`, upstream's type-as-value pair.
+//
+// The load-bearing property is that typeof is STATIC. `[]` and `[]` annotated
+// `[str]` are the same empty list at runtime, so an implementation that probed
+// the value could not tell them apart; upstream compares the type DEFS the
+// compiler resolved, and so does this.
+func TestParity_TypeValues(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final list = [];
+    final slist: [str] = [];
+    final map = {};
+    final smap: {str: int} = {};
+    return "{typeof list}/{typeof slist}/{typeof map}/{typeof smap}/{typeof 1}";
+}`)
+	assert.Equal(t, "<[any]>/<[str]>/<{any: any}>/<{str: int}>/<int>", v.AsString(),
+		"an unannotated empty collection is [any]/{any: any}; an annotated one keeps its declared types")
+}
+
+// TestParity_TypeValueEquality pins the comparison. Two type values are built
+// independently (one from a literal, one from typeof), so equality has to be
+// structural on the canonical spelling - reference equality would make every
+// `typeof x == <T>` false.
+func TestParity_TypeValueEquality(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final slist: [str] = [];
+    return typeof slist == <[str]> and <int> != <str> and <{str: int}> == <{str: int}>;
+}`)
+	assert.True(t, v.AsBool(), "type values compare by what they denote, not by identity")
+}
+
+// TestParity_TypeOfDoesNotEvaluateItsOperand guards the static-ness directly: a
+// typeof whose operand has a side effect must not run it.
+func TestParity_TypeOfDoesNotEvaluateItsOperand(t *testing.T) {
+	v := evalParity(t, `
+var calls = 0;
+
+fun bump() > int {
+    calls = calls + 1;
+    return 1;
+}
+
+fun probe() > int {
+    _ = typeof bump();
+    return calls;
+}`)
+	assert.Equal(t, int64(0), v.AsInt(), "typeof reads a type, it does not call anything")
+}
+
+// TestParity_CollectionCloneAliases covers upstream's copyMutable/copyImmutable,
+// which obj.zig declares as ALIASES of cloneMutable/cloneImmutable rather than
+// as separate operations. Missing them made `list.copyImmutable()` a null call.
+func TestParity_CollectionCloneAliases(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final l = [1, 2, 3];
+    final m = {"a": 1};
+    return "{l.copyImmutable().len()}/{m.copyImmutable().size()}/{l.cloneMutable().len()}";
+}`)
+	assert.Equal(t, "3/1/3", v.AsString(), "the copy* names are the clone* operations under upstream's spelling")
+}
+
+// TestParity_MapHasKey covers map.hasKey, which upstream declares on the map
+// object and gopherbuzz did not implement at all.
+func TestParity_MapHasKey(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final m = {"hello": "world"};
+    return m.hasKey("hello") and !m.hasKey("absent");
+}`)
+	assert.True(t, v.AsBool(), "hasKey reports presence, not the value")
+}
+
+// TestParity_ListFillRange covers fill's start/len window. Filling the whole list
+// regardless passes the simple case and silently corrupts the windowed one, which
+// is why this asserts the UNTOUCHED neighbours rather than only the filled span.
+func TestParity_ListFillRange(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > str {
+    final all = (mut [1, 2, 3]).fill(42);
+    final some = (mut [0, 1, 2, 3, 4, 5]).fill(42, start: 2, len: 3);
+    return "{all[0]}{all[2]}/{some[1]}{some[2]}{some[4]}{some[5]}";
+}`)
+	assert.Equal(t, "4242/142425", v.AsString(), "fill without a window covers everything; with one it covers exactly [start, start+len)")
+}
+
+// TestParity_ListRemoveOutOfRangeIsNull pins remove's miss behaviour. Upstream
+// documents "or null when out of bounds" and asserts `list.remove(12) == null`;
+// raising instead made a miss unrecoverable.
+func TestParity_ListRemoveOutOfRangeIsNull(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > bool {
+    final l = mut ["a", "b", "c"];
+    return l.remove(12) == null and l.len() == 3 and l.remove(1) == "b";
+}`)
+	assert.True(t, v.AsBool(), "an out-of-range remove yields null and changes nothing")
+}

@@ -178,7 +178,10 @@ func collectFuncRefs(n ast.Node, inFunc bool, keep map[string]bool) {
 		collectFuncRefs(v.Value, inFunc, keep)
 	case *ast.FunDecl:
 		// Entering a function body: everything inside it captures by reference today.
-		collectFuncRefs(v.Body, true, keep)
+		// An extern declaration has none.
+		if v.Body != nil {
+			collectFuncRefs(v.Body, true, keep)
+		}
 	case *ast.FunExpr:
 		collectFuncRefs(v.Body, true, keep)
 	case *ast.ObjectDecl:
@@ -864,6 +867,13 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		return nil
 
 	case *ast.FunDecl:
+		// An extern declaration emits NOTHING: it declares a signature the checker
+		// consumes, and the implementation is whatever the host already bound to
+		// that name. Emitting a closure here would shadow the native function with
+		// an empty one, which is the opposite of the point.
+		if v.IsExtern {
+			return nil
+		}
 		idx, err := c.compileFunChunk(v.Name, v.Doc, v.Params, v.Body.Stmts)
 		if err != nil {
 			return err
@@ -1507,6 +1517,12 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.FloatValue(v.Val)), 0)
 	case *ast.StringLit:
 		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(v.Val)), 0)
+	case *ast.TypeExpr:
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.TypeValue(typeConstName(v.Resolved, v.Annot))), 0)
+	case *ast.TypeOfExpr:
+		// The operand is deliberately NOT compiled: typeof is static, so its value
+		// is irrelevant and evaluating it would run side effects upstream does not.
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.TypeValue(typeConstName(v.Resolved, "any"))), 0)
 	case *ast.PatLit:
 		// Compile the regex once, at compile time, so a malformed pattern is a
 		// compile error and the value lives in the const pool (no per-eval recompile,
@@ -1992,4 +2008,14 @@ func isTypeShape(annot string) (base string, nullable bool) {
 		return s, nullable
 	}
 	return s, nullable
+}
+
+// typeConstName picks the spelling a type constant carries. The checker fills in
+// resolved; fallback is only reached when a caller compiled without checking
+// first, where the source text is still better than an empty type.
+func typeConstName(resolved, fallback string) string {
+	if resolved != "" {
+		return resolved
+	}
+	return fallback
 }

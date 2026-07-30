@@ -2,8 +2,8 @@
 
 magus already measured the workspace: what depends on what, what changes
 together, where churn and complexity concentrate, who owns what. Query those
-facts before proposing structure; a proposal that cites graph evidence is
-checkable, one from intuition is vibes.
+facts before proposing structure<!-- why -->; a proposal that cites graph evidence is
+checkable, one from intuition is vibes<!-- /why -->.
 
 ## Survey before proposing
 
@@ -18,9 +18,10 @@ magus graph deps -o tree     # the declared project DAG
 ```
 
 MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground. Affinity deserves special weight: two projects that keep changing
+ground.<!-- why --> Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
-either declare the dependency or move the shared concern.
+either declare the dependency or move the shared concern.<!-- /why --><!-- terse --> Weight affinity most: changing
+together with no declared edge is back-door coupling.<!-- /terse -->
 
 ## Then survey the opposite: what is too THIN to justify a boundary
 
@@ -60,15 +61,16 @@ and nothing it exports would need to be exported once merged.
 ## Sizing a specific refactor
 
 1. Blast radius of a node: `magus explain <node>` shows its edges and how many
-   nodes reach it. A high reached-by count means migration plan, not quick
-   rename.
+   nodes reach it.<!-- why --> A high reached-by count means migration plan, not quick
+   rename.<!-- /why -->
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol. (If it reports no match for a symbol that surely
+   any exported symbol.<!-- why --> (If it reports no match for a symbol that surely
    exists, the index is likely unbuilt: check `magus status`, then
-   `magus graph build`.)
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain -
-   use it to test whether a proposed boundary actually separates them.
+   `magus graph build`.)<!-- /why --><!-- terse --> No match for a symbol that exists means an unbuilt
+   index: `magus graph build`.<!-- /terse -->
+3. How two things relate: `magus path <a> <b>` gives the shortest edge chain<!-- why --> -
+   use it to test whether a proposed boundary actually separates them<!-- /why -->.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
@@ -76,16 +78,16 @@ and nothing it exports would need to be exported once merged.
 
 Derive the pattern from the graph rather than imposing one: where similar code
 already lives (`magus query kind:<kind> <term>`), which modules import which
-(`relation:imports`), how existing projects segment (`magus graph deps`). A
+(`relation:imports`), how existing projects segment (`magus graph deps`).<!-- why --> A
 suggestion that follows the workspace's own conventions costs less than an
-imported ideal. State the observed convention in the proposal, with the query
+imported ideal.<!-- /why --> State the observed convention in the proposal, with the query
 that shows it.
 
 ## Audit the domain model itself
 
-The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+<!-- why -->The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):
+stats for smells (see the magus-query skill for the query syntax):<!-- /why --><!-- terse -->Census the kinds, then read the stats for smells:<!-- /terse -->
 
 ```sh
 magus graph stats                    # god nodes, orphans, doc coverage
@@ -102,26 +104,26 @@ Confirm each smell against the source before acting on it:
   kind, or fold into an attr on an existing one?
 - Two kinds with near-identical population AND edge shape may be one concept
   under two names. Keep them distinct only if their PROVENANCE differs (the kind
-  doctrine in `types/knowledge.go`): a kind whose every instance is derivable
-  from another kind's attr fails that test and should fold.
+  doctrine in `types/knowledge.go`)<!-- why -->: a kind whose every instance is derivable
+  from another kind's attr fails that test and should fold<!-- /why -->.
 - An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
-  which; an undeclared-but-available builtin is neither.
+  which<!-- why -->; an undeclared-but-available builtin is neither<!-- /why -->.
 - A NODE LABEL that varies by checkout (a worktree name where a stable module
-  name belongs) is an identity smell, even when the ID is stable.
+  name belongs) is an identity smell<!-- why -->, even when the ID is stable<!-- /why -->.
 
 A kind or edge earns its place only if it answers a question the others cannot;
-prefer folding into an existing mechanism over adding one (pre-1.0: break
-freely). Ground every claim in a query, exactly as for a layout proposal.
+prefer folding into an existing mechanism over adding one<!-- why --> (pre-1.0: break
+freely)<!-- /why -->. Ground every claim in a query, exactly as for a layout proposal.
 
 ## Verify the change
 
 After restructuring, show the impact in graph terms: `magus graph diff --rev
 <base> -o markdown` lists the nodes and edges the change added, removed, or
-altered - blast radius as data, suitable for a PR description. Then run
+altered<!-- why --> - blast radius as data, suitable for a PR description<!-- /why -->. Then run
 `magus affected ci` to prove the affected projects still pass.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool - do not hand-draw diagrams of what the graph already knows.
+browser graph tool<!-- why --> - do not hand-draw diagrams of what the graph already knows<!-- /why -->.

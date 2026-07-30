@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/serviceident"
+	"github.com/egladman/magus/internal/service/identity"
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
@@ -52,6 +52,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if len(spec.VersionCmd) > 0 {
 			opts = append(opts, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
+		}
+		for tool, argv := range spec.VersionCmds {
+			opts = append(opts, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 		}
 		if spec.Language != "" {
 			opts = append(opts, types.WithLanguage(spec.Language))
@@ -201,7 +204,7 @@ func newServiceViewer(targets map[string]types.SpellOp) func(string) (*types.Ser
 		view := &types.ServiceView{
 			Idle:        op.Service.Idle,
 			Distinct:    op.Service.Distinct,
-			Fingerprint: serviceident.Fingerprint(svc),
+			Fingerprint: identity.Fingerprint(svc),
 		}
 		if op.Service.Readiness.Bin != "" {
 			view.Readiness = append([]string{op.Service.Readiness.Bin}, op.Service.Readiness.Args...)
@@ -376,6 +379,9 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 	}
 	if len(m.VersionCmd) > 0 {
 		opts = append(opts, types.WithVersionProbe(newVersionProbe(m.VersionCmd)))
+	}
+	for tool, argv := range m.VersionCmds {
+		opts = append(opts, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 	}
 	return opts
 }

@@ -14,6 +14,17 @@ pnpm = "10.33.0"
 # Lints the POSIX sh guard templates in docs/guides/integrations/agents. Pinned so
 # the gate is the same everywhere rather than whatever a developer happens to have.
 "aqua:koalaman/shellcheck" = "0.11.0"
+# Dockerfile linter driven by the docker spell's hadolint op. Pinned because it was
+# previously whatever happened to be on PATH: an upgrade changes which Dockerfiles
+# lint clean, and unlike the `go tool` plugins it is bound to no module graph, so
+# nothing else would have caught the drift.
+"aqua:hadolint/hadolint" = "2.14.0"
+# Go linter driven by the go spell's golangci-lint op. Pinned here rather than via
+# go.mod's tool block: a linter generates no code, so it has none of the
+# generator/runtime lockstep that keeps protoc-gen-go on `go tool`, and it was never
+# actually in that block - `go tool golangci-lint` reported "no such tool", so the
+# op could not run at all.
+"aqua:golangci/golangci-lint" = "2.12.2"
 tinygo = "0.41.1"
 "aqua:WebAssembly/binaryen" = "129"
 "aqua:bufbuild/buf" = "1.58.0"

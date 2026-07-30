@@ -76,7 +76,7 @@ var Os = Module{
 				{Name: "dir", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    OsExec,
 		},
 		{
@@ -87,7 +87,7 @@ var Os = Module{
 				{Name: "dir", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
 			Impl:    OsExecSh,
 		},
 		{

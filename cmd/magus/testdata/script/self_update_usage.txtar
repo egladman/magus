@@ -1,0 +1,28 @@
+# magus self update downloads and replaces the running binary, so this test never
+# invokes it - only the usage/help text and argument-validation error paths, which
+# are safe to exercise and still catch real regressions (a subcommand rename, a
+# dropped safety flag, or the help text silently losing its supply-chain claims).
+
+# Bare `magus self` lists the update subcommand and points at `magus init` for
+# workspace bootstrapping - self is about the binary, not a project, so it says so.
+# Bare `magus self` is a usage error (exit 2), matching every other command that
+# was given no subcommand; `magus self -h` remains 0.
+! exec magus self
+stderr 'subcommand required'
+stderr 'Usage: magus self <subcommand> \[flags\]'
+stderr 'update.*update magus to the latest release'
+stderr 'To bootstrap a workspace, use: magus init'
+
+# An unknown subcommand is a distinct, nonzero-exit error naming the bad value.
+! exec magus self nope
+stderr 'magus self: unknown subcommand "nope"'
+
+# `self update --help` documents the supply-chain-relevant claims: Ed25519
+# signature verification, SHA-256 hash verification, and the MAGUS_UPDATE_URL
+# override for a private update channel. This is the contract worth pinning -
+# losing any of these silently would be a real regression in what update promises.
+exec magus self update --help
+stderr 'Ed25519 signature'
+stderr 'SHA-256 hash'
+stderr 'MAGUS_UPDATE_URL'
+stderr 'private update channel'

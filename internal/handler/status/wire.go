@@ -47,7 +47,30 @@ func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.
 	for _, svc := range r.Services {
 		s.Services = append(s.Services, serviceToProto(svc))
 	}
+	for _, l := range r.Locks {
+		s.Locks = append(s.Locks, lockToProto(l))
+	}
 	return s
+}
+
+// lockToProto maps one held workspace lock onto the wire message. It deliberately
+// does not influence deriveHealth above: a held lock is what a working run looks
+// like, and reporting it as unhealthy would make a queued peer look like an outage.
+func lockToProto(l types.StatusLock) *statusv1.Lock {
+	waiters := make([]*statusv1.LockWaiter, 0, len(l.Waiters))
+	for _, w := range l.Waiters {
+		waiters = append(waiters, &statusv1.LockWaiter{
+			Pid: int32(w.PID), Command: w.Command, Dir: w.Dir, WaitTime: tsFromTime(w.WaitTime),
+		})
+	}
+	return &statusv1.Lock{
+		Waiters:     waiters,
+		Project:     l.Project,
+		Pid:         int32(l.PID),
+		Command:     l.Command,
+		Dir:         l.Dir,
+		AcquireTime: tsFromTime(l.AcquireTime),
+	}
 }
 
 // serviceToProto maps one hosted shared service onto the wire message.
@@ -87,15 +110,15 @@ func runToProto(r types.StatusRun) *statusv1.Run {
 func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 	switch s {
 	case types.TargetRunQueued:
-		return statusv1.TargetRun_QUEUED
+		return statusv1.TargetRun_STATE_QUEUED
 	case types.TargetRunRunning:
-		return statusv1.TargetRun_RUNNING
+		return statusv1.TargetRun_STATE_RUNNING
 	case types.TargetRunPassed:
-		return statusv1.TargetRun_PASSED
+		return statusv1.TargetRun_STATE_PASSED
 	case types.TargetRunFailed:
-		return statusv1.TargetRun_FAILED
+		return statusv1.TargetRun_STATE_FAILED
 	case types.TargetRunCached:
-		return statusv1.TargetRun_CACHED
+		return statusv1.TargetRun_STATE_CACHED
 	default:
 		return statusv1.TargetRun_STATE_UNSPECIFIED
 	}

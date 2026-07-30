@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/manpage"
 )
 
@@ -24,5 +25,5 @@ func runAPI(args []string) error {
 		_, err := os.Stdout.Write(data)
 		return err
 	}
-	return os.WriteFile(*out, data, 0o644)
+	return emit.File(*out, data)
 }

@@ -35,6 +35,23 @@ func arith(vm *VM, op OpCode, left, right Value) (Value, error) {
 			merged = append(merged, rightList.Items...)
 			return ListValue(merged), nil
 		}
+		// Map merge, the counterpart of list concatenation above. Both operands are
+		// left untouched (a fresh map is built) because `+` is an expression, not a
+		// mutation: `a + b` must not alter a, even though `a += b` reassigns it.
+		// Right wins on a duplicate key, matching upstream and every other merge in
+		// the language.
+		if left.tag() == tagMap && right.tag() == tagMap {
+			leftMap, rightMap := left.asMap(), right.asMap()
+			out := NewMap()
+			merged := out.asMap()
+			for i, k := range leftMap.Keys {
+				merged.set(k, leftMap.Vals[i])
+			}
+			for i, k := range rightMap.Keys {
+				merged.set(k, rightMap.Vals[i])
+			}
+			return out, nil
+		}
 	}
 
 	// Float promotion
@@ -84,7 +101,13 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 		}
 		return FloatValue(a / b), nil
 	case OpMod:
-		return Null, fmt.Errorf("buzz: %% not supported for float operands")
+		// Floating-point remainder (fmod), matching upstream: `4.0 % 2.0` is 0.0.
+		// Guarded like OpDiv above rather than returning math.Mod's NaN, so a zero
+		// divisor reports the same way whichever numeric type it came from.
+		if b == 0 {
+			return Null, fmt.Errorf("buzz: modulo by zero")
+		}
+		return FloatValue(math.Mod(a, b)), nil
 	default:
 		return Null, fmt.Errorf("buzz: unknown arith opcode %d", op)
 	}
@@ -96,10 +119,10 @@ func floatArith(op OpCode, a, b float64) (Value, error) {
 // the two asNumeric type switches, and floatArith's opcode switch.
 //
 // ok==false means "not a float-handled op here, fall back to applyBinop": that
-// is OpMod (no float modulo) and float division by zero, both of which must
-// surface arith's exact error. The standalone OpAdd/OpSub/… handlers inline
-// their own single-op float path (the op is statically known there); this helper
-// exists only where the sub-opcode is a runtime value.
+// is OpMod (kept off this hot path; arith computes the fmod) and float division
+// by zero, which must surface arith's exact error. The standalone OpAdd/OpSub/…
+// handlers inline their own single-op float path (the op is statically known
+// there); this helper exists only where the sub-opcode is a runtime value.
 //
 // optimization: collapses the float arithmetic/compare dispatch the fused ops
 //
@@ -138,7 +161,7 @@ func floatBinop(op OpCode, a, b float64) (Value, bool) {
 	case OpNotEqual:
 		return BoolValue(a != b), true
 	}
-	return Null, false // OpMod (no float modulo) → applyBinop reports the error
+	return Null, false // OpMod → applyBinop computes the float remainder
 }
 
 // applyBinop dispatches a fused binary op (OpBinLC) to the same semantics
@@ -500,8 +523,12 @@ func listMethod(vm *VM, list Value, name string) Value {
 				return Null, fmt.Errorf("list.remove: requires int index")
 			}
 			idx := int(args[0].AsInt())
+			// Out of bounds is NULL, not an error: upstream documents remove as
+			// "removes and returns the item at `at`, or null when out of bounds", and
+			// its tests assert `list.remove(12) == null`. Raising made a miss
+			// unrecoverable where upstream lets the caller coalesce it.
 			if idx < 0 || idx >= len(lo.Items) {
-				return Null, fmt.Errorf("list.remove: index %d out of range", idx)
+				return Null, nil
 			}
 			removed := lo.Items[idx]
 			lo.Items = append(lo.Items[:idx], lo.Items[idx+1:]...)
@@ -664,18 +691,41 @@ func listMethod(vm *VM, list Value, name string) Value {
 			return ListValue(cp), nil
 		})
 	case "fill":
+		// fill(value, start: int?, len: int?) - upstream fills a RANGE, defaulting to
+		// the whole list. Ignoring start/len silently filled everything, which passes
+		// the simple case and quietly corrupts the windowed one.
 		return DirectValue("list.fill", func(_ context.Context, args []Value) (Value, error) {
 			if len(args) < 1 {
 				return Null, fmt.Errorf("list.fill: requires a value argument")
 			}
-			for i := range lo.Items {
-				lo.Items[i] = args[0]
+			start := 0
+			if len(args) > 1 && args[1].IsInt() {
+				start = int(args[1].AsInt())
+			}
+			count := len(lo.Items) - start
+			if len(args) > 2 && args[2].IsInt() {
+				count = int(args[2].AsInt())
+			}
+			// Clamp rather than raise: a window past the end fills what exists, which
+			// is what a shallow copy-into semantics implies.
+			if start < 0 {
+				start = 0
+			}
+			if end := start + count; end > 0 && start < len(lo.Items) {
+				if end > len(lo.Items) {
+					end = len(lo.Items)
+				}
+				for i := start; i < end; i++ {
+					lo.Items[i] = args[0]
+				}
 			}
 			return list, nil
 		})
-	case "clone", "cloneMutable", "cloneImmutable":
-		// cloneMutable yields a mutable copy; clone/cloneImmutable an immutable one.
-		mut := name == "cloneMutable"
+	case "clone", "cloneMutable", "cloneImmutable", "copyMutable", "copyImmutable":
+		// cloneMutable yields a mutable copy; the rest an immutable one. copyMutable
+		// and copyImmutable are upstream's aliases for the two clone forms (obj.zig
+		// declares them via .aliases), not separate operations.
+		mut := name == "cloneMutable" || name == "copyMutable"
 		return DirectValue("list."+name, func(_ context.Context, _ []Value) (Value, error) {
 			cp := make([]Value, len(lo.Items))
 			copy(cp, lo.Items)
@@ -791,9 +841,18 @@ func mapMethod(vm *VM, m Value, name string) Value {
 			}
 			return acc, nil
 		})
-	case "clone", "cloneMutable", "cloneImmutable":
-		// cloneMutable yields a mutable copy; clone/cloneImmutable an immutable one.
-		mut := name == "cloneMutable"
+	case "hasKey":
+		return DirectValue("map.hasKey", func(_ context.Context, args []Value) (Value, error) {
+			if len(args) < 1 {
+				return Null, fmt.Errorf("map.hasKey: requires 1 argument")
+			}
+			_, ok := mp.get(args[0].String())
+			return BoolValue(ok), nil
+		})
+	case "clone", "cloneMutable", "cloneImmutable", "copyMutable", "copyImmutable":
+		// cloneMutable yields a mutable copy; the rest an immutable one. copyMutable
+		// and copyImmutable are upstream's aliases for the two clone forms.
+		mut := name == "cloneMutable" || name == "copyMutable"
 		return DirectValue("map."+name, func(_ context.Context, _ []Value) (Value, error) {
 			nm := newMapObj()
 			nm.Mut = mut

@@ -317,7 +317,8 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 }
 </code></pre>
 <h2 id="golangci-lint">golangci-lint</h2>
-<p><strong>Command:</strong> <code>go tool golangci-lint run ./...</code></p>
+<p>Invoked directly rather than through <code>go tool</code>: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. <code>go tool golangci-lint</code> also required the binary in the module's tool block, and a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> that had not put it there got &quot;no such tool&quot; - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.</p>
+<p><strong>Command:</strong> <code>golangci-lint run ./...</code></p>
 <h3 id="debug-1">debug</h3>
 <p>Appends <code>-v</code>.</p>
 <details class="charm-patch">
@@ -338,7 +339,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 <pre><code class="language-json">[
   {
     &quot;op&quot;: &quot;add&quot;,
-    &quot;path&quot;: &quot;/3&quot;,
+    &quot;path&quot;: &quot;/1&quot;,
     &quot;value&quot;: &quot;--fix&quot;
   }
 ]
@@ -390,16 +391,19 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../concepts/charms/"><span class="related-card-title">Charms</span><span class="related-card-desc">Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target&#39;s argument vector at run time.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../concepts/spells/rs/"><span class="related-card-title">rs spell</span><span class="related-card-desc">Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.</span></a>
+        <a class="related-card" href="../../../concepts/spells/ts/"><span class="related-card-title">ts spell</span><span class="related-card-desc">TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22golang%22">golang</a><a class="tag" href="../../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:07:00Z">July 28, 2026, 4:07 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/53e1f6255815e483ab6e8a4d0746b9decc7837e8" data-tooltip="53e1f6255815e483ab6e8a4d0746b9decc7837e8" title="53e1f6255815e483ab6e8a4d0746b9decc7837e8">53e1f625</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/99ced4add50cf7abb4471a77f5ee6ce55f7ba71d"><code>99ced4ad</code></a> <small><time datetime="2026-07-28T14:00:34Z">Jul 28, 2026</time></small> - regenerate the routing index, graphs, and docs site</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/go.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/go.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-29T22:33:27Z">July 29, 2026, 10:33 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5482fb86c03caac568ec79fce0ce9a6efce18b25" data-tooltip="5482fb86c03caac568ec79fce0ce9a6efce18b25" title="5482fb86c03caac568ec79fce0ce9a6efce18b25">5482fb86</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/53e1f6255815e483ab6e8a4d0746b9decc7837e8"><code>53e1f625</code></a> <small><time datetime="2026-07-28T16:07:00Z">Jul 28, 2026</time></small> - show backslash namespace access in the hand-authored docs</li><li><a href="https://github.com/egladman/magus/commit/99ced4add50cf7abb4471a77f5ee6ce55f7ba71d"><code>99ced4ad</code></a> <small><time datetime="2026-07-28T14:00:34Z">Jul 28, 2026</time></small> - regenerate the routing index, graphs, and docs site</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/go.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/go.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="project">Project</h3>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
 caching, scheduling, and dependency tracking. See <a href="../../../concepts/workspace/">workspace</a>.</p>
 <h3 id="magusfile">Magusfile</h3>
@@ -443,6 +447,71 @@ a silent no-op. See <a href="../../../concepts/targets/#the-target-name">targets
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

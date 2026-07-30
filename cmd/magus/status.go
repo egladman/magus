@@ -173,6 +173,11 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		// Symbol-index freshness is workspace-local (a cache probe), independent of the
 		// daemon, so it is populated regardless of pool reachability.
 		SymbolIndexes: loadSymbolIndexStatus(ctx),
+		// Held locks are read from the workspace cache, not the daemon: a lock is taken by
+		// whichever process is mutating a project, which is usually a plain `magus run`
+		// with no daemon involved at all. Populated before any proc-socket early return
+		// for the same reason.
+		Locks: loadHeldLocks(ctx),
 		// MCP endpoint health is probed independently of the proc socket below: the
 		// endpoint an agent host connects to can be down while the proc daemon is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
@@ -203,6 +208,20 @@ func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 	}
 	defer func() { _ = m.Close() }()
 	return m.SymbolIndexStatus(ctx)
+}
+
+// loadHeldLocks reads the workspace's held locks. Like the symbol-index probe above
+// it is workspace-local and daemon-independent: a lock is taken by whichever process
+// mutates a project, which is usually a plain `magus run` with no daemon at all.
+func loadHeldLocks(ctx context.Context) []types.StatusLock {
+	// No Close here: loadMagus is a sync.Once singleton, and loadSymbolIndexStatus
+	// above already owns its lifetime. Closing a second time tears down a shared buzz
+	// pool the first caller still expects to be open.
+	m, err := loadMagus(ctx, "")
+	if err != nil {
+		return nil
+	}
+	return m.HeldLocks()
 }
 
 // statusOutputFromReply converts a proc.StatusReply into a types.StatusOutput.
@@ -346,6 +365,7 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 
 	printMCPEndpointStatus(w, r.MCPEndpoint)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
+	printLockStatus(w, r.Locks)
 }
 
 // printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
@@ -815,4 +835,43 @@ func parseRunning(args []string) (project, target string) {
 // the same reason every other magus-authored string is.
 func truncate(s string, n int) string {
 	return tty.Clip(s, n)
+}
+
+// printLockStatus renders the workspace locks held right now.
+//
+// Held is normal, so this is never styled as a failure. Age is the column that
+// matters: seconds means a peer is mid-run, days means a holder nobody remembers
+// starting, and every other run is waiting behind it.
+func printLockStatus(w io.Writer, locks []types.StatusLock) {
+	if len(locks) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nlocks held:")
+	for _, l := range locks {
+		line := "  " + l.Project
+		if l.PID != 0 {
+			line += fmt.Sprintf("  pid %d", l.PID)
+		}
+		if !l.AcquireTime.IsZero() {
+			line += "  " + formatDur(time.Since(l.AcquireTime))
+		}
+		if l.Command != "" {
+			line += "  " + l.Command
+		}
+		fmt.Fprintln(w, line)
+		if l.Dir != "" {
+			fmt.Fprintln(w, "    in "+l.Dir)
+		}
+		// The other half of a stalled queue: who is blocked behind this holder.
+		for _, wt := range l.Waiters {
+			line := fmt.Sprintf("    waiting: pid %d", wt.PID)
+			if !wt.WaitTime.IsZero() {
+				line += "  " + formatDur(time.Since(wt.WaitTime))
+			}
+			if wt.Command != "" {
+				line += "  " + wt.Command
+			}
+			fmt.Fprintln(w, line)
+		}
+	}
 }

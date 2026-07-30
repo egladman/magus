@@ -17,6 +17,7 @@ block-expression.buzz
 break-continue.buzz
 call-without-parentheses.buzz
 checked-subscript.buzz
+composite-assign.buzz
 dead-branches.buzz
 debug.buzz
 default-arguments.buzz
@@ -25,6 +26,7 @@ enums.buzz
 for.buzz
 foreach.buzz
 free-identifiers.buzz
+generics.buzz
 if-arrow.buzz
 inferred-var-type.buzz
 inline-catch.buzz
@@ -39,7 +41,9 @@ json.buzz
 labels.buzz
 lambda.buzz
 list-map-properties.buzz
+lists.buzz
 long-namespace.buzz
+maps.buzz
 named-expr.buzz
 namespace.buzz
 nullable-default.buzz
@@ -51,6 +55,7 @@ placeholder-cycle.buzz
 placeholder-nested-call.buzz
 range-expression-scope.buzz
 range.buzz
+run-file.buzz
 scope.buzz
 str.buzz
 tail-call.buzz

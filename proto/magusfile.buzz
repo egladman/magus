@@ -33,6 +33,21 @@ magus\project({
 //      is `<gitroot>/.git#branch=<default>,subdir=proto`; resolve the git root (mind the
 //      worktree .git FILE, not a dir). The stock buf spell hardcodes ".git#branch=main"
 //      and assumes project==gitroot, so this needs a custom target, not the bare op.
+// KNOWN GAP, deliberately left rather than papered over: buf.gen.yaml runs its
+// codegen plugins as `local: [go, tool, protoc-gen-go]`, so the plugin versions are
+// pinned by the ROOT go.mod - nothing in this project. A plugin bump therefore
+// regenerates nothing, and the committed .pb.go replays from a cache built by the
+// older plugin.
+//
+// Declaring ../go.mod an input WOULD close it, and that is the anti-pattern: go.mod
+// moves on every dependency bump, so this target would re-run for changes that
+// cannot affect it.
+//
+// The right fix is a version PROBE, which moves only when the plugin does
+// (`go tool protoc-gen-go --version` reports v1.36.11). Probes are declared per
+// SPELL today, and which plugins a buf project runs is decided by ITS buf.gen.yaml,
+// so the built-in spell cannot name them. This wants a per-target declaration - a
+// ctx.versions sibling to ctx.inputs.
 export fun generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](ctx); }
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void {

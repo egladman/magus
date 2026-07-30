@@ -42,6 +42,7 @@ func (f *ignoreFlag) Set(value string) error {
 // watchCmd implements `magus watch`; output format matches `git diff --name-only` for pipe compatibility.
 func watchCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	debounce := fs.Duration("debounce", 200*time.Millisecond, "quiet window before emitting a batch")
 	initial := fs.Bool("initial", true, "emit an --all batch on startup before watching")
 	null := fs.Bool("null", false, "NUL-separate paths and double-NUL between batches")

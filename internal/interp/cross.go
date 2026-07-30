@@ -34,8 +34,13 @@ type crossEntry struct {
 // NewCrossDispatch returns an empty coordinator for one run.
 func NewCrossDispatch() *CrossDispatch {
 	return &CrossDispatch{
-		m:   make(map[string]*crossEntry),
-		run: func(ctx context.Context, dir, target string) error { return RunDir(ctx, dir, target, nil) },
+		m: make(map[string]*crossEntry),
+		// A cross-project dependency is run for its EFFECT (its outputs feed the
+		// dependent), so its return value has no consumer here and is dropped.
+		run: func(ctx context.Context, dir, target string) error {
+			_, err := RunDir(ctx, dir, target, nil)
+			return err
+		},
 	}
 }
 

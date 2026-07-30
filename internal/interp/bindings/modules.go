@@ -144,6 +144,18 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 		ispell.HTTPResponseSource,
 		ispell.SemverVersionSource,
 		ispell.URLSource,
+		// magus.ls's result. ProjectEntry precedes Projects (Projects.projects is
+		// [ProjectEntry]).
+		ispell.ProjectEntrySource,
+		ispell.ProjectsSource,
+		// The remaining host results: vcs.tags, magus.affected, magus.graph, and
+		// magus.modules / magus.module. The Module entries precede Module.
+		ispell.TagSource,
+		ispell.AffectedSource,
+		ispell.GraphSource,
+		ispell.ModuleFieldEntrySource,
+		ispell.ModuleMethodEntrySource,
+		ispell.ModuleSource,
 	}, "\n"))
 	// magus/charm: the pure-Buzz patch constructors, registered as its own source
 	// module so a handler op spell or a magusfile can `import "magus/charm"` and

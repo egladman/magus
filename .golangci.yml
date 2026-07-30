@@ -18,6 +18,7 @@ linters:
 
     # --- Type safety ---
     - forcetypeassert # forbid unchecked type assertions (x.(T) without ok guard)
+    - musttag         # every field of a marshaled struct must carry a json tag
     - unconvert       # remove redundant type conversions
     - durationcheck   # catch time.Duration multiplication bugs
 
@@ -34,6 +35,35 @@ linters:
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
   settings:
+    # musttag only sees marshal calls whose argument has a concrete type, so out of
+    # the box it is blind to magus's actual output path: every `-o json|yaml` arm
+    # funnels through emitFormatted(opts, v any), and an `any` parameter erases the
+    # type before the encoder is reached. Registering the funnel itself as a marshal
+    # function restores that view, so a command's output model is checked for json
+    # tags AT THE CALL SITE, where the concrete type is still known.
+    #
+    # This is the guard for a bug that is invisible from the code: a struct with only
+    # yaml tags marshals to JSON under its GO FIELD NAMES, so `config view -o json`
+    # silently emitted "MaxShards" and "HistoryPath" where every other magus surface
+    # says max_shards and history_path.
+    musttag:
+      functions:
+        - name: github.com/egladman/magus/cmd/magus.emitFormatted
+          tag: json
+          arg-pos: 1
+        - name: github.com/egladman/magus/cmd/magus.writeFormatted
+          tag: json
+          arg-pos: 2
+        - name: github.com/egladman/magus/internal/codec.Marshal
+          tag: json
+          arg-pos: 0
+        - name: github.com/egladman/magus/internal/codec.MarshalIndent
+          tag: json
+          arg-pos: 0
+        - name: github.com/egladman/magus/internal/codec.Unmarshal
+          tag: json
+          arg-pos: 1
+
     # govet runs its default analyzer set. The 'shadow' pass is intentionally NOT
     # enabled: it flags 100+ idiomatic `if err := f(); err != nil` re-declarations
     # of err across the tree (all benign), which is pure noise. Re-enable only

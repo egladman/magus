@@ -200,9 +200,6 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_DAEMON_WORKSPACES**
 : Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010). Equivalent magus.yaml key: **daemon.workspaces**.
 
-**MAGUS_ASSUME_INTERACTIVE**
-: When 1 or true, assume an interactive terminal even if detection says otherwise (default: false). Equivalent magus.yaml key: **assume_interactive**.
-
 **MAGUS_MCP_ENABLED**
 : When 0 or false, refuse to start the MCP server (default: true). Equivalent magus.yaml key: **mcp.enabled**.
 

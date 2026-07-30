@@ -1,12 +1,12 @@
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It lives outside the repo, is shared by its worktrees, and is
-visible in the console. It is not automatic model memory: add an entry only
+handoff journal.<!-- why --> It lives outside the repo, is shared by its worktrees, and is
+visible in the console.<!-- /why --> It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
-The graph remains the source of truth. A journal entry links back to the query,
-node, output, command, or document that a later reader should reopen.
+The graph remains the source of truth.<!-- why --> A journal entry links back to the query,
+node, output, command, or document that a later reader should reopen.<!-- /why -->
 
 Ref kinds (the closed set a ref may point at):
 
@@ -26,17 +26,18 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-There is no free-text/`note` type. A claim that is true about the code is a
-`pointer` of kind `query` (fetch it live) or `output`, never stored prose.
+There is no free-text/`note` type.<!-- why --> A claim that is true about the code is a
+`pointer` of kind `query` (fetch it live) or `output`, never stored prose.<!-- /why --><!-- terse --> A claim true
+about the code is a `query` or `output` pointer, never stored prose.<!-- /terse -->
 
 ## Read and write deliberately
 
 - At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory list`. Empty is normal; do not manufacture journal entries.
+  `magus memory list`.<!-- why --> Empty is normal; do not manufacture journal entries.<!-- /why -->
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
-  rediscover. The CLI is often clearer for a human:
+  rediscover.<!-- why --> The CLI is often clearer for a human:<!-- /why -->
 
   ```sh
   magus memory put release-gate --type plan \
@@ -46,8 +47,8 @@ There is no free-text/`note` type. A claim that is true about the code is a
 
 - Use `delete` for entries that no longer earn their keep. Run `magus memory
   verify` (or MCP `{op: "verify"}`) after editing entries or when list reports
-  an issue. It gives a path and repair step for malformed, stale, or broken
-  linked entries.
+  an issue.<!-- why --> It gives a path and repair step for malformed, stale, or broken
+  linked entries.<!-- /why -->
 
 ## Recording
 
@@ -55,19 +56,20 @@ There is no free-text/`note` type. A claim that is true about the code is a
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
-  a rejected approach and why): record a `decision`. A bare "we chose X" helps
-  nobody; the `body` carries the why, and the refs anchor it to the code.
+  a rejected approach and why): record a `decision`.<!-- why --> A bare "we chose X" helps
+  nobody; the `body` carries the why, and the refs anchor it to the code.<!-- /why --><!-- terse --> Put the why
+  in `body` and anchor it with refs.<!-- /terse -->
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
-  it, not a sentence that rots.
+  it<!-- why -->, not a sentence that rots<!-- /why -->.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
 
 ## Scope boundaries
 
 - Intra-session working notes (checklists, partial findings) belong in
-  `magus_scratchpad`, which is per-workspace and disposable, not here.
+  `magus_scratchpad`<!-- why -->, which is per-workspace and disposable<!-- /why -->, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
-- Records live outside the repo, keyed by repository identity. The console,
+- Records live outside the repo, keyed by repository identity.<!-- why --> The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
-  session erase another's handoff.
+  session erase another's handoff.<!-- /why --><!-- terse --> Console, CLI and MCP all show the same entries.<!-- /terse -->

@@ -1,0 +1,17 @@
+# magus man install writes the man pages embedded in the binary to a directory, so
+# the count of pages will churn as commands gain man pages - the count itself is not
+# the contract. What is worth pinning: the command reports success in the expected
+# shape AND real .1 files actually land on disk, not just a printed number.
+#
+# No workspace fixture needed - man pages come from the binary, not the project.
+
+exec magus man install --dir ./mandir
+stdout 'Installed \d+ man pages to \./mandir'
+exists mandir/magus.1
+exists mandir/magus-run.1
+exists mandir/magus-describe.1
+
+# Bare `magus man` with no subcommand exits 1 and names what is missing.
+! exec magus man
+stderr 'Usage: magus man install \[--dir <path>\]'
+stderr '\[error\] magus man: subcommand required'

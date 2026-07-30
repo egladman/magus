@@ -21,7 +21,7 @@ import (
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 19
+const SkillVersion = 20
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -41,6 +41,200 @@ type AgentSkill struct {
 	Body        string
 }
 
+// Variant selects which permutation of a skill body to render.
+//
+// BOTH PERMUTATIONS ARE CURATED, and that is the whole design. The simple one is
+// not a summary, a truncation, or a model-generated paraphrase: there is exactly
+// one human-written body per skill, and its author brackets the spans that only
+// the full permutation keeps. So the two can never come to describe different
+// behaviour, they share one content digest, and they version together - which is
+// the property a second hand-maintained file could not give.
+//
+// The reason to offer a shorter one at all: a skill is a bet about what the reader
+// cannot infer, and that bet ages. Models keep getting better at inferring the
+// why, so the rationale that earns its context today is the same text that is
+// dead weight in a year. Rather than let the skills quietly become bricks, the
+// choice is a flag - and re-asking "does this still earn its context?" is the
+// audit, not a rewrite.
+type Variant int
+
+const (
+	// VariantFull is the default: the imperative steps plus the rationale that
+	// says why each one is the right move and what goes wrong otherwise.
+	VariantFull Variant = iota
+	// VariantSimple keeps the imperative steps and withholds the rationale, for a
+	// capable reader that would rather spend the context on the task. It is a bet
+	// ON the reader, not a lossy compression - which is why the split is a
+	// judgement an author records, and why anything a step cannot survive losing
+	// belongs in the unmarked core instead.
+	VariantSimple
+)
+
+func (v Variant) String() string {
+	if v == VariantSimple {
+		return "simple"
+	}
+	return "full"
+}
+
+// VariantOf maps a --simple boolean to a Variant, so the CLI does not spell the
+// conditional at every call site.
+func VariantOf(simple bool) Variant {
+	if simple {
+		return VariantSimple
+	}
+	return VariantFull
+}
+
+// whyOpen and whyClose bracket prose that only [VariantFull] keeps.
+//
+// They are HTML comments so a marked body stays valid Markdown that renders
+// identically either way - the source is readable, and a skill file opened in any
+// viewer shows no scaffolding. One pair covers both granularities: a whole
+// paragraph, or a trailing clause inside a numbered step, because the span is
+// taken verbatim between the markers regardless of newlines. One rule, not two.
+//
+// The name says the intent rather than the mechanism. What a simple skill drops
+// is the WHY; what both keep is the WHAT. An author deciding where the marker
+// goes is answering "would a capable reader still do the right thing without this
+// sentence?", and that question is the curation.
+// terseOpen and terseClose bracket prose that only [VariantSimple] keeps: the
+// short wording of something the full form says at length.
+//
+// The why markers alone cap how short the simple form can get, because they can
+// only SUBTRACT. Simple is "full minus the marked spans", so a passage that
+// needs two sentences in the full form has to appear at that length in both, and
+// the only way to shorten it further is to drop it entirely and lose the step.
+// Measured on magus-run: widening the why brackets as far as they go reached 31%
+// against a 50-60% target, with the remainder sitting in command blocks and
+// tables that are the highest-value bytes on the page.
+//
+// A why span immediately followed by a terse span is therefore the two-wording
+// idiom - long version, then short version - and it is what makes real
+// compression possible without the full form losing anything:
+//
+//	<!-- why -->the full explanation, at length<!-- /why --><!-- terse -->the gist<!-- /terse -->
+//
+// Neither marker is required, and a span with no counterpart still means what it
+// always did: why-only is "full says more", terse-only is "simple says this and
+// full says nothing", which is almost always a mistake worth noticing in review.
+const (
+	whyOpen    = "<!-- why -->"
+	whyClose   = "<!-- /why -->"
+	terseOpen  = "<!-- terse -->"
+	terseClose = "<!-- /terse -->"
+)
+
+// applyVariant renders body for v: [VariantSimple] removes each marked span,
+// [VariantFull] keeps the prose and removes only the markers themselves, so no
+// scaffolding reaches an installed file either way.
+//
+// Unbalanced markers are an ERROR, never a best guess. A generator that silently
+// mis-elides ships a skill missing a step, and a missing step in an instruction
+// file is indistinguishable from an instruction not to do it.
+func applyVariant(name, body string, v Variant) (string, error) {
+	// Two passes over the same machinery, differing only in which variant keeps
+	// the span. Order does not matter: the pairs may sit adjacent but never nest,
+	// which resolveSpans enforces.
+	out, err := resolveSpans(name, body, whyOpen, whyClose, v == VariantFull)
+	if err != nil {
+		return "", err
+	}
+	out, err = resolveSpans(name, out, terseOpen, terseClose, v == VariantSimple)
+	if err != nil {
+		return "", err
+	}
+	return tidyBlankLines(out), nil
+}
+
+// resolveSpans removes every open/close pair from body, keeping the bracketed
+// prose when keep is set and dropping it otherwise. Either way the markers
+// themselves go, so no scaffolding reaches an installed file.
+//
+// Unbalanced markers are an ERROR, never a best guess. A generator that silently
+// mis-elides ships a skill missing a step, and a missing step in an instruction
+// file is indistinguishable from an instruction not to do it.
+func resolveSpans(name, body, open, close string, keep bool) (string, error) {
+	var b strings.Builder
+	rest := body
+	for {
+		i := strings.Index(rest, open)
+		if i < 0 {
+			if strings.Contains(rest, close) {
+				return "", fmt.Errorf("skill %q: %s with no matching %s", name, close, open)
+			}
+			b.WriteString(rest)
+			break
+		}
+		after := rest[i+len(open):]
+		j := strings.Index(after, close)
+		if j < 0 {
+			return "", fmt.Errorf("skill %q: %s with no matching %s", name, open, close)
+		}
+		if strings.Contains(after[:j], open) {
+			return "", fmt.Errorf("skill %q: nested %s", name, open)
+		}
+		b.WriteString(rest[:i])
+		if keep {
+			b.WriteString(after[:j])
+		}
+		rest = after[j+len(close):]
+		if !keep {
+			trimSeam(&b, rest)
+		}
+	}
+	return b.String(), nil
+}
+
+// trimSeam drops the space left dangling at an elision boundary, when the removed
+// span sat between a space and the punctuation that closed the sentence: "done - a
+// long reason<!-- /why -->." would otherwise render as "done ." with a floating space.
+//
+// It looks at exactly the two characters either side of the cut, and nowhere else.
+// A global " ." -> "." pass is the obvious shortcut and it is wrong: it silently
+// rewrote `git checkout .` to `git checkout.` in the middle of a command the skill
+// tells the reader never to run - corrupting content that was never elided at all.
+func trimSeam(b *strings.Builder, rest string) {
+	if b.Len() == 0 || rest == "" {
+		return
+	}
+	if !strings.ContainsRune(".,;:)!?", rune(rest[0])) {
+		return
+	}
+	s := b.String()
+	if !strings.HasSuffix(s, " ") {
+		return
+	}
+	b.Reset()
+	b.WriteString(strings.TrimRight(s, " "))
+}
+
+// tidyBlankLines collapses the blank-line runs a dropped paragraph leaves behind
+// and strips trailing whitespace, so an elided body is still well-formed Markdown.
+//
+// It does not rewrap prose. A paragraph left with ragged line lengths renders
+// identically - Markdown folds single newlines inside a paragraph into spaces - and
+// a rewrapper would have to understand fenced code, tables and list indentation to
+// avoid breaking them, which is a lot of machinery to buy nothing the reader sees.
+func tidyBlankLines(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	blank := 0
+	for _, l := range lines {
+		l = strings.TrimRight(l, " \t")
+		if l == "" {
+			blank++
+			if blank > 1 {
+				continue
+			}
+		} else {
+			blank = 0
+		}
+		out = append(out, l)
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
 // Status is the verification verdict for one installed skill location.
 type Status struct {
 	Location  string
@@ -58,7 +252,8 @@ type skillSource struct {
 var skillSources = []skillSource{
 	{name: "magus-architecture", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture/SKILL.md"},
 	{name: "magus-buzz", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz/SKILL.md"},
-	{name: "magus-changes", description: "Summarize what merged, changed, or landed recently in a magus workspace. Use for questions such as \"what's been merged lately?\", \"what features landed recently?\", \"catch me up since last week\", or \"what changed in this monorepo?\" Ground each conclusion in VCS history plus magus project and knowledge-graph evidence; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
+	{name: "magus-changes", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
+	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-docs", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs/SKILL.md"},
 	{name: "magus-memory", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
@@ -81,7 +276,8 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 	return c
 }
 
-func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
+// EmbeddedSkills returns every embedded skill rendered for v, in name order.
+func (c *Catalog) EmbeddedSkills(v Variant) ([]AgentSkill, error) {
 	sources := append([]skillSource(nil), skillSources...)
 	sort.Slice(sources, func(i, j int) bool { return sources[i].name < sources[j].name })
 	skills := make([]AgentSkill, 0, len(sources))
@@ -90,7 +286,11 @@ func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: strings.TrimSpace(string(body))})
+		rendered, err := applyVariant(source.name, strings.TrimSpace(string(body)), v)
+		if err != nil {
+			return nil, err
+		}
+		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: rendered})
 	}
 	return skills, nil
 }
@@ -104,14 +304,14 @@ func (c *Catalog) RenderSkill(skill AgentSkill) []byte {
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
-func (c *Catalog) SkillBytes(name string) ([]byte, error) {
-	skills, err := c.EmbeddedSkills()
+func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
 	for _, skill := range skills {
 		if skill.Name == name {
-			return c.StampSkill(c.RenderSkill(skill)), nil
+			return c.StampSkill(c.RenderSkill(skill), v), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown skill %q", name)
@@ -119,7 +319,7 @@ func (c *Catalog) SkillBytes(name string) ([]byte, error) {
 
 // SkillNames returns the embedded skill names in deterministic order.
 func (c *Catalog) SkillNames() ([]string, error) {
-	skills, err := c.EmbeddedSkills()
+	skills, err := c.EmbeddedSkills(VariantFull)
 	if err != nil {
 		return nil, err
 	}
@@ -138,8 +338,8 @@ func (c *Catalog) SkillNames() ([]string, error) {
 // result to `tar -xf - -C <dir>` is the supported way to install skills
 // outside the workspace root - the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
-func (c *Catalog) SkillTar(dest string) ([]byte, error) {
-	skills, err := c.EmbeddedSkills()
+func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +350,7 @@ func (c *Catalog) SkillTar(dest string) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.StampSkill(c.RenderSkill(skill))
+		body := c.StampSkill(c.RenderSkill(skill), v)
 		hdr := &tar.Header{
 			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
 			Mode:    0o644,
@@ -177,11 +377,11 @@ func (c *Catalog) SkillTar(dest string) ([]byte, error) {
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool) ([]string, error) {
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
-	skills, err := c.EmbeddedSkills()
+	skills, err := c.EmbeddedSkills(v)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +399,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool) ([]string, error)
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill)), 0o644); err != nil {
+		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill), v), 0o644); err != nil {
 			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
@@ -284,21 +484,26 @@ func (c *Catalog) WriteAgentsSection(dir string) ([]string, error) {
 	return []string{"AGENTS.md"}, nil
 }
 
-func (c *Catalog) provenance() string {
-	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.contentDigest)
+func (c *Catalog) provenance(v Variant) string {
+	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.contentDigest, v)
 }
 
-func (c *Catalog) footer() string {
-	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.contentDigest)
+func (c *Catalog) footer(v Variant) string {
+	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.contentDigest, v)
 }
 
 // StampSkill injects provenance frontmatter and appends a generated-by footer.
-func (c *Catalog) StampSkill(body []byte) []byte {
-	body = c.injectProvenance(body)
-	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer()...)
+//
+// The stamp names the variant but keeps the SOURCE content digest, deliberately:
+// both permutations come from one body, so they must report the same digest and go
+// stale together. A per-variant digest would let a simple install look current
+// against a source its full sibling had already outgrown.
+func (c *Catalog) StampSkill(body []byte, v Variant) []byte {
+	body = c.injectProvenance(body, v)
+	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer(v)...)
 }
 
-func (c *Catalog) injectProvenance(body []byte) []byte {
+func (c *Catalog) injectProvenance(body []byte, v Variant) []byte {
 	s := string(body)
 	if !strings.HasPrefix(s, "---\n") {
 		return body
@@ -308,7 +513,7 @@ func (c *Catalog) injectProvenance(body []byte) []byte {
 		return body
 	}
 	closeAt := len("---\n") + rel + 1
-	return []byte(s[:closeAt] + c.provenance() + s[closeAt:])
+	return []byte(s[:closeAt] + c.provenance(v) + s[closeAt:])
 }
 
 func (c *Catalog) computeContentDigest() string {
@@ -384,7 +589,11 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
-			out = append(out, c.gradeStamp("AGENTS.md", "magus agent install --agents-md", string(section)))
+			// install-agents-md is a SUBCOMMAND, not a flag on install. The old string
+			// named a flag that does not parse, so the one thing a stale stamp is
+			// supposed to give you - the command that fixes it - failed three times
+			// before the real name turned up in `magus agent install -h`.
+			out = append(out, c.gradeStamp("AGENTS.md", "magus agent install-agents-md", string(section)))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
@@ -413,3 +622,18 @@ func (c *Catalog) gradeStamp(location, reinstall, body string) Status {
 
 // Section returns the provider-neutral always-on AGENTS.md guidance.
 func (c *Catalog) Section() string { return c.agentsSection }
+
+// VariantSize returns the total rendered size of every skill in v, stamp
+// included, so a caller can state the context cost of an install without
+// performing one.
+func (c *Catalog) VariantSize(v Variant) (int64, error) {
+	skills, err := c.EmbeddedSkills(v)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, s := range skills {
+		total += int64(len(c.StampSkill(c.RenderSkill(s), v)))
+	}
+	return total, nil
+}

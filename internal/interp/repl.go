@@ -3,14 +3,18 @@ package interp
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/engine"
 	"github.com/fatih/color"
+	"golang.org/x/term"
 )
 
 // ReplOptions configures a REPL session.
@@ -21,6 +25,336 @@ type ReplOptions struct {
 	Stderr  io.Writer
 	Banner  string                  // printed once before the first prompt
 	Locals  map[string]engine.Value // injected as globals before the loop
+	// Candidates supplies completion candidates the interpreter cannot know:
+	// workspace target names, project paths, host module names. Optional.
+	//
+	// It is a callback rather than a slice because the workspace is the caller's to
+	// read, and reading it once at startup would go stale in a session long enough
+	// to matter - which is most of them, since a REPL is where you sit while editing
+	// the magusfile it is describing.
+	Candidates func() []string
+}
+
+// replInput is the REPL's line source. It is one type with two behaviours because
+// every caller wants the same thing - give me the next line - and only the
+// implementation differs:
+//
+//   - On a terminal: an x/term line editor, so arrow keys recall history, Ctrl-A
+//     and friends edit the line, and Tab completes. This is the whole point; a REPL
+//     without history is one where every typo is retyped from scratch.
+//   - Off a terminal: the bufio.Scanner this used to be, unconditionally. A piped
+//     or scripted session must stay byte-identical, which also means it must not
+//     enter raw mode - there is no terminal to restore.
+type replInput struct {
+	editor  *term.Terminal
+	scanner *bufio.Scanner
+	restore func() error
+	out     io.Writer
+}
+
+// newReplInput builds the line source for opts, installing the editor only when
+// BOTH streams are a terminal: the editor writes its own prompt and echoes
+// keystrokes, so it cannot drive a session whose output goes somewhere else.
+//
+// A failure to enter raw mode is not fatal. It degrades to the scanner, because a
+// REPL that refuses to start over a missing line editor is strictly worse than one
+// with no history.
+func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune) (string, int, bool)) *replInput {
+	in := &replInput{out: opts.Stdout}
+	stdin, isFile := opts.Stdin.(*os.File)
+	if !isFile || !tty.StdinIsTerminal() || !tty.IsTerminalWriter(opts.Stdout, tty.SystemProbe) {
+		in.scanner = bufio.NewScanner(opts.Stdin)
+		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
+		return in
+	}
+	restore, err := tty.MakeRaw(stdin.Fd())
+	if err != nil {
+		in.scanner = bufio.NewScanner(opts.Stdin)
+		in.scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
+		return in
+	}
+	in.restore = restore
+	in.editor = term.NewTerminal(struct {
+		io.Reader
+		io.Writer
+	}{opts.Stdin, opts.Stdout}, "")
+	in.editor.AutoCompleteCallback = complete
+	// Without a size the editor assumes 80 columns and wraps a longer line in the
+	// wrong place, which makes editing the tail of a long expression unusable.
+	if w, h, err := tty.SystemProbe.Size(stdin.Fd()); err == nil {
+		_ = in.editor.SetSize(w, h)
+	}
+	// Output must go through the editor once it owns the line: writing to the raw
+	// stdout underneath it lands mid-prompt and leaves the editor's idea of the
+	// cursor wrong for the rest of the session.
+	in.out = in.editor
+	return in
+}
+
+// readLine returns the next line. The editor draws prompt itself; the scanner path
+// prints it, which is what keeps a piped transcript identical to the old behaviour.
+func (in *replInput) readLine(prompt string) (string, error) {
+	if in.editor != nil {
+		in.editor.SetPrompt(prompt)
+		return in.editor.ReadLine()
+	}
+	fmt.Fprint(in.out, prompt)
+	if !in.scanner.Scan() {
+		if err := in.scanner.Err(); err != nil {
+			return "", err
+		}
+		return "", io.EOF
+	}
+	return in.scanner.Text(), nil
+}
+
+func (in *replInput) close() {
+	if in.restore != nil {
+		_ = in.restore()
+	}
+}
+
+// replCompleter answers Tab from what magus already knows about itself.
+//
+// Every source here is an existing structured surface, which is the reason this is
+// worth doing at all: completion is a PROJECTION of the session and the workspace,
+// not a second list to keep in sync. Nothing here has to be updated when a target,
+// module or meta-command is added.
+//
+//   - meta commands, including one per available language driver
+//   - the session's own user globals, so a value you just bound completes
+//   - whatever the caller supplies: workspace targets, projects, host modules
+type replCompleter struct {
+	meta       []string
+	driver     func() engine.ReplDriver
+	candidates func() []string
+	out        io.Writer
+}
+
+// complete is x/term's per-keypress hook. It acts on Tab and declines everything
+// else, so ordinary typing is untouched.
+//
+// The three outcomes follow readline, because that is what hands already expect:
+// one match completes; several insert their longest common prefix, and when that
+// adds nothing the list is printed; none does nothing at all rather than beeping.
+func (c *replCompleter) complete(line string, pos int, key rune) (string, int, bool) {
+	if key != '\t' {
+		return "", 0, false
+	}
+	start := wordStart(line, pos)
+	word := line[start:pos]
+	matches := c.matching(word)
+	if len(matches) == 0 {
+		return "", 0, false
+	}
+
+	insert := matches[0]
+	if len(matches) > 1 {
+		insert = commonPrefix(matches)
+		if insert == word {
+			// No progress to make, so show the alternatives instead of silently
+			// doing nothing - the state where a user presses Tab repeatedly.
+			c.list(matches)
+			return "", 0, false
+		}
+	}
+	return line[:start] + insert + line[pos:], start + len(insert), true
+}
+
+// matching gathers every candidate with the given prefix, deduplicated and sorted
+// so the order is stable between presses.
+func (c *replCompleter) matching(word string) []string {
+	var pool []string
+	// A word starting with "." can only be a meta command, so the noise of every
+	// global and target is excluded rather than ranked below.
+	if strings.HasPrefix(word, ".") {
+		pool = c.meta
+	} else {
+		if d := c.driver(); d != nil {
+			for name := range d.UserGlobals() {
+				pool = append(pool, name)
+			}
+		}
+		if c.candidates != nil {
+			pool = append(pool, c.candidates()...)
+		}
+	}
+	seen := make(map[string]bool, len(pool))
+	var out []string
+	for _, p := range pool {
+		if p != "" && strings.HasPrefix(p, word) && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// list prints the alternatives in columns, capped. An unbounded dump on Tab can
+// scroll the transcript away, which costs the reader more than the list gives them.
+func (c *replCompleter) list(matches []string) {
+	const maxRows = 40
+	shown := matches
+	trailer := ""
+	if len(shown) > maxRows {
+		shown = shown[:maxRows]
+		trailer = fmt.Sprintf("  ... and %d more", len(matches)-maxRows)
+	}
+	fmt.Fprintln(c.out)
+	width := 0
+	for _, m := range shown {
+		if len(m) > width {
+			width = len(m)
+		}
+	}
+	perRow := max(1, 76/(width+2))
+	for i, m := range shown {
+		fmt.Fprintf(c.out, "%-*s", width+2, m)
+		if (i+1)%perRow == 0 {
+			fmt.Fprintln(c.out)
+		}
+	}
+	if len(shown)%perRow != 0 {
+		fmt.Fprintln(c.out)
+	}
+	if trailer != "" {
+		fmt.Fprintln(c.out, trailer)
+	}
+}
+
+// wordStart finds where the word under the cursor begins. Buzz member access is a
+// dot and namespaces are a backslash, so neither breaks a word: completing
+// "fs.wri" has to see the whole thing to know it is a member of fs, and a meta
+// command is a leading dot.
+func wordStart(line string, pos int) int {
+	i := pos
+	for i > 0 {
+		ch := line[i-1]
+		if ch == ' ' || ch == '\t' || ch == '(' || ch == ',' || ch == '[' || ch == '{' || ch == '"' {
+			break
+		}
+		i--
+	}
+	return i
+}
+
+// commonPrefix returns the longest prefix shared by every match, which is how much
+// of an ambiguous completion can be inserted without choosing for the user.
+func commonPrefix(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	p := items[0]
+	for _, s := range items[1:] {
+		for !strings.HasPrefix(s, p) {
+			p = p[:len(p)-1]
+			if p == "" {
+				return ""
+			}
+		}
+	}
+	return p
+}
+
+// metaCommands lists the dot-commands Tab offers.
+//
+// It is exactly what handleReplMeta accepts, and deliberately does NOT include a
+// `.<language>` entry per driver. replHelp advertises language switching, but
+// handleReplMeta discards its driver argument and has no case for it, so `.buzz`
+// falls through and is evaluated as Buzz source. Completing to a command that errors
+// is worse than not offering it; if the switch is implemented, add it here and to
+// handleReplMeta together.
+func metaCommands(drivers []engine.ReplDriver) []string {
+	_ = drivers
+	out := []string{".exit", ".help", ".load", ".quit"}
+	slices.Sort(out)
+	return out
+}
+
+// stickyFooterRows is the height of the REPL's pinned status region.
+//
+// One row, and status only: a REPL's errors belong inline in the transcript where
+// the input that caused them is, not in a region that overwrites its oldest entry.
+// That is the opposite of the cache handler's use, where failures scroll away
+// during a long run and the region is what keeps them on screen.
+const stickyFooterRows = 1
+
+// replFooter pins one dim row at the bottom of the terminal with the session state
+// a REPL otherwise makes you remember: which language you are in, where the working
+// directory is, and whether the parser is mid-expression.
+//
+// The last of those is the reason it is worth the row. A continuation prompt says
+// ">>" and nothing else, so an unclosed brace looks identical to a REPL that has
+// simply stopped responding - the state that makes people kill the process. The
+// footer names the depth instead.
+//
+// It degrades to nothing off a TTY: Region reports disabled, and every method here
+// is a no-op, so a piped or scripted session behaves exactly as before.
+type replFooter struct {
+	region *tty.Region
+}
+
+func newReplFooter(out io.Writer) *replFooter {
+	return &replFooter{region: tty.NewRegion(out, stickyFooterRows, tty.SystemProbe)}
+}
+
+// paint redraws the footer. It needs no cursor bookkeeping: Region painting is
+// cursor-transparent, so the prompt printed next - and the characters the terminal
+// echoes as the user types - land wherever the transcript had reached.
+func (f *replFooter) paint(state string) {
+	if f == nil || !f.region.Enabled() {
+		return
+	}
+	// The error is deliberately dropped rather than surfaced. A footer is
+	// decoration on an interactive session: a terminal that refuses the escape
+	// sequence should cost the reader a status line, never an aborted REPL or a
+	// diagnostic interleaved with their own typing.
+	_ = f.region.SetStatus(state)
+}
+
+func (f *replFooter) release() {
+	if f == nil {
+		return
+	}
+	_ = f.region.Release()
+}
+
+// replState renders the footer's one line. Ordering is fixed so the eye lands in
+// the same place every repaint: what is running, then where, then what it is
+// waiting for.
+func replState(lang, workDir string, depth int, pending bool) string {
+	parts := []string{"magus repl"}
+	if lang != "" {
+		parts = append(parts, lang)
+	}
+	if workDir != "" {
+		parts = append(parts, shortenPath(workDir))
+	}
+	switch {
+	case depth > 0:
+		// The count, not just the fact: it tells you how many closers to type.
+		parts = append(parts, fmt.Sprintf("continuing (depth %d)", depth))
+	case pending:
+		parts = append(parts, "continuing")
+	}
+	parts = append(parts, ".help")
+	return strings.Join(parts, "  |  ")
+}
+
+// shortenPath keeps the tail of a long path, which is the half that identifies the
+// project; a footer clipped from the left would show the same home prefix for every
+// session.
+func shortenPath(p string) string {
+	const max = 40
+	if len(p) <= max {
+		return p
+	}
+	tail := p[len(p)-max:]
+	if i := strings.IndexByte(tail, '/'); i >= 0 {
+		tail = tail[i:]
+	}
+	return "..." + tail
 }
 
 // replDrivers returns the available REPL drivers for sess. The caller may use
@@ -68,10 +402,31 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 	drivers := replDrivers(sess)
 	currentDriver := defaultDriver(drivers)
 
-	scanner := bufio.NewScanner(opts.Stdin)
-	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 	var pending strings.Builder
 	depth := 0
+
+	completer := &replCompleter{
+		meta:       metaCommands(drivers),
+		driver:     func() engine.ReplDriver { return currentDriver },
+		candidates: opts.Candidates,
+	}
+	input := newReplInput(opts, completer.complete)
+	defer input.close()
+	// The completer prints its candidate list through the same writer the editor
+	// owns, so the list cannot land mid-prompt.
+	completer.out = input.out
+	// With the editor active, output routes through it; off a TTY these stay the
+	// caller's streams and the transcript is unchanged.
+	stdout, stderr := input.out, opts.Stderr
+	if input.editor != nil {
+		stderr = input.out
+	}
+
+	footer := newReplFooter(opts.Stdout)
+	// Released on every exit path, including the ctx-cancelled one below: leaving
+	// the scroll margins set would hand the shell back a terminal that only
+	// scrolls its top rows, and the user has no obvious way to undo that.
+	defer footer.release()
 
 	for {
 		if ctx.Err() != nil {
@@ -82,17 +437,27 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		if pending.Len() > 0 || depth > 0 {
 			prompt = ">> "
 		}
-		fmt.Fprint(opts.Stdout, prompt)
-
-		if !scanner.Scan() {
-			fmt.Fprintln(opts.Stdout)
-			return scanner.Err()
+		// Painted before the prompt, not after: paint leaves the cursor on the
+		// transcript's last row, so the prompt and the user's echoed keystrokes
+		// land there rather than in the region.
+		lang := ""
+		if currentDriver != nil {
+			lang = currentDriver.Language()
 		}
-		line := scanner.Text()
+		footer.paint(replState(lang, opts.WorkDir, depth, pending.Len() > 0))
+
+		line, err := input.readLine(prompt)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Fprintln(stdout)
+				return nil
+			}
+			return err
+		}
 
 		// Meta-commands only on fresh input.
 		if pending.Len() == 0 && depth == 0 {
-			handled, exit := handleReplMeta(ctx, opts.Stdout, opts.Stderr, line, &currentDriver, drivers, sess)
+			handled, exit := handleReplMeta(ctx, stdout, stderr, line, &currentDriver, drivers, sess)
 			if exit {
 				return nil
 			}
@@ -120,23 +485,25 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 		}
 
 		if currentDriver == nil {
-			fmt.Fprintln(opts.Stderr, "error: no REPL driver available")
+			fmt.Fprintln(stderr, "error: no REPL driver available")
 			pending.Reset()
 			continue
 		}
 
-		input := pending.String()
-		vals, err := currentDriver.EvalLine(input)
-		if err != nil {
-			if currentDriver.IsIncomplete(err) {
+		// Named src, not input: input is the line source now, and shadowing it here
+		// would hide the editor from the rest of the loop.
+		src := pending.String()
+		vals, evalErr := currentDriver.EvalLine(src)
+		if evalErr != nil {
+			if currentDriver.IsIncomplete(evalErr) {
 				continue
 			}
-			fmt.Fprintf(opts.Stderr, "error: %v\n", err)
+			fmt.Fprintf(stderr, "error: %v\n", evalErr)
 			pending.Reset()
 		} else {
 			for _, v := range vals {
 				if !v.IsNil() {
-					PrettyPrint(opts.Stdout, v, PrettyOpts{MaxDepth: 3})
+					PrettyPrint(stdout, v, PrettyOpts{MaxDepth: 3})
 				}
 			}
 			pending.Reset()

@@ -9,13 +9,13 @@ import (
 
 func TestResolve(t *testing.T) {
 	ok := func(t *testing.T, input, anchor, want string) {
-		got, err := Resolve(input, anchor)
-		require.NoError(t, err, "Resolve(%q, %q)", input, anchor)
+		got, err := resolveAmbiguous(input, anchor)
+		require.NoError(t, err, "resolveAmbiguous(%q, %q)", input, anchor)
 		assert.Equal(t, want, got)
 	}
 	fail := func(t *testing.T, input, anchor, wantErr string) {
-		got, err := Resolve(input, anchor)
-		require.Error(t, err, "Resolve(%q, %q) = %q, want error containing %q", input, anchor, got, wantErr)
+		got, err := resolveAmbiguous(input, anchor)
+		require.Error(t, err, "resolveAmbiguous(%q, %q) = %q, want error containing %q", input, anchor, got, wantErr)
 		assert.ErrorContains(t, err, wantErr)
 	}
 
@@ -44,4 +44,67 @@ func TestResolve(t *testing.T) {
 	t.Run("bare embedded escape", func(t *testing.T) { fail(t, "foo/../../bar", "a/b", "escapes workspace root") })
 	t.Run("bare escape to parent", func(t *testing.T) { fail(t, "foo/../..", "a/b", "escapes workspace root") })
 	t.Run("bare internal dotdot ok", func(t *testing.T) { ok(t, "foo/../bar", "a/b", "bar") })
+}
+
+// TestResolveImport pins the `import "project/<path>"` contract: the path is
+// always dot-relative to the importing magusfile, so a BARE descendant anchors
+// rather than being read as workspace-relative the way Resolve reads it.
+func TestResolveImport(t *testing.T) {
+	ok := func(t *testing.T, input, anchor, want string) {
+		got, err := ResolveImport(input, anchor)
+		require.NoError(t, err, "ResolveImport(%q, %q)", input, anchor)
+		assert.Equal(t, want, got)
+	}
+
+	// The regression: docs importing a nested project resolved to the bare path,
+	// which matched no registered project and broke every graph build.
+	t.Run("bare descendant anchors", func(t *testing.T) {
+		ok(t, "guides/integrations/agents", "docs", "docs/guides/integrations/agents")
+	})
+	t.Run("bare sibling anchors", func(t *testing.T) { ok(t, "api", "extensions/drape", "extensions/drape/api") })
+	t.Run("from root anchor", func(t *testing.T) { ok(t, "libs/gopherbuzz", ".", "libs/gopherbuzz") })
+
+	// Dot-relative forms keep resolving exactly as before.
+	t.Run("up one", func(t *testing.T) { ok(t, "../libs/textsearch", "docs", "libs/textsearch") })
+	t.Run("explicit dot", func(t *testing.T) { ok(t, "./peer", "extensions/drape", "extensions/drape/peer") })
+	t.Run("self", func(t *testing.T) { ok(t, ".", "docs", "docs") })
+
+	// Errors still reject what Resolve rejects.
+	t.Run("empty", func(t *testing.T) {
+		_, err := ResolveImport("", "docs")
+		require.Error(t, err)
+	})
+	t.Run("escapes root", func(t *testing.T) {
+		_, err := ResolveImport("../../foo", "docs")
+		require.ErrorContains(t, err, "escapes workspace root")
+	})
+	// A bare path that only escapes AFTER anchoring, and one that escapes only
+	// relative to the root anchor.
+	t.Run("bare embedded escape", func(t *testing.T) {
+		_, err := ResolveImport("foo/../../../bar", "docs")
+		require.ErrorContains(t, err, "escapes workspace root")
+	})
+	t.Run("bare internal dotdot ok", func(t *testing.T) { ok(t, "foo/../bar", "docs", "docs/bar") })
+
+	// Absolute forms are rejected. The Windows rooted spelling only looks
+	// absolute after ToSlash, so classifying the raw string would let it pass.
+	t.Run("abs unix", func(t *testing.T) {
+		_, err := ResolveImport("/etc", "docs")
+		require.ErrorContains(t, err, "must be relative")
+	})
+	t.Run("drive letter", func(t *testing.T) {
+		_, err := ResolveImport(`C:\foo`, "docs")
+		require.ErrorContains(t, err, "must be relative")
+	})
+	t.Run("windows rooted", func(t *testing.T) {
+		_, err := ResolveImport(`\foo`, "docs")
+		require.ErrorContains(t, err, "must be relative")
+	})
+
+	// The error quotes what the magusfile wrote, never an internally synthesized path.
+	t.Run("error quotes original input", func(t *testing.T) {
+		_, err := ResolveImport("foo/../../../bar", "docs")
+		require.ErrorContains(t, err, `"foo/../../../bar"`)
+		assert.NotContains(t, err.Error(), "./foo")
+	})
 }

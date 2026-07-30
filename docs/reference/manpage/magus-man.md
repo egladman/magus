@@ -10,7 +10,7 @@ Install the man pages embedded in this binary
 
 ## Synopsis
 
-**magus** man install [--dir DIR]
+**magus** man install [--dir \<path\>]
 
 ## Description
 

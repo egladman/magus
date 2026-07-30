@@ -109,7 +109,7 @@ Full metadata table: short_hash, hash, branch, commit_date, is_dirty.
 
 Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == "") rather than for null.
 
-**Signature:** `vcs\commit([rev]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L382)
+**Signature:** `vcs\commit([rev]) → Commit` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L382)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -121,7 +121,7 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.
 
-**Signature:** `vcs\history([limit]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L396)
+**Signature:** `vcs\history([limit]) → [Commit]` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L396)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -141,7 +141,7 @@ Absolute path to the active VCS executable (git/hg/jj), or "" if unresolved. Let
 
 Repository tags, newest first. Each is a record {name, date, id}: name as written ("v0.3.0", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name ("v*"); wildcards stop at "/", so "v*" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting "no tags". Note a shallow or single-branch clone legitimately fetches no tags, so an empty list still means "none present here", not "none exist".
 
-**Signature:** `vcs\tags([pattern]) → any` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L426)
+**Signature:** `vcs\tags([pattern]) → [Tag]` · [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L426)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

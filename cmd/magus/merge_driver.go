@@ -20,7 +20,14 @@ import (
 // mergeDriverCmd dispatches `magus merge-driver %O %A %B %L %P`.
 // Per-clone wiring is installed by `magus init`, not here.
 func mergeDriverCmd(ctx context.Context, root string, args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
+	if len(args) == 0 {
+		_ = mergeDriverUsage()
+		// git only ever calls this with all five placeholders, so a bare invocation is
+		// a human typing it. Exiting 0 said "merge resolved" for a run that did nothing,
+		// and disagreed with the 1-argument case, which already errored.
+		return usagef("magus merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return mergeDriverUsage()
 	}
 	return mergeDriverRun(ctx, root, args)
@@ -124,7 +131,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 // Args: ancestor result other markerSize path (git/hg protocol); exit non-zero falls back to conflict markers.
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
-		return fmt.Errorf("merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+		return usagef("magus merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
 	}
 	pathArg := args[4] // git: repo-relative; hg: absolute workspace path (== result arg)
 

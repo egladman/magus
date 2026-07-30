@@ -14,6 +14,7 @@ import (
 
 func configCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -34,7 +35,7 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 	rest := fs.Args()
 	if len(rest) == 0 {
 		fs.Usage()
-		return nil
+		return usagef("magus config: subcommand required (want view, set, history, cache, or mcp)")
 	}
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
@@ -52,7 +53,8 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 		fs.Usage()
 		return nil
 	default:
-		return fmt.Errorf("config: unknown subcommand %q", sub)
+		fs.Usage()
+		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, or mcp)", sub)
 	}
 }
 
@@ -128,6 +130,7 @@ func intOrDef(n int, def string) string {
 
 func runConfigSet(args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	useGlobal := fs.Bool("global", false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")
@@ -154,7 +157,7 @@ func runConfigSet(args []string) error {
 	}
 	if fs.NArg() != 1 {
 		fs.Usage()
-		return fmt.Errorf("magus config set: requires one argument in key=<key>,value=<value> form")
+		return usagef("magus config set: requires one argument in key=<key>,value=<value> form")
 	}
 	key, value, err := parseConfigSetArg(fs.Arg(0))
 	if err != nil {

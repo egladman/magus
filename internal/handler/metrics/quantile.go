@@ -1,5 +1,5 @@
-// Quantile estimation for a classic (explicit-bucket) histogram, by linear
-// interpolation within the matched bucket.
+// Package quantile estimates a quantile from a classic (explicit-bucket) histogram
+// by linear interpolation within the matched bucket.
 //
 // The algorithm is the histogram_quantile / bucketQuantile routine from Prometheus,
 // reduced to the single interpolation core magus needs to turn an OTel histogram's
@@ -19,10 +19,6 @@
 //	limitations under the License.
 //
 // Source: https://github.com/prometheus/prometheus/blob/main/promql/quantile.go
-//
-// Kept as its own FILE, not its own package: the Apache-2.0 notice above scopes to this
-// file, and the upstream names are preserved so a future sync against promql/quantile.go
-// stays a readable diff.
 package metrics
 
 import (
@@ -30,16 +26,16 @@ import (
 	"sort"
 )
 
-// bucket is one cumulative histogram bucket: CumulativeCount observations fell at or
+// histBucket is one cumulative histogram bucket: CumulativeCount observations fell at or
 // below UpperBound. Buckets are cumulative and ascending by UpperBound; the last
 // bucket's UpperBound is conventionally +Inf (math.Inf(1)), which an OTel explicit-bucket
 // histogram always carries as its implied final bucket.
-type bucket struct {
+type histBucket struct {
 	UpperBound      float64
 	CumulativeCount float64
 }
 
-// quantile estimates the q-quantile (q in [0,1]) of the distribution described by
+// Quantile estimates the q-quantile (q in [0,1]) of the distribution described by
 // buckets. It sorts a copy of buckets (the caller's slice is never mutated), then
 // linearly interpolates within the bucket that contains the q*N-th observation.
 //
@@ -48,7 +44,7 @@ type bucket struct {
 // implied +Inf bucket, fewer than two buckets, or zero observations) yields NaN. A
 // rank that falls in the final +Inf bucket clamps to the largest finite upper bound,
 // since that overflow bucket has no finite boundary to interpolate toward.
-func quantile(q float64, buckets []bucket) float64 {
+func quantileOf(q float64, buckets []histBucket) float64 {
 	switch {
 	case math.IsNaN(q):
 		return math.NaN()
@@ -62,7 +58,7 @@ func quantile(q float64, buckets []bucket) float64 {
 	}
 
 	// Sort a copy so callers keep their slice order (and any shared backing array).
-	bs := make([]bucket, len(buckets))
+	bs := make([]histBucket, len(buckets))
 	copy(bs, buckets)
 	sort.Slice(bs, func(i, j int) bool { return bs[i].UpperBound < bs[j].UpperBound })
 

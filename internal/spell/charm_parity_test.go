@@ -1,3 +1,18 @@
+// This file is the ONE deliberate exception to two conventions this repo
+// otherwise holds to: a test file pairs with a source file of the same name, and
+// tests live in the package they test.
+//
+// It can satisfy neither, because it is not a test OF a file - it is a parity gate
+// BETWEEN files in three packages: the Buzz module in internal/spell, the Go
+// helpers in std/charm.go, and the vm.Value marshaller in host. The import chain
+// runs internal/spell <- std <- host, so the only in-package home is `host`, where
+// no charm source file exists to pair with; and `package spell` cannot import std
+// or host without a cycle.
+//
+// Every alternative pays for the naming with worse production code: exporting std
+// or internal/spell internals for a test's benefit, adding a non-upstream
+// ValueToAny to gopherbuzz's vm, or copying host's ~30-line marshaller in here.
+// Leave it external, and leave the name saying what it guards.
 package spell_test
 
 import (
@@ -15,7 +30,7 @@ import (
 )
 
 // TestCharmBuzzParityWithHost keeps the pure-Buzz magus/charm module
-// (internal/spell/buzzlib/charm.buzz) in lockstep with the Go charm host module
+// (internal/spell/charm.buzz) in lockstep with the Go charm host module
 // (std/charm.go): every constructor magus/charm exports must produce a
 // byte-identical RFC 6902 patch record. The Buzz module is hand-written (charm is
 // logic, not a struct, so it can't be codegen'd), so this guard is what licenses

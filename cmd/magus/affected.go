@@ -25,6 +25,22 @@ import (
 
 // affected dispatches `magus affected <target>`; project set is determined by VCS diff.
 func affected(ctx context.Context, root string, _ runConfig, args []string) error {
+	// Same grammar as `magus run`: the chain is split off the RAW args, before
+	// anything partitions or reorders them. affected is the CI-facing twin, and CI
+	// is exactly where "what did this produce" needs answering.
+	args, chainArgs, chained := splitOnThen(args)
+
+	// Parsed before the run, for the same reason `magus run` does: a typo'd verb must
+	// not cost a full CI pipeline before it is rejected.
+	var chain chainPlan
+	if chained {
+		var proceed bool
+		var chainErr error
+		if chain, proceed, chainErr = prepareChain(chainArgs); chainErr != nil || !proceed {
+			return chainErr
+		}
+	}
+
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
@@ -307,6 +323,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}, version, captureHandlers...)
 	defer func() { endInvocation(err) }()
 
+	invCtx, readReturns := types.WithReturnCapture(invCtx)
 	if target == "ci" {
 		err = m.RunCI(invCtx, targets, runOpts...)
 	} else {
@@ -318,7 +335,18 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	if chained {
+		return runChain(ctx, m, opts, target, targets, chain, readReturns(target))
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputTemplate:
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target))
+	}
+	return nil
 }
 
 func affectedUsage() {
@@ -700,18 +728,19 @@ func countLabel(n int, singular, plural string) string {
 // Returns (project, base, true) when --explain is present; otherwise ("", "", false).
 func parseExplainArgs(args []string) (project, base string, ok bool) {
 	for i, a := range args {
-		if a == "--explain" {
+		switch {
+		case isFlagNamed(a, "explain"):
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				project = args[i+1]
 			}
 			ok = true
-		} else if strings.HasPrefix(a, "--explain=") {
-			project = strings.TrimPrefix(a, "--explain=")
+		case flagValueOf(a, "explain") != "":
+			project = flagValueOf(a, "explain")
 			ok = true
-		} else if a == "--base" && i+1 < len(args) {
+		case isFlagNamed(a, "base") && i+1 < len(args):
 			base = args[i+1]
-		} else if strings.HasPrefix(a, "--base=") {
-			base = strings.TrimPrefix(a, "--base=")
+		case flagValueOf(a, "base") != "":
+			base = flagValueOf(a, "base")
 		}
 	}
 	return project, base, ok

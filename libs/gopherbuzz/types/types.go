@@ -30,6 +30,11 @@ var (
 	Fib     Type = &PrimitiveType{"fib"}       // unparameterized fiber type
 	Pat     Type = &PrimitiveType{"pat"}       // pattern type ($"...")
 	Ud      Type = &PrimitiveType{"ud"}        // foreign userdata (FFI opaque pointer), matching upstream's `ud`
+	// TypeVal is the type OF a type used as a value: what `<[str]>` and `typeof x`
+	// have. Every type value shares it, so `typeof a == typeof b` type-checks
+	// regardless of which types they denote; the canonical spellings are compared
+	// at runtime, not here.
+	TypeVal Type = &PrimitiveType{"type"}
 )
 
 // FibType is the parameterized fiber type fib<Yield, Return>.

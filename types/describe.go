@@ -8,6 +8,16 @@ const SpellDefinition = "A spell is a language/runtime adapter that " +
 	"Spells are registered at startup and bound to projects by importing the spell " +
 	"and listing it in the spells of magus.project in the magusfile."
 
+// SpellVersion is one probe's result: the tool it names, what it reported, and the
+// cache-key fragment that value produces. Error is set instead of Version when the
+// probe could not run, so a caller can tell "not installed" from "no probe declared".
+type SpellVersion struct {
+	Tool     string `json:"tool" yaml:"tool"`
+	Version  string `json:"version,omitempty" yaml:"version,omitempty"`
+	CacheKey string `json:"cache_key,omitempty" yaml:"cache_key,omitempty"`
+	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
 // SpellEntry is the structured view of a single spell.
 type SpellEntry struct {
 	Name    string   `json:"name"              yaml:"name"`
@@ -21,6 +31,26 @@ type SpellEntry struct {
 	// node so `magus query language:go` reaches the adapter alongside that language's
 	// files and symbols.
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	// VersionProbe reports whether the spell declares a toolchain-version command
+	// (mgs_getVersionCommand). Its OUTPUT is mixed into every cache key for the
+	// project (run.go's toolVersionsByProject), making it one of the few cache
+	// inputs that is not a file - so "why did this key change" is unanswerable from
+	// the spell inventory without it. Reported as a bool rather than the argv
+	// because the argv survives only inside the probe closure; the descriptor keeps
+	// it, and `magus describe spell <name>` docs render it from there.
+	//
+	// Its absence is not cosmetic: with every spell reporting identically whether or
+	// not it probed, the inventory reads as though none of them do.
+	VersionProbe bool `json:"version_probe,omitempty" yaml:"version_probe,omitempty"`
+	// Versions are the probes' OBSERVED results, populated only when the caller asks
+	// for them (they shell out, so they are never gathered by default).
+	//
+	// Declared and observed are different questions and only the second debugs
+	// anything: VersionProbe above says a probe exists, which cannot tell you that the
+	// toolchain on this machine has drifted from what the project pins, even though
+	// that value is in every cache key. On the model rather than in a print helper so
+	// every output format carries it - an agent reading -o json needs it most.
+	Versions []SpellVersion `json:"versions,omitempty" yaml:"versions,omitempty"`
 	// TargetDocs maps a target name to its handler's doc comment, where one
 	// exists. Populated only for workspace-local Buzz spells (built-in docs are
 	// not serialized in bytecode).
@@ -281,15 +311,24 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 	"discovered by the presence of a magusfile (magusfile.buzz, or a magusfiles/ subdirectory) " +
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
-// ProjectEntry is the structured view of a single project.
+// ProjectEntry is the structured view of a single project. Its Buzz mirror is
+// generated alongside Projects; DependsOn is tagged because ToMap emits the
+// camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
+// JSON name.
 type ProjectEntry struct {
-	Path      string   `json:"path"                yaml:"path"`
+	Path string `json:"path"                yaml:"path"`
+	// Name is the project's DECLARED name (magus.project's "name" key), empty when
+	// it declares none. Carried on the boundary because a consumer rendering a
+	// human label has to prefer it over the directory basename - without it,
+	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
+	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
+	Name      string   `json:"name,omitempty"      yaml:"name,omitempty"`
 	Dir       string   `json:"dir"                 yaml:"dir"`
 	Spell     string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
 	Spells    []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
-	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 }
 
@@ -297,6 +336,7 @@ type ProjectEntry struct {
 func (p ProjectEntry) ToMap() map[string]any {
 	return map[string]any{
 		"path":      p.Path,
+		"name":      p.Name,
 		"dir":       p.Dir,
 		"spell":     p.Spell,
 		"spells":    p.Spells,
@@ -308,8 +348,14 @@ func (p ProjectEntry) ToMap() map[string]any {
 }
 
 // ProjectsOutput is the top-level result for "describe projects".
+//
+// The Buzz `object Projects` mirror is generated from this struct by
+// cmd/magus-utils types, so magus.ls's result can be annotated `> Projects` for
+// compile-checked field access. Definition carries `buzz:"-"` to keep the mirror
+// honest: ToMap drops it, so a mirrored field would be one the Buzz value never
+// has.
 type ProjectsOutput struct {
-	Definition string         `json:"definition" yaml:"definition"`
+	Definition string         `json:"definition" yaml:"definition" buzz:"-"`
 	Workspace  string         `json:"workspace"  yaml:"workspace"`
 	Count      int            `json:"count"      yaml:"count"`
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`

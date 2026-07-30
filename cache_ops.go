@@ -146,3 +146,24 @@ func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) 
 	_, logPath, err = m.cache.LastEntry(projectPath)
 	return logPath, err
 }
+
+// ArtifactHistory returns every cached version of the workspace-relative wsPath,
+// newest first, with identical consecutive content collapsed.
+//
+// Returns types.ErrNoCache on an Inspect workspace: "no versions" and "no store to
+// look in" are different answers.
+func (m *Magus) ArtifactHistory(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
+	if m.cache == nil {
+		return nil, types.ErrNoCache
+	}
+	return m.cache.ArtifactHistory(ctx, projectPath, wsPath)
+}
+
+// MaterializeArtifact writes a cached version to dst, cloning from the store when
+// the filesystem supports reflink.
+func (m *Magus) MaterializeArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
+	if m.cache == nil {
+		return types.ErrNoCache
+	}
+	return m.cache.MaterializeArtifact(ctx, v, dst)
+}

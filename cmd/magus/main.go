@@ -14,7 +14,7 @@
 //	magus run <target> [project...]     run a target for selected projects (use --graph for dependency view)
 //	magus x [filter...]                 interactive shorthand: pick project + target
 //	magus where [filter...]             print the absolute path of a project
-//	magus tail [-f] [-n N] [target]     stream the most recent cached log (interactive only)
+//	magus tail [-f] [-n <count>] [target]     stream the most recent cached log (interactive only)
 //	magus affected <target>             run a target for VCS-diff affected projects
 //	magus affected --plan               emit shard plan JSON for CI fan-out
 //	magus graph <deps|export|stats>     the graphs as objects: project DAG, knowledge-graph export, shape stats
@@ -106,7 +106,7 @@ func runCLI() int {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "-v", "--version":
-		runVersion(res.subArgs)
+		code = exitCodeOf(runVersion(res.subArgs))
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
@@ -262,6 +262,15 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	profile := resolveProfile(peekedSub, peekedSubArgs)
 
 	if !profile.needsConfig {
+		// This branch skips the main flag parse entirely, so anything written BEFORE
+		// the subcommand was silently dropped: `magus -o json version` printed text
+		// and exited 0, while `magus version -o json` worked. The top-level usage
+		// advertises global flags as working "before or after the subcommand", so
+		// bind the display flags here to make that true for these profiles too.
+		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return startupResult{cleanup: cleanup}, exitUsage
+		}
 		return startupResult{
 			rootCtx: rootCtx,
 			sub:     peekedSub,
@@ -551,6 +560,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return initCmd(ctx, root, subArgs)
 	case "agent":
 		return agentCmd(ctx, subArgs)
+	case "vcs":
+		return vcsCmd(ctx, root, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":
@@ -566,47 +577,13 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	}
 }
 
-var knownSubcommands = []string{
-	"ls", "describe", "run", "x", "where", "tail",
-	"affected", "insight", "query", "explain", "path", "refs", "graph", "watch", "status", "doctor",
-	"config", "memory", "server", "repl", "completion", "man", "init", "self", "version",
-	"clean", "merge-driver", "buzz", "agent",
-	"help",
-}
-
 func usage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus [flags] <subcommand> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  ls             list all discovered projects")
-	fmt.Fprintln(os.Stderr, "  describe       define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)")
-	fmt.Fprintln(os.Stderr, "  run            run a target for selected projects")
-	fmt.Fprintln(os.Stderr, "  x              interactive shorthand: pick project + target (TTY only)")
-	fmt.Fprintln(os.Stderr, "  where          print the absolute path of a project (fuzzy match)")
-	fmt.Fprintln(os.Stderr, "  tail           stream the most recent cached log for cwd project")
-	fmt.Fprintln(os.Stderr, "  affected       run a target for VCS-diff affected projects")
-	fmt.Fprintln(os.Stderr, "  query          search the knowledge graph and show a node's neighborhood")
-	fmt.Fprintln(os.Stderr, "  explain        show one knowledge-graph node: its edges, provenance, blast radius")
-	fmt.Fprintln(os.Stderr, "  path           show the shortest path between two knowledge-graph nodes")
-	fmt.Fprintln(os.Stderr, "  refs           list where an ingested code symbol is defined and referenced")
-	fmt.Fprintln(os.Stderr, "  graph          the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)")
-	fmt.Fprintln(os.Stderr, "  insight        VCS-history analytics: hotspots, affinity, ownership, trend, volatility")
-	fmt.Fprintln(os.Stderr, "  watch          emit changed file paths (pipe into affected --stdin)")
-	fmt.Fprintln(os.Stderr, "  status         inspect the concurrency pool of a running parent magus")
-	fmt.Fprintln(os.Stderr, "  clean          remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]")
-	fmt.Fprintln(os.Stderr, "  merge-driver   VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)")
-	fmt.Fprintln(os.Stderr, "  doctor         validate the workspace")
-	fmt.Fprintln(os.Stderr, "  config         view or update magus configuration")
-	fmt.Fprintln(os.Stderr, "  server         manage the persistent daemon (start / stop / status; MCP starts with it)")
-	fmt.Fprintln(os.Stderr, "  repl           open an interactive Buzz interpreter")
-	fmt.Fprintln(os.Stderr, "  buzz           run a Buzz script (Buzz stdlib + every magus host module)")
-	fmt.Fprintln(os.Stderr, "  completion     print a shell completion script (bash, zsh, fish)")
-	fmt.Fprintln(os.Stderr, "  man            install the man pages embedded in this binary")
-	fmt.Fprintln(os.Stderr, "  init           bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)")
-	fmt.Fprintln(os.Stderr, "  agent          install the knowledge-graph agent skills into a repo (agent install <dir>)")
-	fmt.Fprintln(os.Stderr, "  self           manage the magus binary (self update / install)")
-	fmt.Fprintln(os.Stderr, "  version        print version, commit, and build date")
-	fmt.Fprintln(os.Stderr, "  help           show this message")
+	for _, sc := range subcommands {
+		fmt.Fprintf(os.Stderr, "  %-14s %s\n", sc.Name, sc.Short)
+	}
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
@@ -640,6 +617,11 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 		ignoredV      verbosity
 		ignoredQ      bool
 	)
+	// nodisplayflags: this FlagSet exists to ABSORB and discard the global flags
+	// a caller repeated after the subcommand, so it redeclares them into ignored
+	// variables on purpose. Binding the real ones here would double-register and
+	// panic, and would also write through to the live globals this is designed
+	// to swallow.
 	fs := flag.NewFlagSet("adopted", flag.ContinueOnError)
 	fs.StringVar(&ignoredRoot, "root", "", "")
 	fs.StringVar(&ignoredRoot, "C", "", "")
@@ -840,6 +822,46 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	}()
 }
 
+// applyPreSubDisplayFlags binds the global display flags that appear BEFORE the
+// subcommand, for the profiles whose startup returns before the main flag parse
+// (help, version, buzz - the ones needing no config or workspace).
+//
+// --root and --config are bound to throwaway targets on purpose: they are legal in
+// this position and would otherwise abort the parse at the first one, taking any
+// later -o with them.
+//
+// The parse error is RETURNED, not swallowed. For these profiles there is no later
+// flag parse to catch it, so ignoring it meant `magus --bogus -o json version`
+// accepted the unknown flag, silently discarded the -o that followed it (Parse
+// stops at the first error), printed text and exited 0 - a misuse reported as
+// success.
+//
+// subArgs, not a search for sub, delimits the pre-subcommand slice: peekSub already
+// resolved where the subcommand is, and slices.Index found its FIRST occurrence, so
+// a flag value equal to the subcommand name (`magus --root version version`)
+// truncated at the value instead.
+func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
+	pre := args
+	if sub != "" {
+		if n := len(args) - len(subArgs) - 1; n >= 0 && n <= len(args) {
+			pre = args[:n]
+		}
+	}
+	if len(pre) == 0 {
+		return nil
+	}
+	fs := flag.NewFlagSet("magus", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	bindDisplayFlags(fs)
+	var discardRoot, discardConfig string
+	fs.StringVar(&discardRoot, "root", "", "")
+	fs.StringVar(&discardConfig, "config", "", "")
+	if err := fs.Parse(pre); err != nil {
+		return usagef("magus: %v", err)
+	}
+	return nil
+}
+
 func extractRootFlag(args []string) string {
 	for i, a := range args {
 		switch {
@@ -931,6 +953,12 @@ func exitCodeOf(err error) int {
 	var silent errSilent
 	if errors.As(err, &silent) {
 		return silent.exitCode
+	}
+	// A misuse of the command line exits 2, not 1: the work was never attempted.
+	var usage errUsage
+	if errors.As(err, &usage) {
+		slog.Error(err.Error())
+		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
 	// generic error line; the magusfile already logged whatever it wanted to.

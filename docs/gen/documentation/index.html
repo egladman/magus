@@ -178,7 +178,7 @@ magus affected ci   # run ci only for the projects your changes touched
   </main>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../search/?q=tag%3A%22documentation%22">documentation</a><a class="tag" href="../search/?q=tag%3A%22docs%22">docs</a><a class="tag" href="../search/?q=tag%3A%22getting-started%22">getting-started</a><a class="tag" href="../search/?q=tag%3A%22guide%22">guide</a><a class="tag" href="../search/?q=tag%3A%22index%22">index</a><a class="tag" href="../search/?q=tag%3A%22overview%22">overview</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:07:00Z">July 28, 2026, 4:07 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/53e1f6255815e483ab6e8a4d0746b9decc7837e8" data-tooltip="53e1f6255815e483ab6e8a4d0746b9decc7837e8" title="53e1f6255815e483ab6e8a4d0746b9decc7837e8">53e1f625</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/5406eeed703484b77daed129f7f3a72dbdb2422e"><code>5406eeed</code></a> <small><time datetime="2026-07-22T13:46:49Z">Jul 22, 2026</time></small> - document the concurrency model; the intra-run scheduler versus the cross-process workspace lock and MAGUS_NO_WAIT; link it from the docs index</li><li><a href="https://github.com/egladman/magus/commit/c8cde77afd6e363da8a976807f329d28c4c0b5e5"><code>c8cde77a</code></a> <small><time datetime="2026-07-22T06:04:47Z">Jul 22, 2026</time></small> - make magus.Context the sole target contract enforced with MGS1008; remove discovery-run and build the target graph statically; rename vcs.classifyDrift to diagnoseDrift; unify the docs markers under a magus prefix and reword the recorder dry-run output; add a runnable magusfile to the README</li><li><a href="https://github.com/egladman/magus/commit/23f8a88d7ca59270c75ce8378635f29e99067ce4"><code>23f8a88d</code></a> <small><time datetime="2026-07-22T03:38:29Z">Jul 22, 2026</time></small> - add a Diagnostics docs page showcasing the coded-diagnostic system where every error is a pointable MGSxxxx code with a handwritten resolution page and a queryable graph node worked through the drift-classification example; link it from the documentation index</li><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64"><code>40867b28</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - make the generated docs-markdown story cohesive: de-collide the manpage &#34;gen&#34; dirs, move docs-content generation into the docs project, and give the manpage roff/md an owned split</li><li><a href="https://github.com/egladman/magus/commit/be1a024d7be7d1abfdb8c892f4745e639b72e8b5"><code>be1a024d</code></a> <small><time datetime="2026-07-15T03:44:47Z">Jul 15, 2026</time></small> - add docs/from-nx.md: an Nx adoption page</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-28T23:12:51Z">July 28, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5db7b6e6a7872314693673c15d1271a5e75a8069" data-tooltip="5db7b6e6a7872314693673c15d1271a5e75a8069" title="5db7b6e6a7872314693673c15d1271a5e75a8069">5db7b6e6</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (7)</summary><ul><li><a href="https://github.com/egladman/magus/commit/53e1f6255815e483ab6e8a4d0746b9decc7837e8"><code>53e1f625</code></a> <small><time datetime="2026-07-28T16:07:00Z">Jul 28, 2026</time></small> - show backslash namespace access in the hand-authored docs</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li><li><a href="https://github.com/egladman/magus/commit/5406eeed703484b77daed129f7f3a72dbdb2422e"><code>5406eeed</code></a> <small><time datetime="2026-07-22T13:46:49Z">Jul 22, 2026</time></small> - document the concurrency model; the intra-run scheduler versus the cross-process workspace lock and MAGUS_NO_WAIT; link it from the docs index</li><li><a href="https://github.com/egladman/magus/commit/c8cde77afd6e363da8a976807f329d28c4c0b5e5"><code>c8cde77a</code></a> <small><time datetime="2026-07-22T06:04:47Z">Jul 22, 2026</time></small> - make magus.Context the sole target contract enforced with MGS1008; remove discovery-run and build the target graph statically; rename vcs.classifyDrift to diagnoseDrift; unify the docs markers under a magus prefix and reword the recorder dry-run output; add a runnable magusfile to the README</li><li><a href="https://github.com/egladman/magus/commit/23f8a88d7ca59270c75ce8378635f29e99067ce4"><code>23f8a88d</code></a> <small><time datetime="2026-07-22T03:38:29Z">Jul 22, 2026</time></small> - add a Diagnostics docs page showcasing the coded-diagnostic system where every error is a pointable MGSxxxx code with a handwritten resolution page and a queryable graph node worked through the drift-classification example; link it from the documentation index</li><li><a href="https://github.com/egladman/magus/commit/2f02f9d747507eb280fce3393074953ffb06d433"><code>2f02f9d7</code></a> <small><time datetime="2026-07-16T04:52:34Z">Jul 16, 2026</time></small> - magus.needs takes target functions only: same-project exports by reference (forward refs work, bodies run post-load) and cross-project import members as real callables (alias.target() dispatches directly); add magus.needsGlob as the separate pattern verb; remove the magus.target namespace (literal/glob/regex/expand_globs), the Buzz TargetQuery mirror, and types.TargetQuery; resolve identifier and needsGlob edges in the static extractor and dry tracer so the graph is unchanged and dependency typos fail at load; export gopherbuzz vm.Value.Equal (Buzz == semantics) for host-side function identity; migrate all magusfiles (proto gains a conventional generate target wrapping buf-generate), docs, tour, starter, examples, and tests</li><li><a href="https://github.com/egladman/magus/commit/40867b28aeae537f8e3e807343175138f173cc64"><code>40867b28</code></a> <small><time datetime="2026-07-15T23:00:02Z">Jul 15, 2026</time></small> - make the generated docs-markdown story cohesive: de-collide the manpage &#34;gen&#34; dirs, move docs-content generation into the docs project, and give the manpage roff/md an owned split</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/documentation.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/documentation.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -271,6 +271,71 @@ so it is the entry point an agent reads first. See
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

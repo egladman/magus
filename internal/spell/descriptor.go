@@ -76,6 +76,15 @@ type Descriptor struct {
 	Ops         map[string]types.SpellOp `json:"targets,omitempty"`
 	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
 	VersionCmd []string `json:"version_cmd,omitempty"`
+	// VersionCmds are ADDITIONAL named probes, tool name to argv, for a spell that
+	// drives more than one binary. One probe per spell was not enough: buf's
+	// generate op shells out to protoc-gen-go, and go's ops run gofmt, golangci-lint
+	// and mockery - tools that produce committed output while being invisible to
+	// every cache key, so a change in one replays artifacts it never built.
+	//
+	// Keyed by tool name rather than positional so the cache entry reads
+	// spell:tool:version and reordering a declaration invalidates nothing.
+	VersionCmds map[string][]string `json:"version_cmds,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

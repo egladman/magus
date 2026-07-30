@@ -2,20 +2,18 @@ package main
 
 import (
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
+	"errors"
+	"flag"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/generate/godecl"
 )
 
 func TestRunConfigView_Text(t *testing.T) {
@@ -97,9 +95,27 @@ func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "frobnicate", "error should mention subcommand name")
 }
 
+// TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
+// quiet success. It previously returned nil, so `magus config` exited 0 and a script
+// could not tell a bare invocation from one that did work - and it disagreed with
+// `magus man`, which exited 1 for the same mistake. Usage errors exit 2 across the CLI.
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
-	assert.NoError(t, configCmd(context.Background(), "", cfg, nil), "no args should print usage, not error")
+	err := configCmd(context.Background(), "", cfg, nil)
+	require.Error(t, err, "no args should be a usage error, not a quiet success")
+
+	var usage errUsage
+	require.ErrorAs(t, err, &usage, "should be errUsage so it exits %d", exitUsage)
+	assert.Equal(t, exitUsage, exitCodeOf(err))
+}
+
+// TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
+// is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
+func TestUsageErrorsExitTwo(t *testing.T) {
+	assert.Equal(t, 0, exitCodeOf(nil), "success")
+	assert.Equal(t, 0, exitCodeOf(flag.ErrHelp), "an explicit -h is a request that was satisfied")
+	assert.Equal(t, exitUsage, exitCodeOf(usagef("bad invocation")), "misuse")
+	assert.Equal(t, 1, exitCodeOf(errors.New("the work failed")), "runtime failure")
 }
 
 // runOnlyFlags lists flags that intentionally exist on `magus run` but not
@@ -165,73 +181,27 @@ func TestRunAffectedFlagParity(t *testing.T) {
 	}
 }
 
-// collectFlagNames parses file, finds the function named funcName, and
-// returns the set of flag names registered via calls of the form
-// fs.<Method>("name", ...) where Method is Bool, String, Int, Duration,
-// Float64, or their Var variants. The receiver must be the FlagSet
-// identifier "fs" so that same-named helpers (e.g. slog.String("k", v))
-// are not mistaken for flag registrations.
+// collectFlagNames returns the flags bound inside funcName, as a set.
+//
+// The AST walking lives in internal/generate/godecl, shared with the generators. This
+// file grew its own copy, and because that copy read only the named function while
+// magus binds flags across several, anything built on it reported three false
+// positives for every real finding.
+//
+// FlagNamesIn, not FlagNames: this test compares what each COMMAND binds, and
+// affected.go also binds flags in affectedPlan and affectedImpact, which are sub-modes
+// rather than part of affected's own surface.
 func collectFlagNames(t *testing.T, file, funcName string) map[string]struct{} {
 	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, file, nil, 0)
+	parsed, err := godecl.Parse(file)
 	require.NoError(t, err, "parse %s", file)
-
-	var body *ast.BlockStmt
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if ok && fn.Name.Name == funcName {
-			body = fn.Body
-			break
-		}
+	names := godecl.FlagNamesIn(parsed, funcName)
+	require.NotEmpty(t, names, "function %q bound no flags in %s", funcName, file)
+	out := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		out[n] = struct{}{}
 	}
-	require.NotNil(t, body, "function %q not found in %s", funcName, file)
-
-	flagMethods := map[string]bool{
-		"Bool": true, "BoolVar": true,
-		"String": true, "StringVar": true,
-		"Int": true, "IntVar": true,
-		"Int64": true, "Int64Var": true,
-		"Uint": true, "UintVar": true,
-		"Float64": true, "Float64Var": true,
-		"Duration": true, "DurationVar": true,
-	}
-
-	names := make(map[string]struct{})
-	ast.Inspect(body, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !flagMethods[sel.Sel.Name] {
-			return true
-		}
-		// Only count calls on the FlagSet itself (fs.String(...)), not
-		// like-named helpers such as slog.String("key", v).
-		if recv, ok := sel.X.(*ast.Ident); !ok || recv.Name != "fs" {
-			return true
-		}
-		// For Var variants the name is the second arg; for the rest it's first.
-		nameArgIdx := 0
-		if strings.HasSuffix(sel.Sel.Name, "Var") {
-			nameArgIdx = 1
-		}
-		if len(call.Args) <= nameArgIdx {
-			return true
-		}
-		lit, ok := call.Args[nameArgIdx].(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
-			return true
-		}
-		name, err := strconv.Unquote(lit.Value)
-		if err != nil {
-			return true
-		}
-		names[name] = struct{}{}
-		return true
-	})
-	return names
+	return out
 }
 
 // subtract returns a copy of flags with all keys in exceptions removed.

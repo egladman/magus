@@ -11,7 +11,7 @@ func TestQuantile(t *testing.T) {
 	cases := []struct {
 		name    string
 		q       float64
-		buckets []bucket
+		buckets []histBucket
 		want    float64
 		wantNaN bool
 	}{
@@ -24,31 +24,31 @@ func TestQuantile(t *testing.T) {
 		{
 			name:    "single finite bucket without +Inf overflow",
 			q:       0.5,
-			buckets: []bucket{{UpperBound: 10, CumulativeCount: 5}},
+			buckets: []histBucket{{UpperBound: 10, CumulativeCount: 5}},
 			wantNaN: true,
 		},
 		{
 			name:    "q NaN yields NaN",
 			q:       math.NaN(),
-			buckets: []bucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
+			buckets: []histBucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
 			wantNaN: true,
 		},
 		{
 			name:    "q above 1 yields +Inf",
 			q:       1.5,
-			buckets: []bucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
+			buckets: []histBucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
 			want:    inf(),
 		},
 		{
 			name:    "q below 0 yields -Inf",
 			q:       -0.1,
-			buckets: []bucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
+			buckets: []histBucket{{UpperBound: 1, CumulativeCount: 0}, {UpperBound: inf(), CumulativeCount: 10}},
 			want:    math.Inf(-1),
 		},
 		{
 			name: "interpolation midpoint",
 			q:    0.5,
-			buckets: []bucket{
+			buckets: []histBucket{
 				{UpperBound: 1, CumulativeCount: 0},
 				{UpperBound: 2, CumulativeCount: 10},
 				{UpperBound: inf(), CumulativeCount: 10},
@@ -58,7 +58,7 @@ func TestQuantile(t *testing.T) {
 		{
 			name: "q at 1.0 reaches upper bound",
 			q:    1.0,
-			buckets: []bucket{
+			buckets: []histBucket{
 				{UpperBound: 1, CumulativeCount: 0},
 				{UpperBound: 2, CumulativeCount: 10},
 				{UpperBound: inf(), CumulativeCount: 10},
@@ -68,7 +68,7 @@ func TestQuantile(t *testing.T) {
 		{
 			name: "q below first bound interpolates from zero",
 			q:    0.1,
-			buckets: []bucket{
+			buckets: []histBucket{
 				{UpperBound: 1, CumulativeCount: 2},
 				{UpperBound: 2, CumulativeCount: 10},
 				{UpperBound: inf(), CumulativeCount: 10},
@@ -78,7 +78,7 @@ func TestQuantile(t *testing.T) {
 		{
 			name: "rank in +Inf bucket clamps to last finite bound",
 			q:    0.9,
-			buckets: []bucket{
+			buckets: []histBucket{
 				{UpperBound: 1, CumulativeCount: 2},
 				{UpperBound: 2, CumulativeCount: 4},
 				{UpperBound: inf(), CumulativeCount: 10},
@@ -88,7 +88,7 @@ func TestQuantile(t *testing.T) {
 		{
 			name: "zero observations yields NaN",
 			q:    0.5,
-			buckets: []bucket{
+			buckets: []histBucket{
 				{UpperBound: 1, CumulativeCount: 0},
 				{UpperBound: inf(), CumulativeCount: 0},
 			},
@@ -98,15 +98,15 @@ func TestQuantile(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := quantile(tc.q, tc.buckets)
+			got := quantileOf(tc.q, tc.buckets)
 			if tc.wantNaN {
 				if !math.IsNaN(got) {
-					t.Fatalf("quantile(%v) = %v, want NaN", tc.q, got)
+					t.Fatalf("quantileOf(%v) = %v, want NaN", tc.q, got)
 				}
 				return
 			}
 			if got != tc.want {
-				t.Fatalf("quantile(%v) = %v, want %v", tc.q, got, tc.want)
+				t.Fatalf("quantileOf(%v) = %v, want %v", tc.q, got, tc.want)
 			}
 		})
 	}
@@ -115,12 +115,12 @@ func TestQuantile(t *testing.T) {
 // TestQuantileDoesNotMutateInput confirms the caller's slice order survives a call
 // even when the input is given out of ascending order.
 func TestQuantileDoesNotMutateInput(t *testing.T) {
-	in := []bucket{
+	in := []histBucket{
 		{UpperBound: inf(), CumulativeCount: 10},
 		{UpperBound: 2, CumulativeCount: 10},
 		{UpperBound: 1, CumulativeCount: 0},
 	}
-	_ = quantile(0.5, in)
+	_ = quantileOf(0.5, in)
 	if in[0].UpperBound != inf() || in[1].UpperBound != 2 || in[2].UpperBound != 1 {
 		t.Fatalf("Quantile mutated its input slice: %+v", in)
 	}

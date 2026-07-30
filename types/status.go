@@ -61,6 +61,17 @@ type StatusReport struct {
 	// glance whether code symbols reflect current source. Empty when the workspace is
 	// unavailable or no project is symbol-capable.
 	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
+	// Locks are the per-project workspace locks held right now, with the process
+	// holding each. A held lock is NORMAL - every mutating run takes one - so this is
+	// reported as state, never as a fault: it must not fail a readiness or liveness
+	// probe, because a run blocked on a peer is waiting correctly and restarting it
+	// would only send it to the back of the queue.
+	//
+	// It is here because the failure it makes visible is otherwise invisible. A lock is
+	// held for as long as its process lives, so a process nobody remembers starting
+	// holds one indefinitely, and every other run simply waits. Surfacing who holds
+	// what turns that from a hang into a fact.
+	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
 	// MCPEndpoint reports the health of the MCP HTTP endpoint agent hosts (an editor,
 	// IDEs, Desktop) actually connect to: its address and whether it is really serving.
 	// It is checked independently of the Pool fields above, which report the proc socket
@@ -128,6 +139,43 @@ type StatusService struct {
 	State      string    `json:"state,omitempty" yaml:"state,omitempty"` // starting | running | idle | failed
 	Dependents int       `json:"dependents,omitempty" yaml:"dependents,omitempty"`
 	StartedAt  time.Time `json:"started_at,omitempty" yaml:"started_at,omitempty"`
+}
+
+// StatusLock is one held per-project workspace lock and the process holding it.
+//
+// Held is the normal state, not an alarm. What makes it worth reporting is the
+// holder: an OS file lock carries no identity of its own, so without this a blocked
+// run can only say "another magus process" and a lock held by something abandoned is
+// indistinguishable from one held by a peer that is about to finish.
+type StatusLock struct {
+	// Project is the workspace-relative path whose lock is held ("." for the root).
+	Project string `json:"project" yaml:"project"`
+	// PID, Command and Dir identify the holder. Dir is the one that usually settles
+	// it: a holder running in a directory that no longer exists is abandoned.
+	PID     int    `json:"pid,omitempty" yaml:"pid,omitempty"`
+	Command string `json:"command,omitempty" yaml:"command,omitempty"`
+	Dir     string `json:"dir,omitempty" yaml:"dir,omitempty"`
+	// StaleAfterSeconds is the threshold at which this holder should be read as
+	// possibly abandoned rather than busy. Carried on the wire so every renderer
+	// shares one judgement instead of each picking its own.
+	StaleAfterSeconds int `json:"stale_after_seconds,omitempty" yaml:"stale_after_seconds,omitempty"`
+	// Waiters are the processes blocked on this lock right now. Empty is the common
+	// case; a non-empty list is the other half of the picture, because a holder alone
+	// says who is working and a waiter list says who is stalled because of it.
+	Waiters []StatusLockWaiter `json:"waiters,omitempty" yaml:"waiters,omitempty"`
+	// AcquireTime is when the holder took it. Age is the signal a human reads: seconds
+	// is a peer, days is something nobody knows is running. Named per AIP-142, which
+	// asks for a _time suffix on a timestamp rather than the _at spelling.
+	AcquireTime time.Time `json:"acquire_time,omitempty" yaml:"acquire_time,omitempty"`
+}
+
+// StatusLockWaiter is one process blocked on a lock, with how long it has been
+// blocked. A waiter is transient by nature, so this is only ever a snapshot.
+type StatusLockWaiter struct {
+	PID      int       `json:"pid,omitempty" yaml:"pid,omitempty"`
+	Command  string    `json:"command,omitempty" yaml:"command,omitempty"`
+	Dir      string    `json:"dir,omitempty" yaml:"dir,omitempty"`
+	WaitTime time.Time `json:"wait_time,omitempty" yaml:"wait_time,omitempty"`
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the

@@ -59,6 +59,7 @@ const (
 	tagFib                // obj: *fibObj
 	tagPat                // obj: *patObj
 	tagUD                 // obj: *udObj (foreign FFI pointer; heap-boxed to carry the full 64-bit address)
+	tagType               // obj: *typeObj (a type used as a value: `<[str]>`, `typeof x`)
 )
 
 // Value is defined in value_unsafe.go / value_safe.go (build-tag-selected),
@@ -488,6 +489,8 @@ func (v Value) buzzKind() string {
 		return "pat"
 	case tagUD:
 		return "ud"
+	case tagType:
+		return "type"
 	default:
 		return "unknown"
 	}
@@ -578,6 +581,10 @@ func (v Value) String() string {
 		return v.asPat().src
 	case tagUD:
 		return fmt.Sprintf("ud:0x%x", v.AsUD())
+	case tagType:
+		// Printed as written in source, angle brackets included, so a failing
+		// assertion shows `<[any]>` rather than a bare type name.
+		return "<" + v.asType().name + ">"
 	default:
 		return "<unknown>"
 	}
@@ -675,6 +682,12 @@ func valuesEqual(a, b Value) bool {
 	case tagEnumVal:
 		ae, be := a.asEnumVal(), b.asEnumVal()
 		return ae.Enum == be.Enum && ae.Case == be.Case
+	case tagType:
+		// Structural, like tagRange below and unlike the collections: `typeof x ==
+		// <[str]>` compares two independently constructed type values, so reference
+		// equality would make every such comparison false. The canonical spelling is
+		// the identity (see typeval.go).
+		return a.asType().name == b.asType().name
 	case tagRange:
 		// Structural, not by reference: `0..10 == 0..10` has to hold, and a range
 		// is fully described by its two operands.

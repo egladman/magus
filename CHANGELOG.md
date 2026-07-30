@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Removed
+
+- The `assume_interactive` config key (`MAGUS_ASSUME_INTERACTIVE`,
+  `--assume-interactive`) is gone. It existed to lift the TTY gate on `magus tail` and
+  `magus x`, and did not earn its place on either. For `x` it never reached a working
+  state: past the outer gate the picker hit its own TTY check and failed anyway, so the
+  escape hatch only moved the error later. For `tail` it was a workaround for a gate
+  that was too broad, now narrowed instead (see Changed). Nothing replaces it; if you
+  set it in `magus.yaml` it is now inert.
+
+### Changed
+
+- `magus tail` only requires an interactive terminal for `-f`. Without it, tail prints
+  the last `-n` lines to stdout and exits, which works in a script, a CI step, or an
+  agent - the whole command used to be gated on `isatty`, which made the useful half
+  unreachable for every non-human caller.
+- Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
+  fingerprints are now computed by streaming fields into SHA256 rather than by hashing
+  marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
+  check treats a version mismatch as a full rebuild, which is the whole migration. The
+  old approach marshalled each shard purely to hash the bytes, putting an encode on the
+  hot path of every magus command (fingerprinting all shards costs 757 ms at 50k
+  projects) and coupling the fingerprint to the storage format, so a future format
+  change would have silently invalidated every cached shard. Measured: -44% sec/op,
+  -23% B/op, -41% allocs/op.
+- Host methods that return a record now say so in their signature: `magus\cmd(args,
+  [opts]) -> ExecResult` where it previously read `map[string]any`. Nineteen methods
+  across nine modules were affected. Annotating the named type (`final r: ExecResult =
+  magus\cmd(...)`) makes the checker verify field access, turning a typo from a runtime
+  nil into a load error; that already worked and was simply undiscoverable.
+
 ### Added
 
 - Agent skill version 19. `magus-architecture` now surveys for what is too THIN to
@@ -46,6 +77,29 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   are now declared with `ctx.updates`. `magus clean`'s help no longer describes what it
   removes as "regenerable build artifacts" either - that was the declaration's claim, not
   something clean verified.
+- `magus agent install --simple` installs a shorter permutation of every agent skill: the
+  imperative steps with the rationale withheld, for a capable model that infers the why and
+  would rather spend the context on the task. Both permutations are hand-authored from ONE
+  source body (an author brackets the withheld spans), so they cannot describe different
+  behaviour and they share one content digest - `magus graph verify` reports staleness the
+  same way whichever is installed, and the file's stamp records `skill-variant`. Across the
+  eight skills the short form is 14% smaller. The docs site now reproduces every skill in
+  both forms with a size comparison (`reference/skills/`), generated from the embedded
+  bodies so it cannot drift from what install writes.
+- The `magus-changes` skill now serves three outputs rather than one: the evidence-backed
+  brief it already wrote, a `CHANGELOG.md` entry in this file's existing Keep a Changelog
+  shape, and per-question granular diff commands - all answered through magus surfaces
+  (`graph diff`, `describe file`, `affected --impact/--explain`) rather than a raw diff.
+- Shell completion now offers the target names this workspace actually declares, read from
+  `magus describe targets`, instead of eight names baked into each script; zsh and fish also
+  show each target's kind (canonical, or the spell providing it). Falls back to the built-in
+  set outside a workspace, where `describe` cannot answer.
+- `magus repl` gained a line editor: arrow-key history, line editing, and Tab completion
+  drawn from magus's own surfaces - meta commands, the session's user globals, host modules
+  and their methods (`fs.writeF<TAB>`), and the workspace's targets and projects. A piped
+  session is unchanged. It also pins a one-row status footer showing the active language,
+  the working directory, and the parser's continuation depth.
+
 - File authorship is now first-class in the graph (schema v6): an `author` node per git
   contributor with `authored` edges to the files they touched, so `explain author:<name>`
   shows what someone maintains and it can be set against a file's declared CODEOWNERS owner

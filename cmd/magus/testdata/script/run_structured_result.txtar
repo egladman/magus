@@ -1,0 +1,71 @@
+# `magus run <target> -o json` reports what the run PRODUCED.
+#
+# From plans/dagger-typed-returns-plan.md: an agent that runs a build has to guess
+# where the artifact went, and then guess whether the file it found is generated or
+# hand-written. Both answers already live inside magus - the first in the target's
+# ctx.outputs declaration, the second in the same classification `magus describe file`
+# returns - so this turns two guesses into one command.
+#
+# run previously honored only -o jsonl, the streaming event log. That answers "what
+# happened during the run"; this answers the different question of what exists on disk
+# now that it is over, so the two coexist rather than compete.
+#
+# The artifacts are scoped to the ONE target asked about (buildStep, the same fold the
+# cache keys and snapshots), not the project-wide output union.
+#
+# The result is shaped PER PROJECT because a run fans out: a flat artifact list could
+# not say which project produced which file, and a single return value would be
+# meaningless once more than one project ran.
+
+exec magus run bundle:rw -o json
+stdout '"target": "bundle"'
+stdout '"dist/app.txt"'
+
+# The glob that claimed the file rides along: the declaration is what makes it a build
+# artifact rather than an incidental file in the tree.
+stdout '"glob": "dist/\*\.txt"'
+
+# role is the second guess, answered. output = generated, so do not hand-edit it.
+stdout '"role": "output"'
+
+# A SECOND run is a cache hit, and it must report the same artifacts. The design plan
+# called this out as the risk that would sink the feature - "prints on the first run
+# and nothing on the second is worse than not having the feature". Resolving artifacts
+# from the working tree rather than from the run's return value sidesteps it: the cache
+# replays declared outputs on a hit, so the files are there either way.
+exec magus run bundle:rw -o json
+stdout '"dist/app.txt"'
+stdout '"role": "output"'
+
+exec magus run bundle:rw -o yaml
+stdout 'target: bundle'
+stdout 'path: dist/app.txt'
+
+# A DRY RUN executed nothing, so it reports no artifacts. Any file matching an output
+# glob right now is left over from an earlier run, and listing it would claim this
+# invocation produced it.
+exec magus run bundle --dry-run -o json
+stdout '"dry_run": true'
+! stdout 'artifacts'
+! stdout '"value"'
+
+# The text form is untouched: -o is purely additive here.
+exec magus run bundle:rw
+! stdout '"target"'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "os";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
+}
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

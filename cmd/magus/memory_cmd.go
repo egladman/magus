@@ -28,7 +28,7 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 	case "verify":
 		return memoryVerify(root, args[1:])
 	default:
-		return fmt.Errorf("magus memory: unknown subcommand %q (try: list, get, put, delete, verify)", args[0])
+		return usagef("magus memory: unknown subcommand %q (want list, get, put, delete, or verify)", args[0])
 	}
 }
 

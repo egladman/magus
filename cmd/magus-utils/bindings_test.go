@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,23 +12,6 @@ import (
 	// register every module (Sh, Fs, Vcs, …) with std.Register.
 	"github.com/egladman/magus/std"
 )
-
-func TestWriteFileIfChanged(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "generated.go")
-	stamp := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
-	require.NoError(t, os.WriteFile(path, []byte("current"), 0o644))
-	require.NoError(t, os.Chtimes(path, stamp, stamp))
-
-	require.NoError(t, writeFileIfChanged(path, []byte("current"), 0o644))
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	assert.True(t, stamp.Equal(info.ModTime()))
-
-	require.NoError(t, writeFileIfChanged(path, []byte("updated"), 0o644))
-	got, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.Equal(t, "updated", string(got))
-}
 
 // buzzModules lists modules with generated Buzz host bindings.
 var buzzModules = []string{

@@ -251,9 +251,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 	if v := getenv("MAGUS_DRY_RUN"); v != "" {
 		cfg.DryRun = parseBoolEnv(v, cfg.DryRun)
 	}
-	if v := getenv("MAGUS_ASSUME_INTERACTIVE"); v != "" {
-		cfg.AssumeInteractive = parseBoolEnv(v, cfg.AssumeInteractive)
-	}
 	if v := getenv("MAGUS_DEFAULT_CHARMS"); v != "" {
 		parts := strings.Split(v, ",")
 		out := parts[:0]

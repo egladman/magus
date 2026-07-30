@@ -130,7 +130,12 @@ type FunDecl struct {
 	IsExported bool
 	// IsStatic marks an object's `static fun` method: it is called on the type
 	// itself (Foo.make(...)), takes no receiver, and cannot access this.
-	IsStatic    bool
+	IsStatic bool
+	// IsExtern marks a body-less `extern fun name(...) > T;` forward declaration:
+	// the signature is declared here, the implementation comes from the host. It
+	// is how upstream Buzz types its native stdlib (src/lib/*.buzz), and it emits
+	// no code - the name must already be bound at runtime. Body is nil.
+	IsExtern    bool
 	Name        string
 	Params      []string
 	ParamAnnots []string // parallel to Params; "" = unannotated
@@ -227,6 +232,30 @@ type UnaryExpr struct {
 	Pos
 	Op      string
 	Operand Node
+}
+
+// TypeExpr: `<[str]>` - a TYPE written where a value goes. Annot is the type as
+// spelled in source; the compiler canonicalizes it before emitting the constant.
+type TypeExpr struct {
+	Pos
+	Annot string
+	// Resolved is the canonical spelling, filled in by the checker by resolving
+	// Annot and rendering it the same way a typeof result is rendered. Both sides
+	// of `typeof x == <T>` are produced by one function so they cannot disagree
+	// over spacing (`{str:int}` vs `{str: int}`) or an alias.
+	Resolved string
+}
+
+// TypeOfExpr: `typeof x`. Buzz's typeof is STATIC - it yields the type the
+// checker inferred for Operand, not a probe of the runtime value, which is why
+// `final list = []` gives `[any]` while `final slist: [str] = []` gives `[str]`
+// for the same empty list. Resolved is filled in by the checker with the
+// canonical spelling; the compiler emits it as a constant and never evaluates
+// Operand.
+type TypeOfExpr struct {
+	Pos
+	Operand  Node
+	Resolved string
 }
 
 // CallExpr: callee(args...). ArgNames is parallel to Args when any argument

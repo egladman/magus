@@ -22,7 +22,7 @@ import (
 
 // snapshot records the project's declared outputs into the cache and writes the manifest.
 // A project with no declared outputs records an empty manifest (correct cache hit on rerun).
-func (c *Cache) snapshot(s Step, hash string) ([]string, error) {
+func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, error) {
 	root := s.WorkspaceRoot
 	matches, err := expandOutputGlobs(s.Outputs, root)
 	if err != nil {
@@ -50,6 +50,11 @@ func (c *Cache) snapshot(s Step, hash string) ([]string, error) {
 		Hash:        hash,
 		Target:      s.Target,
 		CreatedAt:   time.Now().UTC(),
+	}
+	// Carry the target's return value onto the entry so a hit can replay it; absent
+	// for a void target, which is nearly all of them.
+	if v, ok := types.ReturnFor(ctx, s.ProjectPath, s.Target); ok {
+		manifest.Return = v
 	}
 	var written []string
 	for _, m := range matches {

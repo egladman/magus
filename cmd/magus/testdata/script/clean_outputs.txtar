@@ -1,0 +1,49 @@
+# `magus clean` deletes files matched by a project's declared Outputs globs - the same
+# files the cache snapshots and replays on cache hits - so getting the scope wrong
+# either leaves stale generated artifacts behind or, worse, deletes something it was
+# never told about. --dry-run has to be an honest preview: a dry run that deletes
+# anyway is the worst possible failure mode for a "let me see what would happen" flag.
+
+exec magus clean -h
+stderr 'Usage: magus clean \[flags\] \[project\.\.\.\]'
+stderr 'declared Outputs globs'
+stderr 'cache snapshots and replays on cache hits'
+stderr '--cache to also drop the magus cache entries'
+stderr '--dry-run \(global flag\) to preview'
+
+# Only build_generate declares an output (gen/*.txt). untouched.txt sits right next to
+# it as ordinary source, unmatched by any glob - clean must leave it alone, proving
+# this is scoped by the declaration rather than a blanket rm.
+exists gen/output.txt
+exists untouched.txt
+
+# --dry-run previews without deleting: it reports the match, but the file survives.
+exec magus clean --dry-run
+stdout '\[dry-run\] would remove .*gen/output\.txt'
+exists gen/output.txt
+
+# A real clean removes the declared output...
+exec magus clean
+stdout 'removed .*gen/output\.txt'
+! exists gen/output.txt
+
+# ...and leaves the undeclared file untouched.
+exists untouched.txt
+
+# --cache additionally invalidates the cache entries for the selected projects, and
+# still exits clean even with nothing left on disk to remove.
+exec magus clean --cache
+stderr 'invalidated cache'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+
+export fun build_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("gen/*.txt");
+}
+-- gen/output.txt --
+generated
+-- untouched.txt --
+keep me

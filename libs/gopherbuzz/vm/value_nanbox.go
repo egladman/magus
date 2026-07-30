@@ -231,6 +231,7 @@ func (v Value) asIterState() *iterStateObj { return nanboxObj(v).(*iterStateObj)
 func (v Value) asRange() *rangeObj         { return nanboxObj(v).(*rangeObj) }
 func (v Value) asFib() *fibObj             { return nanboxObj(v).(*fibObj) }
 func (v Value) asPat() *patObj             { return nanboxObj(v).(*patObj) }
+func (v Value) asType() *typeObj           { return nanboxObj(v).(*typeObj) }
 
 // asObjDecl returns the *ast.ObjectDecl payload. Only valid when tag == tagObjDecl.
 func (v Value) asObjDecl() *ast.ObjectDecl { return nanboxObj(v).(*objDeclPayload).ObjectDecl }

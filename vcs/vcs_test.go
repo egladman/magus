@@ -440,10 +440,10 @@ func TestIsSecondaryCheckout(t *testing.T) {
 func TestParseTagLines(t *testing.T) {
 	t.Parallel()
 
-	got, err := parseTags("v0.3.0\t2026-07-25T10:14:05-04:00\tabc123\n" +
-		"no-date\t\tdef456\n" +
-		"bad-date\tnot-a-timestamp\tghi789\n" +
-		"\t2026-01-01T00:00:00Z\tskipped\n" +
+	got, err := parseTags("v0.3.0\t2026-07-25T10:14:05-04:00\tabc123\n"+
+		"no-date\t\tdef456\n"+
+		"bad-date\tnot-a-timestamp\tghi789\n"+
+		"\t2026-01-01T00:00:00Z\tskipped\n"+
 		"name-only", "")
 	require.NoError(t, err)
 

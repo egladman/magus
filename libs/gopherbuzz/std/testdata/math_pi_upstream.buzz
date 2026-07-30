@@ -1,0 +1,9 @@
+// @expect: true
+// DELIBERATE DIVERGENCE, do not "fix" by adopting upstream's constant.
+// buzz declares pi as the 14-digit literal 3.1415926535898; gopherbuzz uses the
+// nearest double instead, because correct arithmetic beats bug-for-bug parity on
+// a numeric constant. This pins the FULL-PRECISION result, so a future change
+// that adopts the truncated literal to make tests/behavior/math.buzz pass fails
+// here instead of silently degrading every trig result.
+import "math";
+final __r = math.deg(2.0) == 114.59155902616465 and math.rad(math.deg(2.0)) == 2;

@@ -54,6 +54,35 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 		// function-handler target (record-style {cmd,args} ops are exempt).
 		types.WithDocRequiredTargets(spec.DocOps...),
 	)
+	// The rest of OptionalContract. These are applied here rather than in the
+	// NewSpell call above because each is conditional on the spell having declared
+	// it, and NewSpell takes options rather than a descriptor.
+	//
+	// Omitting them was a silent, three-way capability loss for every
+	// workspace-local spell: the descriptor carried mgs_getVersionCommand,
+	// mgs_getLanguage and mgs_isOpaque faithfully, and none of them reached the
+	// registered spell. A declared version probe therefore never ran and never
+	// entered the cache key, so a local spell's toolchain could drift with nothing
+	// invalidating; the spell reported no language; and an opaque spell was treated
+	// as transparent. The two sibling construction paths in spell.go already wired
+	// all of this, which is why built-in spells were unaffected and the gap stayed
+	// invisible.
+	var extra []types.SpellOption
+	if len(spec.VersionCmd) > 0 {
+		extra = append(extra, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
+	}
+	for tool, argv := range spec.VersionCmds {
+		extra = append(extra, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+	}
+	if spec.Language != "" {
+		extra = append(extra, types.WithLanguage(spec.Language))
+	}
+	if spec.Opaque {
+		extra = append(extra, types.WithOpaque())
+	}
+	for _, o := range extra {
+		o(sp)
+	}
 	// Register-if-absent (not Lookup-then-Register): two imports of the same spell
 	// racing here must not both reach RegisterSpell's duplicate panic. First wins;
 	// a re-import gets the existing handle. Op bodies re-read inputs per call, so a

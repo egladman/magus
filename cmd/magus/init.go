@@ -38,6 +38,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	useGlobal := fs.Bool("global", false, "Write only the global config ($XDG_CONFIG_HOME/magus/magus.yaml); skips workspace bootstrap")
 	useLocal := fs.Bool("local", false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	force := fs.Bool("force", false, "Overwrite an existing config file")

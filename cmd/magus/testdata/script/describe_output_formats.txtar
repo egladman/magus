@@ -1,0 +1,95 @@
+# Every describe noun must render in every advertised output format.
+#
+# This is a MATRIX, not a snapshot: it asserts each (noun, format) pair succeeds and
+# produces output, deliberately without pinning the exact bytes. That is the failure
+# it exists to catch - a new field added to one format and forgotten in another, or a
+# noun whose structured arm was never wired - which a per-command golden file does not
+# catch because a golden file only knows about the formats someone remembered to write.
+#
+# text is covered by the per-noun scripts; this covers the machine-readable arms.
+
+# -- spells ------------------------------------------------------------------
+exec magus describe spells
+stdout 'acme'
+exec magus describe spells -o json
+stdout '"spells"'
+exec magus describe spells -o yaml
+stdout 'spells:'
+exec magus describe spells -o jsonl
+stdout '"name"'
+exec magus describe spells -o name
+stdout 'acme'
+
+# -- charms ------------------------------------------------------------------
+exec magus describe charms
+exec magus describe charms -o json
+stdout '"charms"'
+exec magus describe charms -o yaml
+stdout 'charms:'
+exec magus describe charms -o jsonl
+exec magus describe charms -o name
+stdout 'rw'
+
+# -- targets -----------------------------------------------------------------
+exec magus describe targets
+exec magus describe targets -o json
+stdout '"targets"'
+exec magus describe targets -o yaml
+exec magus describe targets -o jsonl
+exec magus describe targets -o name
+stdout 'lint'
+
+# -- projects ----------------------------------------------------------------
+exec magus describe projects
+exec magus describe projects -o json
+stdout '"projects"'
+exec magus describe projects -o yaml
+exec magus describe projects -o jsonl
+exec magus describe projects -o name
+
+# -- modules -----------------------------------------------------------------
+exec magus describe modules
+exec magus describe modules -o json
+exec magus describe modules -o yaml
+exec magus describe modules -o jsonl
+exec magus describe modules -o name
+
+# -- mcp-tools ---------------------------------------------------------------
+exec magus describe mcp-tools
+exec magus describe mcp-tools -o json
+exec magus describe mcp-tools -o yaml
+exec magus describe mcp-tools -o jsonl
+exec magus describe mcp-tools -o name
+
+# -o template renders against the SAME shape as -o json, keyed by json tag. A bare
+# -o template documents the available fields instead of rendering, which is what makes
+# the tag-vs-Go-field distinction discoverable.
+exec magus describe spells -o template
+stdout 'fields for -o json'
+
+exec magus describe spells -o 'template={{range .spells}}{{.name}}{{end}}'
+stdout 'acme'
+
+# A misspelled key must FAIL, not render "<no value>" and exit 0. Silently empty
+# output on the format an agent scripts against is the worst available outcome, so
+# missingkey=error is on and the message names the contract.
+! exec magus describe spells -o 'template={{.Name}}'
+stderr 'map has no entry for key "Name"'
+stderr '\.name, not \.Name'
+# The error must not only diagnose - it must say HOW to find the right names.
+stderr 'rerun it with a bare -o template'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

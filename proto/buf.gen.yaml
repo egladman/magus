@@ -36,6 +36,20 @@ plugins:
     out: ../docs/src/gen
     opt: target=ts
     include_imports: true
+  # The console is a separate project that consumes the same client, and for the same
+  # esbuild reason its copy must live inside its own tree. It is GENERATED here rather
+  # than copied from docs: an unowned copy is invisible to magus, which classifies it as
+  # hand-written source, so nothing gates its drift. That is exactly how console/src/gen
+  # silently went stale against a viewer.proto field rename and only surfaced when the
+  # tree was finally resynced by hand.
+  #
+  # The cost is a second invocation of the same remote plugin per run. The rate-limit
+  # problem this file warns about above was one of FREQUENCY - codegen re-running on
+  # every prose edit - and that fix (keying on the schema alone) still holds.
+  - remote: buf.build/bufbuild/es:v2.9.0
+    out: ../console/src/gen
+    opt: target=ts
+    include_imports: true
   # ConnectRPC Go handlers/clients: one endpoint speaks Connect (browser-native HTTP), gRPC,
   # and gRPC-Web. Pinned through `go tool` like protoc-gen-go so codegen needs no install.
   - local: [go, tool, protoc-gen-connect-go]

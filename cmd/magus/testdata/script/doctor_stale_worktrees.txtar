@@ -1,0 +1,48 @@
+# A leftover directory under .claude/worktrees is a second copy of the workspace's
+# spell sources, so magus discovers them twice at the repo root: it trips MGS1002 and
+# fails tests that walk the tree, pointing at the duplicate rather than the cause.
+#
+# Detection is the ABSENCE of the .git link file git writes into a live worktree and
+# removes on `worktree remove`/`prune`, so a pruned-but-undeleted directory reads as
+# stale with no git invocation - which keeps the check cheap and correct when git is
+# not on PATH at all. That is why this test can be hermetic.
+
+# doctor exits nonzero here for reasons unrelated to worktrees (a minimal fixture
+# does not satisfy every check), so these assert on THIS check's line rather than on
+# the overall status - the alternative is a fixture that has to stay perfect forever.
+! exec magus doctor
+stdout 'stale worktrees: no \.claude/worktrees directory'
+
+# A LIVE worktree carries .git and is counted, not flagged.
+mkdir .claude/worktrees/live
+exec touch .claude/worktrees/live/.git
+! exec magus doctor
+stdout '1 live worktree\(s\); none orphaned'
+
+# A pruned-but-undeleted directory is the failure. The message names what it BREAKS
+# (MGS1002) rather than merely reporting untidiness, and the details carry the path
+# plus a remedy - a finding without one is just a complaint.
+mkdir .claude/worktrees/graph-explorer-viz-8008f6
+! exec magus doctor
+stdout 'are not live worktrees'
+stdout 'MGS1002'
+stdout '\.claude/worktrees/graph-explorer-viz-8008f6'
+stdout 'git worktree add'
+
+# The live one is still not implicated.
+! stdout '\.claude/worktrees/live'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+-- spells/acme/spell.buzz --
+import "magus/target";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

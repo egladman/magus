@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -111,9 +112,9 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
-// detection). The project path is resolved with file.Resolve against the caller's
-// workspace-relative path — the same rule the static extractor uses, so the graph
-// edge and the runtime dispatch agree, and a ..-escape or absolute path is rejected
+// detection). The project path is resolved with file.ResolveImport against the caller's
+// workspace-relative path, the same rule describe.go applies to the extracted ref, so
+// the graph edge and the runtime dispatch agree, and a ..-escape or absolute path is rejected
 // rather than running a magusfile outside the workspace. The dep's canonical dir
 // comes from the workspace, keeping the coordinator's run-once/cycle key canonical.
 // It yields the caller's concurrency slot for the duration (the remote run needs
@@ -130,7 +131,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	if err != nil {
 		return fmt.Errorf("magus: cross-project dependency: %w", err)
 	}
-	depPath, err := file.Resolve(ref.Project, filepath.ToSlash(callerRel))
+	depPath, err := file.ResolveImport(ref.Project, filepath.ToSlash(callerRel))
 	if err != nil {
 		return err
 	}
@@ -267,6 +268,13 @@ func dispatchBuzzDeps(callCtx context.Context, targets map[string]vm.Callable, n
 	// in the background rather than blocked on (see runCommand). The directly-run
 	// target is dispatched without this marker, so it still foregrounds.
 	callCtx = service.WithSupervision(callCtx)
+	// `--` args belong to the target the USER named, not to whatever that target
+	// pulls in. They ride the context, and runBuzzCommand hands them to any op that
+	// declared no explicit args, so without this every dependency got them too:
+	// `magus run test <p> -- -run TestX` reached the format dependency, and gofmt
+	// tried to lstat "-run" and "TestX" as paths. That made the documented way to
+	// narrow a run unusable on any target with a ctx.needs, which is most of them.
+	callCtx = project.WithExtraArgs(callCtx, nil)
 	names = dedupStrings(names)
 	if src := interp.SourceFromContext(callCtx); src != nil {
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {

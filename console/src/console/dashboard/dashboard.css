@@ -177,6 +177,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 
 /* Dense rows. */
 .console-dashboard-rowlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+/* A lock held long enough that its holder is more likely abandoned than busy. Marks the ROW, not
+   the card: one stale holder among several working ones should stand out without recolouring a tile
+   whose normal state is perfectly healthy. */
+.console-dashboard-row[data-stale="true"] {
+  border-color: var(--pf-t--global--border--color--status--warning--default);
+  background: var(--pf-t--global--background--color--status--warning--default);
+}
+
 .console-dashboard-row {
   display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
   padding: 0.4rem 0.55rem;
