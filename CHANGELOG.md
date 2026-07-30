@@ -11,6 +11,23 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- Agent skill version 19. `magus-architecture` now surveys for what is too THIN to
+  justify a boundary, not only what is too big. Every existing lens (god nodes,
+  hotspots, affinity, ownership) detects something central, hot, or heavily coupled;
+  none detect over-abstraction, which is the more common failure early on. The skill
+  names the cost no metric records: in Go every package boundary forces an export, so
+  splitting files into packages to organize them widens the public surface you were
+  trying to keep small. It flags three shapes - imported only from inside its own
+  subtree, one importer with nothing encapsulated, single file with a single exported
+  symbol - and says explicitly that SIZE is not one of them, because a small package
+  that hides four helpers behind one function is earning its keep.
+
+  Known gap this does not close: the graph has no `package` kind, so it cannot answer
+  "who imports this Go package" directly. Its finest structural rung is `project`
+  (a magusfile-bearing directory) and the next is `file`; Go's unit of encapsulation
+  sits between them and is unmodelled. Minting `package` with `imports` edges would
+  make the first shape above a one-line query instead of a manual read.
+
 - `ctx.updates(...)`, a third per-target footprint declaration beside `ctx.inputs` and
   `ctx.outputs`, for a file a target EDITS rather than produces: a hand-written page with
   a generated region between markers, a manifest a tool rewrites in place. magus never
