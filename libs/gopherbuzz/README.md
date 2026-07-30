@@ -43,8 +43,33 @@ initializer, default argument values, error sets on declarations plus
 interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, ranges with their full method set, and
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
-generic object declarations, inline ifs, and `catch void`. Two deliberate supersets: the contextual
-`test` keyword (below) and named-argument labels.
+generic object declarations, inline ifs, and `catch void`. Three deliberate supersets: the contextual
+`test` keyword (below), named-argument labels, and compiled-bytecode serialization
+(next).
+
+### One superset worth naming: serialized bytecode
+
+Upstream has no compile-to-file step at all -- its subcommands are `run`, `test`,
+`check`, `fmt` and the REPL, and nothing in its tree writes or reads a bytecode
+artifact. gopherbuzz does: [`Chunk.Marshal`](vm/marshal.go) emits a portable `.bo`
+blob that `UnmarshalChunk` runs without re-parsing or re-compiling, with source
+positions split into a companion `.bdb`.
+
+This is the ordinary shape for a bytecode VM rather than an invention -- CPython's
+`.pyc`, the JVM's `.class`, `luac` and Lua's `string.dump`, and Erlang's `.beam` are
+all the same idea, and the split debug file mirrors a PDB or a DWARF `.dwo`. It is
+also load-bearing here: magus ships every built-in spell as a prebuilt `.bo`
+(`internal/spell/gen/*.bo`), so a spell loads without a compiler on the critical
+path.
+
+Because it is ours and not upstream's, it is ours to keep whole. Every constant kind
+the compiler can mint -- null, bool, int, float, str, enum def, object declaration,
+pattern, and type value -- has an encoding, so the encoder's "cannot serialize" arm
+is unreachable from compiled code. A type-value constant (`<T>`, `typeof x`) was the
+one that had been missed: `Marshal` failed outright on it, which silently barred any
+program using `typeof` from ever being a built-in spell. [Bytecode
+version](#bytecode-version) records what each format bump changed and why an older
+VM must reject a newer blob.
 
 ### What does not
 
