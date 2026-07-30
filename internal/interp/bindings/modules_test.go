@@ -375,6 +375,10 @@ export fun verify(ctx: magus\Context, _opts: [str]) > void {
 // module imports (fs.join / os.execSh, in camelCase) and coexist with Buzz's own
 // stdlib in the same file: the magus fs/os methods are layered onto the bare
 // fs/os modules, while hashing uses the stdlib `crypto.hash`.
+//
+// `crypto.hash` returns the RAW digest bytes, matching upstream Buzz; `.hex()`
+// renders them. magus's own crypto module also offers sha256_hex for the hex form
+// directly.
 func TestRunBuzzAggregateUtil(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -387,7 +391,7 @@ import "crypto";
 export fun verify(ctx: magus\Context, _opts: [str]) > void {
     var joined = fs.join("a", "b", "c");
     var res = os.execSh("printf hello").stdout;
-    var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "");
+    var digest = crypto.hash(crypto.HashAlgorithm.Sha256, "").hex();
     fs.writeFile("ran", joined + "|" + res + "|" + digest);
 }
 `), 0o644))
