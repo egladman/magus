@@ -1,6 +1,7 @@
 package vcs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -337,6 +338,21 @@ func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []
 func (v hgVCS) CheckMergeDriver(_ context.Context, root string) (bool, error) {
 	data, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
 	return strings.Contains(string(data), hgRCBegin), nil
+}
+
+// EnsureMergeDriver implements types.MergeDriverInstaller. hgrc holds the glob list
+// inline, so a byte comparison of the rendered section answers both questions the git
+// side needs two checks for: registered at all, and registered for the current globs.
+func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+	if len(outputGlobs) == 0 {
+		return false, nil
+	}
+	before, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
+	if err := v.InstallMergeDriver(ctx, root, outputGlobs); err != nil {
+		return false, err
+	}
+	after, _ := os.ReadFile(filepath.Join(root, ".hg", "hgrc"))
+	return !bytes.Equal(before, after), nil
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller: it registers an hg `update`

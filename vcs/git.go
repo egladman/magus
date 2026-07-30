@@ -394,9 +394,9 @@ func parseChangesByCommit(out string) []types.CommitChange {
 }
 
 const (
-	gitAttrsBegin  = "# BEGIN magus-generated — do not edit this section manually"
-	gitAttrsEnd    = "# END magus-generated"
-	gitMergeDriver = "magus merge-driver %O %A %B %L %P"
+	gitAttrsBegin = "# BEGIN magus-generated — do not edit this section manually"
+	gitAttrsEnd   = "# END magus-generated"
+	gitDriverArgs = " merge-driver %O %A %B %L %P"
 
 	gitHookBegin = "# BEGIN magus-refresh — do not edit this section manually"
 	gitHookEnd   = "# END magus-refresh"
@@ -414,6 +414,26 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs
 	return v.writeGitConfig(ctx, root)
 }
 
+// EnsureMergeDriver re-wires the driver whenever the declared output globs have moved
+// on (or nothing wired it in the first place), and reports whether it changed anything.
+//
+// Installing only at `magus init` leaves the protection frozen at the shape the
+// workspace had that day: a project that declares an output later is never added to
+// .gitattributes, and a clone that never ran init has no registration at all. Both fail
+// the same silent way - a merge conflicts every generated file by hand. The globs are
+// derived, so treat the section as derived too and keep it current on its own.
+func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
+	if len(outputGlobs) == 0 {
+		return false, nil
+	}
+	attrsCurrent, attrsWanted := v.gitAttrsState(root, outputGlobs)
+	registered, _ := v.CheckMergeDriver(ctx, root)
+	if attrsCurrent == attrsWanted && registered && v.driverExecutable(ctx, root) {
+		return false, nil
+	}
+	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
+}
+
 // CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
 	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
@@ -425,21 +445,77 @@ func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error)
 	return strings.Contains(string(data), gitAttrsBegin), nil
 }
 
-func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
-	attrsPath := filepath.Join(root, ".gitattributes")
+// gitAttrsState returns .gitattributes as it is now and as the declared globs say it
+// should be, so callers can compare the two without writing.
+func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string) {
 	var section strings.Builder
 	section.WriteString(gitAttrsBegin + "\n")
 	for _, glob := range outputGlobs {
 		fmt.Fprintf(&section, "%s merge=magus linguist-generated\n", glob)
 	}
 	section.WriteString(gitAttrsEnd + "\n")
-	existing, _ := os.ReadFile(attrsPath)
-	updated := replaceManagedSection(string(existing), section.String(), gitAttrsBegin, gitAttrsEnd)
-	return os.WriteFile(attrsPath, []byte(updated), 0o644)
+	existing, _ := os.ReadFile(filepath.Join(root, ".gitattributes"))
+	return string(existing), replaceManagedSection(string(existing), section.String(), gitAttrsBegin, gitAttrsEnd)
+}
+
+func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
+	current, updated := v.gitAttrsState(root, outputGlobs)
+	if current == updated {
+		return nil // already correct: do not churn the file's mtime
+	}
+	return os.WriteFile(filepath.Join(root, ".gitattributes"), []byte(updated), 0o644)
+}
+
+// gitMergeDriverCommand is the command line git runs to resolve a conflict in a
+// generated file. Registering the bare word "magus" assumes a released binary on
+// PATH; when there is not one, git cannot execute the driver and silently falls
+// back to conflict markers in every generated file - which is indistinguishable
+// from having no driver at all. Prefer PATH so the registration survives an
+// upgrade-in-place, and fall back to this binary's own absolute path so a
+// source checkout with no installed magus still merges cleanly.
+func gitMergeDriverCommand() string {
+	exe, err := exec.LookPath("magus")
+	if err != nil {
+		if exe, err = os.Executable(); err != nil {
+			return "magus" + gitDriverArgs
+		}
+	}
+	if strings.ContainsAny(exe, " \t") {
+		exe = `"` + exe + `"`
+	}
+	return exe + gitDriverArgs
+}
+
+// driverExecutable reports whether the command currently registered still resolves to a
+// runnable binary. A registration can rot without anyone touching git config: an absolute
+// path recorded from a `go run` build points into a temp dir that is gone next run, and a
+// path into a since-removed install is no better. git treats a driver it cannot execute
+// as a conflict, so a rotted registration behaves exactly like no driver - the failure it
+// causes never mentions the driver, so nothing points at the cause.
+func (v gitVCS) driverExecutable(ctx context.Context, root string) bool {
+	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
+	cmdline := strings.TrimSpace(string(out))
+	if cmdline == "" {
+		return false
+	}
+	exe := cmdline
+	if strings.HasPrefix(exe, `"`) {
+		if end := strings.Index(exe[1:], `"`); end >= 0 {
+			exe = exe[1 : end+1]
+		}
+	} else if i := strings.Index(exe, " "); i >= 0 {
+		exe = exe[:i]
+	}
+	if strings.ContainsRune(exe, filepath.Separator) {
+		_, err := os.Stat(exe)
+		return err == nil
+	}
+	_, err := exec.LookPath(exe)
+	return err == nil
 }
 
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver", gitMergeDriver)
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}
