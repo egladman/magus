@@ -753,13 +753,30 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	if imp.Alias != "" && imp.Alias != "_" {
 		boundName = imp.Alias
 	}
-	if _, bound := s.env.Get(boundName); bound {
+	// A selective import binds its own names, not boundName, so "the module is already
+	// bound" says nothing about whether those names are - skip the guard for it, or
+	// `import "buzz:std"` followed by `import print from "buzz:std"` would bind nothing
+	// the second time.
+	if _, bound := s.env.Get(boundName); bound && len(imp.Only) == 0 {
 		return ImportBound, nil
 	}
 
 	// Host-provided synthetic modules (e.g. "magus/extra") resolve before
 	// any filesystem search and bind directly under the import's name.
 	if v, ok := s.syntheticModules[resolvePath]; ok {
+		if len(imp.Only) > 0 {
+			// `import print, assert from "buzz:std"` binds exactly the named members,
+			// unprefixed. A name the module does not have is the import being wrong, so it
+			// fails here rather than surfacing later as an unrelated "undefined".
+			for _, name := range imp.Only {
+				member, has := v.MapGet(name)
+				if !has {
+					return ImportSynthetic, bzz.Errorf(UnresolvedImport, "buzz: import %q: module has no member %q", imp.Path, name)
+				}
+				s.env.Define(name, member)
+			}
+			return ImportSynthetic, nil
+		}
 		if imp.Alias == "_" {
 			// `import "buzz:crypto" as _` is upstream's FLAT import: the module's members
 			// land in the importing scope with no prefix, which is how upstream's own

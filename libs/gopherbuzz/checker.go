@@ -829,7 +829,15 @@ func (c *checker) infer(n ast.Node) types.Type {
 		} else {
 			v.Call.ArgNames = nil
 		}
-		for _, a := range v.Call.Args {
+		// A fiber wraps an ordinary call, so its arguments get their parameter types the
+		// same way a direct call's do (inferCall). Inferring them bare left an anonymous
+		// `.{ ... }` argument as a map, so `&f(.{ points = 8 })` produced something
+		// whose methods did not exist.
+		for i, a := range v.Call.Args {
+			if ft, ok := calleeTyp.(*types.FuncType); ok && i < len(ft.Params) {
+				c.inferExpected(a, c.resolveType(ft.Params[i]))
+				continue
+			}
 			c.infer(a)
 		}
 		ft, ok := calleeTyp.(*types.FuncType)
@@ -1012,7 +1020,12 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// that cannot name its own type (`.one`, and anything else that reads the
 		// expected type) resolves from the signature.
 		if ok && i < len(ft.Params) {
-			c.inferExpected(a, ft.Params[i])
+			// resolveType, not the param as-is: a signature's annotations are parsed by
+			// types.ParseAnnot, which knows the primitives but not this checker's named
+			// types, so `task: FiberTask` arrives as a NamedType. An anonymous `.{ ... }`
+			// argument looks for an OBJECT in its expected type and would find none, and
+			// so stay a plain map whose methods then do not exist.
+			c.inferExpected(a, c.resolveType(ft.Params[i]))
 			continue
 		}
 		c.infer(a)

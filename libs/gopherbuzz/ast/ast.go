@@ -24,6 +24,10 @@ type ImportStmt struct {
 	Pos
 	Path  string
 	Alias string // "" = use basename; "_" = flat (no bound name)
+	// Only holds the names of a SELECTIVE import, `import a, b from "path"`, which
+	// binds just those members unprefixed. Empty for every other form. It is distinct
+	// from a flat `as _` import, which binds all of them.
+	Only []string
 }
 
 // NamespaceStmt: namespace name; — declares the module's namespace identifier.

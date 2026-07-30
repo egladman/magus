@@ -25,6 +25,7 @@ debug.buzz
 default-arguments.buzz
 discarded-value.buzz
 enums.buzz
+fibers.buzz
 for.buzz
 foreach.buzz
 forward-method-placeholders.buzz
@@ -32,6 +33,7 @@ free-identifiers.buzz
 fs.buzz
 generics.buzz
 if-arrow.buzz
+import-lib.buzz
 inferred-enum-case.buzz
 inferred-var-type.buzz
 inline-catch.buzz

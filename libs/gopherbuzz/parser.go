@@ -361,6 +361,26 @@ func (p *parser) parseStmt() (ast.Node, error) {
 
 func (p *parser) parseImport() (*ast.ImportStmt, error) {
 	t, _ := p.eat(token.Import)
+	// The selective form `import a, b from "path"` names its members BEFORE the path,
+	// so an identifier here (rather than a string) is what distinguishes it.
+	var only []string
+	if p.check(token.Ident) {
+		for {
+			id, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			only = append(only, id.Val)
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+		}
+		if !p.check(token.Ident) || p.peek().Val != "from" {
+			return nil, fmt.Errorf("buzz: line %d:%d: expected `from` after the imported names", p.peek().Line, p.peek().Col)
+		}
+		p.advance() // `from`
+	}
 	pathTok, err := p.eat(token.String)
 	if err != nil {
 		return nil, err
@@ -374,7 +394,7 @@ func (p *parser) parseImport() (*ast.ImportStmt, error) {
 		}
 	}
 	p.optSemicolon()
-	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias}, nil
+	return &ast.ImportStmt{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Path: pathTok.Val, Alias: alias, Only: only}, nil
 }
 
 func (p *parser) parseNamespace() (*ast.NamespaceStmt, error) {
