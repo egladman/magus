@@ -123,3 +123,25 @@ func (o SpellOp) OpKind() string {
 // IsService reports whether the op is a service op (a long-running process) rather
 // than a command op (run to completion).
 func (o SpellOp) IsService() bool { return o.Kind == OpKindService }
+
+// Key implements CacheRepository: an op is identified by the command it runs, which is
+// the honest answer to "what work is this" and what lets two entry points onto the same
+// op share an entry.
+//
+// A service op contributes nothing, and that is correct rather than a gap: a
+// service-backed target is forced NoCache at run.go's step construction, so it is never
+// replayed and has no key to protect. A function-op computes its argv in-VM, so an empty
+// Bin likewise has nothing to say.
+func (o SpellOp) Key() []string {
+	if o.Bin == "" {
+		return nil
+	}
+	key := make([]string, 0, len(o.Args)+1)
+	key = append(key, "bin:"+o.Bin)
+	for _, a := range o.Args {
+		key = append(key, "arg:"+a)
+	}
+	return key
+}
+
+

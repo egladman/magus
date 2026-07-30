@@ -192,16 +192,13 @@ func (r ExecResult) ToMap() map[string]any {
 // project's magusfile - see Project.MagusfileTargets for why it cannot answer for one.
 const MagusfileSpellName = "magusfile"
 
-// MagusfileTarget is the CacheRepository for a magusfile's exported targets.
-type MagusfileTarget struct{}
-
-// CacheKey implements CacheRepository. A magusfile body is Buzz, not a command, so there
-// is no argv to serialize; its text already reaches the key through the magusfile's own
-// Sources entry, leaving the entry point as what distinguishes build from go-build in
-// one file.
-func (MagusfileTarget) CacheKey(target string) []string {
-	if target == "" {
+// Key implements CacheRepository: a target is identified by its name, because its
+// body is Buzz rather than a command and has no argv to serialize - the body's text
+// already reaches the key through the magusfile's own Sources entry, leaving the entry
+// point as what separates build from go-build within one project.
+func (t Target) Key() []string {
+	if t.Name == "" {
 		return nil
 	}
-	return []string{"magusfile-target:" + target}
+	return []string{"target:" + t.Name}
 }
