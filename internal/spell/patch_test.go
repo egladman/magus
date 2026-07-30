@@ -8,7 +8,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
 func TestExplainCharms(t *testing.T) {
