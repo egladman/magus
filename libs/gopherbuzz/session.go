@@ -81,6 +81,11 @@ type Session struct {
 	// so qualified access like `state\wm()` resolves to its declared return type
 	// and field access on module-returned values is type-checked correctly.
 	importedModuleFuncs map[string][]*ast.FunDecl
+	// importedModuleTypes maps the same bound name to the module's exported object
+	// and enum declarations. importedTypes above is a flat list (every flat import's
+	// types, registered under their bare names); this keeps the per-module grouping a
+	// namespace object needs, so `io\File` resolves as well as a bare `File`.
+	importedModuleTypes map[string][]ast.Node
 	// sourceModules maps an import path to embedded .buzz source. Unlike a
 	// synthetic module (a host Value carrying functions), a source module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
@@ -602,7 +607,7 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
-	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importPrivateHint())
+	errs := checkWithGlobals(prog, globals, s.importedTypes, s.importedModuleFuncs, s.importedModuleTypes, s.importPrivateHint())
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
 		if len(errs) > 0 {
@@ -764,6 +769,20 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	// Host-provided synthetic modules (e.g. "magus/extra") resolve before
 	// any filesystem search and bind directly under the import's name.
 	if v, ok := s.syntheticModules[resolvePath]; ok {
+		// A module may register BOTH a native value and a Buzz declaration source under
+		// one name (crypto, io). The native value is what runs -- and what a host
+		// overlays its own methods onto -- while the source exists only to be read for
+		// its signatures, which is what lets an inferred enum case in an argument
+		// (`hash(.Md5, ...)`, `File.open(p, mode: .read)`) resolve. Collect it here and
+		// do NOT execute it: executing would redefine at runtime what the native module
+		// already provides.
+		if src, hasDecls := s.sourceModules[resolvePath]; hasDecls {
+			key := "decls:" + resolvePath
+			if !s.loadedPaths[key] {
+				s.loadedPaths[key] = true
+				s.collectImportedModule(boundName, src)
+			}
+		}
 		if len(imp.Only) > 0 {
 			// `import print, assert from "buzz:std"` binds exactly the named members,
 			// unprefixed. A name the module does not have is the import being wrong, so it
@@ -899,10 +918,12 @@ func (s *Session) collectImportedModule(boundName, src string) {
 		case *ast.ObjectDecl:
 			if d.IsExported {
 				s.importedTypes = append(s.importedTypes, d)
+				s.rememberModuleType(boundName, d)
 			}
 		case *ast.EnumDecl:
 			if d.IsExported {
 				s.importedTypes = append(s.importedTypes, d)
+				s.rememberModuleType(boundName, d)
 			}
 		case *ast.FunDecl:
 			if d.IsExported {
@@ -933,6 +954,15 @@ func (s *Session) bindNamespaceObject(name string, exports []string) {
 		}
 	}
 	s.env.Define(name, m)
+}
+
+// rememberModuleType records one exported type declaration under its module's bound
+// name, for the namespace object the checker builds.
+func (s *Session) rememberModuleType(boundName string, d ast.Node) {
+	if s.importedModuleTypes == nil {
+		s.importedModuleTypes = map[string][]ast.Node{}
+	}
+	s.importedModuleTypes[boundName] = append(s.importedModuleTypes[boundName], d)
 }
 
 // declaredNamespace returns the segments of a module's leading `namespace a\b\c`

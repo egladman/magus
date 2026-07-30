@@ -1780,11 +1780,17 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if v.Enum == "" {
 			return fmt.Errorf("buzz: line %d:%d: unresolved enum case .%s", v.Line, v.Col, v.Name)
 		}
-		return c.compileExpr(&ast.MemberExpr{
-			Pos:    v.Pos,
-			Object: &ast.IdentExpr{Pos: v.Pos, Name: v.Enum},
-			Name:   v.Name,
-		})
+		// `ns\Enum` is itself a MemberExpr on the module value, so a namespaced enum
+		// nests one level deeper than a bare one.
+		var enumRef ast.Node = &ast.IdentExpr{Pos: v.Pos, Name: v.Enum}
+		if v.EnumNS != "" {
+			enumRef = &ast.MemberExpr{
+				Pos:    v.Pos,
+				Object: &ast.IdentExpr{Pos: v.Pos, Name: v.EnumNS},
+				Name:   v.Enum,
+			}
+		}
+		return c.compileExpr(&ast.MemberExpr{Pos: v.Pos, Object: enumRef, Name: v.Name})
 	case *ast.IsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err

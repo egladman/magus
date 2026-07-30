@@ -44,6 +44,12 @@ type checker struct {
 	// declarations. collectTopLevel uses this to build a typed namespace ObjectType
 	// for the import so qualified access (e.g. state\wm()) resolves precisely.
 	moduleFuncs map[string][]*ast.FunDecl
+	// moduleTypes holds each imported module's exported object/enum declarations,
+	// so a namespace object can carry them as fields (`io\File`, `io\FileMode`).
+	moduleTypes map[string][]ast.Node
+	// enumNS maps an enum's bare name to the namespace it is reachable through, for
+	// a module imported without flattening. See ast.EnumCaseExpr.EnumNS.
+	enumNS map[string]string
 	// private names are visible in a flat-imported module's runtime Env but hidden
 	// from this file by exports-only import visibility; referencing one yields an
 	// "export it" hint rather than a bare "undefined". See session.importPrivate.
@@ -55,10 +61,11 @@ type checker struct {
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, private map[string]bool) []typeError {
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, private map[string]bool) []typeError {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
+		moduleTypes: moduleTypes,
 		private:     private,
 	}
 	c.pushScope()
@@ -139,11 +146,28 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 	for _, s := range prog.Stmts {
 		switch v := s.(type) {
 		case *ast.ImportStmt:
-			if v.Alias == "_" {
-				break // flat import: nothing bound under a name
-			}
-			parts := strings.Split(v.Path, "/")
+			// The module's lookup name is the path's last segment with the `buzz:` stdlib
+			// scheme stripped, which is the same bare name resolveImport binds under.
+			parts := strings.Split(strings.TrimPrefix(v.Path, "buzz:"), "/")
 			name := parts[len(parts)-1]
+			if v.Alias == "_" || len(v.Only) > 0 {
+				// A flat or selective import binds members UNPREFIXED, so their signatures
+				// have to be defined under their bare names. The session already splats the
+				// values into the env, so without this the names resolve but carry no
+				// parameter types - and an inferred enum case in an argument (`hash(.Md5,
+				// ...)`) has nothing to resolve against.
+				wanted := map[string]bool{}
+				for _, n := range v.Only {
+					wanted[n] = true
+				}
+				for _, fd := range c.moduleFuncs[name] {
+					if len(wanted) > 0 && !wanted[fd.Name] {
+						continue
+					}
+					c.define(fd.Name, c.funDeclType(fd), true)
+				}
+				break
+			}
 			if v.Alias != "" {
 				name = v.Alias
 			}
@@ -151,10 +175,29 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// typed namespace object so qualified access (e.g. state\wm()) resolves
 			// to the declared return type instead of any. This lets the checker
 			// propagate types through cross-module calls and enforce E28 correctly.
-			if fds, ok := c.moduleFuncs[name]; ok && len(fds) > 0 {
+			fds := c.moduleFuncs[name]
+			decls := c.moduleTypes[name]
+			if len(fds) > 0 || len(decls) > 0 {
 				nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
 				for _, fd := range fds {
 					nt.Fields[fd.Name] = c.funDeclType(fd)
+				}
+				// An exported TYPE is reachable through the namespace too, as the type value
+				// itself, so `io\File.open(...)` resolves the same static method a bare
+				// `File.open(...)` does - and `io\FileMode.read` the same case.
+				for _, d := range decls {
+					switch v := d.(type) {
+					case *ast.ObjectDecl:
+						nt.Fields[v.Name] = c.buildObjectType(v)
+					case *ast.EnumDecl:
+						nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases}
+						// The enum's VALUE lives behind the namespace, so a resolved case has to
+						// compile to `ns\Enum.case` rather than the bare name the checker uses.
+						if c.enumNS == nil {
+							c.enumNS = map[string]string{}
+						}
+						c.enumNS[v.Name] = name
+					}
 				}
 				c.define(name, nt, false)
 			} else {
@@ -800,6 +843,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// Record the resolution for the compiler: it emits the same access as an
 		// explicit Enum.case, and this is the only point at which the enum is known.
 		v.Enum = et.Name
+		v.EnumNS = c.enumNS[et.Name]
 		return et
 	case *ast.IsExpr:
 		c.infer(v.Expr)

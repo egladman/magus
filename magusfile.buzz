@@ -355,7 +355,7 @@ fun build_release_variant(goos: str, goarch: str, cgo: bool, suffix: str) > void
     archive\compress(stage, asset, {});
     fs\delete(stage);
 
-    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
+    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset)).hex();
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
 }
 

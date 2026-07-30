@@ -159,7 +159,7 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     final stringToSign = "AWS4-HMAC-SHA256\n"
         + amzdate + "\n"
         + scope + "\n"
-        + crypto\hash(crypto\HashAlgorithm.Sha256, canonicalRequest);
+        + crypto\hash(crypto\HashAlgorithm.Sha256, canonicalRequest).hex();
 
     // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.

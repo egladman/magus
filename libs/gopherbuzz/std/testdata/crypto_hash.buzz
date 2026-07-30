@@ -1,3 +1,6 @@
 // @expect: 5d41402abc4b2a76b9719d911017c592
+// crypto\hash returns the RAW digest bytes, as upstream's does; `.hex()` renders
+// them. This fixture previously expected hex straight out of hash(), which made
+// upstream's own `hash(...).hex()` double-encode.
 import "crypto";
-final __r = crypto\hash(crypto\HashAlgorithm.Md5, "hello");
+final __r = crypto\hash(crypto\HashAlgorithm.Md5, data: "hello").hex();

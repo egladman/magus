@@ -43,11 +43,26 @@ var Modules = []buzz.Module{
 	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
 	{Name: "fs", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("fs", fsModule)},
 	{Name: "os", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("os", osModule)},
-	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("crypto", cryptoModule)},
+	// crypto and io each register TWICE: the native module under the real name, and
+	// a Buzz declaration source under the same name. The synthetic value is what runs
+	// (and what a host like magus overlays its own methods onto); the source is parsed
+	// for its SIGNATURES only, which is what lets an inferred enum case in an argument
+	// resolve. See resolveImport.
+	{Name: "cryptocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("cryptocore", cryptoCoreModule)},
+	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule("crypto", cryptoCoreModule())
+		s.SetSourceModule("crypto", cryptoSource)
+		return nil
+	}},
 	{Name: "gc", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("gc", gcModule)},
 	{Name: "debug", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("debug", debugModule)},
+	{Name: "iocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
+		s.SetSyntheticModule("iocore", ioCoreModule(s)) // io binds against the session
+		return nil
+	}},
 	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule("io", ioModule(s)) // io binds against the session
+		s.SetSyntheticModule("io", ioCoreModule(s))
+		s.SetSourceModule("io", ioSource)
 		return nil
 	}},
 	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},

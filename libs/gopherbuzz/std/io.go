@@ -11,7 +11,12 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-func ioModule(sess *buzz.Session) vm.Value {
+// ioCoreModule is the native layer under the buzz-authored `io` module (io.buzz),
+// the same split assertcore/assert and cryptocore/crypto use. FileMode stays here
+// as well as in io.buzz: the native File.open reads the enum VALUE it is handed,
+// while the Buzz declaration is what gives the checker a type to resolve an
+// inferred case against.
+func ioCoreModule(sess *buzz.Session) vm.Value {
 	m := mod()
 	m.MapSet("FileMode", vm.EnumDefValue("FileMode", []string{"read", "write", "update"}, nil))
 	fileDef := mod()

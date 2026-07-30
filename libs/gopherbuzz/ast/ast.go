@@ -478,6 +478,12 @@ type EnumCaseExpr struct {
 	Pos
 	Name string
 	Enum string
+	// EnumNS is the namespace the enum is reachable through, set when the enum came
+	// from a module imported WITHOUT flattening (`import "buzz:io"` makes FileMode
+	// reachable only as `io\FileMode`). The checker knows the enum by its bare name,
+	// but the compiler has to emit an access that exists at runtime. Empty when the
+	// bare name is in scope.
+	EnumNS string
 }
 
 type IsExpr struct {

@@ -16,15 +16,16 @@ import "assert";
 // writeSiteManifest's per-asset integrity list), so the two never compute "the same
 // hash" two different ways.
 export fun fileSha256(path: str) > str {
-    return crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(path));
+    return crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(path)).hex();
 }
 
 // scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes
-// a browser hashes against a hash-source script-src). crypto.hash returns lowercase hex;
+// a browser hashes against a hash-source script-src). crypto.hash returns raw digest
+// bytes, so .hex() renders the lowercase hex this decodes;
 // CSP hash-sources are base64, so hexDecode back to raw digest bytes before
 // base64-encoding.
 export fun scriptHash(js: str) > str {
-    return "sha256-" + encoding\base64Encode(encoding\hexDecode(crypto\hash(crypto\HashAlgorithm.Sha256, js)));
+    return "sha256-" + encoding\base64Encode(encoding\hexDecode(crypto\hash(crypto\HashAlgorithm.Sha256, js).hex()));
 }
 
 // extractInlineScripts pulls the text of every attribute-less `<script>...</script>`

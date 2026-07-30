@@ -1,0 +1,39 @@
+namespace io;
+
+/// The `io` module, matching upstream Buzz's src/lib/io.buzz.
+///
+/// Only the TYPED surface lives here; `iocore` still does the work. A host module
+/// built directly as a Go value carries no signatures, so `File.open(path, mode:
+/// .write)` had no parameter type for the inferred enum case to resolve against.
+/// Declaring FileMode and a typed `open` here gives it one. Everything the opened
+/// handle can do (write, close, readAll, readLine, read, collect, isTTY) stays on
+/// the native value it returns.
+import "iocore";
+
+/// How a file is opened.
+export enum FileMode {
+    read,
+    write,
+    update,
+}
+
+/// An opened file. `open` is the only member declared here: it is the one that
+/// needed a signature. It returns the native handle as `ud` -- upstream's own
+/// spelling for a file descriptor -- which this checker does not resolve, so the
+/// handle's methods (write, close, readAll, readLine, read) stay dynamic instead of
+/// being rejected as field access on `any`.
+export object File {
+    static fun open(path: str, mode: FileMode) > ud {
+        return iocore\File.open(path, mode);
+    }
+}
+
+export final stdin = iocore\stdin;
+export final stdout = iocore\stdout;
+export final stderr = iocore\stderr;
+
+/// Runs a Buzz file.
+/// @param filename The file to run
+export fun runFile(filename: str) > void {
+    iocore\runFile(filename);
+}

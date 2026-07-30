@@ -78,7 +78,7 @@ export fun buildServiceWorker(site: Site) > void {
             manifest = manifest + rel + ":" + fileSha256(p) + "\n";
         }
     }
-    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest).sub(0, 12);
+    final version = site.config.title + "-" + crypto\hash(crypto\HashAlgorithm.Sha256, manifest).hex().sub(0, 12);
     os\execute(["esbuild", "src/site/service-worker.ts", "--bundle", "--minify", "--format=iife",
         "--define:SERVICE_WORKER_VERSION=\"" + version + "\"",
         "--define:SERVICE_WORKER_PRECACHE=" + serialize\jsonEncode(site.config.precacheAssets),

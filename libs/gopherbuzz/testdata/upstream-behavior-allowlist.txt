@@ -21,6 +21,7 @@ call-without-parentheses.buzz
 checked-subscript.buzz
 composite-assign.buzz
 control-flow.buzz
+crypto.buzz
 dead-branches.buzz
 debug.buzz
 default-arguments.buzz
@@ -41,6 +42,7 @@ inline-catch.buzz
 inline-if.buzz
 interpolation.buzz
 invoke.buzz
+io.buzz
 is.buzz
 iterator.buzz
 jit-dynamic-call.buzz
