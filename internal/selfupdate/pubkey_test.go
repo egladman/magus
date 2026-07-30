@@ -22,7 +22,9 @@ func TestReleaseTrustAnchorMatchesInstallerAndCI(t *testing.T) {
 	require.NoError(t, err)
 	action, err := os.ReadFile(filepath.Join(root, ".github", "actions", "setup-magus", "action.yml"))
 	require.NoError(t, err)
-	guide, err := os.ReadFile(filepath.Join(root, "docs", "guides", "download.md"))
+	// The key lives on the verify page, not the download hub: a first install must
+	// verify by hand, and that is the page those instructions live on.
+	guide, err := os.ReadFile(filepath.Join(root, "docs", "guides", "download", "verify.md"))
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, strings.Count(string(installer), wantHex), "installer must embed the binary's release key once")
