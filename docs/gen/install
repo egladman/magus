@@ -13,6 +13,8 @@ INSTALL_PREFIX="${INSTALL_PREFIX:-${HOME:?}/.local}"
 
 MAGUS_RELEASE_PUBKEY_HEX="ffbb8fa6f36274defd12888093c6a322c2532bc545016f495ab4955decb66779"
 
+SHORTHAND="${SHORTHAND:-true}"
+
 DRY_RUN=false
 VERBOSE=false
 
@@ -60,6 +62,7 @@ Usage:
 Options:
   --version VERSION   Install a specific release tag
   --variant VARIANT   Install static (default) or dynamic binary
+  --no-shorthand      Do not symlink mgs, the magus shorthand
   --dry-run           Show what would be installed
   --verbose           Print additional verification details
   --help              Show this help message
@@ -68,6 +71,7 @@ Environment:
   VERSION             Release version (default: latest)
   VARIANT             Binary variant: static (default) or dynamic
   INSTALL_PREFIX      Installation prefix (default: ~/.local)
+  SHORTHAND           Symlink mgs alongside magus (default: true)
   TARGET_OS           The operating system's binary to be installed  (default: auto-detected)
   TARGET_ARCH         The architecture's binary to be installed  (default: auto-detected)
 EOF
@@ -89,6 +93,11 @@ while [ "$#" -gt 0 ]; do
 
             VARIANT="$2"
             shift 2
+            ;;
+
+        --no-shorthand)
+            SHORTHAND=false
+            shift
             ;;
 
         --dry-run)
@@ -327,6 +336,9 @@ install_release() {
     printf '  Platform: %s/%s\n' "$OS" "$ARCH"
     printf '  Variant: %s\n' "$VARIANT"
     printf '  Destination: %s/bin/magus\n' "$INSTALL_PREFIX"
+    if is_true "$SHORTHAND"; then
+        printf '  Shorthand: %s/bin/mgs -> magus\n' "$INSTALL_PREFIX"
+    fi
 
     if is_true "$DRY_RUN"; then
         return
@@ -353,6 +365,13 @@ install_release() {
     "${INSTALL_PREFIX}/bin/magus" man install \
         --dir "${INSTALL_PREFIX}/share/man/man1"
 
+    # The shorthand is a convenience, so a failure here (an mgs already on the
+    # prefix, a read-only bin dir) must not fail an otherwise good install.
+    if is_true "$SHORTHAND"; then
+        "${INSTALL_PREFIX}/bin/magus" self install-shorthand ||
+            printf 'warning: could not install the mgs shorthand; magus itself is installed\n' >&2
+    fi
+
     printf '\n'
     printf 'Successfully installed Magus to:\n'
     printf '  %s/magus\n' "${INSTALL_PREFIX}/bin"
@@ -375,15 +394,19 @@ install_release() {
     printf '  Create a workspace: magus init\n'
     printf '  Read the local manual: man magus\n'
 
+    # The zsh script ends by invoking its own completion function, so it must go
+    # on $fpath as _magus - appending it to ~/.zshrc registers nothing.
     case "${SHELL:-}" in
         */bash)
-            printf '  Enable Bash completion: magus completion bash >> ~/.bashrc\n'
+            printf "  Enable Bash completion: echo 'source <(magus completion bash)' >> ~/.bashrc\n"
             ;;
         */zsh)
-            printf '  Enable Zsh completion: magus completion zsh >> ~/.zshrc\n'
+            printf '  Enable Zsh completion: magus completion zsh > ~/.zsh/completions/_magus\n'
+            printf '    then put that directory on the zsh fpath before compinit:\n'
+            printf '    https://eli.gladman.cc/magus/guides/download/shell-setup/\n'
             ;;
         */fish)
-            printf '  Enable Fish completion: magus completion fish >> ~/.config/fish/config.fish\n'
+            printf '  Enable Fish completion: magus completion fish > ~/.config/fish/completions/magus.fish\n'
             ;;
     esac
 }

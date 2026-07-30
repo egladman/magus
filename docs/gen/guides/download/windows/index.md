@@ -6,7 +6,7 @@ tags: [download, install, windows, powershell, path]
 
 # Install on Windows
 
-magus ships as a single self-contained binary. Download it with `curl.exe`, extract it into a `PATH` directory you own, then [verify it](../download.md#verify-a-release) before first run. Run these in PowerShell:
+magus ships as a single self-contained binary. Download it with `curl.exe`, extract it into a `PATH` directory you own, then [verify it](verify.md) before first run. Run these in PowerShell:
 
 ## Quick install
 
@@ -30,7 +30,7 @@ curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA2
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](../download.md#verify-a-release).
+Then verify the Ed25519 signature *first*, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
 
 ## Put it on your PATH
 
@@ -44,6 +44,6 @@ Open a new PowerShell window afterward, then re-run `magus version`.
 
 ## Next steps
 
-- [Verify the release](../download.md#verify-a-release) before first run.
-- Set up [shell completion](../download.md#shell-completion) (PowerShell is supported).
+- [Verify the release](verify.md) before first run.
+- Set up [shell completion](shell-setup.md#shell-completion) (PowerShell is supported).
 - Keep it current with [`magus self update`](../download.md#update).

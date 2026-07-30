@@ -3,7 +3,7 @@
   "projects": [
     {
       "path": ".",
-      "name": "plans-buzz-parity-handoff-9b8119",
+      "name": "magus",
       "engine": "buzz",
       "nodes": [
         {
@@ -248,7 +248,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -263,6 +263,12 @@
               "spell": "md",
               "ops": [
                 "markdownlint"
+              ]
+            },
+            {
+              "spell": "bash",
+              "ops": [
+                "shellcheck"
               ]
             }
           ]
@@ -291,6 +297,11 @@
             "build",
             "test"
           ]
+        },
+        {
+          "name": "completion-test",
+          "declared": "completion_test",
+          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell."
         },
         {
           "name": "ci-shard",
@@ -506,6 +517,10 @@
             {
               "project": "libs/textsearch",
               "target": "lint"
+            },
+            {
+              "project": "guides/integrations/agents",
+              "target": "lint"
             }
           ]
         },
@@ -574,8 +589,33 @@
       ],
       "depends_on": [
         ".",
+        "guides/integrations/agents",
         "libs/gopherbuzz",
         "libs/textsearch"
+      ]
+    },
+    {
+      "path": "docs/guides/integrations/agents",
+      "name": "docs/guides/integrations/agents",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "lint",
+          "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way).",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the anchor `magus affected ci` keys off.",
+          "dependencies": [
+            "lint"
+          ]
+        }
       ]
     },
     {

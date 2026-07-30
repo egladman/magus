@@ -152,6 +152,9 @@ guides/download/
 guides/download/docker/
 guides/download/linux/
 guides/download/macos/
+guides/download/package-managers/
+guides/download/shell-setup/
+guides/download/verify/
 guides/download/windows/
 guides/editor/
 guides/getting-started/

@@ -201,7 +201,10 @@ _magus() {
                     ;;
                 self)
                     if (( CURRENT == 2 )); then
-                        local -a subs=('update:download and install the latest magus release')
+                        local -a subs=(
+                            'update:download and install the latest magus release'
+                            'install-shorthand:symlink mgs to the running binary'
+                        )
                         _describe 'subcommand' subs
                     fi
                     ;;

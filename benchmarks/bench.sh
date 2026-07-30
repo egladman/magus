@@ -302,6 +302,8 @@ run_bench() {
     mkdir -p "$(dirname "$outfile")"
 
     if [[ "$DRY_RUN" == "1" ]]; then
+        # The inner quotes are part of the command line being echoed, not this one.
+        # shellcheck disable=SC2016
         echo "[dry-run] hyperfine --warmup $warmup --runs $runs${prepare:+ --prepare '$prepare'} '$cmd' -> $outfile"
         return
     fi

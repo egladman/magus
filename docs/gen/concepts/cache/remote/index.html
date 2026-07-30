@@ -159,7 +159,7 @@ calls. Everything backend-specific (auth, transport) stays in the <a class="glos
 <code>magus.yaml</code> declares the trust set that secures it (<code><a class="code-xref" href="../../../reference/config/#cache" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_CACHE_REMOTE_TRUSTED_KEYS">cache.remote.trusted_keys</a></code>, i.e.
 data). The split is deliberate. A trust anchor is declarative <a class="code-xref" href="../../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>, not build
 logic, so it lives in YAML <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> it can't branch or compute itself. The spell
-<strong><a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a>-gates</strong> via <code>enabled()</code>, so the backend is a no-op anywhere it isn't
+<strong><a class="code-xref" href="../../../reference/manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a>-gates</strong> via <code>enabled()</code>, so the backend is a no-op anywhere it isn't
 configured (e.g. a developer machine with no credentials):</p>
 <pre><code class="language-buzz">// magusfile.buzz
 import &quot;spells/github/actions&quot; as github;
@@ -371,7 +371,7 @@ signing for free. It only moves the opaque bytes.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22remote-cache%22">remote-cache</a><a class="tag" href="../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../search/?q=tag%3A%22s3%22">s3</a><a class="tag" href="../../../search/?q=tag%3A%22github-actions%22">github-actions</a><a class="tag" href="../../../search/?q=tag%3A%22artifacts%22">artifacts</a><a class="tag" href="../../../search/?q=tag%3A%22signing%22">signing</a><a class="tag" href="../../../search/?q=tag%3A%22supply-chain%22">supply-chain</a></div>
-    <small>Last updated <time datetime="2026-07-28T16:08:23Z">July 28, 2026, 4:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/d371df6bc7420bf2418692b5f0f894d2e744f1b2" data-tooltip="d371df6bc7420bf2418692b5f0f894d2e744f1b2" title="d371df6bc7420bf2418692b5f0f894d2e744f1b2">d371df6b</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

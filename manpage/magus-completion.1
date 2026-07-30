@@ -5,24 +5,44 @@ magus\-completion \- Print a shell completion script
 .B magus
 .RI "completion <bash|zsh|fish|powershell>"
 .SH DESCRIPTION
-Print a shell completion script to stdout and append it to your shell's startup file.
+Print a shell completion script to stdout. Every script registers both
+magus and the mgs shorthand.
+.PP
+Completes subcommands, the targets accepted by run and affected, the nouns
+accepted by describe, the lenses accepted by insight, and each subcommand's
+flags. Project paths are completed live by shelling out to magus ls \-o name,
+so they track the workspace instead of a baked\-in list; outside a workspace
+they are simply empty.
+.PP
+Install differs per shell, and zsh is the one that bites:
+.PP
+bash        source it from ~/.bashrc, which re\-reads it from the binary on
+              every new shell and so survives an upgrade:
+                  source <(magus completion bash)
+  zsh         write it to a directory on $fpath as _magus. The script ends by
+              invoking its own completion function, so sourcing it from
+              ~/.zshrc runs that outside a completion context and registers
+              nothing. Regenerate the file after magus self update.
+  fish        write it to ~/.config/fish/completions/magus.fish, loaded on
+              demand.
+  powershell  append it to $PROFILE.
 .SH EXAMPLES
-\fIBash\fR
+\fIBash: source from the rc, never goes stale\fR
 .PP
 .EX
-magus completion bash >> ~/.bashrc
+echo 'source <(magus completion bash)' >> ~/.bashrc
 .EE
 .PP
-\fIZsh\fR
+\fIZsh: install onto $fpath (not into ~/.zshrc)\fR
 .PP
 .EX
-magus completion zsh >> ~/.zshrc
+magus completion zsh > ~/.zsh/completions/_magus
 .EE
 .PP
 \fIFish\fR
 .PP
 .EX
-magus completion fish >> ~/.config/fish/config.fish
+magus completion fish > ~/.config/fish/completions/magus.fish
 .EE
 .PP
 \fIPowerShell\fR

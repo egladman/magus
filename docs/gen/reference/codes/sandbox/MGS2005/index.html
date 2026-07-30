@@ -107,7 +107,7 @@ landlock LSM. Magus continues with interpreter-level enforcement only.</p>
 layers:</p>
 <ol>
 <li><strong>Kernel layer</strong>: Linux landlock LSM applies the policy via
-<code>landlock_restrict_<a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.">self</a></code>, after which every child process inherits
+<code>landlock_restrict_<a class="code-xref" href="../../../manpage/magus-self/" data-kind="command" data-def="magus self: Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">self</a></code>, after which every child process inherits
 the restriction across <code>fork+exec</code>.</li>
 <li><strong>Interpreter layer</strong>: the <a class="glossary-term" href="../../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> <code>fs.*</code>, <code>sh.*</code>, <code>env.*</code>
 bindings consult the policy in user space before performing any

@@ -89,7 +89,8 @@ end
 
 function __magus_self_subs
     printf '%s\t%s\n' \
-        update 'download and install the latest magus release'
+        update            'download and install the latest magus release' \
+        install-shorthand 'symlink mgs to the running binary'
 end
 
 function __magus_projects
@@ -169,7 +170,7 @@ for _cmd in magus mgs
 
     complete -c $_cmd -n "__fish_seen_subcommand_from server; and not __fish_seen_subcommand_from start stop" -a '(__magus_server_subs)'
 
-    complete -c $_cmd -n "__fish_seen_subcommand_from self; and not __fish_seen_subcommand_from update" -a '(__magus_self_subs)'
+    complete -c $_cmd -n "__fish_seen_subcommand_from self; and not __fish_seen_subcommand_from update install-shorthand" -a '(__magus_self_subs)'
 
     complete -c $_cmd -n '__fish_seen_subcommand_from init' -l global -d 'write only the global config'
     complete -c $_cmd -n '__fish_seen_subcommand_from init' -l local -d 'write config into the repo (CWD)'

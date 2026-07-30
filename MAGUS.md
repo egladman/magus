@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2482 nodes** and **4775 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2202 nodes** and **4777 edges** (schema v6). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 82 | `magus query kind:target` | `content-generate`, `bindings-generate`, `generate` |
+| target | 83 | `magus query kind:target` | `content-generate`, `generate`, `image-build` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -53,16 +53,16 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 45 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 215 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 414 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| doc | 218 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 126 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 230 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1102 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1104 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 117 | `magus query kind:import` | `std`, `magus`, `fs` |
-| rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 25 | `magus query project:.` | `bindings-generate`, `generate`, `image-build` |
+| . | 26 | `magus query project:.` | `generate`, `image-build`, `lint` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
@@ -87,9 +87,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-run` | Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz). |
 | `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats first, then golangci-lint, go vet, and markdownlint. |
+| `lint` | Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
+| `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |

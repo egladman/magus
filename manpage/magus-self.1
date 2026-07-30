@@ -1,14 +1,15 @@
 .TH MAGUS-SELF 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-self \- Manage the magus binary (update)
+magus\-self \- Manage the magus binary (update, install\-shorthand)
 .SH SYNOPSIS
 .B magus
-.RI "self update [flags]"
+.RI "self <subcommand> [flags]"
 .SH DESCRIPTION
 Targets for managing the magus binary.
 .PP
 update is compiled in by default. Package maintainers who own the system
 binary can build with \-tags noselfupdate to disable the self\-update mechanism.
+install\-shorthand is available in every build.
 .PP
 To bootstrap a workspace, use: magus init
 .SS self update options
@@ -35,17 +36,35 @@ Short for \-\-yes
 \fB\-\-yes\fR
 Skip interactive confirmation
 .RE
+.SS self install\-shorthand options
+.RS
+.TP
+\fB\-\-dir\fR \fIstring\fR
+Directory for the shorthand (default: the running binary's directory)
+.TP
+\fB\-\-force\fR
+Replace an existing file at the shorthand path
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
 \fBupdate\fR
 Update magus to the latest release
+.TP
+\fBinstall\-shorthand\fR
+Symlink mgs, the magus shorthand, to the running binary
 .RE
 .SH EXAMPLES
 \fIUpdate the running binary\fR
 .PP
 .EX
 magus self update
+.EE
+.PP
+\fIInstall the mgs shorthand\fR
+.PP
+.EX
+magus self install-shorthand
 .EE
 .PP
 .SH SEE ALSO

@@ -4,21 +4,22 @@ package manpage
 
 import "flag"
 
-// selfCommand (default build) documents the `magus self` surface: update.
-// It is omitted from binaries built with -tags noselfupdate, so it is part of
-// the man pages only for the default build.
+// selfCommand (default build) documents the `magus self` surface: update and
+// install-shorthand. The update child is omitted from binaries built with -tags
+// noselfupdate, so that build carries its own selfCommand.
 var selfCommand = Command{
 	Name:        "self",
-	Short:       "Manage the magus binary (update)",
-	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories.",
-	Tags:        []string{"cli", "magus self", "self update", "updates", "versioning", "install"},
+	Short:       "Manage the magus binary (update, install-shorthand)",
+	Description: "Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.",
+	Tags:        []string{"cli", "magus self", "self update", "self install-shorthand", "updates", "versioning", "install", "mgs"},
 	Long: `Targets for managing the magus binary.
 
 update is compiled in by default. Package maintainers who own the system
 binary can build with -tags noselfupdate to disable the self-update mechanism.
+install-shorthand is available in every build.
 
 To bootstrap a workspace, use: magus init`,
-	Usage: "magus self update [flags]",
+	Usage: "magus self <subcommand> [flags]",
 	Children: []Command{
 		{
 			Name:  "update",
@@ -48,8 +49,10 @@ updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 				{"Install into ~/bin instead of replacing in place", "magus self update --bin-dir ~/bin"},
 			},
 		},
+		selfInstallShorthandCommand,
 	},
 	Examples: []Example{
 		{"Update the running binary", "magus self update"},
+		{"Install the mgs shorthand", "magus self install-shorthand"},
 	},
 }

@@ -104,22 +104,40 @@
       </nav>
     </aside>
     <div>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="magus-completion">magus-completion</h1>
 <p>Print a shell <a class="code-xref" href="./" data-kind="command" data-def="magus completion: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">completion</a> script</p>
 <h2 id="synopsis">Synopsis</h2>
 <p><strong>magus</strong> completion &lt;bash|zsh|fish|powershell&gt;</p>
 <h2 id="description">Description</h2>
-<p>Print a shell completion script to stdout and append it to your shell's startup file.</p>
+<p>Print a shell completion script to stdout. Every script registers both
+magus and the mgs shorthand.</p>
+<p>Completes subcommands, the targets accepted by <a class="code-xref" href="../magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> and <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>, the nouns
+accepted by <a class="code-xref" href="../magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a>, the lenses accepted by <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a>, and each subcommand's
+flags. <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">Project</a> paths are completed live by shelling out to <a class="code-xref" href="../magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a> -o name,
+so they track the <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> instead of a baked-in list; outside a workspace
+they are simply empty.</p>
+<p>Install differs per shell, and zsh is the one that bites:</p>
+<p>bash        source it from ~/.bashrc, which re-reads it from the binary on
+every new shell and so survives an upgrade:
+source &lt;(<a class="code-xref" href="./" data-kind="command" data-def="Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.">magus completion</a> bash)
+zsh         write it to a directory on $fpath as _magus. The script ends by
+invoking its own completion function, so sourcing it from
+~/.zshrc runs that outside a completion context and registers
+nothing. Regenerate the file after <a class="code-xref" href="../magus-self/" data-kind="command" data-def="Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.">magus self</a> update.
+fish        write it to ~/.<a class="code-xref" href="../magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>/fish/completions/magus.fish, loaded on
+demand.
+powershell  append it to $PROFILE.</p>
 <h2 id="examples">Examples</h2>
-<p><em>Bash</em></p>
-<pre><code class="language-sh">magus completion bash &gt;&gt; ~/.bashrc
+<p><em>Bash: source from the rc, never goes stale</em></p>
+<pre><code class="language-sh">echo 'source &lt;(magus completion bash)' &gt;&gt; ~/.bashrc
 </code></pre>
-<p><em>Zsh</em></p>
-<pre><code class="language-sh">magus completion zsh &gt;&gt; ~/.zshrc
+<p><em>Zsh: install onto $fpath (not into ~/.zshrc)</em></p>
+<pre><code class="language-sh">magus completion zsh &gt; ~/.zsh/completions/_magus
 </code></pre>
 <p><em>Fish</em></p>
-<pre><code class="language-sh">magus completion fish &gt;&gt; ~/.config/fish/config.fish
+<pre><code class="language-sh">magus completion fish &gt; ~/.config/fish/completions/magus.fish
 </code></pre>
 <p><em>PowerShell</em></p>
 <pre><code class="language-sh">magus completion powershell &gt;&gt; $PROFILE
@@ -139,19 +157,35 @@
     <div class="related-grid">
         <a class="related-card" href="../../../reference/manpage/"><span class="related-card-title">Manpage</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-affected/"><span class="related-card-title">magus affected</span><span class="related-card-desc">Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.</span></a>
-        <a class="related-card" href="../../../reference/manpage/magus-config/"><span class="related-card-title">magus config</span><span class="related-card-desc">Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.</span></a>
         <a class="related-card" href="../../../reference/manpage/magus-describe/"><span class="related-card-title">magus describe</span><span class="related-card-desc">Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-doctor/"><span class="related-card-title">magus doctor</span><span class="related-card-desc">Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+completion%22">magus completion</a><a class="tag" href="../../../search/?q=tag%3A%22completion%22">completion</a><a class="tag" href="../../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../../search/?q=tag%3A%22zsh%22">zsh</a><a class="tag" href="../../../search/?q=tag%3A%22fish%22">fish</a><a class="tag" href="../../../search/?q=tag%3A%22powershell%22">powershell</a><a class="tag" href="../../../search/?q=tag%3A%22shell%22">shell</a></div>
-    <small>Last updated <time datetime="2026-07-27T03:51:44Z">July 27, 2026, 3:51 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/b1b786d34804d09a1e1292b444bb68735a0bea2d" data-tooltip="b1b786d34804d09a1e1292b444bb68735a0bea2d" title="b1b786d34804d09a1e1292b444bb68735a0bea2d">b1b786d3</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-completion.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-completion.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-completion.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-completion.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="affected">Affected</h3>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../concepts/targets/">targets</a>.</p>
+<h3 id="affected">Affected</h3>
 <p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
 only over them. See <a href="../../../guides/affected/">affected</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../concepts/targets/#the-target-name">targets</a>.</p>
 <h3 id="magusmd">MAGUS.md</h3>
 <p>The committed routing index at a workspace root, regenerated from the knowledge
 graph: it lists every node and points at the exact query for a given question,

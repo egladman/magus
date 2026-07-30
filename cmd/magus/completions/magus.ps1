@@ -18,7 +18,7 @@ $__magus_scriptblock = {
     $graphSubs     = 'deps', 'export', 'stats'
     $configSubs    = 'view', 'set', 'history', 'cache', 'mcp'
     $serverSubs    = 'start', 'stop'
-    $selfSubs      = 'update'
+    $selfSubs      = 'update', 'install-shorthand'
     $shells        = 'bash', 'zsh', 'fish', 'powershell'
     $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout',
                       '--shard', '--n-shards', '--no-flake-retry', '--race', '--step',
