@@ -54,7 +54,13 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	_, _ = h.Write(buf)
 
 	writeLine("projectPath:", s.ProjectPath)
-	if s.Target != "" {
+	// The work's own account of itself when it gave one; the target name only as a
+	// fallback, for a Step built by a caller that never resolved a contributor.
+	if len(s.WorkKey) > 0 {
+		for _, k := range s.WorkKey {
+			writeLine("work:", k)
+		}
+	} else if s.Target != "" {
 		writeLine("target:", s.Target)
 	}
 	// Active charms (sorted by the caller) change behaviour, so they key the

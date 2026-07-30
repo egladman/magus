@@ -307,8 +307,26 @@ func raceForcesNoCache(o run) bool {
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
 	step.Target = target
+	// Ask the work what it is, rather than keying on its name. A magusfile target wins
+	// over a spell op of the same name (it is the workspace's own override), so it is
+	// also the only contributor when both exist - the key must describe what actually
+	// runs, and running both was the bug that made this visible.
+	var fallback []string
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
+		if !slices.Contains(s.Targets(), target) {
+			continue
+		}
+		if s.Name() == types.MagusfileSpellName {
+			step.WorkKey = types.MagusfileTarget().Cache(target).Key()
+			continue
+		}
+		if fallback == nil {
+			fallback = s.Cache(target).Key()
+		}
+	}
+	if step.WorkKey == nil {
+		step.WorkKey = fallback
 	}
 	// Per-target inputs declared via magus.inputs (one InputRef shape for same-project
 	// globs and cross-project files; each carries its owning project). This is the one

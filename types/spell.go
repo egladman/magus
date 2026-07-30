@@ -121,6 +121,29 @@ func (s *Spell) RenderCommand(target string, charms []string) (cmd string, args 
 	return s.renderCmd(target, charms)
 }
 
+// Cache implements Cacheable: a spell op identifies itself by the command it runs.
+//
+// The argv is the honest answer to "what work is this", and it is what lets two
+// entry points onto the same op share an entry. Charms are applied first, because a
+// charm changes the argv and so changes the work.
+//
+// When the argv is not statically knowable - a function-op computes it in-VM - the op
+// falls back to naming itself. That is strictly weaker than the argv but never wrong:
+// it keys the op apart from every other op, which is what the target name did for
+// everything before this.
+func (s *Spell) Cache(target string) CacheContribution {
+	cmd, args, ok, err := s.RenderCommand(target, nil)
+	if err != nil || !ok {
+		return NewCacheContribution("op:" + s.name + ":" + target)
+	}
+	key := make([]string, 0, len(args)+2)
+	key = append(key, "op:"+s.name+":"+target, "bin:"+cmd)
+	for _, a := range args {
+		key = append(key, "arg:"+a)
+	}
+	return NewCacheContribution(key...)
+}
+
 // ExplainCommand returns the charm-application trace for a static preview: step 0
 // is the base command (no charms), and each later step is the command after one
 // more active charm's patch, in the deterministic order magus applies them. ok is

@@ -89,6 +89,10 @@ type Step struct {
 	// The field itself is not written into the key - only the resulting file set is, so
 	// two ignore sets that yield the same files hash identically.
 	IgnoreDirs []string
+	// WorkKey is what the dispatched work says it is (types.Cacheable.Cache(target).Key()).
+	// It replaces the target NAME as the key's account of the work: a name is a label,
+	// and two entry points onto one op share work while one name over two bodies does not.
+	WorkKey    []string
 	EnvAllow   []string // env var names whose values contribute to the key
 	// ExecOverrides are per-op ctx.withEnv / ctx.withCwd execution overrides ("env:K=V", "cwd:V"), extracted
 	// statically. Unlike EnvAllow, which names env vars whose PROCESS value is read, a
