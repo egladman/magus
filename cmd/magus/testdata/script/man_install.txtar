@@ -13,5 +13,5 @@ exists mandir/magus-describe.1
 
 # Bare `magus man` with no subcommand exits 1 and names what is missing.
 ! exec magus man
-stderr 'Usage: magus man install \[--dir DIR\]'
+stderr 'Usage: magus man install \[--dir <path>\]'
 stderr '\[error\] magus man: subcommand required'

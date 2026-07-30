@@ -80,6 +80,7 @@
           <li><a href="../../../reference/skills/magus-architecture/" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" aria-current="page" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -87,21 +88,62 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#run-it" title="Run it">Run it</a></li><li><a href="#never-guess-an-api-ask" title="Never guess an API: ask">Never guess an API: ask</a></li><li><a href="#imports" title="Imports">Imports</a></li><li><a href="#two-rules-that-cause-most-first-try-failures" title="Two rules that cause most first-try failures">Two rules that cause most first-try failures</a></li><li><a href="#syntax-that-differs-from-what-you-expect" title="Syntax that differs from what you expect">Syntax that differs from what you expect</a></li><li><a href="#a-worked-script" title="A worked script">A worked script</a></li><li><a href="#test-what-you-write" title="Test what you write">Test what you write</a></li><li><a href="#where-buzz-code-belongs" title="Where Buzz code belongs">Where Buzz code belongs</a></li><li><a href="#run-it-1" title="Run it">Run it</a></li><li><a href="#never-guess-an-api-ask-1" title="Never guess an API: ask">Never guess an API: ask</a></li><li><a href="#imports-1" title="Imports">Imports</a></li><li><a href="#two-rules-that-cause-most-first-try-failures-1" title="Two rules that cause most first-try failures">Two rules that cause most first-try failures</a></li><li><a href="#syntax-that-differs-from-what-you-expect-1" title="Syntax that differs from what you expect">Syntax that differs from what you expect</a></li><li><a href="#a-worked-script-1" title="A worked script">A worked script</a></li><li><a href="#test-what-you-write-1" title="Test what you write">Test what you write</a></li><li><a href="#where-buzz-code-belongs-1" title="Where Buzz code belongs">Where Buzz code belongs</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">7 min read</small>
+    <small class="reading-time" title="Estimated reading time">8 min read</small>
     <article>
 <h1 id="magus-buzz">magus-buzz</h1>
-<p><progress value="5321" max="6148" aria-label="The --simple permutation is 13% smaller: 5321 of 6148 bytes."></progress><small>The --simple permutation is 13% smaller: 5321 of 6148 bytes.</small></p>
+<p><progress value="5180" max="6148" aria-label="The --simple permutation is 15% smaller: 5180 of 6148 bytes."></progress><small>The --simple permutation is 15% smaller: 5180 of 6148 bytes.</small></p>
 <p>Write and <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>, the language magusfiles, spells, and <code>magus buzz</code> scripts are written in. Use when writing or debugging a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, a <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, or a .buzz file, and when a <a class="glossary-term" href="../../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a> script is needed in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> - Buzz is already installed with the whole magus host <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use <code>=</code>, and <code>magus buzz</code> runs upstream-strict (no top-level control flow, every argument after the first must be labeled).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># Writing Buzz
@@ -125,155 +167,113 @@ fun main() &gt; void {
     std\print(&quot;hello&quot;);
 }
 main();
-</code></pre>
-<pre><code class="language-sh">magus buzz hello.buzz
-</code></pre>
-<h2 id="run-it">Run it</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>form</th>
-<th>use</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>magus buzz &lt;file&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
-<td>run a script file</td>
-</tr>
-<tr>
-<td><code>magus buzz -e '&lt;code&gt;'</code></td>
-<td>run a snippet inline</td>
-</tr>
-<tr>
-<td><code>echo '&lt;code&gt;' | magus buzz -</code></td>
-<td>run from stdin (a pipe or heredoc also works with no <code>-</code>)</td>
-</tr>
-<tr>
-<td><code>magus buzz -t &lt;file&gt;</code></td>
-<td>run the file's <code>test &quot;...&quot; {}</code> blocks and report pass/fail</td>
-</tr>
-<tr>
-<td><code>magus buzz</code> (a terminal, no args)</td>
-<td>REPL</td>
-</tr>
-</tbody>
-</table></figure>
-<h2 id="never-guess-an-api-ask">Never guess an API: ask</h2>
-<p>The stdlib is discoverable, and guessing at it is the single biggest source of
-wasted turns. <code>strings</code> is case-conversion helpers, NOT Go's strings; JSON is
-<code><a class="code-xref" href="../../buzz/json/#stringify" data-kind="method" data-def="">json\stringify</a></code> / <code><a class="code-xref" href="../../buzz/json/#parse" data-kind="method" data-def="">json\parse</a></code>, not <code>encode</code> / <code>decode</code>. Look it up:</p>
-<pre><code class="language-sh">magus describe modules -o name        # every module available to a script
+```
+
+```sh
+magus buzz hello.buzz
+```
+
+## Run it
+
+| form | use |
+| --- | --- |
+| `magus buzz &lt;file&gt;` | run a script file |
+| `magus buzz -e '&lt;code&gt;'` | run a snippet inline |
+| `echo '&lt;code&gt;' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
+| `magus buzz -t &lt;file&gt;` | run the file's `test &quot;...&quot; {}` blocks and report pass/fail |
+| `magus buzz` (a terminal, no args) | REPL |
+
+## Never guess an API: ask
+
+The stdlib is discoverable, and guessing at it is the single biggest source of
+wasted turns. `strings` is case-conversion helpers, NOT Go's strings; JSON is
+`json\stringify` / `json\parse`, not `encode` / `decode`. Look it up:
+
+```sh
+magus describe modules -o name        # every module available to a script
 magus describe module json            # its methods, docs, and SIGNATURES with return types
-</code></pre>
-<p>This file teaches the fundamentals and nothing more. Escalate deliberately:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>question</th>
-<th><a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>what modules exist, what a method takes and RETURNS</td>
-<td><code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> module &lt;name&gt;</code> - the authority, generated from the bindings</td>
-</tr>
-<tr>
-<td>how a feature works, concepts, guides, worked examples</td>
-<td>the magus-docs skill - the documentation is written and searchable</td>
-</tr>
-<tr>
-<td>what THIS workspace declares (targets, spells, projects)</td>
-<td>the magus-<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a> skill</td>
-</tr>
-</tbody>
-</table></figure>
-<p>Anything of substance - error sets, fibers, generics, the full stdlib, <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>
-behavior - is documented; search it rather than guessing from this page.</p>
-<p>WRONG: assume <code>strings\toLower(s)</code> or <code>json\encode(v)</code> exist.
-CORRECT: <code>magus <a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> module strings</code>, then write what it lists.</p>
-<p>Text operations that are not case conversion are usually METHODS on the value,
-not <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> functions: <code>&quot;a.buzz&quot;.endsWith(&quot;.buzz&quot;)</code>, <code>s.len()</code>, <code>list.join(&quot; &quot;)</code>.</p>
-<h2 id="imports">Imports</h2>
-<p>Every module, including the Buzz stdlib, must be imported by BARE name. There is
-no <code>magus:</code> or <code>buzz:</code> prefix on the host modules.</p>
-<pre><code class="language-buzz">import &quot;std&quot;;                 // print, assert
+```
+
+This file teaches the fundamentals and nothing more. Escalate deliberately:
+
+| question | where |
+| --- | --- |
+| what modules exist, what a method takes and RETURNS | `magus describe module &lt;name&gt;` - the authority, generated from the bindings |
+| how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
+| what THIS workspace declares (targets, spells, projects) | the magus-query skill |
+
+Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
+behavior - is documented; search it rather than guessing from this page.
+
+WRONG: assume `strings\toLower(s)` or `json\encode(v)` exist.
+CORRECT: `magus describe module strings`, then write what it lists.
+
+Text operations that are not case conversion are usually METHODS on the value,
+not module functions: `&quot;a.buzz&quot;.endsWith(&quot;.buzz&quot;)`, `s.len()`, `list.join(&quot; &quot;)`.
+
+## Imports
+
+Every module, including the Buzz stdlib, must be imported by BARE name. There is
+no `magus:` or `buzz:` prefix on the host modules.
+
+```buzz
+import &quot;std&quot;;                 // print, assert
 import &quot;fs&quot;; import &quot;json&quot;;   // host modules
-</code></pre>
-<p>Available in <code>magus buzz</code>: the Buzz stdlib plus <code>archive</code>, <code>charm</code>, <code>crypto</code>,
-<code>encoding</code>, <code>env</code>, <code>fmt</code>, <code>fs</code>, <code>http</code>, <code>json</code>, <code>markdown</code>, <code>os</code>, <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a></code>,
-<code>platform</code>, <code>semver</code>, <code>strings</code>, <code>template</code>, <code>time</code>, <code>toml</code>, <code>uuid</code>, <code>vcs</code>,
-<code>xml</code>, <code>yaml</code>. The <code>magus</code> module itself is NOT available here - it needs a
-magusfile's targets, so use it from a magusfile, not a standalone script.</p>
-<h2 id="two-rules-that-cause-most-first-try-failures">Two rules that cause most first-try failures</h2>
-<p><code>magus buzz</code> runs upstream-strict by default.</p>
-<ol>
-<li><strong>Control flow is not allowed at the top level.</strong> Declarations and expression
-statements are; <code>if</code>/<code>while</code>/<code>for</code> are not. Put them in a function and call
-it. <code>magus buzz --embedded</code> relaxes this if you want a throwaway snippet.</li>
-<li><strong>Every argument after the first must be labeled.</strong></li>
-</ol>
-<pre><code class="language-buzz">// WRONG (strict mode): argument 2 must be labeled
+```
+
+Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
+`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
+`platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
+`xml`, `yaml`. The `magus` module itself is NOT available here - it needs a
+magusfile's targets, so use it from a magusfile, not a standalone script.
+
+## Two rules that cause most first-try failures
+
+`magus buzz` runs upstream-strict by default.
+
+1. **Control flow is not allowed at the top level.** Declarations and expression
+   statements are; `if`/`while`/`for` are not. Put them in a function and call
+   it. `magus buzz --embedded` relaxes this if you want a throwaway snippet.
+2. **Every argument after the first must be labeled.**
+
+```buzz
+// WRONG (strict mode): argument 2 must be labeled
 std\assert(x == 1, &quot;checked x&quot;);
 template\render(tpl, {&quot;name&quot;: &quot;world&quot;});
 
 // CORRECT
 std\assert(x == 1, message: &quot;checked x&quot;);
 template\render(tpl, data: {&quot;name&quot;: &quot;world&quot;});
-</code></pre>
-<h2 id="syntax-that-differs-from-what-you-expect">Syntax that differs from what you expect</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>thing</th>
-<th>Buzz</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>namespace access</td>
-<td><code>fs\list(&quot;.&quot;)</code> - a BACKSLASH, not a dot</td>
-</tr>
-<tr>
-<td>member access</td>
-<td><code>obj.field</code>, <code>&quot;s&quot;.len()</code> - a dot</td>
-</tr>
-<tr>
-<td>object literal</td>
-<td><code>Point{ <a class="code-xref" href="../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a> = 1 }</code> - <code>=</code>, not <code>:</code></td>
-</tr>
-<tr>
-<td>map literal</td>
-<td><code>{&quot;key&quot;: value}</code> - <code>:</code>, like JSON</td>
-</tr>
-<tr>
-<td>typed binding</td>
-<td><code>final n: int = 1;</code> - type AFTER the name</td>
-</tr>
-<tr>
-<td>immutable / mutable</td>
-<td><code>final</code> / <code>var</code>; collections need <code>mut [1, 2]</code> to be mutated</td>
-</tr>
-<tr>
-<td>optional</td>
-<td><code>int?</code>, unwrap with <code>??</code>, <code>?.</code>, or <code>!</code></td>
-</tr>
-<tr>
-<td>errors</td>
-<td><code>fun f() &gt; int !&gt; str</code> declares what it throws; <code>try</code>/<code>catch</code>, or <code>expr catch fallback</code> inline</td>
-</tr>
-</tbody>
-</table></figure>
-<p>Reserved words that cannot be used as names: <code>map</code>, <code>static</code>, <code>test</code>, <code>out</code>,
-<code>from</code>, <code>type</code>, <code>double</code>, <code>fib</code>, and the obvious keywords. A fixture that uses
-one fails with a confusing <code>null is not callable</code>. Prefix or rename instead.</p>
-<p>A raw string is backticks, and it does NOT interpolate <code>{...}</code> - use it for
-Mustache templates, regexes, and JSON blobs:</p>
-<pre><code class="language-buzz">template\render(`Hello {{name}}!`, data: {&quot;name&quot;: &quot;world&quot;});
-</code></pre>
-<h2 id="a-worked-script">A worked script</h2>
-<pre><code class="language-buzz">import &quot;std&quot;; import &quot;fs&quot;; import &quot;json&quot;; import &quot;strings&quot;;
+```
+
+## Syntax that differs from what you expect
+
+| thing | Buzz |
+| --- | --- |
+| namespace access | `fs\list(&quot;.&quot;)` - a BACKSLASH, not a dot |
+| member access | `obj.field`, `&quot;s&quot;.len()` - a dot |
+| object literal | `Point{ x = 1 }` - `=`, not `:` |
+| map literal | `{&quot;key&quot;: value}` - `:`, like JSON |
+| typed binding | `final n: int = 1;` - type AFTER the name |
+| immutable / mutable | `final` / `var`; collections need `mut [1, 2]` to be mutated |
+| optional | `int?`, unwrap with `??`, `?.`, or `!` |
+| errors | `fun f() &gt; int !&gt; str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
+
+Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
+`from`, `type`, `double`, `fib`, and the obvious keywords. A fixture that uses
+one fails with a confusing `null is not callable`. Prefix or rename instead.
+
+A raw string is backticks, and it does NOT interpolate `{...}` - use it for
+Mustache templates, regexes, and JSON blobs:
+
+```buzz
+template\render(`Hello {{name}}!`, data: {&quot;name&quot;: &quot;world&quot;});
+```
+
+## A worked script
+
+```buzz
+import &quot;std&quot;; import &quot;fs&quot;; import &quot;json&quot;; import &quot;strings&quot;;
 
 fun main() &gt; void {
     var count = 0;
@@ -283,47 +283,51 @@ fun main() &gt; void {
     std\print(json\stringify({&quot;buzz_files&quot;: count, &quot;slug&quot;: strings\kebabCase(&quot;Hello World&quot;)}));
 }
 main();
-</code></pre>
-<h2 id="test-what-you-write">Test what you write</h2>
-<p>Buzz has test blocks, and <code>magus buzz -t</code> is the runner. Use them for any script
-worth keeping, and for spell files (which are Buzz too).</p>
-<pre><code class="language-buzz">import &quot;std&quot;; import &quot;strings&quot;;
+```
+
+## Test what you write
+
+Buzz has test blocks, and `magus buzz -t` is the runner. Use them for any script
+worth keeping, and for spell files (which are Buzz too).
+
+```buzz
+import &quot;std&quot;; import &quot;strings&quot;;
 
 fun slug(s: str) &gt; str { return strings\kebabCase(s); }
 
 test &quot;slug hyphenates&quot; {
     std\assert(slug(&quot;Hello World&quot;) == &quot;hello-world&quot;, message: &quot;slug&quot;);
 }
+```
+
+```sh
+magus buzz -t script.buzz     # ok/fail per block, then a summary line
+```
+
+## Where Buzz code belongs
+
+- **A one-off** - a standalone `.buzz` file run with `magus buzz`. Nothing is
+  registered; it is a script.
+- **Work the workspace repeats** - a target in `magusfile.buzz`, so it gets
+  caching, sandboxing, and affected tracking. Targets take
+  `(ctx: magus\Context, args: [str])` and receive `magus run &lt;target&gt; -- &lt;args&gt;`
+  as that `args` list.
+- **A tool adapter** - a spell, so every project of that type gets the ops.
+
+Prefer a target over a script for anything that will be run more than once: a
+script re-runs from scratch every time, a target replays from cache.
 </code></pre>
-<pre><code class="language-sh">magus buzz -t script.buzz     # ok/fail per block, then a summary line
-</code></pre>
-<h2 id="where-buzz-code-belongs">Where Buzz code belongs</h2>
-<ul>
-<li><strong>A one-off</strong> - a standalone <code>.buzz</code> file run with <code>magus buzz</code>. Nothing is
-registered; it is a script.</li>
-<li><strong>Work the workspace repeats</strong> - a target in <code>magusfile.buzz</code>, so it gets
-caching, sandboxing, and <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> tracking. Targets take
-<code>(ctx: magus\Context, args: [str])</code> and receive <code><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; -- &lt;args&gt;</code>
-as that <code>args</code> list.</li>
-<li><strong>A tool adapter</strong> - a spell, so every <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> of that type gets the ops.</li>
-</ul>
-<p>Prefer a target over a script for anything that will be run more than once: a
-script re-runs from scratch every time, a target replays from <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>.</p>
-<pre><code>
-## Short form (`--simple`)
-
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
-
-&lt;details&gt;
-&lt;summary&gt;Show the short form&lt;/summary&gt;
-
-```markdown
-# Writing Buzz
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># Writing Buzz
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
 it as a general-purpose scripting language with the whole magus host surface
-attached. In a magus workspace it is the right reach for a one-off script -
-scanning files, reshaping JSON/YAML/TOML, templating, hitting HTTP.
+attached. Reach for it for a
+one-off script: already installed, no dependency install, same language as the
+workspace's build logic.
 
 ## The smallest thing that runs
 
@@ -336,149 +340,108 @@ fun main() &gt; void {
     std\print(&quot;hello&quot;);
 }
 main();
-</code></pre>
-<pre><code class="language-sh">magus buzz hello.buzz
-</code></pre>
-<h2 id="run-it-1">Run it</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>form</th>
-<th>use</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>magus buzz &lt;file&gt;</code></td>
-<td>run a script file</td>
-</tr>
-<tr>
-<td><code>magus buzz -e '&lt;code&gt;'</code></td>
-<td>run a snippet inline</td>
-</tr>
-<tr>
-<td><code>echo '&lt;code&gt;' | magus buzz -</code></td>
-<td>run from stdin (a pipe or heredoc also works with no <code>-</code>)</td>
-</tr>
-<tr>
-<td><code>magus buzz -t &lt;file&gt;</code></td>
-<td>run the file's <code>test &quot;...&quot; {}</code> blocks and report pass/fail</td>
-</tr>
-<tr>
-<td><code>magus buzz</code> (a terminal, no args)</td>
-<td>REPL</td>
-</tr>
-</tbody>
-</table></figure>
-<h2 id="never-guess-an-api-ask-1">Never guess an API: ask</h2>
-<p>The stdlib is discoverable, and guessing at it is the single biggest source of
-wasted turns. Look it up:</p>
-<pre><code class="language-sh">magus describe modules -o name        # every module available to a script
+```
+
+```sh
+magus buzz hello.buzz
+```
+
+## Run it
+
+| form | use |
+| --- | --- |
+| `magus buzz &lt;file&gt;` | run a script file |
+| `magus buzz -e '&lt;code&gt;'` | run a snippet inline |
+| `echo '&lt;code&gt;' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
+| `magus buzz -t &lt;file&gt;` | run the file's `test &quot;...&quot; {}` blocks and report pass/fail |
+| `magus buzz` (a terminal, no args) | REPL |
+
+## Never guess an API: ask
+
+The stdlib is discoverable, and guessing at it is the single biggest source of
+wasted turns. Look it up:
+
+```sh
+magus describe modules -o name        # every module available to a script
 magus describe module json            # its methods, docs, and SIGNATURES with return types
-</code></pre>
-<p>This file teaches the fundamentals and nothing more. Escalate deliberately:</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>question</th>
-<th>where</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>what modules exist, what a method takes and RETURNS</td>
-<td><code>magus describe module &lt;name&gt;</code> - the authority, generated from the bindings</td>
-</tr>
-<tr>
-<td>how a feature works, concepts, guides, worked examples</td>
-<td>the magus-docs skill - the documentation is written and searchable</td>
-</tr>
-<tr>
-<td>what THIS workspace declares (targets, spells, projects)</td>
-<td>the magus-query skill</td>
-</tr>
-</tbody>
-</table></figure>
-<p>Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
-behavior - is documented; search it rather than guessing from this page.</p>
-<p>WRONG: assume <code>strings\toLower(s)</code> or <code>json\encode(v)</code> exist.
-CORRECT: <code>magus describe module strings</code>, then write what it lists.</p>
-<p>Text operations that are not case conversion are usually METHODS on the value,
-not module functions: <code>&quot;a.buzz&quot;.endsWith(&quot;.buzz&quot;)</code>, <code>s.len()</code>, <code>list.join(&quot; &quot;)</code>.</p>
-<h2 id="imports-1">Imports</h2>
-<p>Every module, including the Buzz stdlib, must be imported by BARE name.</p>
-<pre><code class="language-buzz">import &quot;std&quot;;                 // print, assert
+```
+
+Escalate deliberately:
+
+| question | where |
+| --- | --- |
+| what modules exist, what a method takes and RETURNS | `magus describe module &lt;name&gt;` - the authority, generated from the bindings |
+| how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
+| what THIS workspace declares (targets, spells, projects) | the magus-query skill |
+
+Error sets, fibers, generics, the full stdlib and sandbox behavior are all
+documented; search rather than guess.
+
+WRONG: assume `strings\toLower(s)` or `json\encode(v)` exist.
+CORRECT: `magus describe module strings`, then write what it lists.
+
+Text operations that are not case conversion are usually METHODS on the value,
+not module functions: `&quot;a.buzz&quot;.endsWith(&quot;.buzz&quot;)`, `s.len()`, `list.join(&quot; &quot;)`.
+
+## Imports
+
+Every module, including the Buzz stdlib, must be imported by BARE name.
+
+```buzz
+import &quot;std&quot;;                 // print, assert
 import &quot;fs&quot;; import &quot;json&quot;;   // host modules
-</code></pre>
-<p>Available in <code>magus buzz</code>: the Buzz stdlib plus <code>archive</code>, <code>charm</code>, <code>crypto</code>,
-<code>encoding</code>, <code>env</code>, <code>fmt</code>, <code>fs</code>, <code>http</code>, <code>json</code>, <code>markdown</code>, <code>os</code>, <code>path</code>,
-<code>platform</code>, <code>semver</code>, <code>strings</code>, <code>template</code>, <code>time</code>, <code>toml</code>, <code>uuid</code>, <code>vcs</code>,
-<code>xml</code>, <code>yaml</code>. The <code>magus</code> module itself is NOT available here, so use it from a magusfile, not a standalone script.</p>
-<h2 id="two-rules-that-cause-most-first-try-failures-1">Two rules that cause most first-try failures</h2>
-<p><code>magus buzz</code> runs upstream-strict by default.</p>
-<ol>
-<li><strong>Control flow is not allowed at the top level.</strong> Put them in a function and call
-it. <code>magus buzz --embedded</code> relaxes this if you want a throwaway snippet.</li>
-<li><strong>Every argument after the first must be labeled.</strong></li>
-</ol>
-<pre><code class="language-buzz">// WRONG (strict mode): argument 2 must be labeled
+```
+
+Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
+`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
+`platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
+`xml`, `yaml`. The `magus` module itself is NOT available here, so use it from a magusfile, not a standalone script.
+
+## Two rules that cause most first-try failures
+
+`magus buzz` runs upstream-strict by default.
+
+1. **Control flow is not allowed at the top level.** Put them in a function and call
+   it.
+   (`--embedded` relaxes this.)
+2. **Every argument after the first must be labeled.**
+
+```buzz
+// WRONG (strict mode): argument 2 must be labeled
 std\assert(x == 1, &quot;checked x&quot;);
 template\render(tpl, {&quot;name&quot;: &quot;world&quot;});
 
 // CORRECT
 std\assert(x == 1, message: &quot;checked x&quot;);
 template\render(tpl, data: {&quot;name&quot;: &quot;world&quot;});
-</code></pre>
-<h2 id="syntax-that-differs-from-what-you-expect-1">Syntax that differs from what you expect</h2>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>thing</th>
-<th>Buzz</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>namespace access</td>
-<td><code>fs\list(&quot;.&quot;)</code> - a BACKSLASH, not a dot</td>
-</tr>
-<tr>
-<td>member access</td>
-<td><code>obj.field</code>, <code>&quot;s&quot;.len()</code> - a dot</td>
-</tr>
-<tr>
-<td>object literal</td>
-<td><code>Point{ x = 1 }</code> - <code>=</code>, not <code>:</code></td>
-</tr>
-<tr>
-<td>map literal</td>
-<td><code>{&quot;key&quot;: value}</code> - <code>:</code>, like JSON</td>
-</tr>
-<tr>
-<td>typed binding</td>
-<td><code>final n: int = 1;</code> - type AFTER the name</td>
-</tr>
-<tr>
-<td>immutable / mutable</td>
-<td><code>final</code> / <code>var</code>; collections need <code>mut [1, 2]</code> to be mutated</td>
-</tr>
-<tr>
-<td>optional</td>
-<td><code>int?</code>, unwrap with <code>??</code>, <code>?.</code>, or <code>!</code></td>
-</tr>
-<tr>
-<td>errors</td>
-<td><code>fun f() &gt; int !&gt; str</code> declares what it throws; <code>try</code>/<code>catch</code>, or <code>expr catch fallback</code> inline</td>
-</tr>
-</tbody>
-</table></figure>
-<p>Reserved words that cannot be used as names: <code>map</code>, <code>static</code>, <code>test</code>, <code>out</code>,
-<code>from</code>, <code>type</code>, <code>double</code>, <code>fib</code>, and the obvious keywords. Prefix or rename instead.</p>
-<p>A raw string is backticks, and it does NOT interpolate <code>{...}</code>:</p>
-<pre><code class="language-buzz">template\render(`Hello {{name}}!`, data: {&quot;name&quot;: &quot;world&quot;});
-</code></pre>
-<h2 id="a-worked-script-1">A worked script</h2>
-<pre><code class="language-buzz">import &quot;std&quot;; import &quot;fs&quot;; import &quot;json&quot;; import &quot;strings&quot;;
+```
+
+## Syntax that differs from what you expect
+
+| thing | Buzz |
+| --- | --- |
+| namespace access | `fs\list(&quot;.&quot;)` - a BACKSLASH, not a dot |
+| member access | `obj.field`, `&quot;s&quot;.len()` - a dot |
+| object literal | `Point{ x = 1 }` - `=`, not `:` |
+| map literal | `{&quot;key&quot;: value}` - `:`, like JSON |
+| typed binding | `final n: int = 1;` - type AFTER the name |
+| immutable / mutable | `final` / `var`; collections need `mut [1, 2]` to be mutated |
+| optional | `int?`, unwrap with `??`, `?.`, or `!` |
+| errors | `fun f() &gt; int !&gt; str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
+
+Reserved words that cannot be used as names: `map`, `static`, `test`, `out`,
+`from`, `type`, `double`, `fib`, and the obvious keywords. Prefix or rename instead.
+
+A raw string is backticks, and it does NOT interpolate `{...}`:
+
+```buzz
+template\render(`Hello {{name}}!`, data: {&quot;name&quot;: &quot;world&quot;});
+```
+
+## A worked script
+
+```buzz
+import &quot;std&quot;; import &quot;fs&quot;; import &quot;json&quot;; import &quot;strings&quot;;
 
 fun main() &gt; void {
     var count = 0;
@@ -488,32 +451,38 @@ fun main() &gt; void {
     std\print(json\stringify({&quot;buzz_files&quot;: count, &quot;slug&quot;: strings\kebabCase(&quot;Hello World&quot;)}));
 }
 main();
-</code></pre>
-<h2 id="test-what-you-write-1">Test what you write</h2>
-<p>Buzz has test blocks, and <code>magus buzz -t</code> is the runner. Use them for any script
-worth keeping, and for spell files.</p>
-<pre><code class="language-buzz">import &quot;std&quot;; import &quot;strings&quot;;
+```
+
+## Test what you write
+
+Buzz has test blocks, and `magus buzz -t` is the runner. Use them for any script
+worth keeping, and for spell files.
+
+```buzz
+import &quot;std&quot;; import &quot;strings&quot;;
 
 fun slug(s: str) &gt; str { return strings\kebabCase(s); }
 
 test &quot;slug hyphenates&quot; {
     std\assert(slug(&quot;Hello World&quot;) == &quot;hello-world&quot;, message: &quot;slug&quot;);
 }
+```
+
+```sh
+magus buzz -t script.buzz     # ok/fail per block, then a summary line
+```
+
+## Where Buzz code belongs
+
+- **A one-off** - a standalone `.buzz` file run with `magus buzz`.
+- **Work the workspace repeats** - a target in `magusfile.buzz`. Targets take
+  `(ctx: magus\Context, args: [str])` and receive `magus run &lt;target&gt; -- &lt;args&gt;`
+  as that `args` list.
+- **A tool adapter** - a spell, so every project of that type gets the ops.
+
+Prefer a target over a script for anything that will be run more than once.
 </code></pre>
-<pre><code class="language-sh">magus buzz -t script.buzz     # ok/fail per block, then a summary line
-</code></pre>
-<h2 id="where-buzz-code-belongs-1">Where Buzz code belongs</h2>
-<ul>
-<li><strong>A one-off</strong> - a standalone <code>.buzz</code> file run with <code>magus buzz</code>.</li>
-<li><strong>Work the workspace repeats</strong> - a target in <code>magusfile.buzz</code>. Targets take
-<code>(ctx: magus\Context, args: [str])</code> and receive <code>magus run &lt;target&gt; -- &lt;args&gt;</code>
-as that <code>args</code> list.</li>
-<li><strong>A tool adapter</strong> - a spell, so every project of that type gets the ops.</li>
-</ul>
-<p>Prefer a target over a script for anything that will be run more than once.</p>
-<pre><code>
-&lt;/details&gt;
-</code></pre>
+</details>
     </article>
     </div>
     </div>
@@ -533,7 +502,7 @@ as that <code>args</code> list.</li>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-buzz%22">magus-buzz</a></div>
-    <small>Last updated <time datetime="2026-07-29T23:55:02Z">July 29, 2026, 11:55 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed" data-tooltip="32393b3650099222a26a55a57669a18f203b1bed" title="32393b3650099222a26a55a57669a18f203b1bed">32393b36</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -597,6 +566,71 @@ duplicating it. See <a href="../../../reference/console/">reference/console</a>.
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

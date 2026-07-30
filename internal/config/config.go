@@ -54,8 +54,6 @@ type Config struct {
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.
 	DryRun bool `json:"dry_run" yaml:"dry_run" cli:"short=u"`
 
-	// AssumeInteractive allows interactive commands even when ISATTY returns false. Default false.
-	AssumeInteractive bool `json:"assume_interactive" yaml:"assume_interactive"`
 
 	// DefaultCharms are execution charms applied to every `magus run` / `magus x` by
 	// default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run
@@ -415,7 +413,6 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_ADDRESS", "daemon.address", "", "Adopt-server socket as a unix:// URL; empty auto-generates a per-process socket"},
 		{"MAGUS_DAEMON_IDLE_TTL", "daemon.idle_ttl", "6h", "Idle workspace eviction TTL for the multi-workspace daemon; e.g. \"6h\", \"30m\""},
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
-		{"MAGUS_ASSUME_INTERACTIVE", "assume_interactive", "false", "When 1 or true, assume an interactive terminal even if detection says otherwise"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},

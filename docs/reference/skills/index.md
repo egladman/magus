@@ -14,12 +14,13 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 
 | skill | full | short | saved | what it is for |
 | --- | --- | --- | --- | --- |
-| [magus-architecture](magus-architecture.md) | 4510 | 3967 | 12% | Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. |
-| [magus-buzz](magus-buzz.md) | 6148 | 5321 | 13% | Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. |
-| [magus-changes](magus-changes.md) | 5134 | 4417 | 13% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
-| [magus-docs](magus-docs.md) | 3670 | 3012 | 17% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
-| [magus-memory](magus-memory.md) | 3845 | 3190 | 17% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
-| [magus-query](magus-query.md) | 7785 | 6593 | 15% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
-| [magus-run](magus-run.md) | 8164 | 6630 | 18% | Run builds, tests, lints, and codegen through magus targets. |
-| [magus-vcs](magus-vcs.md) | 4723 | 3097 | 34% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
-| **all 8** | **43979** | **36227** | **17%** | |
+| [magus-architecture](magus-architecture.md) | 4510 | 3532 | 21% | Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. |
+| [magus-buzz](magus-buzz.md) | 6148 | 5180 | 15% | Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. |
+| [magus-changes](magus-changes.md) | 5134 | 3864 | 24% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
+| [magus-context-audit](magus-context-audit.md) | 5171 | 3687 | 28% | Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. |
+| [magus-docs](magus-docs.md) | 3670 | 2917 | 20% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
+| [magus-memory](magus-memory.md) | 3845 | 3167 | 17% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
+| [magus-query](magus-query.md) | 7785 | 5576 | 28% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
+| [magus-run](magus-run.md) | 7970 | 4199 | 47% | Run builds, tests, lints, and codegen through magus targets. |
+| [magus-vcs](magus-vcs.md) | 5402 | 3443 | 36% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
+| **all 9** | **49635** | **35565** | **28%** | |

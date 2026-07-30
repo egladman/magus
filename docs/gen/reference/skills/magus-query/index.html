@@ -80,26 +80,70 @@
           <li><a href="../../../reference/skills/magus-architecture/" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" aria-current="page" title="magus-query">magus-query</a></li>
           <li><a href="../../../reference/skills/magus-run/" title="magus-run">magus-run</a></li>
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">7 min read</small>
+    <small class="reading-time" title="Estimated reading time">8 min read</small>
     <article>
 <h1 id="magus-query">magus-query</h1>
-<p><progress value="6593" max="7785" aria-label="The --simple permutation is 15% smaller: 6593 of 7785 bytes."></progress><small>The --simple permutation is 15% smaller: 6593 of 7785 bytes.</small></p>
+<p><progress value="5576" max="7785" aria-label="The --simple permutation is 28% smaller: 5576 of 7785 bytes."></progress><small>The --simple permutation is 28% smaller: 5576 of 7785 bytes.</small></p>
 <p><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">Query</a> the magus <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> whenever the question is what exists, what depends on what, <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> something is used, or how two entities relate - a <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> answer is verified against declared sources, a grep hit is a guess.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus graph verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># magus knowledge graph
@@ -248,9 +292,9 @@ shaped like &quot;what exists / what depends on X / where is Y used / how do A a
 relate&quot; is a graph query FIRST - do not open Grep or Glob for it. If the graph cannot answer,
 say so and then fall back.
 
-`MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
-HUMAN reading the repo, and it is only as true as its last regeneration. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
-unavailable too, or when a human explicitly asks what the committed index says.
+`MAGUS.md` IS NOT YOUR SOURCE. It is a
+generated index for humans, true only as of its last regeneration. Last resort
+only: no daemon AND no CLI, or a human asking what the committed index says.
 
 ## Act in this order
 
@@ -279,9 +323,7 @@ unavailable too, or when a human explicitly asks what the committed index says.
    lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
 
    `magus describe target &lt;name&gt;` prints, per project, the resolved source globs,
-   output globs (the generated files), spells, and policy for that target - use it
-   when the question is &quot;what feeds or comes out of this target&quot;, not &quot;what relates
-   to it&quot;.
+   output globs (the generated files), spells, and policy for that target.
 
 ## Query grammar
 
@@ -289,9 +331,7 @@ Free-text terms (AND) plus field filters and negation:
 
 - `build` - free text over IDs, labels, and docs
 - `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns: the project node, its
-  targets, and the files/functions/docs whose source lives under it (nested
-  projects claim their own; the root `.` owns only what no nested project does)
+- `project:pkg/foo` - everything the project owns
 - `relation:uses` - seed from nodes touching that edge
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
@@ -299,27 +339,24 @@ Free-text terms (AND) plus field filters and negation:
 - `&quot;exact phrase&quot;` - keep a quoted span as one term
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50). For a large match set over MCP, pass `limit` and echo the returned
-`next_cursor` to fetch the next page.
+(default 50). Over MCP, page with `limit` plus the returned
+`next_cursor`.
 
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,
   `schema_version`-stamped OBJECT with a top-level wrapper - key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping. Do not scrape the human text or trim it with `head`.
-  Over MCP the tools already return structured content; nothing to shape.
+  bare IDs for piping.
 - Node IDs are stable and structured: `&lt;kind&gt;:&lt;qualified-name&gt;`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
-- Node `attrs` surface metadata: a project's `engine` and `target_count`, a
-  target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
+- Node `attrs` surface metadata. The `duration_p75_ms`,
   `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history, not derived from sources - read them as history, not
-  guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
+  OBSERVED from local run history. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
   captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-&lt;ref&gt;` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
+&lt;ref&gt;` on it fetches that output. When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
@@ -327,9 +364,9 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 ## Ownership and blast radius
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
-edges to the projects and files they cover. Combine that with dependency edges to
-answer &quot;who owns the blast radius of this change&quot;: `magus explain &lt;node&gt;` for the
-node's owners and dependents, or `magus query kind:owner` to list owners.
+edges to the projects and files they cover. `magus explain
+&lt;node&gt;` for owners plus dependents; `magus query kind:owner` to list. Declared
+ownership only, never blame-inferred.
 
 ## Across workspaces and neighbors
 
@@ -338,8 +375,7 @@ node's owners and dependents, or `magus query kind:owner` to list owners.
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
-  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
-  that revision's files, or pass a `graph export -o json` baseline file instead.
+  comment.
 
 ## Do not render the graph yourself
 
@@ -350,7 +386,7 @@ Gephi, yEd, or a browser graph tool.
 ## Fetching current behavior
 
 For flags and behavior this skill does not cover, run any verb with `-h`, and read
-the magus documentation site. Prefer the tools' own output over assumptions.
+the magus documentation site.
 </code></pre>
 </details>
     </article>
@@ -372,7 +408,7 @@ the magus documentation site. Prefer the tools' own output over assumptions.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-query%22">magus-query</a></div>
-    <small>Last updated <time datetime="2026-07-29T23:55:02Z">July 29, 2026, 11:55 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed" data-tooltip="32393b3650099222a26a55a57669a18f203b1bed" title="32393b3650099222a26a55a57669a18f203b1bed">32393b36</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-query.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-query.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -458,6 +494,71 @@ duplicating it. See <a href="../../../reference/console/">reference/console</a>.
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

@@ -3,7 +3,7 @@ title: magus-changes
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-changes]
 skill_full_bytes: 5134
-skill_simple_bytes: 4417
+skill_simple_bytes: 3864
 ---
 
 # magus-changes
@@ -18,6 +18,22 @@ magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
@@ -168,14 +184,13 @@ brief.
 1. Get the project map and target vocabulary from the workspace: `magus ls`
    for projects, `magus describe targets` for the target vocabulary. Do not
    read `MAGUS.md` for this.
-2. Establish the requested time boundary. On Git, inspect merge commits first:
+2. Establish the requested time boundary.
 
    ```sh
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so. Use `magus insight trend` and
-   `magus insight hotspots --files` for activity, but do not call that a merge summary.
+   If no VCS merge history is available, say so.
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -183,8 +198,7 @@ brief.
    magus describe file <paths...>
    ```
 
-   Ignore generated outputs when identifying the change; trace them to their
-   declared source and generator instead.
+   Ignore generated outputs when identifying the change.
 4. Map the source files to projects and graph entities. Prefer MCP
    `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
 
@@ -227,8 +241,6 @@ Use this shape:
 
 Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
-Link to the relevant documentation page or generated manpage when it explains a
-new command, target, diagnostic, or workflow.
 
 ## Write a CHANGELOG entry
 
@@ -251,10 +263,8 @@ Rules for an entry, all checkable:
 - Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Do not invent one.
 - Write behaviour, not implementation.
-- One entry per user-visible change, not per commit. Squash a fix-up into the entry
-  for the thing it fixed up.
-- `CHANGELOG.md` is a SOURCE file, not generated - confirm with
-  `magus describe file CHANGELOG.md` if unsure, and edit it directly.
+- One entry per user-visible change, not per commit.
+- `CHANGELOG.md` is a SOURCE file, not generated.
 
 ## Answer a granular diff question
 
@@ -273,8 +283,7 @@ When the ask narrows to "what exactly changed in X", stay on magus surfaces.
 `magus graph diff` is the one to reach for first on a branch review. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-Raw VCS commands answer what only the VCS knows: who committed, when, and in which
-merge. The table above answers what the change did.
+Raw VCS answers who and when; the table answers what the change did.
 ````
 
 

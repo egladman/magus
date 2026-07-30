@@ -80,6 +80,7 @@
           <li><a href="../../../reference/skills/magus-architecture/" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -87,21 +88,62 @@
           <li><a href="../../../reference/skills/magus-vcs/" aria-current="page" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#rules-for-generated-files" title="Rules for generated files">Rules for generated files</a></li><li><a href="#preparing-a-commit" title="Preparing a commit">Preparing a commit</a></li><li><a href="#rules-for-generated-files-1" title="Rules for generated files">Rules for generated files</a></li><li><a href="#preparing-a-commit-1" title="Preparing a commit">Preparing a commit</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus-vcs">magus-vcs</h1>
-<p><progress value="3097" max="4723" aria-label="The --simple permutation is 34% smaller: 3097 of 4723 bytes."></progress><small>The --simple permutation is 34% smaller: 3097 of 4723 bytes.</small></p>
+<p><progress value="3443" max="5402" aria-label="The --simple permutation is 36% smaller: 3443 of 5402 bytes."></progress><small>The --simple permutation is 36% smaller: 3443 of 5402 bytes.</small></p>
 <p>Safe git operations in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> (any repo with <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git <a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a> or a diff - especially one touching <a class="glossary-term" href="../../../glossary/#magusmd" data-def="The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first.">MAGUS.md</a>, gen/ trees, lockfiles, or other generated files. Classifies every changed <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> as generated output vs source (<a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># VCS hygiene in a magus workspace
@@ -118,83 +160,98 @@ each against the workspace's declared globs:
 
 ```sh
 magus describe file $(git diff --name-only) &lt;other paths...&gt;
-</code></pre>
-<p>MCP: <code>magus_<a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a>_file</code> {paths}. Each path comes back with its owning
-<a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> and a role:</p>
-<ul>
-<li><code>output</code> - matches a declared outputs glob: the file is GENERATED.</li>
-<li><code>source</code> - matches a declared sources glob: it feeds <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> keys and the
-<a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set. This is the diff worth reading.</li>
-<li><code>unclaimed</code> - no project declares it: it affects no <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>. Check the VCS
-ignore rules (<code>git check-ignore -v &lt;path&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>) - build residue should be
-ignored, and an unclaimed un-ignored file is at risk of being lost.</li>
-</ul>
-<p>WRONG: reading a 3000-line diff of <code>docs/gen/</code> to understand a change.
-CORRECT: note that <code>docs/gen/**</code> is a declared output of
-<code>docs:generate</code>, skip the diff, and read the source change that caused it.</p>
-<h2 id="rules-for-generated-files">Rules for generated files</h2>
-<ul>
-<li>Never hand-edit one. Change the source of truth, then <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> the producing
-target (usually <code><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> generate</code>).</li>
-<li>Do not investigate their diffs; regenerate and compare instead. If a generated
-file changed with no source change, that is the finding (stale or hand-edited
-output) - <code>magus run generate</code> should settle it.</li>
-<li>Distinguish real drift from environmental noise before you act. If regenerating
-reproduces the same diff while the target's declared inputs are unchanged, the
-drift is environmental (a tool-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> bump, an embedded timestamp), not your
-change. Report the tool or version; never revert the working tree to chase it.
-Real drift traces to a source edit; environmental drift traces to the toolchain.</li>
-<li>Commit regenerated outputs together with the source change that produced
-them. <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> typically runs the generate target as a drift gate: a source change
-whose outputs were not committed fails there.</li>
-<li>On merge conflicts in a generated file, do not merge hunks by hand: take
-either side, then regenerate. Workspaces wired with <code><a class="code-xref" href="../../manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> <a class="code-xref" href="../../manpage/magus-init/" data-kind="command" data-def="magus init: Bootstrap a magus workspace with a magus.yaml config, magusfile stub, and VCS merge driver; supports global, local, and non-interactive modes.">init</a></code> have
-a VCS merge driver that does this automatically.</li>
-<li><code>magus clean</code> removes declared outputs when you want a provably fresh
-regeneration.</li>
-</ul>
-<h2 id="preparing-a-commit">Preparing a commit</h2>
-<ol>
-<li>List the dirty tree with your VCS (<code>git status --porcelain</code>).</li>
-<li>Classify every path with <code>magus describe file</code> as above. Untracked files
-that are neither ignored nor declared outputs are the ones at risk of being
-silently lost - stage them or ask about them, never leave them dangling.</li>
-<li>Regenerate if any source of a generate target changed, and include the
-refreshed outputs in the same commit.</li>
-<li>Review <code>git status</code> first, then stage deliberately. <code>git add -A</code> stages every
-untracked file too, so a stray build artifact or scratch file rides along
-silently (this is how a compiled binary once slipped into a commit); use it
-only when <code>git status</code> shows nothing you do not intend, else stage the specific
-paths. Do not lean on a hand-typed path list as your only safeguard either:
-<code>git add</code> aborts on the first pathspec that matches nothing (staging none of
-the rest), and a path you just <code>git mv</code>d or <code>git rm</code>d is gone at its old name.
-Whichever you use, confirm with <code>git diff --cached --stat</code>: every intended edit,
-renames included (<code>renamed:</code>), must be present. <code>git commit</code> records what <code>git diff --cached</code> shows and does not re-check that your edits landed.</li>
-<li>Run <code><a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> before calling the work done: it runs the full
-pipeline over every project the diff reaches, including ones you never edited,
-and after committing confirms HEAD builds - a partial commit that drops a
-rename or an importer update leaves HEAD non-building.</li>
-</ol>
-<p>Never <code>git stash</code>, <code>git reset</code>, <code>git checkout .</code>, or <code>git clean</code> to &quot;verify a
+```
+
+MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+project and a role:
+
+- `output` - matches a declared outputs glob: the file is GENERATED.
+- `source` - matches a declared sources glob: it feeds cache keys and the
+  affected set. This is the diff worth reading.
+- `unclaimed` - no project declares it: it affects no target. Check the VCS
+  ignore rules (`git check-ignore -v &lt;path&gt;`) - build residue should be
+  ignored, and an unclaimed un-ignored file is at risk of being lost.
+
+WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
+CORRECT: note that `docs/gen/**` is a declared output of
+`docs:generate`, skip the diff, and read the source change that caused it.
+
+## Rules for generated files
+
+- Never hand-edit one. Change the source of truth, then run the producing
+  target (usually `magus run generate`).
+- Do not investigate their diffs; regenerate and compare instead. If a generated
+  file changed with no source change, that is the finding (stale or hand-edited
+  output) - `magus run generate` should settle it.
+- Distinguish real drift from environmental noise before you act. If regenerating
+  reproduces the same diff while the target's declared inputs are unchanged, the
+  drift is environmental (a tool-version bump, an embedded timestamp), not your
+  change. Report the tool or version; never revert the working tree to chase it.
+  Real drift traces to a source edit; environmental drift traces to the toolchain.
+- Commit regenerated outputs together with the source change that produced
+  them. CI typically runs the generate target as a drift gate: a source change
+  whose outputs were not committed fails there.
+- On merge conflicts in a generated file, do not merge hunks by hand: take
+  either side, then regenerate. Workspaces wired with `magus config init` have
+  a VCS merge driver that does this automatically.
+- `magus clean` removes declared outputs when you want a provably fresh
+  regeneration.
+
+## Preparing a commit
+
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add &lt;path&gt;...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in, which is the one thing
+`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
+1. List the dirty tree with your VCS (`git status --porcelain`).
+2. Classify every path with `magus describe file` as above. Untracked files
+   that are neither ignored nor declared outputs are the ones at risk of being
+   silently lost - stage them or ask about them, never leave them dangling.
+3. Regenerate if any source of a generate target changed, and include the
+   refreshed outputs in the same commit.
+4. Review `git status` first, then stage deliberately. `git add -A` stages every
+   untracked file too, so a stray build artifact or scratch file rides along
+   silently (this is how a compiled binary once slipped into a commit); use it
+   only when `git status` shows nothing you do not intend, else stage the specific
+   paths. Do not lean on a hand-typed path list as your only safeguard either:
+   `git add` aborts on the first pathspec that matches nothing (staging none of
+   the rest), and a path you just moved or removed is gone at its old name.
+   Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
+   renames included (`renamed:`), must be present. `git commit` records what `git
+   diff --cached` shows and does not re-check that your edits landed.
+5. Run `magus affected ci` before calling the work done: it runs the full
+   pipeline over every project the diff reaches, including ones you never edited,
+   and after committing confirms HEAD builds - a partial commit that drops a
+   rename or an importer update leaves HEAD non-building.
+
+Never `git stash`, `git reset`, `git checkout .`, or `git clean` to &quot;verify a
 build without committing.&quot; The working tree is ALREADY what you want to verify,
-so run <code>magus run build</code> / <code>magus <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> ci</code> in place; building does not
-require committing first. A whole-tree stash or reset also unrecoverably
+so run `magus run build` / `magus affected ci` in place; building does not
+require committing first. A whole-tree revert also unrecoverably
 destroys any untracked work a concurrent agent is writing. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
-<code>git worktree add</code>, never the live tree.</p>
-<p><code>magus_affected_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a></code> {project} answers why a specific project is in the
+`git worktree add`, never the live tree.
+
+`magus_affected_explain` {project} answers why a specific project is in the
 affected set (the changed files and dependency chains that pulled it in) when
-the result surprises you.</p>
-<pre><code>
-## Short form (`--simple`)
-
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
-
-&lt;details&gt;
-&lt;summary&gt;Show the short form&lt;/summary&gt;
-
-```markdown
-# VCS hygiene in a magus workspace
+the result surprises you.
+</code></pre>
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
 (`MAGUS.md`, `gen/` trees, lockfile-adjacent artifacts). Use the same
@@ -206,60 +263,71 @@ Feed every changed or conflicting path to magus in one call:
 
 ```sh
 magus describe file $(git diff --name-only) &lt;other paths...&gt;
-</code></pre>
-<p>MCP: <code>magus_describe_file</code> {paths}. Each path comes back with its owning
-project and a role:</p>
-<ul>
-<li><code>output</code> - matches a declared outputs glob: the file is GENERATED.</li>
-<li><code>source</code> - matches a declared sources glob: it feeds cache keys and the
-affected set. This is the diff worth reading.</li>
-<li><code>unclaimed</code> - no project declares it: it affects no target. Check the VCS
-ignore rules (<code>git check-ignore -v &lt;path&gt;</code>).</li>
-</ul>
-<h2 id="rules-for-generated-files-1">Rules for generated files</h2>
-<ul>
-<li>Never hand-edit one. Change the source of truth, then run the producing
-target (usually <code>magus run generate</code>).</li>
-<li>Do not investigate their diffs; regenerate and compare instead. If a generated
-file changed with no source change, that is the finding.</li>
-<li>Distinguish real drift from environmental noise before you act. If regenerating
-reproduces the same diff while the target's declared inputs are unchanged, the
-drift is environmental (a tool-version bump, an embedded timestamp), not your
-change. Report the tool or version; never revert the working tree to chase it.</li>
-<li>Commit regenerated outputs together with the source change that produced
-them.</li>
-<li>On merge conflicts in a generated file, do not merge hunks by hand: take
-either side, then regenerate.</li>
-<li><code>magus clean</code> removes declared outputs when you want a provably fresh
-regeneration.</li>
-</ul>
-<h2 id="preparing-a-commit-1">Preparing a commit</h2>
-<ol>
-<li>List the dirty tree with your VCS (<code>git status --porcelain</code>).</li>
-<li>Classify every path with <code>magus describe file</code> as above. Untracked files
-that are neither ignored nor declared outputs are the ones at risk of being
-silently lost - stage them or ask about them, never leave them dangling.</li>
-<li>Regenerate if any source of a generate target changed, and include the
-refreshed outputs in the same commit.</li>
-<li>Review <code>git status</code> first, then stage deliberately. <code>git add -A</code> stages every
-untracked file too; use it
-only when <code>git status</code> shows nothing you do not intend, else stage the specific
-paths. Do not lean on a hand-typed path list as your only safeguard either:
-<code>git add</code> aborts on the first pathspec that matches nothing (staging none of
-the rest), and a path you just <code>git mv</code>d or <code>git rm</code>d is gone at its old name.
-Whichever you use, confirm with <code>git diff --cached --stat</code>: every intended edit,
-renames included (<code>renamed:</code>), must be present.</li>
-<li>Run <code>magus affected ci</code> before calling the work done.</li>
-</ol>
-<p>Never <code>git stash</code>, <code>git reset</code>, <code>git checkout .</code>, or <code>git clean</code> to &quot;verify a
-build without committing.&quot; If you truly need a
+```
+
+MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+project and a role:
+
+- `output` - matches a declared outputs glob: the file is GENERATED.
+- `source` - matches a declared sources glob: it feeds cache keys and the
+  affected set. This is the diff worth reading.
+- `unclaimed` - no project declares it: it affects no target. Check the VCS
+  ignore rules (`git check-ignore -v &lt;path&gt;`).
+
+## Rules for generated files
+
+- Never hand-edit one. Change the source of truth, then run the producing
+  target (usually `magus run generate`).
+- Do not investigate their diffs; regenerate and compare instead. If a generated
+  file changed with no source change, that is the finding.
+- Distinguish real drift from environmental noise before you act.
+  Same diff on regenerate with inputs unchanged means environmental (tool
+  version, timestamp). Report the tool; never revert the tree to chase it.
+- Commit regenerated outputs together with the source change that produced
+  them.
+- On merge conflicts in a generated file, do not merge hunks by hand: take
+  either side, then regenerate.
+- `magus clean` removes declared outputs when you want a provably fresh
+  regeneration.
+
+## Preparing a commit
+
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add &lt;path&gt;...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
+1. List the dirty tree with your VCS (`git status --porcelain`).
+2. Classify every path with `magus describe file` as above. Untracked files
+   that are neither ignored nor declared outputs are the ones at risk of being
+   silently lost - stage them or ask about them, never leave them dangling.
+3. Regenerate if any source of a generate target changed, and include the
+   refreshed outputs in the same commit.
+4. Review `git status` first, then stage deliberately. Avoid staging
+   everything (stray artifacts ride along); a hand-typed path list is not safer,
+   since the first non-matching pathspec aborts the whole call. Confirm with
+   `git diff --cached --stat`: every intended edit, renames included.
+5. Run `magus affected ci` before calling the work done.
+
+Never `git stash`, `git reset`, `git checkout .`, or `git clean` to &quot;verify a
+build without committing.&quot; Build in place; a
+whole-tree revert destroys a concurrent agent's untracked work. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
-<code>git worktree add</code>, never the live tree.</p>
-<p><code>magus_affected_explain</code> {project} answers why a specific project is in the
-affected set.</p>
-<pre><code>
-&lt;/details&gt;
+`git worktree add`, never the live tree.
+
+`magus_affected_explain` {project} answers why a specific project is in the
+affected set.
 </code></pre>
+</details>
     </article>
     </div>
     </div>
@@ -278,7 +346,7 @@ affected set.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-vcs%22">magus-vcs</a></div>
-    <small>Last updated <time datetime="2026-07-29T23:55:02Z">July 29, 2026, 11:55 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed" data-tooltip="32393b3650099222a26a55a57669a18f203b1bed" title="32393b3650099222a26a55a57669a18f203b1bed">32393b36</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -333,6 +401,71 @@ so it is the entry point an agent reads first. See
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

@@ -159,6 +159,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
 		r.checkSpellContract(),
 		r.checkGraphCycles(),
+		r.checkGuardBinary(),
 		r.checkSymlinks(),
 		r.checkStaleWorktrees(),
 		r.checkEnvVars(),

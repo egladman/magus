@@ -1,0 +1,64 @@
+# The chain verbs hand-roll their argument parsing, because `--then` hands them a
+# raw tail rather than a FlagSet. That makes them the one argument surface in the
+# CLI that does not inherit Go's flag semantics for free, so this file pins that
+# they reproduce them deliberately.
+#
+# Two divergences were found by writing the grammar down, and both are pinned here:
+#
+#  1. `-path=out` was rejected while the other three spellings worked. A flag that
+#     takes three of four forms is worse than one that takes one, because the
+#     missing form fails looking like a bad VALUE rather than a bad syntax.
+#  2. Everything that was not --path was silently DROPPED, so `export --path out
+#     -o json` discarded the -o and `export stray --path out` discarded the stray.
+#     That is the accepted-and-ignored failure the --then separator exists to
+#     prevent, and the sibling verbs (contents, history, diff) already rejected it.
+
+exec magus run bundle:rw
+
+# All four spellings of --path resolve identically.
+exec magus run bundle:rw --then outputs export --path out1
+exists out1/dist/a.txt
+exec magus run bundle:rw --then outputs export -path out2
+exists out2/dist/a.txt
+exec magus run bundle:rw --then outputs export --path=out3
+exists out3/dist/a.txt
+exec magus run bundle:rw --then outputs export -path=out4
+exists out4/dist/a.txt
+
+# ... and on the file verb too.
+exec magus run bundle:rw --then file dist/a.txt export -path=copied.txt
+exists copied.txt
+
+# A trailing global flag is REJECTED, not dropped. This is the case that shipped
+# broken: the export ran and the -o json vanished.
+! exec magus run bundle:rw --then outputs export --path out5 -o json
+stderr 'unexpected argument'
+! exists out5
+
+# A stray positional before the flag is rejected too.
+! exec magus run bundle:rw --then outputs export stray --path out6
+stderr 'unexpected argument'
+! exists out6
+
+# The error names the flag AND says where global flags belong, so the fix is in
+# the message rather than in the usage block the reader has to go find.
+! exec magus run bundle:rw --then file dist/a.txt export --path out7 -o json
+stderr 'global flags go BEFORE --then'
+
+# A missing value is distinguishable from a missing flag.
+! exec magus run bundle:rw --then outputs export --path
+stderr '--path needs a value'
+! exec magus run bundle:rw --then outputs export
+stderr 'requires --path'
+
+-- magusfile.buzz --
+import "fs";
+import "magus";
+
+magus\project({"name": "chainflags", "spells": []});
+
+export fun bundle(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("dist/*.txt");
+    fs\mkdirall("dist");
+    fs\writeFile("dist/a.txt", "ARTIFACT\n");
+}

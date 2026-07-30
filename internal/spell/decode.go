@@ -48,13 +48,13 @@ func Decode(src Obj) (Descriptor, error) {
 	}
 	language, _ := src.Str("language")
 	m := Descriptor{
-		Name:       name,
-		Claims:     src.Strs("claims"),
-		IgnoreDirs: src.Strs("ignore_dirs"),
+		Name:        name,
+		Claims:      src.Strs("claims"),
+		IgnoreDirs:  src.Strs("ignore_dirs"),
 		VersionCmd:  src.Strs("version_cmd"),
 		VersionCmds: decodeVersionCmds(src),
-		Language:   language,
-		Opaque:     src.Bool("opaque"),
+		Language:    language,
+		Opaque:      src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs", "")

@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 4723
-skill_simple_bytes: 3097
+skill_full_bytes: 5402
+skill_simple_bytes: 3443
 ---
 
 # magus-vcs
@@ -19,11 +19,27 @@ magus agent install .claude/skills --simple   # the short form below
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
 
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+
 ## Full form
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
@@ -77,6 +93,21 @@ CORRECT: note that `docs/gen/**` is a declared output of
 
 ## Preparing a commit
 
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add <path>...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in, which is the one thing
+`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
    that are neither ignored nor declared outputs are the ones at risk of being
@@ -89,7 +120,7 @@ CORRECT: note that `docs/gen/**` is a declared output of
    only when `git status` shows nothing you do not intend, else stage the specific
    paths. Do not lean on a hand-typed path list as your only safeguard either:
    `git add` aborts on the first pathspec that matches nothing (staging none of
-   the rest), and a path you just `git mv`d or `git rm`d is gone at its old name.
+   the rest), and a path you just moved or removed is gone at its old name.
    Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
    renames included (`renamed:`), must be present. `git commit` records what `git
    diff --cached` shows and does not re-check that your edits landed.
@@ -101,7 +132,7 @@ CORRECT: note that `docs/gen/**` is a declared output of
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
 build without committing." The working tree is ALREADY what you want to verify,
 so run `magus run build` / `magus affected ci` in place; building does not
-require committing first. A whole-tree stash or reset also unrecoverably
+require committing first. A whole-tree revert also unrecoverably
 destroys any untracked work a concurrent agent is writing. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
@@ -109,7 +140,7 @@ pristine tree (e.g. to diff regenerated output), use a throwaway
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set (the changed files and dependency chains that pulled it in) when
 the result surprises you.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -118,7 +149,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
@@ -148,10 +179,9 @@ project and a role:
   target (usually `magus run generate`).
 - Do not investigate their diffs; regenerate and compare instead. If a generated
   file changed with no source change, that is the finding.
-- Distinguish real drift from environmental noise before you act. If regenerating
-  reproduces the same diff while the target's declared inputs are unchanged, the
-  drift is environmental (a tool-version bump, an embedded timestamp), not your
-  change. Report the tool or version; never revert the working tree to chase it.
+- Distinguish real drift from environmental noise before you act.
+  Same diff on regenerate with inputs unchanged means environmental (tool
+  version, timestamp). Report the tool; never revert the tree to chase it.
 - Commit regenerated outputs together with the source change that produced
   them.
 - On merge conflicts in a generated file, do not merge hunks by hand: take
@@ -161,29 +191,41 @@ project and a role:
 
 ## Preparing a commit
 
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add <path>...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
    that are neither ignored nor declared outputs are the ones at risk of being
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately. `git add -A` stages every
-   untracked file too; use it
-   only when `git status` shows nothing you do not intend, else stage the specific
-   paths. Do not lean on a hand-typed path list as your only safeguard either:
-   `git add` aborts on the first pathspec that matches nothing (staging none of
-   the rest), and a path you just `git mv`d or `git rm`d is gone at its old name.
-   Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
-   renames included (`renamed:`), must be present.
+4. Review `git status` first, then stage deliberately. Avoid staging
+   everything (stray artifacts ride along); a hand-typed path list is not safer,
+   since the first non-matching pathspec aborts the whole call. Confirm with
+   `git diff --cached --stat`: every intended edit, renames included.
 5. Run `magus affected ci` before calling the work done.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
-build without committing." If you truly need a
+build without committing." Build in place; a
+whole-tree revert destroys a concurrent agent's untracked work. If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
 
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set.
-```
+````
+
 
 </details>

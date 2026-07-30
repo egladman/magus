@@ -9,14 +9,14 @@ brief.<!-- why --> The output is a decision aid, not a chronological commit dump
    for projects, `magus describe targets` for the target vocabulary. Do not
    read `MAGUS.md` for this<!-- why --> - it is a generated index for human readers, and
    a history brief that describes stale structure is worse than none<!-- /why -->.
-2. Establish the requested time boundary. On Git, inspect merge commits first:
+2. Establish the requested time boundary.<!-- why --> On Git, inspect merge commits first:<!-- /why -->
 
    ```sh
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so. Use `magus insight trend` and
-   `magus insight hotspots --files` for activity, but do not call that a merge summary.
+   If no VCS merge history is available, say so.<!-- why --> Use `magus insight trend` and
+   `magus insight hotspots --files` for activity, but do not call that a merge summary.<!-- /why -->
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -24,8 +24,8 @@ brief.<!-- why --> The output is a decision aid, not a chronological commit dump
    magus describe file <paths...>
    ```
 
-   Ignore generated outputs when identifying the change; trace them to their
-   declared source and generator instead.
+   Ignore generated outputs when identifying the change<!-- why -->; trace them to their
+   declared source and generator instead<!-- /why -->.
 4. Map the source files to projects and graph entities. Prefer MCP
    `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
 
@@ -68,9 +68,9 @@ Use this shape:
 ```
 
 Do not label a refactor, generated-output refresh, dependency bump, or failed
-experiment as a landed feature unless the source and graph evidence support it.
+experiment as a landed feature unless the source and graph evidence support it.<!-- why -->
 Link to the relevant documentation page or generated manpage when it explains a
-new command, target, diagnostic, or workflow.
+new command, target, diagnostic, or workflow.<!-- /why -->
 
 ## Write a CHANGELOG entry
 
@@ -94,10 +94,10 @@ Rules for an entry, all checkable:
   `Removed`, `Fixed`, `Security`. Do not invent one.
 - Write behaviour, not implementation.<!-- why --> "The graph indexes the build I/O layer" is an
   entry; "refactored the extractor" is not.<!-- /why -->
-- One entry per user-visible change, not per commit. Squash a fix-up into the entry
-  for the thing it fixed up.
-- `CHANGELOG.md` is a SOURCE file, not generated - confirm with
-  `magus describe file CHANGELOG.md` if unsure, and edit it directly.
+- One entry per user-visible change, not per commit.<!-- why --> Squash a fix-up into the entry
+  for the thing it fixed up.<!-- /why -->
+- `CHANGELOG.md` is a SOURCE file, not generated<!-- why --> - confirm with
+  `magus describe file CHANGELOG.md` if unsure, and edit it directly<!-- /why -->.
 
 ## Answer a granular diff question
 
@@ -119,6 +119,6 @@ nodes and edges added, removed, or changed, which is blast radius as data rather
 than a file list to interpret<!-- /why -->. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-Raw VCS commands answer what only the VCS knows: who committed, when, and in which
-merge. The table above answers what the change did.<!-- why --> Reading a raw diff to work out
-what a change affects is the work these verbs already did.<!-- /why -->
+<!-- why -->Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+merge. The table above answers what the change did. Reading a raw diff to work out
+what a change affects is the work these verbs already did.<!-- /why --><!-- terse -->Raw VCS answers who and when; the table answers what the change did.<!-- /terse -->

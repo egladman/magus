@@ -98,9 +98,31 @@ func VariantOf(simple bool) Variant {
 // is the WHY; what both keep is the WHAT. An author deciding where the marker
 // goes is answering "would a capable reader still do the right thing without this
 // sentence?", and that question is the curation.
+// terseOpen and terseClose bracket prose that only [VariantSimple] keeps: the
+// short wording of something the full form says at length.
+//
+// The why markers alone cap how short the simple form can get, because they can
+// only SUBTRACT. Simple is "full minus the marked spans", so a passage that
+// needs two sentences in the full form has to appear at that length in both, and
+// the only way to shorten it further is to drop it entirely and lose the step.
+// Measured on magus-run: widening the why brackets as far as they go reached 31%
+// against a 50-60% target, with the remainder sitting in command blocks and
+// tables that are the highest-value bytes on the page.
+//
+// A why span immediately followed by a terse span is therefore the two-wording
+// idiom - long version, then short version - and it is what makes real
+// compression possible without the full form losing anything:
+//
+//	<!-- why -->the full explanation, at length<!-- /why --><!-- terse -->the gist<!-- /terse -->
+//
+// Neither marker is required, and a span with no counterpart still means what it
+// always did: why-only is "full says more", terse-only is "simple says this and
+// full says nothing", which is almost always a mistake worth noticing in review.
 const (
-	whyOpen  = "<!-- why -->"
-	whyClose = "<!-- /why -->"
+	whyOpen    = "<!-- why -->"
+	whyClose   = "<!-- /why -->"
+	terseOpen  = "<!-- terse -->"
+	terseClose = "<!-- /terse -->"
 )
 
 // applyVariant renders body for v: [VariantSimple] removes each marked span,
@@ -111,35 +133,57 @@ const (
 // mis-elides ships a skill missing a step, and a missing step in an instruction
 // file is indistinguishable from an instruction not to do it.
 func applyVariant(name, body string, v Variant) (string, error) {
+	// Two passes over the same machinery, differing only in which variant keeps
+	// the span. Order does not matter: the pairs may sit adjacent but never nest,
+	// which resolveSpans enforces.
+	out, err := resolveSpans(name, body, whyOpen, whyClose, v == VariantFull)
+	if err != nil {
+		return "", err
+	}
+	out, err = resolveSpans(name, out, terseOpen, terseClose, v == VariantSimple)
+	if err != nil {
+		return "", err
+	}
+	return tidyBlankLines(out), nil
+}
+
+// resolveSpans removes every open/close pair from body, keeping the bracketed
+// prose when keep is set and dropping it otherwise. Either way the markers
+// themselves go, so no scaffolding reaches an installed file.
+//
+// Unbalanced markers are an ERROR, never a best guess. A generator that silently
+// mis-elides ships a skill missing a step, and a missing step in an instruction
+// file is indistinguishable from an instruction not to do it.
+func resolveSpans(name, body, open, close string, keep bool) (string, error) {
 	var b strings.Builder
 	rest := body
 	for {
-		open := strings.Index(rest, whyOpen)
-		if open < 0 {
-			if strings.Contains(rest, whyClose) {
-				return "", fmt.Errorf("skill %q: %s with no matching %s", name, whyClose, whyOpen)
+		i := strings.Index(rest, open)
+		if i < 0 {
+			if strings.Contains(rest, close) {
+				return "", fmt.Errorf("skill %q: %s with no matching %s", name, close, open)
 			}
 			b.WriteString(rest)
 			break
 		}
-		after := rest[open+len(whyOpen):]
-		close := strings.Index(after, whyClose)
-		if close < 0 {
-			return "", fmt.Errorf("skill %q: %s with no matching %s", name, whyOpen, whyClose)
+		after := rest[i+len(open):]
+		j := strings.Index(after, close)
+		if j < 0 {
+			return "", fmt.Errorf("skill %q: %s with no matching %s", name, open, close)
 		}
-		if inner := after[:close]; strings.Contains(inner, whyOpen) {
-			return "", fmt.Errorf("skill %q: nested %s", name, whyOpen)
+		if strings.Contains(after[:j], open) {
+			return "", fmt.Errorf("skill %q: nested %s", name, open)
 		}
-		b.WriteString(rest[:open])
-		if v == VariantFull {
-			b.WriteString(after[:close])
+		b.WriteString(rest[:i])
+		if keep {
+			b.WriteString(after[:j])
 		}
-		rest = after[close+len(whyClose):]
-		if v == VariantSimple {
+		rest = after[j+len(close):]
+		if !keep {
 			trimSeam(&b, rest)
 		}
 	}
-	return tidyBlankLines(b.String()), nil
+	return b.String(), nil
 }
 
 // trimSeam drops the space left dangling at an elision boundary, when the removed
@@ -209,6 +253,7 @@ var skillSources = []skillSource{
 	{name: "magus-architecture", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture/SKILL.md"},
 	{name: "magus-buzz", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz/SKILL.md"},
 	{name: "magus-changes", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
+	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-docs", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs/SKILL.md"},
 	{name: "magus-memory", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
@@ -577,3 +622,18 @@ func (c *Catalog) gradeStamp(location, reinstall, body string) Status {
 
 // Section returns the provider-neutral always-on AGENTS.md guidance.
 func (c *Catalog) Section() string { return c.agentsSection }
+
+// VariantSize returns the total rendered size of every skill in v, stamp
+// included, so a caller can state the context cost of an install without
+// performing one.
+func (c *Catalog) VariantSize(v Variant) (int64, error) {
+	skills, err := c.EmbeddedSkills(v)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, s := range skills {
+		total += int64(len(c.StampSkill(c.RenderSkill(s), v)))
+	}
+	return total, nil
+}

@@ -2,10 +2,12 @@
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
 it as a general-purpose scripting language with the whole magus host surface
-attached. In a magus workspace it is the right reach for a one-off script -
-scanning files, reshaping JSON/YAML/TOML, templating, hitting HTTP<!-- why --> - because it
+attached.<!-- why --> In a magus workspace it is the right reach for a one-off script -
+scanning files, reshaping JSON/YAML/TOML, templating, hitting HTTP - because it
 is already installed, it needs no dependency install or virtualenv, and it is
-the same language the workspace's own build logic is written in<!-- /why -->.
+the same language the workspace's own build logic is written in.<!-- /why --><!-- terse --> Reach for it for a
+one-off script: already installed, no dependency install, same language as the
+workspace's build logic.<!-- /terse -->
 
 ## The smallest thing that runs
 
@@ -46,7 +48,7 @@ magus describe modules -o name        # every module available to a script
 magus describe module json            # its methods, docs, and SIGNATURES with return types
 ```
 
-This file teaches the fundamentals and nothing more. Escalate deliberately:
+<!-- why -->This file teaches the fundamentals and nothing more. Escalate deliberately:<!-- /why --><!-- terse -->Escalate deliberately:<!-- /terse -->
 
 | question | where |
 | --- | --- |
@@ -54,8 +56,9 @@ This file teaches the fundamentals and nothing more. Escalate deliberately:
 | how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
-Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
-behavior - is documented; search it rather than guessing from this page.
+<!-- why -->Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
+behavior - is documented; search it rather than guessing from this page.<!-- /why --><!-- terse -->Error sets, fibers, generics, the full stdlib and sandbox behavior are all
+documented; search rather than guess.<!-- /terse -->
 
 WRONG: assume `strings\toLower(s)` or `json\encode(v)` exist.
 CORRECT: `magus describe module strings`, then write what it lists.
@@ -85,7 +88,8 @@ magusfile's targets<!-- /why -->, so use it from a magusfile, not a standalone s
 
 1. **Control flow is not allowed at the top level.**<!-- why --> Declarations and expression
    statements are; `if`/`while`/`for` are not.<!-- /why --> Put them in a function and call
-   it. `magus buzz --embedded` relaxes this if you want a throwaway snippet.
+   it.<!-- why --> `magus buzz --embedded` relaxes this if you want a throwaway snippet.<!-- /why --><!-- terse -->
+   (`--embedded` relaxes this.)<!-- /terse -->
 2. **Every argument after the first must be labeled.**
 
 ```buzz

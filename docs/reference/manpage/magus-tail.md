@@ -10,7 +10,7 @@ Stream the most recent cached log (interactive only)
 
 ## Synopsis
 
-**magus** tail [-f] [-n N] [target]
+**magus** tail [-f] [-n \<count\>] [target]
 
 ## Description
 
@@ -18,8 +18,8 @@ Stream the captured build log of the most recent cache entry for a
 project. The log was written during a cache miss (when the build actually
 ran). Subsequent cache hits replay the same log without re-running the build.
 
-Requires an interactive terminal (like magus x). Set assume_interactive: true
-in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override.
+Only -f (follow) requires an interactive terminal. Without it, tail prints the
+last -n lines to stdout and exits, which works in a script or a pipeline.
 
 target follows the canonical path:target form used by magus run:
   (none)     cwd project, latest run of any target

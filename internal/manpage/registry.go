@@ -166,8 +166,8 @@ var tailCommand = Command{
 project. The log was written during a cache miss (when the build actually
 ran). Subsequent cache hits replay the same log without re-running the build.
 
-Requires an interactive terminal (like magus x). Set assume_interactive: true
-in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override.
+Only -f (follow) requires an interactive terminal. Without it, tail prints the
+last -n lines to stdout and exits, which works in a script or a pipeline.
 
 target follows the canonical path:target form used by magus run:
   (none)     cwd project, latest run of any target
@@ -177,7 +177,7 @@ target follows the canonical path:target form used by magus run:
 
 Exits non-zero when the project is not found, or when no cache entries
 exist yet (run a build first).`,
-	Usage: "magus tail [-f] [-n N] [target]",
+	Usage: "magus tail [-f] [-n <count>] [target]",
 	Examples: []Example{
 		{"Stream last log for cwd project", "magus tail"},
 		{"Follow (stream new output as it arrives)", "magus tail -f"},
@@ -582,7 +582,7 @@ var manCommand = Command{
 	Description: "Write magus section 1 man pages from the running binary to a user-selected manpath.",
 	Tags:        []string{"cli", "magus man", "manpage", "documentation", "install"},
 	Long:        `Write the complete magus manpage set carried by this binary. The installer uses this command to place the pages under the selected installation prefix.`,
-	Usage:       "magus man install [--dir DIR]",
+	Usage:       "magus man install [--dir <path>]",
 	Children: []Command{
 		{Name: "install", Short: "Write the embedded section 1 man pages"},
 	},

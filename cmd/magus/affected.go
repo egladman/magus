@@ -728,18 +728,19 @@ func countLabel(n int, singular, plural string) string {
 // Returns (project, base, true) when --explain is present; otherwise ("", "", false).
 func parseExplainArgs(args []string) (project, base string, ok bool) {
 	for i, a := range args {
-		if a == "--explain" {
+		switch {
+		case isFlagNamed(a, "explain"):
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
 				project = args[i+1]
 			}
 			ok = true
-		} else if strings.HasPrefix(a, "--explain=") {
-			project = strings.TrimPrefix(a, "--explain=")
+		case flagValueOf(a, "explain") != "":
+			project = flagValueOf(a, "explain")
 			ok = true
-		} else if a == "--base" && i+1 < len(args) {
+		case isFlagNamed(a, "base") && i+1 < len(args):
 			base = args[i+1]
-		} else if strings.HasPrefix(a, "--base=") {
-			base = strings.TrimPrefix(a, "--base=")
+		case flagValueOf(a, "base") != "":
+			base = flagValueOf(a, "base")
 		}
 	}
 	return project, base, ok

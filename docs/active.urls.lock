@@ -162,6 +162,7 @@ guides/integrations/daemon/
 guides/integrations/editor/
 guides/integrations/mcp/
 guides/mcp/
+guides/quickstart/
 guides/testing/
 guides/tips/
 index.html
@@ -332,6 +333,7 @@ reference/skills/
 reference/skills/magus-architecture/
 reference/skills/magus-buzz/
 reference/skills/magus-changes/
+reference/skills/magus-context-audit/
 reference/skills/magus-docs/
 reference/skills/magus-memory/
 reference/skills/magus-query/

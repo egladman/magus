@@ -38,7 +38,7 @@ import (
 // chainUsage is the shared usage text; every misuse in this file prints it, so a
 // wrong verb teaches the whole grammar rather than only naming what failed.
 func chainUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [projects...] --then <verb> [args]")
+	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [project...] --then <verb> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Verbs, applied to the files the target declared as outputs:")
 	fmt.Fprintln(os.Stderr, "  outputs                          list every artifact produced")
@@ -251,21 +251,50 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 	return nil
 }
 
-// chainPathFlag reads the required --path value for an export verb.
+// chainPathFlag reads the required --path value for an export verb, and rejects
+// everything else.
+//
+// It is hand-rolled rather than a FlagSet because the chain grammar is
+// positional and `--then` hands it a raw tail. That makes it the one argument
+// reader in the CLI that does not inherit Go's flag semantics for free, so it
+// has to reproduce them deliberately. Two ways it previously did not, both found
+// by writing the grammar down as a test:
+//
+//   - It accepted `--path v`, `-path v` and `--path=v` but NOT `-path=v`. Three
+//     spellings out of four is worse than one, because the missing one fails
+//     looking like a bad value rather than a bad syntax.
+//   - It scanned for --path anywhere and IGNORED every other argument, so
+//     `export --path out -o json` silently dropped the `-o json` and
+//     `export stray --path out` silently dropped `stray`. That is precisely the
+//     accepted-and-ignored failure the `--then` separator exists to prevent, and
+//     the sibling verbs (history, diff, contents) already rejected it.
+//
+// Repeat flags take the LAST value, matching Go's flag package rather than
+// inventing a stricter rule for one command.
 func chainPathFlag(argv []string, verb string) (string, error) {
-	for i, a := range argv {
-		if a == "--path" || a == "-path" {
+	dst, seen := "", false
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		switch {
+		case isFlagNamed(a, "path"):
 			if i+1 >= len(argv) {
 				return "", usagef("magus run: %s: --path needs a value", verb)
 			}
-			return argv[i+1], nil
-		}
-		if v, ok := strings.CutPrefix(a, "--path="); ok {
-			return v, nil
+			dst, seen = argv[i+1], true
+			i++
+		case flagValueOf(a, "path") != "":
+			dst, seen = flagValueOf(a, "path"), true
+		default:
+			chainUsage()
+			return "", usagef("magus run: %s: unexpected argument %q (want only --path <dir>; "+
+				"global flags go BEFORE --then)", verb, a)
 		}
 	}
-	chainUsage()
-	return "", usagef("magus run: %s requires --path <dir>", verb)
+	if !seen {
+		chainUsage()
+		return "", usagef("magus run: %s requires --path <dir>", verb)
+	}
+	return dst, nil
 }
 
 // artifactRoles classifies artifacts so a structured result says whether each file

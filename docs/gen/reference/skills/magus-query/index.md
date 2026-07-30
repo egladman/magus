@@ -3,7 +3,7 @@ title: magus-query
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
 skill_full_bytes: 7785
-skill_simple_bytes: 6593
+skill_simple_bytes: 5576
 ---
 
 # magus-query
@@ -18,6 +18,22 @@ magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
@@ -175,9 +191,9 @@ shaped like "what exists / what depends on X / where is Y used / how do A and B
 relate" is a graph query FIRST - do not open Grep or Glob for it. If the graph cannot answer,
 say so and then fall back.
 
-`MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
-HUMAN reading the repo, and it is only as true as its last regeneration. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
-unavailable too, or when a human explicitly asks what the committed index says.
+`MAGUS.md` IS NOT YOUR SOURCE. It is a
+generated index for humans, true only as of its last regeneration. Last resort
+only: no daemon AND no CLI, or a human asking what the committed index says.
 
 ## Act in this order
 
@@ -206,9 +222,7 @@ unavailable too, or when a human explicitly asks what the committed index says.
    lists each project's symbol-index state; `magus graph build` indexes and rebuilds.
 
    `magus describe target <name>` prints, per project, the resolved source globs,
-   output globs (the generated files), spells, and policy for that target - use it
-   when the question is "what feeds or comes out of this target", not "what relates
-   to it".
+   output globs (the generated files), spells, and policy for that target.
 
 ## Query grammar
 
@@ -216,9 +230,7 @@ Free-text terms (AND) plus field filters and negation:
 
 - `build` - free text over IDs, labels, and docs
 - `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns: the project node, its
-  targets, and the files/functions/docs whose source lives under it (nested
-  projects claim their own; the root `.` owns only what no nested project does)
+- `project:pkg/foo` - everything the project owns
 - `relation:uses` - seed from nodes touching that edge
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
@@ -226,27 +238,24 @@ Free-text terms (AND) plus field filters and negation:
 - `"exact phrase"` - keep a quoted span as one term
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50). For a large match set over MCP, pass `limit` and echo the returned
-`next_cursor` to fetch the next page.
+(default 50). Over MCP, page with `limit` plus the returned
+`next_cursor`.
 
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,
   `schema_version`-stamped OBJECT with a top-level wrapper - key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping. Do not scrape the human text or trim it with `head`.
-  Over MCP the tools already return structured content; nothing to shape.
+  bare IDs for piping.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
-- Node `attrs` surface metadata: a project's `engine` and `target_count`, a
-  target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
+- Node `attrs` surface metadata. The `duration_p75_ms`,
   `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history, not derived from sources - read them as history, not
-  guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
+  OBSERVED from local run history. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
   captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-<ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
+<ref>` on it fetches that output. When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
@@ -254,9 +263,9 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 ## Ownership and blast radius
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
-edges to the projects and files they cover. Combine that with dependency edges to
-answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind:owner` to list owners.
+edges to the projects and files they cover. `magus explain
+<node>` for owners plus dependents; `magus query kind:owner` to list. Declared
+ownership only, never blame-inferred.
 
 ## Across workspaces and neighbors
 
@@ -265,8 +274,7 @@ node's owners and dependents, or `magus query kind:owner` to list owners.
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
-  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
-  that revision's files, or pass a `graph export -o json` baseline file instead.
+  comment.
 
 ## Do not render the graph yourself
 
@@ -277,7 +285,8 @@ Gephi, yEd, or a browser graph tool.
 ## Fetching current behavior
 
 For flags and behavior this skill does not cover, run any verb with `-h`, and read
-the magus documentation site. Prefer the tools' own output over assumptions.
+the magus documentation site.
 ```
+
 
 </details>

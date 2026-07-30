@@ -22,6 +22,7 @@ var completionPowerShell string
 
 func completion(args []string) error {
 	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = completionUsage
 	if err := fs.Parse(args); err != nil {
 		return err

@@ -148,3 +148,35 @@ func flagIsBool(f *flag.Flag) bool {
 func outputOptionsOrDefault() (OutputOptions, error) {
 	return ResolveOutput(global.output)
 }
+
+// isFlagNamed and flagValueOf recognize a flag the way Go's flag package does,
+// for the few readers that scan a raw argument tail instead of a FlagSet.
+//
+// Go accepts all FOUR spellings of every flag - `-f v`, `--f v`, `-f=v`,
+// `--f=v` - so every magus flag does too, for free, everywhere cmdParse is used.
+// A hand-rolled scanner only accepts the spellings its author happened to write,
+// and the resulting gap is invisible until someone types the missing one:
+//
+//   - `--then outputs export -path=out` was rejected as a bad value, not a bad
+//     syntax, because chainPathFlag handled three of the four.
+//   - `magus affected -explain .` did not error on the flag at all. The scanner
+//     matched only `--explain`, so `-explain` fell through and `.` was read as a
+//     TARGET, producing "target name \".\": must contain only letters, digits..."
+//   - an error naming neither the flag nor the real problem.
+//
+// These exist so that gap is closed once rather than re-derived per call site.
+// Prefer a FlagSet; reach for these only when the tail cannot go through one.
+func isFlagNamed(arg, name string) bool {
+	return arg == "-"+name || arg == "--"+name
+}
+
+// flagValueOf returns the value of an `-name=value` or `--name=value` argument,
+// or "" when arg is not that flag.
+func flagValueOf(arg, name string) string {
+	for _, prefix := range []string{"-" + name + "=", "--" + name + "="} {
+		if v, ok := strings.CutPrefix(arg, prefix); ok {
+			return v
+		}
+	}
+	return ""
+}

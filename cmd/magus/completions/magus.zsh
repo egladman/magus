@@ -68,6 +68,7 @@ _magus() {
                 'man:install the man pages embedded in this binary'
                 'init:bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
                 'agent:install the knowledge-graph agent skills into a repo (agent install <dir>)'
+                'vcs:stage a change by what the workspace declares (vcs add), instead of git add -A'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
                 'help:show this message'

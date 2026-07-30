@@ -14,6 +14,7 @@ import (
 
 func configCmd(ctx context.Context, root string, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -129,6 +130,7 @@ func intOrDef(n int, def string) string {
 
 func runConfigSet(args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	useGlobal := fs.Bool("global", false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")

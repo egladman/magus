@@ -80,6 +80,7 @@
           <li><a href="../../../reference/skills/magus-architecture/" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" aria-current="page" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -87,7 +88,7 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#write-the-brief" title="Write the brief">Write the brief</a></li><li><a href="#write-a-changelog-entry" title="Write a CHANGELOG entry">Write a CHANGELOG entry</a></li><li><a href="#answer-a-granular-diff-question" title="Answer a granular diff question">Answer a granular diff question</a></li><li><a href="#write-the-brief-1" title="Write the brief">Write the brief</a></li><li><a href="#write-a-changelog-entry-1" title="Write a CHANGELOG entry">Write a CHANGELOG entry</a></li><li><a href="#answer-a-granular-diff-question-1" title="Answer a granular diff question">Answer a granular diff question</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -95,13 +96,54 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus-changes">magus-changes</h1>
-<p><progress value="4417" max="5134" aria-label="The --simple permutation is 13% smaller: 4417 of 5134 bytes."></progress><small>The --simple permutation is 13% smaller: 4417 of 5134 bytes.</small></p>
+<p><progress value="3864" max="5134" aria-label="The --simple permutation is 24% smaller: 3864 of 5134 bytes."></progress><small>The --simple permutation is 24% smaller: 3864 of 5134 bytes.</small></p>
 <p>Summarize what changed in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>, write it up, or answer a granular diff question. Use for &quot;what's been merged lately?&quot;, &quot;catch me up since last week&quot;, &quot;add this to the CHANGELOG&quot;, and &quot;what exactly did this branch change?&quot; Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (<a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> diff, <a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> file, <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> --impact/--<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a>) rather than reading a raw diff; do not infer features from commit subjects alone.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus graph verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># Recent changes in a magus workspace
@@ -119,37 +161,46 @@ brief. The output is a decision aid, not a chronological commit dump.
 
    ```sh
    git log --first-parent --merges --since=&quot;&lt;window&gt;&quot; --format='%h %ad %s' --date=short
-</code></pre>
-<p>If no VCS merge history is available, say so. Use <code><a class="code-xref" href="../../manpage/magus-insight/" data-kind="command" data-def="Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">magus insight</a> trend</code> and
-<code>magus <a class="code-xref" href="../../manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a> hotspots --files</code> for activity, but do not call that a merge summary.
-3. For each candidate change, list its files, then classify them before reading:</p>
-<pre><code class="language-sh">git show --format= --name-only &lt;commit&gt;
-magus describe file &lt;paths...&gt;
-</code></pre>
-<p>Ignore generated outputs when identifying the change; <a class="glossary-term" href="../../../glossary/#trace" data-def="OpenTelemetry's name for one whole magus invocation; every target it runs is a span beneath it.">trace</a> them to their
-declared source and generator instead.
+   ```
+
+   If no VCS merge history is available, say so. Use `magus insight trend` and
+   `magus insight hotspots --files` for activity, but do not call that a merge summary.
+3. For each candidate change, list its files, then classify them before reading:
+
+   ```sh
+   git show --format= --name-only &lt;commit&gt;
+   magus describe file &lt;paths...&gt;
+   ```
+
+   Ignore generated outputs when identifying the change; trace them to their
+   declared source and generator instead.
 4. Map the source files to projects and graph entities. Prefer MCP
-<code>magus_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code>, <code>magus_explain</code>, and <code>magus_describe_file</code>; otherwise use:</p>
-<pre><code class="language-sh">magus query &quot;&lt;project or feature terms&gt;&quot;
-magus explain &lt;node&gt;
-magus graph diff --rev &lt;base&gt; -o markdown
-</code></pre>
-<ol start="5">
-<li>Use <code>magus insight affinity</code>, <code>ownership</code>, and <code>trend</code> only to add context:
-hidden coupling, <a class="glossary-term" href="../../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a> risk, or unusually rising activity. They do not
-prove that a feature landed.</li>
-</ol>
-<h2 id="write-the-brief">Write the brief</h2>
-<p>Lead with three to seven grouped changes, not every commit. For each item state:</p>
-<ul>
-<li><strong>What landed</strong> - a plain-language feature or behavioral change.</li>
-<li><strong><a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a></strong> - projects and graph entities <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>.</li>
-<li><strong>Evidence</strong> - merge commit(s), source files, and the relevant graph relation.</li>
-<li><strong>Why it matters</strong> - user impact, dependency impact, or an explicit uncertainty.</li>
-<li><strong>Follow-up</strong> - a concrete next command when more detail is useful.</li>
-</ul>
-<p>Use this shape:</p>
-<pre><code class="language-markdown">## Recent changes since &lt;boundary&gt;
+   `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
+
+   ```sh
+   magus query &quot;&lt;project or feature terms&gt;&quot;
+   magus explain &lt;node&gt;
+   magus graph diff --rev &lt;base&gt; -o markdown
+   ```
+
+5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
+   hidden coupling, ownership risk, or unusually rising activity. They do not
+   prove that a feature landed.
+
+## Write the brief
+
+Lead with three to seven grouped changes, not every commit. For each item state:
+
+- **What landed** - a plain-language feature or behavioral change.
+- **Where** - projects and graph entities affected.
+- **Evidence** - merge commit(s), source files, and the relevant graph relation.
+- **Why it matters** - user impact, dependency impact, or an explicit uncertainty.
+- **Follow-up** - a concrete next command when more detail is useful.
+
+Use this shape:
+
+```markdown
+## Recent changes since &lt;boundary&gt;
 
 ### &lt;feature or change&gt;
 
@@ -162,92 +213,69 @@ prove that a feature landed.</li>
 ## Watch items
 
 - &lt;hidden affinity, ownership, or trend signal - or &quot;None found.&quot;&gt;
-</code></pre>
-<p>Do not label a refactor, generated-output refresh, dependency bump, or failed
+```
+
+Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
-new command, <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, diagnostic, or workflow.</p>
-<h2 id="write-a-changelog-entry">Write a CHANGELOG entry</h2>
-<p>A brief is for a person catching up; a changelog entry is a durable record. When
+new command, target, diagnostic, or workflow.
+
+## Write a CHANGELOG entry
+
+A brief is for a person catching up; a changelog entry is a durable record. When
 the ask is &quot;add this to the changelog&quot;, match the file's existing shape - Keep a
-Changelog 1.1.0 with SemVer - and append under <code>## [Unreleased]</code>:</p>
-<pre><code class="language-markdown">### Added
+Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
+
+```markdown
+### Added
 
 - &lt;What a user can now do, in one sentence.&gt; &lt;Why it is the right shape, or what it
   replaces.&gt; Set `&lt;config.key&gt;` (env `MAGUS_&lt;CONFIG_KEY&gt;`) to &lt;what the toggle does&gt;;
   &lt;default&gt;.
-</code></pre>
-<p>Rules for an entry, all checkable:</p>
-<ul>
-<li>Name every <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> it adds: the <a class="code-xref" href="../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> key WITH its env var, the CLI flag, the
-<a class="glossary-term" href="../../../glossary/#diagnostic-code" data-def="A stable MGSxxxx identifier attached to a magus warning or error, so it can be referenced and looked up; some are guardrails (see wards), others hard errors.">diagnostic code</a>, the target. A reader upgrades by searching for those strings.</li>
-<li>Section headings are Keep a Changelog's: <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>,
-<code>Removed</code>, <code>Fixed</code>, <code>Security</code>. Do not invent one.</li>
-<li>Write behaviour, not implementation. &quot;The graph indexes the build I/O layer&quot; is an
-entry; &quot;refactored the extractor&quot; is not.</li>
-<li>One entry per user-visible change, not per commit. Squash a fix-up into the entry
-for the thing it fixed up.</li>
-<li><code>CHANGELOG.md</code> is a SOURCE file, not generated - confirm with
-<code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> file CHANGELOG.md</code> if unsure, and edit it directly.</li>
-</ul>
-<h2 id="answer-a-granular-diff-question">Answer a granular diff question</h2>
-<p>When the ask narrows to &quot;what exactly changed in <a class="code-xref" href="../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a>&quot;, stay on magus surfaces: they
-classify and relate, where a raw diff only shows text.</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>question</th>
-<th>command</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>what did this change do to the domain's shape</td>
-<td><code>magus graph diff --rev &lt;base&gt; -o markdown</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></td>
-</tr>
-<tr>
-<td>is this changed file source or generated output</td>
-<td><code>magus describe file &lt;paths...&gt;</code></td>
-</tr>
-<tr>
-<td>which projects does the change reach</td>
-<td><code><a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --impact</code></td>
-</tr>
-<tr>
-<td>why is THIS <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in the affected set</td>
-<td><code>magus affected --explain &lt;project&gt;</code></td>
-</tr>
-<tr>
-<td>what does one node's neighborhood look like now</td>
-<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a> &lt;node&gt;</code></td>
-</tr>
-<tr>
-<td>where is this symbol defined and used</td>
-<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Find a symbol's definition and references.">magus refs</a> &lt;symbol&gt;</code></td>
-</tr>
-<tr>
-<td>what did a target actually output</td>
-<td><code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output &lt;ref&gt;</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p><code>magus graph diff</code> is the one to reach for first on a branch review: it reports the
+```
+
+Rules for an entry, all checkable:
+
+- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+  diagnostic code, the target. A reader upgrades by searching for those strings.
+- Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
+  `Removed`, `Fixed`, `Security`. Do not invent one.
+- Write behaviour, not implementation. &quot;The graph indexes the build I/O layer&quot; is an
+  entry; &quot;refactored the extractor&quot; is not.
+- One entry per user-visible change, not per commit. Squash a fix-up into the entry
+  for the thing it fixed up.
+- `CHANGELOG.md` is a SOURCE file, not generated - confirm with
+  `magus describe file CHANGELOG.md` if unsure, and edit it directly.
+
+## Answer a granular diff question
+
+When the ask narrows to &quot;what exactly changed in X&quot;, stay on magus surfaces: they
+classify and relate, where a raw diff only shows text.
+
+| question | command |
+| --- | --- |
+| what did this change do to the domain's shape | `magus graph diff --rev &lt;base&gt; -o markdown` |
+| is this changed file source or generated output | `magus describe file &lt;paths...&gt;` |
+| which projects does the change reach | `magus affected --impact` |
+| why is THIS project in the affected set | `magus affected --explain &lt;project&gt;` |
+| what does one node's neighborhood look like now | `magus explain &lt;node&gt;` |
+| where is this symbol defined and used | `magus refs &lt;symbol&gt;` |
+| what did a target actually output | `magus query output &lt;ref&gt;` |
+
+`magus graph diff` is the one to reach for first on a branch review: it reports the
 nodes and edges added, removed, or changed, which is blast radius as data rather
-than a file list to interpret. Pair it with <code>magus describe file</code> so a diff of 300
-paths collapses to the handful that are declared sources.</p>
-<p>Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+than a file list to interpret. Pair it with `magus describe file` so a diff of 300
+paths collapses to the handful that are declared sources.
+
+Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did. Reading a raw diff to work out
-what a change affects is the work these verbs already did.</p>
-<pre><code>
-## Short form (`--simple`)
-
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
-
-&lt;details&gt;
-&lt;summary&gt;Show the short form&lt;/summary&gt;
-
-```markdown
-# Recent changes in a magus workspace
+what a change affects is the work these verbs already did.
+</code></pre>
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># Recent changes in a magus workspace
 
 Turn a large workspace's recent change history into a short, evidence-backed
 brief.
@@ -257,40 +285,47 @@ brief.
 1. Get the project map and target vocabulary from the workspace: `magus ls`
    for projects, `magus describe targets` for the target vocabulary. Do not
    read `MAGUS.md` for this.
-2. Establish the requested time boundary. On Git, inspect merge commits first:
+2. Establish the requested time boundary.
 
    ```sh
    git log --first-parent --merges --since=&quot;&lt;window&gt;&quot; --format='%h %ad %s' --date=short
-</code></pre>
-<p>If no VCS merge history is available, say so. Use <code>magus insight trend</code> and
-<code>magus insight hotspots --files</code> for activity, but do not call that a merge summary.
-3. For each candidate change, list its files, then classify them before reading:</p>
-<pre><code class="language-sh">git show --format= --name-only &lt;commit&gt;
-magus describe file &lt;paths...&gt;
-</code></pre>
-<p>Ignore generated outputs when identifying the change; trace them to their
-declared source and generator instead.
+   ```
+
+   If no VCS merge history is available, say so.
+3. For each candidate change, list its files, then classify them before reading:
+
+   ```sh
+   git show --format= --name-only &lt;commit&gt;
+   magus describe file &lt;paths...&gt;
+   ```
+
+   Ignore generated outputs when identifying the change.
 4. Map the source files to projects and graph entities. Prefer MCP
-<code>magus_query</code>, <code>magus_explain</code>, and <code>magus_describe_file</code>; otherwise use:</p>
-<pre><code class="language-sh">magus query &quot;&lt;project or feature terms&gt;&quot;
-magus explain &lt;node&gt;
-magus graph diff --rev &lt;base&gt; -o markdown
-</code></pre>
-<ol start="5">
-<li>Use <code>magus insight affinity</code>, <code>ownership</code>, and <code>trend</code> only to add context:
-hidden coupling, ownership risk, or unusually rising activity.</li>
-</ol>
-<h2 id="write-the-brief-1">Write the brief</h2>
-<p>Lead with three to seven grouped changes, not every commit. For each item state:</p>
-<ul>
-<li><strong>What landed</strong> - a plain-language feature or behavioral change.</li>
-<li><strong>Where</strong> - projects and graph entities affected.</li>
-<li><strong>Evidence</strong> - merge commit(s), source files, and the relevant graph relation.</li>
-<li><strong>Why it matters</strong> - user impact, dependency impact, or an explicit uncertainty.</li>
-<li><strong>Follow-up</strong> - a concrete next command when more detail is useful.</li>
-</ul>
-<p>Use this shape:</p>
-<pre><code class="language-markdown">## Recent changes since &lt;boundary&gt;
+   `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
+
+   ```sh
+   magus query &quot;&lt;project or feature terms&gt;&quot;
+   magus explain &lt;node&gt;
+   magus graph diff --rev &lt;base&gt; -o markdown
+   ```
+
+5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
+   hidden coupling, ownership risk, or unusually rising activity.
+
+## Write the brief
+
+Lead with three to seven grouped changes, not every commit. For each item state:
+
+- **What landed** - a plain-language feature or behavioral change.
+- **Where** - projects and graph entities affected.
+- **Evidence** - merge commit(s), source files, and the relevant graph relation.
+- **Why it matters** - user impact, dependency impact, or an explicit uncertainty.
+- **Follow-up** - a concrete next command when more detail is useful.
+
+Use this shape:
+
+```markdown
+## Recent changes since &lt;boundary&gt;
 
 ### &lt;feature or change&gt;
 
@@ -303,86 +338,61 @@ hidden coupling, ownership risk, or unusually rising activity.</li>
 ## Watch items
 
 - &lt;hidden affinity, ownership, or trend signal - or &quot;None found.&quot;&gt;
-</code></pre>
-<p>Do not label a refactor, generated-output refresh, dependency bump, or failed
+```
+
+Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
-Link to the relevant documentation page or generated manpage when it explains a
-new command, target, diagnostic, or workflow.</p>
-<h2 id="write-a-changelog-entry-1">Write a CHANGELOG entry</h2>
-<p>When
+
+## Write a CHANGELOG entry
+
+ When
 the ask is &quot;add this to the changelog&quot;, match the file's existing shape - Keep a
-Changelog 1.1.0 with SemVer - and append under <code>## [Unreleased]</code>:</p>
-<pre><code class="language-markdown">### Added
+Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
+
+```markdown
+### Added
 
 - &lt;What a user can now do, in one sentence.&gt; &lt;Why it is the right shape, or what it
   replaces.&gt; Set `&lt;config.key&gt;` (env `MAGUS_&lt;CONFIG_KEY&gt;`) to &lt;what the toggle does&gt;;
   &lt;default&gt;.
+```
+
+Rules for an entry, all checkable:
+
+- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+  diagnostic code, the target.
+- Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
+  `Removed`, `Fixed`, `Security`. Do not invent one.
+- Write behaviour, not implementation.
+- One entry per user-visible change, not per commit.
+- `CHANGELOG.md` is a SOURCE file, not generated.
+
+## Answer a granular diff question
+
+When the ask narrows to &quot;what exactly changed in X&quot;, stay on magus surfaces.
+
+| question | command |
+| --- | --- |
+| what did this change do to the domain's shape | `magus graph diff --rev &lt;base&gt; -o markdown` |
+| is this changed file source or generated output | `magus describe file &lt;paths...&gt;` |
+| which projects does the change reach | `magus affected --impact` |
+| why is THIS project in the affected set | `magus affected --explain &lt;project&gt;` |
+| what does one node's neighborhood look like now | `magus explain &lt;node&gt;` |
+| where is this symbol defined and used | `magus refs &lt;symbol&gt;` |
+| what did a target actually output | `magus query output &lt;ref&gt;` |
+
+`magus graph diff` is the one to reach for first on a branch review. Pair it with `magus describe file` so a diff of 300
+paths collapses to the handful that are declared sources.
+
+Raw VCS answers who and when; the table answers what the change did.
 </code></pre>
-<p>Rules for an entry, all checkable:</p>
-<ul>
-<li>Name every surface it adds: the config key WITH its env var, the CLI flag, the
-diagnostic code, the target.</li>
-<li>Section headings are Keep a Changelog's: <code>Added</code>, <code>Changed</code>, <code>Deprecated</code>,
-<code>Removed</code>, <code>Fixed</code>, <code>Security</code>. Do not invent one.</li>
-<li>Write behaviour, not implementation.</li>
-<li>One entry per user-visible change, not per commit. Squash a fix-up into the entry
-for the thing it fixed up.</li>
-<li><code>CHANGELOG.md</code> is a SOURCE file, not generated - confirm with
-<code>magus describe file CHANGELOG.md</code> if unsure, and edit it directly.</li>
-</ul>
-<h2 id="answer-a-granular-diff-question-1">Answer a granular diff question</h2>
-<p>When the ask narrows to &quot;what exactly changed in X&quot;, stay on magus surfaces.</p>
-<figure class="table-scroll"><table>
-<thead>
-<tr>
-<th>question</th>
-<th>command</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>what did this change do to the domain's shape</td>
-<td><code>magus graph diff --rev &lt;base&gt; -o markdown</code></td>
-</tr>
-<tr>
-<td>is this changed file source or generated output</td>
-<td><code>magus describe file &lt;paths...&gt;</code></td>
-</tr>
-<tr>
-<td>which projects does the change reach</td>
-<td><code>magus affected --impact</code></td>
-</tr>
-<tr>
-<td>why is THIS project in the affected set</td>
-<td><code>magus affected --explain &lt;project&gt;</code></td>
-</tr>
-<tr>
-<td>what does one node's neighborhood look like now</td>
-<td><code>magus explain &lt;node&gt;</code></td>
-</tr>
-<tr>
-<td>where is this symbol defined and used</td>
-<td><code>magus <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a> &lt;symbol&gt;</code></td>
-</tr>
-<tr>
-<td>what did a target actually output</td>
-<td><code>magus query output &lt;ref&gt;</code></td>
-</tr>
-</tbody>
-</table></figure>
-<p><code>magus graph diff</code> is the one to reach for first on a branch review. Pair it with <code>magus describe file</code> so a diff of 300
-paths collapses to the handful that are declared sources.</p>
-<p>Raw VCS commands answer what only the VCS knows: who committed, when, and in which
-merge. The table above answers what the change did.</p>
-<pre><code>
-&lt;/details&gt;
-</code></pre>
+</details>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../magus-buzz/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">magus-buzz</span></a>
-      <a class="page-nav-next" href="../magus-docs/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-docs</span></a>
+      <a class="page-nav-next" href="../magus-context-audit/"><span class="page-nav-dir">Next</span><span class="page-nav-title">magus-context-audit</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -396,7 +406,7 @@ merge. The table above answers what the change did.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-changes%22">magus-changes</a></div>
-    <small>Last updated <time datetime="2026-07-30T00:06:39Z">July 30, 2026, 12:06 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/73c9e114d75d095404a34fad01234dcb75fc5c4e" data-tooltip="73c9e114d75d095404a34fad01234dcb75fc5c4e" title="73c9e114d75d095404a34fad01234dcb75fc5c4e">73c9e114</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/c78aa0860aa42f33bdd27de1970f7b99fbc97167"><code>c78aa086</code></a> <small><time datetime="2026-07-30T00:00:11Z">Jul 30, 2026</time></small> - give magus-changes three outputs instead of one, all through magus surfaces</li><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/73c9e114d75d095404a34fad01234dcb75fc5c4e"><code>73c9e114</code></a> <small><time datetime="2026-07-30T00:06:39Z">Jul 30, 2026</time></small> - strip the AI tells from the prose I added, and fold twelve unpaired test files into their pairs</li><li><a href="https://github.com/egladman/magus/commit/c78aa0860aa42f33bdd27de1970f7b99fbc97167"><code>c78aa086</code></a> <small><time datetime="2026-07-30T00:00:11Z">Jul 30, 2026</time></small> - give magus-changes three outputs instead of one, all through magus surfaces</li><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-changes.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -468,6 +478,71 @@ duplicating it. See <a href="../../../reference/console/">reference/console</a>.
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

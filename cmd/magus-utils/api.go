@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/manpage"
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/internal/manpage"
 )
 
 // runAPI writes magus's public CLI API as a sorted .lock snapshot (the same plain

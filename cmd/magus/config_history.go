@@ -45,6 +45,7 @@ func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []s
 // input is the history `magus run` wrote; there is no separate "merge" mode.
 func runHistoryImport(ctx context.Context, cfg config.Config, args []string) error {
 	fs := flag.NewFlagSet("config history import", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	historyPath := fs.String("history", cfg.HistoryPath, "Path to the history JSON to write (default: configured history_path)")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history import [--history <path>] <history.json>...")
@@ -113,6 +114,7 @@ type missBuild struct {
 // eliminate. Outputs a summary including total redundant build-seconds.
 func runHistoryDedup(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config history dedup", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config history dedup <report.jsonl>...")
 		fmt.Fprintln(os.Stderr, "")

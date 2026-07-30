@@ -147,3 +147,61 @@ When a ref cannot be resolved, `magus query` reports a coded
   stored output, so the lookup is ambiguous.
 - [MGS8003](../../reference/codes/outputref/MGS8003.md): `magus query output` was given an argument
   that is not a well-formed `ref<hex>` id, so it cannot name a stored output.
+
+## The artifact twin: history and diff
+
+An output ref reaches a past run's captured **log**. The same store also still holds
+that run's **artifacts**, because the cache is content-addressed: blobs under `cas/`
+keyed by their sha256, referenced by one manifest per cache entry. Every earlier
+version of a declared output is therefore still on disk and addressable, until
+eviction reclaims it.
+
+Two chain verbs expose that:
+
+```sh
+magus run build --then file dist/app history   # every cached version of that artifact
+magus run build --then file dist/app diff      # compare it against the last cached version
+```
+
+`history` answers a question the VCS answers badly for generated files. Git tells you
+when someone committed a regeneration; this tells you when the **bytes** changed:
+
+```
+2026-07-30T00:35:44Z  81db67b6a570      412  build
+2026-07-30T00:12:09Z  2d27fbdf4e8c      412  build
+```
+
+Runs that produced identical bytes collapse to one row, and the row kept is the
+earliest of the run, because the useful question is when content first appeared
+rather than when it was last re-confirmed. Add `-o json` (before `--then`) for the
+blob, size, target and cache entry, so a script can compare them itself.
+
+### diff delegates; it does not render
+
+`diff` materializes the cached side into a temporary file and runs **your** difftool,
+resolved in order from `$MAGUS_DIFFTOOL`, then `$DIFFTOOL`, then `git diff
+--no-index` (git is already a hard dependency of a workspace, so it is the one
+differ guaranteed to be present). The value is split on spaces, so a tool with flags
+works without a shell:
+
+```sh
+MAGUS_DIFFTOOL="delta --side-by-side" magus run build --then file dist/app diff
+MAGUS_DIFFTOOL="difft"                magus run build --then file dist/app diff
+```
+
+magus emits and does not render, exactly as it refuses to draw the knowledge graph.
+A built-in differ would be a worse version of the tool you already chose.
+
+Materializing clones from the store rather than copying wherever the filesystem
+supports it (APFS, btrfs, XFS), so comparing a large artifact costs almost nothing.
+
+### Two answers that are not failures
+
+- **"matches every cached version; nothing to diff."** The working tree is the only
+  content the store has for that path. Running a differ over two identical files and
+  leaving you to infer that from empty output would be worse.
+- **"artifact blob evicted."** The store evicts least-recently-used blobs, so a
+  version can be listed from a surviving manifest and still have no bytes behind it.
+  This is reported rather than shown as an empty diff, because an empty diff reads as
+  "unchanged" - the most misleading answer available. Re-run the target with
+  `--no-cache` to regenerate it.

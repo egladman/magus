@@ -56,6 +56,7 @@
 - [Daemon and concurrency](https://eli.gladman.cc/magus/guides/integrations/daemon/index.md): The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.
 - [Editor setup](https://eli.gladman.cc/magus/guides/integrations/editor/index.md): Wire your editor to the magus language server (magus buzz lsp) for completion, hover, and signature help in magusfiles and spells.
 - [MCP](https://eli.gladman.cc/magus/guides/integrations/mcp/index.md): The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
+- [Quick start](https://eli.gladman.cc/magus/guides/quickstart/index.md): Everything you need to be productive with magus on one page - install, first target, the output flags, the agent skills and the guard hook - each linking to the page that goes deeper.
 - [Testing](https://eli.gladman.cc/magus/guides/testing/index.md): How to test Buzz code in magus with the test primitive and the assert and suite libraries, and why not to test magusfiles.
 - [Tips and tricks](https://eli.gladman.cc/magus/guides/tips/index.md): Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, and recursive invocation.
 - [Migrating](https://eli.gladman.cc/magus/migrating/index.md): Pages in this section.
@@ -172,6 +173,7 @@
 - [magus-architecture](https://eli.gladman.cc/magus/reference/skills/magus-architecture/index.md): Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.
 - [magus-buzz](https://eli.gladman.cc/magus/reference/skills/magus-buzz/index.md): Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in.
 - [magus-changes](https://eli.gladman.cc/magus/reference/skills/magus-changes/index.md): Summarize what changed in a magus workspace, write it up, or answer a granular diff question.
+- [magus-context-audit](https://eli.gladman.cc/magus/reference/skills/magus-context-audit/index.md): Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do.
 - [magus-docs](https://eli.gladman.cc/magus/reference/skills/magus-docs/index.md): Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL.
 - [magus-memory](https://eli.gladman.cc/magus/reference/skills/magus-memory/index.md): Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions.
 - [magus-query](https://eli.gladman.cc/magus/reference/skills/magus-query/index.md): Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).

@@ -14,13 +14,15 @@ source or scored by a rubric, and says which.<!-- /why --> If the graph cannot a
 say so and then fall back<!-- why --> - a silent fallback hides the gap that should be
 reported<!-- /why -->.
 
-`MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
-HUMAN reading the repo, and it is only as true as its last regeneration<!-- why --> - a
+`MAGUS.md` IS NOT YOUR SOURCE.<!-- why --> It is a generated routing index written for a
+HUMAN reading the repo, and it is only as true as its last regeneration - a
 workspace whose generate target has not run since the last change describes a
 tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
-workspace<!-- /why -->. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
-unavailable too, or when a human explicitly asks what the committed index says.
+workspace. Read it as a LAST RESORT: when no daemon is reachable and the CLI is
+unavailable too, or when a human explicitly asks what the committed index says.<!-- /why --><!-- terse --> It is a
+generated index for humans, true only as of its last regeneration. Last resort
+only: no daemon AND no CLI, or a human asking what the committed index says.<!-- /terse -->
 
 ## Act in this order
 
@@ -54,9 +56,9 @@ unavailable too, or when a human explicitly asks what the committed index says.
 
 <!-- why -->   The graph relates entities; the evaluated dispatch plan lives one verb over.
 <!-- /why -->   `magus describe target <name>` prints, per project, the resolved source globs,
-   output globs (the generated files), spells, and policy for that target - use it
+   output globs (the generated files), spells, and policy for that target<!-- why --> - use it
    when the question is "what feeds or comes out of this target", not "what relates
-   to it".
+   to it"<!-- /why -->.
 
 ## Query grammar
 
@@ -64,9 +66,9 @@ Free-text terms (AND) plus field filters and negation:
 
 - `build` - free text over IDs, labels, and docs
 - `kind:spell` - only that node kind
-- `project:pkg/foo` - everything the project owns: the project node, its
+- `project:pkg/foo` - everything the project owns<!-- why -->: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
-  projects claim their own; the root `.` owns only what no nested project does)
+  projects claim their own; the root `.` owns only what no nested project does)<!-- /why -->
 - `relation:uses` - seed from nodes touching that edge
 - `id:build` - substring match on the node ID
 - `id:target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
@@ -74,28 +76,29 @@ Free-text terms (AND) plus field filters and negation:
 - `"exact phrase"` - keep a quoted span as one term
 
 A query returns ranked matches plus their neighborhood, bounded by `--budget`
-(default 50). For a large match set over MCP, pass `limit` and echo the returned
-`next_cursor` to fetch the next page.
+(default 50).<!-- why --> For a large match set over MCP, pass `limit` and echo the returned
+`next_cursor` to fetch the next page.<!-- /why --><!-- terse --> Over MCP, page with `limit` plus the returned
+`next_cursor`.<!-- /terse -->
 
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,
   `schema_version`-stamped OBJECT with a top-level wrapper - key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping. Do not scrape the human text or trim it with `head`.
-  Over MCP the tools already return structured content; nothing to shape.
+  bare IDs for piping.<!-- why --> Do not scrape the human text or trim it with `head`.
+  Over MCP the tools already return structured content; nothing to shape.<!-- /why -->
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them<!-- why -->; a rename
   is a delete plus an add<!-- /why -->.
 - Edges are directed and carry a `confidence` - `extracted` (read directly off a
   source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
-- Node `attrs` surface metadata: a project's `engine` and `target_count`, a
-  target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
+- Node `attrs` surface metadata<!-- why -->: a project's `engine` and `target_count`, a
+  target's inherited `engine`, a doc's `title` and `tags`<!-- /why -->. The `duration_p75_ms`,
   `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history, not derived from sources - read them as history, not
-  guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
+  OBSERVED from local run history<!-- why -->, not derived from sources - read them as history, not
+  guarantees<!-- /why -->. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
   captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-<ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
+<ref>` on it fetches that output<!-- why --> - a target-to-output hop<!-- /why -->. When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
@@ -103,10 +106,12 @@ A query returns ranked matches plus their neighborhood, bounded by `--budget`
 ## Ownership and blast radius
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
-edges to the projects and files they cover. Combine that with dependency edges to
+edges to the projects and files they cover.<!-- why --> Combine that with dependency edges to
 answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind:owner` to list owners.<!-- why --> Only
-declared CODEOWNERS ownership appears - it is not blame-inferred.<!-- /why -->
+node's owners and dependents, or `magus query kind:owner` to list owners. Only
+declared CODEOWNERS ownership appears - it is not blame-inferred.<!-- /why --><!-- terse --> `magus explain
+<node>` for owners plus dependents; `magus query kind:owner` to list. Declared
+ownership only, never blame-inferred.<!-- /terse -->
 
 ## Across workspaces and neighbors
 
@@ -115,8 +120,8 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.<!-- /why -->
 - `magus affected`, `magus insight`, and `magus describe` sit alongside the graph;
   `magus graph export -o json` dumps the whole graph for bulk analysis.
 - To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
-  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
-  that revision's files, or pass a `graph export -o json` baseline file instead.
+  comment<!-- why --> (nodes/edges added, removed, or changed); `--rev` builds the base graph from
+  that revision's files, or pass a `graph export -o json` baseline file instead<!-- /why -->.
 
 ## Do not render the graph yourself
 
@@ -128,4 +133,4 @@ governs you too.<!-- /why -->
 ## Fetching current behavior
 
 For flags and behavior this skill does not cover, run any verb with `-h`, and read
-the magus documentation site. Prefer the tools' own output over assumptions.
+the magus documentation site.<!-- why --> Prefer the tools' own output over assumptions.<!-- /why -->

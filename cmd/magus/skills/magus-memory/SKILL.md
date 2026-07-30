@@ -1,8 +1,8 @@
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It lives outside the repo, is shared by its worktrees, and is
-visible in the console. It is not automatic model memory: add an entry only
+handoff journal.<!-- why --> It lives outside the repo, is shared by its worktrees, and is
+visible in the console.<!-- /why --> It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
 The graph remains the source of truth.<!-- why --> A journal entry links back to the query,
@@ -26,8 +26,9 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-There is no free-text/`note` type. A claim that is true about the code is a
-`pointer` of kind `query` (fetch it live) or `output`, never stored prose.
+There is no free-text/`note` type.<!-- why --> A claim that is true about the code is a
+`pointer` of kind `query` (fetch it live) or `output`, never stored prose.<!-- /why --><!-- terse --> A claim true
+about the code is a `query` or `output` pointer, never stored prose.<!-- /terse -->
 
 ## Read and write deliberately
 
@@ -56,7 +57,8 @@ There is no free-text/`note` type. A claim that is true about the code is a
   `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
   a rejected approach and why): record a `decision`.<!-- why --> A bare "we chose X" helps
-  nobody; the `body` carries the why, and the refs anchor it to the code.<!-- /why -->
+  nobody; the `body` carries the why, and the refs anchor it to the code.<!-- /why --><!-- terse --> Put the why
+  in `body` and anchor it with refs.<!-- /terse -->
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it<!-- why -->, not a sentence that rots<!-- /why -->.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
@@ -70,4 +72,4 @@ There is no free-text/`note` type. A claim that is true about the code is a
 - Records live outside the repo, keyed by repository identity.<!-- why --> The console,
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
-  session erase another's handoff.<!-- /why -->
+  session erase another's handoff.<!-- /why --><!-- terse --> Console, CLI and MCP all show the same entries.<!-- /terse -->

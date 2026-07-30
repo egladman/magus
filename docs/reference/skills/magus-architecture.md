@@ -3,7 +3,7 @@ title: magus-architecture
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture]
 skill_full_bytes: 4510
-skill_simple_bytes: 3967
+skill_simple_bytes: 3532
 ---
 
 # magus-architecture
@@ -18,6 +18,22 @@ magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
@@ -145,9 +161,8 @@ magus graph deps -o tree     # the declared project DAG
 ```
 
 MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground. Affinity deserves special weight: two projects that keep changing
-together WITHOUT a declared dependency edge are coupled through the back door -
-either declare the dependency or move the shared concern.
+ground. Weight affinity most: changing
+together with no declared edge is back-door coupling.
 
 ## Sizing a specific refactor
 
@@ -155,9 +170,8 @@ either declare the dependency or move the shared concern.
    nodes reach it.
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol. (If it reports no match for a symbol that surely
-   exists, the index is likely unbuilt: check `magus status`, then
-   `magus graph build`.)
+   any exported symbol. No match for a symbol that exists means an unbuilt
+   index: `magus graph build`.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
@@ -171,9 +185,7 @@ that shows it.
 
 ## Audit the domain model itself
 
-The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
-names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):
+Census the kinds, then read the stats for smells:
 
 ```sh
 magus graph stats                    # god nodes, orphans, doc coverage
@@ -197,8 +209,7 @@ Confirm each smell against the source before acting on it:
   name belongs) is an identity smell.
 
 A kind or edge earns its place only if it answers a question the others cannot;
-prefer folding into an existing mechanism over adding one (pre-1.0: break
-freely). Ground every claim in a query, exactly as for a layout proposal.
+prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
 
 ## Verify the change
 
@@ -211,7 +222,7 @@ altered. Then run
 
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool - do not hand-draw diagrams of what the graph already knows.
+browser graph tool.
 ````
 
 

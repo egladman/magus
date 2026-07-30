@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/internal/generate/godecl"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/egladman/magus/internal/generate/godecl"
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
@@ -89,7 +89,6 @@ func readSurface(path string) ([]subcommandDoc, error) {
 	}
 	return out, nil
 }
-
 
 func renderBashList(subs []subcommandDoc) string {
 	names := make([]string, len(subs))

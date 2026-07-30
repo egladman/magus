@@ -23,6 +23,10 @@ func selfCmd(_ context.Context, _ string, args []string) error {
 		}
 	}
 	fs := flag.NewFlagSet("self", flag.ContinueOnError)
+	// Bound even though this build errors out regardless: a caller passing -s
+	// should get the real "compiled without self-update support" message, not a
+	// flag-parse error that hides it.
+	bindDisplayFlags(fs)
 	fs.Usage = func() {}
 	_ = fs.Parse(args)
 	return errors.New("magus was compiled without self-update support; rebuild without -tags noselfupdate to enable")

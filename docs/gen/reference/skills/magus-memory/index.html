@@ -80,6 +80,7 @@
           <li><a href="../../../reference/skills/magus-architecture/" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" aria-current="page" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -87,21 +88,62 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#recording" title="Recording">Recording</a></li><li><a href="#scope-boundaries" title="Scope boundaries">Scope boundaries</a></li><li><a href="#recording-1" title="Recording">Recording</a></li><li><a href="#scope-boundaries-1" title="Scope boundaries">Scope boundaries</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#recording" title="Recording">Recording</a></li><li><a href="#scope-boundaries" title="Scope boundaries">Scope boundaries</a></li><li><a href="#recording-1" title="Recording">Recording</a></li><li><a href="#scope-boundaries-1" title="Scope boundaries">Scope boundaries</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
     <article>
 <h1 id="magus-memory">magus-memory</h1>
-<p><progress value="3190" max="3845" aria-label="The --simple permutation is 17% smaller: 3190 of 3845 bytes."></progress><small>The --simple permutation is 17% smaller: 3190 of 3845 bytes.</small></p>
+<p><progress value="3167" max="3845" aria-label="The --simple permutation is 17% smaller: 3167 of 3845 bytes."></progress><small>The --simple permutation is 17% smaller: 3167 of 3845 bytes.</small></p>
 <p>Maintain a user-owned handoff journal through magus_memory or <code>magus memory</code>: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>/<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus graph verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># Handoff journal
@@ -189,8 +231,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It lives outside the repo, is shared by its worktrees, and is
-visible in the console. It is not automatic model memory: add an entry only
+handoff journal. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
 The graph remains the source of truth.
@@ -213,8 +254,8 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-There is no free-text/`note` type. A claim that is true about the code is a
-`pointer` of kind `query` (fetch it live) or `output`, never stored prose.
+There is no free-text/`note` type. A claim true
+about the code is a `query` or `output` pointer, never stored prose.
 
 ## Read and write deliberately
 
@@ -240,7 +281,8 @@ an issue.</li>
 by <code>name</code> (a kebab slug). Pass <code>refs</code> as one per line, <code>kind: target</code> (e.g.
 <code>query: kind:op depends cache</code> or <code>node: file:internal/hash/hasher.go</code>).</li>
 <li>Made a choice another session would otherwise re-derive (architecture, naming,
-a rejected approach and why): record a <code>decision</code>.</li>
+a rejected approach and why): record a <code>decision</code>. Put the why
+in <code>body</code> and anchor it with refs.</li>
 <li>Prefer a ref over prose: if a fact is derivable, record the <code>query</code> that proves
 it.</li>
 <li>Prune with <code>op: &quot;delete&quot;</code>; list-then-get with <code>op: &quot;list&quot;</code> / <code>op: &quot;get&quot;</code>.</li>
@@ -251,9 +293,10 @@ it.</li>
 <code>magus_scratchpad</code>, not here.</li>
 <li>Facts the repo already records (code structure, git history, MAGUS.md) do not
 belong in memory; record the <code>magus_query</code> that surfaces them instead.</li>
-<li>Records live outside the repo, keyed by repository identity.</li>
+<li>Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.</li>
 </ul>
 <pre><code>
+
 &lt;/details&gt;
 </code></pre>
     </article>
@@ -275,7 +318,7 @@ belong in memory; record the <code>magus_query</code> that surfaces them instead
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-memory%22">magus-memory</a></div>
-    <small>Last updated <time datetime="2026-07-29T23:55:02Z">July 29, 2026, 11:55 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed" data-tooltip="32393b3650099222a26a55a57669a18f203b1bed" title="32393b3650099222a26a55a57669a18f203b1bed">32393b36</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -324,6 +367,71 @@ duplicating it. See <a href="../../../reference/console/">reference/console</a>.
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

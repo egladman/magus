@@ -3,7 +3,7 @@ title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
 skill_full_bytes: 6148
-skill_simple_bytes: 5321
+skill_simple_bytes: 5180
 ---
 
 # magus-buzz
@@ -19,11 +19,27 @@ magus agent install .claude/skills --simple   # the short form below
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
 
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+
 ## Full form
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Writing Buzz
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
@@ -194,7 +210,7 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 Prefer a target over a script for anything that will be run more than once: a
 script re-runs from scratch every time, a target replays from cache.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -203,13 +219,14 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Writing Buzz
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
 it as a general-purpose scripting language with the whole magus host surface
-attached. In a magus workspace it is the right reach for a one-off script -
-scanning files, reshaping JSON/YAML/TOML, templating, hitting HTTP.
+attached. Reach for it for a
+one-off script: already installed, no dependency install, same language as the
+workspace's build logic.
 
 ## The smallest thing that runs
 
@@ -248,7 +265,7 @@ magus describe modules -o name        # every module available to a script
 magus describe module json            # its methods, docs, and SIGNATURES with return types
 ```
 
-This file teaches the fundamentals and nothing more. Escalate deliberately:
+Escalate deliberately:
 
 | question | where |
 | --- | --- |
@@ -256,8 +273,8 @@ This file teaches the fundamentals and nothing more. Escalate deliberately:
 | how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
-Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
-behavior - is documented; search it rather than guessing from this page.
+Error sets, fibers, generics, the full stdlib and sandbox behavior are all
+documented; search rather than guess.
 
 WRONG: assume `strings\toLower(s)` or `json\encode(v)` exist.
 CORRECT: `magus describe module strings`, then write what it lists.
@@ -284,7 +301,8 @@ Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
 `magus buzz` runs upstream-strict by default.
 
 1. **Control flow is not allowed at the top level.** Put them in a function and call
-   it. `magus buzz --embedded` relaxes this if you want a throwaway snippet.
+   it.
+   (`--embedded` relaxes this.)
 2. **Every argument after the first must be labeled.**
 
 ```buzz
@@ -362,6 +380,7 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 - **A tool adapter** - a spell, so every project of that type gets the ops.
 
 Prefer a target over a script for anything that will be run more than once.
-```
+````
+
 
 </details>

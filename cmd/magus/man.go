@@ -24,6 +24,7 @@ func manCmd(args []string) error {
 	}
 
 	fs := flag.NewFlagSet("man install", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	dir := fs.String("dir", defaultManDir(), "directory for section 1 man pages")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -58,7 +59,7 @@ func defaultManDir() string {
 }
 
 func manUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir DIR]")
+	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir <path>]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Write the man pages embedded in this binary.")
 }

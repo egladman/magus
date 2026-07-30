@@ -124,15 +124,57 @@ func TestApplyVariantDoesNotTouchUnelidedContent(t *testing.T) {
 	}
 }
 
+// TestApplyVariantSwapsTwoWordings pins the idiom that makes real compression
+// possible: a why span carrying the long wording, immediately followed by a terse
+// span carrying the short one. Each variant keeps exactly one of them, so the
+// full form loses nothing and the simple form is genuinely rewritten rather than
+// merely truncated.
+func TestApplyVariantSwapsTwoWordings(t *testing.T) {
+	body := "Scope explicitly<!-- why -->, because a bare command acts on whichever project holds " +
+		"your current directory and therefore means something different depending on where you " +
+		"happen to be standing<!-- /why --><!-- terse --> (magus is CWD-relative)<!-- /terse -->."
+
+	full, err := applyVariant("s", body, VariantFull)
+	require.NoError(t, err)
+	assert.Equal(t, "Scope explicitly, because a bare command acts on whichever project holds your "+
+		"current directory and therefore means something different depending on where you happen "+
+		"to be standing.", full)
+
+	simple, err := applyVariant("s", body, VariantSimple)
+	require.NoError(t, err)
+	assert.Equal(t, "Scope explicitly (magus is CWD-relative).", simple)
+
+	for _, got := range []string{full, simple} {
+		assert.NotContains(t, got, "<!--", "no scaffolding may reach an installed file")
+	}
+}
+
+// TestApplyVariantTerseAloneIsSimpleOnly covers the unpaired case: a terse span
+// with no why sibling is content the short form has and the long form does not.
+func TestApplyVariantTerseAloneIsSimpleOnly(t *testing.T) {
+	body := "Step one.<!-- terse --> See the docs for why.<!-- /terse -->"
+
+	full, err := applyVariant("s", body, VariantFull)
+	require.NoError(t, err)
+	assert.Equal(t, "Step one.", full)
+
+	simple, err := applyVariant("s", body, VariantSimple)
+	require.NoError(t, err)
+	assert.Equal(t, "Step one. See the docs for why.", simple)
+}
+
 // TestApplyVariantRefusesUnbalancedMarkers keeps a malformed body from installing.
 // Silently dropping to the end of the file, or silently keeping everything, both
 // ship a skill missing a step - and in an instruction file a missing step is
 // indistinguishable from an instruction not to do it.
 func TestApplyVariantRefusesUnbalancedMarkers(t *testing.T) {
 	for name, body := range map[string]string{
-		"open with no close": "Do it<!-- why --> because.",
-		"close with no open": "Do it because<!-- /why -->.",
-		"nested open":        "a<!-- why -->b<!-- why -->c<!-- /why -->d",
+		"open with no close":       "Do it<!-- why --> because.",
+		"close with no open":       "Do it because<!-- /why -->.",
+		"nested open":              "a<!-- why -->b<!-- why -->c<!-- /why -->d",
+		"terse open with no close": "Do it<!-- terse --> briefly.",
+		"terse close with no open": "Do it briefly<!-- /terse -->.",
+		"nested terse open":        "a<!-- terse -->b<!-- terse -->c<!-- /terse -->d",
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := applyVariant("magus-x", body, VariantSimple)

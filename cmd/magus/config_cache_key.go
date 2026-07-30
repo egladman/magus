@@ -13,6 +13,7 @@ const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
 func configCacheKey(_ context.Context, _ string, args []string) error {
 	fs := flag.NewFlagSet("config cache key", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache key <subcommand>")
 		fmt.Fprintln(os.Stderr, "")
@@ -50,6 +51,7 @@ func configCacheKey(_ context.Context, _ string, args []string) error {
 // developer machine; copy it straight into a CI secret store.
 func configCacheKeyGenerate(args []string) error {
 	fs := flag.NewFlagSet("config cache key generate", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache key generate")
 		fmt.Fprintln(os.Stderr, "")
@@ -87,6 +89,7 @@ func configCacheKeyGenerate(args []string) error {
 // never echoing the seed.
 func configCacheKeyID(args []string) error {
 	fs := flag.NewFlagSet("config cache key id", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache key id [<base64-public-key>]")
 		fmt.Fprintln(os.Stderr, "")

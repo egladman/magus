@@ -335,6 +335,25 @@ The practical effect is that magus stays out of the way. It is the same standard
 the tool holds itself to everywhere else - never get between someone and the
 work - extended to the agent doing it.
 
+### The guard is not a security boundary
+
+It reads a command string and returns an opinion. That catches a habit and does
+nothing against intent. `TestGuardKnownHoles` records what it misses: a command
+inside a script file, a program name from `$(...)` or a variable, a shell alias,
+a recipe behind `make`.
+
+You own the hook script and its response template. Edit them so denials stop
+arriving and you have configured your tool, the same way you can turn off every
+rule in `.eslintrc`.
+
+`magus affected ci` is the gate that holds. It is committed, it passes through
+review, and no local config edit changes what it runs.
+
+Ask where a config came from rather than who can edit it. One you wrote is
+yours. One that arrived in a cloned repository is a stranger's code your host
+may run, the same standing risk as that repo's `Makefile` or git hooks, and
+older than agents. Read it before you run it.
+
 A command is denied on either of two independent triggers. It cannot be UNDONE,
 or it has an EXACT WORKING EQUIVALENT. The second is not about danger: a raw
 `go test` is harmless and reversible, and it is denied because magus does the
@@ -477,7 +496,7 @@ one you do not.
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\"; if [ ! -x \"$MAGUS_BIN\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: go build -o /tmp/magus ./cmd/magus\"}}'; exit 0; fi; exec \"$MAGUS_BIN\" agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; if [ ! -x \"$MAGUS_BIN\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: magus run build .\"}}'; exit 0; fi; exec \"$MAGUS_BIN\" agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
             "timeout": 10
           }
         ]
@@ -487,7 +506,7 @@ one you do not.
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$(command -v magus 2>/dev/null || echo /tmp/magus)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; exec \"$MAGUS_BIN\" agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
+            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; exec \"$MAGUS_BIN\" agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
             "timeout": 10
           }
         ]
@@ -1025,6 +1044,85 @@ denial:
 ```sh
 command -v magus >/dev/null 2>&1 || { echo '{"permission":"deny","agent_message":"magus not on PATH; guard cannot evaluate"}'; exit 0; }
 ```
+
+## Attention hooks: knowing when an agent needs you
+
+An agent that is blocked on a permission prompt, or that finished twenty minutes
+ago, is only useful if you find out. `magus agent notify` turns one host event
+into a neutral attention record and, with `--desktop`, a desktop notification.
+
+**MCP cannot do this job, and it is worth being clear why.** An MCP server only
+ever observes tool *calls*. A blocked agent makes no call at all - the blockage
+*is* the silence, and silence is precisely what MCP has no way to report. The
+host's own hook system is the only surface that fires on it. So this is a hook
+sink, not a tool, and it stays that way regardless of whether the daemon is up.
+
+The command is host-neutral in the same way `magus agent hook` is: one envelope,
+and each host's dialect expressed as a documented invocation rather than as code
+inside magus.
+
+```sh
+magus agent notify --kind Notification --desktop "needs your approval"
+magus agent notify --kind Stop -o json          # for a script to consume
+```
+
+`--kind` takes whatever the host calls the event. It is classified by substring,
+case-insensitively, into one of four kinds - `waiting`, `stopped`, `permission`,
+`other` - because host event vocabularies are not stable and an exact-match table
+would rot. An unrecognized kind still classifies as `other` and still notifies:
+a missed alert is the failure this exists to prevent.
+
+Read the event from the host's JSON on stdin when it provides one:
+
+```sh
+magus agent notify \
+  --kind-from-json hook_event_name \
+  --from-json message \
+  --desktop
+```
+
+### Wiring it per host
+
+The event names below are the ones each host documents; check yours against its
+current documentation, because these move. The magus side never changes.
+
+| host | event(s) to wire | notes |
+| --- | --- | --- |
+| Claude Code | `Notification`, `Stop`, `SubagentStop` | `Notification` fires on a permission prompt and on idle-waiting-for-input; the event JSON carries `hook_event_name`, `message`, and `session_id` |
+| Codex | its hook/notify program setting | hooks are experimental and off by default; see the guard-hook section above for the same caveat |
+| opencode | its plugin/hook surface | same envelope, invoked from the plugin |
+| Cursor | its agent hook surface | same envelope |
+| anything else | any event that means "a human is needed" | if the host can run a command on that event, this works |
+
+Claude Code, in `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" agent notify --kind-from-json hook_event_name --from-json message --desktop >/dev/null 2>&1; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+It exits 0 unconditionally and swallows its own output, which is deliberate: a
+notifier that can fail is a hook that can break the session it was meant to
+watch. The same reasoning as the guard's fail-open contract.
+
+Note the binary resolution, which is the same one the guard uses: prefer a
+repo-local `./magus`, then PATH, and do nothing if neither exists. Do **not**
+fall back to a fixed path like `/tmp/magus` - a stale binary there will run
+happily and enforce months-old rules while looking perfectly healthy. `magus
+doctor`'s **guard binary** check reports which binary a hook would actually run,
+and fails when it is older than your working tree.
 
 ## The MCP daemon
 

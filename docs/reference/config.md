@@ -49,7 +49,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 | Config key | Environment variable | Flag | Type |
 |------------|----------------------|------|------|
-| `assume_interactive` | `MAGUS_ASSUME_INTERACTIVE` | `--assume-interactive` | bool |
 | `concurrency` | `MAGUS_CONCURRENCY` | `-j`, `--concurrency` | int |
 | `default_charms` | `MAGUS_DEFAULT_CHARMS` | _(env only)_ | list _(comma-separated, env only)_ |
 | `dry_run` | `MAGUS_DRY_RUN` | `-u`, `--dry-run` | bool |

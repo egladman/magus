@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/generate/emit"
+	"github.com/egladman/magus/types"
 )
 
 func main() {
@@ -44,12 +45,23 @@ func main() {
 	}
 }
 
-// catalog binds the embedded skill sources the same way cmd/magus does. The
-// schema version is irrelevant here (it only feeds the install stamp, which these
-// pages deliberately do not reproduce), so it is passed as zero rather than
-// threaded from a package this tool has no other reason to import.
+// run binds the embedded skill sources the same way cmd/magus does.
+//
+// The real KnowledgeSchemaVersion is threaded through, not zero. It used to be
+// zero on the grounds that it only feeds the install stamp and these pages did
+// not reproduce the stamp - but they do now (writeStampTable), and a page
+// claiming `knowledge-schema-version: 0` would be documenting a stamp no install
+// ever writes. A generated page showing a value that cannot occur is worse than
+// no page.
 func run(outDir, srcDir string) error {
-	cat := agent.NewCatalog(os.DirFS(srcDir), "", 0)
+	// The agents section is part of the content digest, so it has to be the REAL
+	// one. Passing "" produced a digest no install ever writes, which the stamp
+	// table would then have published as fact.
+	section, err := os.ReadFile(filepath.Join(srcDir, "agents-section.md"))
+	if err != nil {
+		return fmt.Errorf("read agents-section.md: %w", err)
+	}
+	cat := agent.NewCatalog(os.DirFS(srcDir), string(section), types.KnowledgeSchemaVersion)
 	full, err := cat.EmbeddedSkills(agent.VariantFull)
 	if err != nil {
 		return err
@@ -70,7 +82,7 @@ func run(outDir, srcDir string) error {
 		if f.Name != s.Name {
 			return fmt.Errorf("permutation order mismatch at %d: %q vs %q", i, f.Name, s.Name)
 		}
-		page := renderSkill(f, s)
+		page := renderSkill(cat, f, s)
 		if err := emit.File(filepath.Join(outDir, f.Name+".md"), []byte(page)); err != nil {
 			return err
 		}
@@ -86,7 +98,7 @@ func run(outDir, srcDir string) error {
 // near-identical text. Only the simple one is collapsed - the comparison a reader
 // wants is "what did the short one drop", and that reads better by expanding the
 // short one against the long one already on screen.
-func renderSkill(full, simple agent.AgentSkill) string {
+func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	var b strings.Builder
 	// The two byte counts are stated as FACTS; the SSG turns them into a percentage
 	// and a <progress> bar (engine/meta.buzz:insertSizeRatio). Presentation is the
@@ -100,6 +112,8 @@ func renderSkill(full, simple agent.AgentSkill) string {
 	fmt.Fprintf(&b, "```sh\nmagus agent install .claude/skills            # the full form below\nmagus agent install .claude/skills --simple   # the short form below\n```\n\n")
 	fmt.Fprintf(&b, "An installed copy carries a provenance stamp, so `magus graph verify` can tell "+
 		"you when a magus upgrade has made it stale. Text copied from this page carries none.\n\n")
+
+	writeStampTable(&b, cat, full)
 
 	b.WriteString("## Full form\n\nThe default: the steps plus the rationale for each.\n\n")
 	writeFenced(&b, full.Body)
@@ -176,4 +190,46 @@ func firstSentence(s string) string {
 		return s[:i+1]
 	}
 	return s
+}
+
+// writeStampTable renders the provenance frontmatter an INSTALLED copy carries.
+//
+// The page already tells the reader that an installed skill is stamped and that
+// copied text is not, then never showed the stamp - so the one concrete reason to
+// prefer `magus agent install` over copy-paste was an assertion rather than
+// something you could look at. These are the exact fields `magus graph verify`
+// reads to decide "up to date" or "STALE".
+//
+// The values come from the catalog rather than a literal, so the table cannot
+// drift from what install actually writes. skill-content is the shared digest:
+// both permutations report the SAME one, which is why they go stale together.
+func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSkill) {
+	body := string(cat.StampSkill(cat.RenderSkill(skill), agent.VariantFull))
+
+	b.WriteString("## What an installed copy carries\n\n")
+	b.WriteString("`magus agent install` writes this frontmatter above the body. " +
+		"`magus graph verify` reads it to report whether your installed skills are current.\n\n")
+	b.WriteString("| field | value |\n| --- | --- |\n")
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		key, value, ok := strings.Cut(line, ":")
+		if !ok || key == "" || key == "---" {
+			continue
+		}
+		// Stop at the body: the closing --- ends the frontmatter, and the long
+		// description is already the page's subtitle.
+		if key == "name" || key == "description" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		fmt.Fprintf(b, "| `%s` | `%s` |\n", key, value)
+		if key == "skill-variant" {
+			break
+		}
+	}
+	b.WriteString("\nThe `skill-content` digest is shared by both permutations below, " +
+		"so they version together: a magus upgrade makes both stale at once, never one silently.\n\n")
 }

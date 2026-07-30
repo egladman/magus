@@ -80,6 +80,7 @@
           <li><a href="../../../reference/skills/magus-architecture/" aria-current="page" title="magus-architecture">magus-architecture</a></li>
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
+          <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -87,21 +88,62 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#sizing-a-specific-refactor" title="Sizing a specific refactor">Sizing a specific refactor</a></li><li><a href="#match-the-existing-conventions" title="Match the existing conventions">Match the existing conventions</a></li><li><a href="#audit-the-domain-model-itself" title="Audit the domain model itself">Audit the domain model itself</a></li><li><a href="#verify-the-change" title="Verify the change">Verify the change</a></li><li><a href="#do-not-render-the-graph-yourself" title="Do not render the graph yourself">Do not render the graph yourself</a></li><li><a href="#sizing-a-specific-refactor-1" title="Sizing a specific refactor">Sizing a specific refactor</a></li><li><a href="#match-the-existing-conventions-1" title="Match the existing conventions">Match the existing conventions</a></li><li><a href="#audit-the-domain-model-itself-1" title="Audit the domain model itself">Audit the domain model itself</a></li><li><a href="#verify-the-change-1" title="Verify the change">Verify the change</a></li><li><a href="#do-not-render-the-graph-yourself-1" title="Do not render the graph yourself">Do not render the graph yourself</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">5 min read</small>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus-architecture">magus-architecture</h1>
-<p><progress value="3967" max="4510" aria-label="The --simple permutation is 12% smaller: 3967 of 4510 bytes."></progress><small>The --simple permutation is 12% smaller: 3967 of 4510 bytes.</small></p>
+<p><progress value="3532" max="4510" aria-label="The --simple permutation is 21% smaller: 3532 of 4510 bytes."></progress><small>The --simple permutation is 21% smaller: 3532 of 4510 bytes.</small></p>
 <p>Ground refactoring and structure proposals in the magus <a class="glossary-term" href="../../../glossary/#knowledge-graph" data-def="The queryable graph of a workspace's spells, targets, docs, and code relationships; query it with magus query/explain/path.">knowledge graph</a> instead of intuition. Use when suggesting directory structure, package layout, or <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a> boundaries, when deciding <a class="code-xref" href="../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>'s coupling and churn concentrate.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
 magus agent install .claude/skills --simple   # the short form below
 </code></pre>
 <p>An installed copy carries a provenance stamp, so <code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> verify</code> can tell you when a magus upgrade has made it stale. Text copied from this page carries none.</p>
+<h2 id="what-an-installed-copy-carries">What an installed copy carries</h2>
+<p><code>magus agent install</code> writes this frontmatter above the body. <code>magus <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> verify</code> reads it to report whether your installed skills are current.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>field</th>
+<th>value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>license</code></td>
+<td><code>GPL-3.0-or-later</code></td>
+</tr>
+<tr>
+<td><code>compatibility</code></td>
+<td><code>any-agent</code></td>
+</tr>
+<tr>
+<td><code>source</code></td>
+<td><code>magus</code></td>
+</tr>
+<tr>
+<td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
+<td><code>20</code></td>
+</tr>
+<tr>
+<td><code>knowledge-schema-version</code></td>
+<td><code>7</code></td>
+</tr>
+<tr>
+<td><code>skill-content</code></td>
+<td><code>7a4455e07c55</code></td>
+</tr>
+<tr>
+<td><code>skill-variant</code></td>
+<td><code>full</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The <code>skill-content</code> digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.</p>
 <h2 id="full-form">Full form</h2>
 <p>The default: the steps plus the rationale for each.</p>
 <pre><code class="language-markdown"># Architecture decisions from the graph
@@ -121,79 +163,87 @@ magus insight hotspots       # churn x complexity per project, with blast radius
 magus insight affinity       # projects that change together: hidden coupling
 magus insight ownership      # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
-</code></pre>
-<p>MCP: <code>magus_stats</code>, <code>magus_<a class="code-xref" href="../../manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a></code> {lens}, and <code>magus_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code> cover the same
-ground. <a class="glossary-term" href="../../../glossary/#affinity" data-def="An insight lens: projects that change together (temporal coupling). A pair that co-changes without either declaring a dependency on the other is a candidate architectural smell.">Affinity</a> deserves special weight: two projects that keep changing
+```
+
+MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+ground. Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
-either declare the dependency or move the shared concern.</p>
-<h2 id="sizing-a-specific-refactor">Sizing a specific refactor</h2>
-<ol>
-<li>Blast radius of a node: <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Explain one knowledge-graph node.">magus explain</a> &lt;node&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> shows its edges and how many
-nodes reach it. A high reached-by count means migration plan, not quick
-rename.</li>
-<li>Fan-in of a symbol: <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Find a symbol's definition and references.">magus refs</a> &lt;symbol&gt;</code> lists the defining file and every
-referencing file:line from the SCIP index. <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> it before moving or renaming
-any exported symbol. (If it reports no match for a symbol that surely
-exists, the index is likely unbuilt: check <code><a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">magus status</a></code>, then
-<code>magus <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> build</code>.)</li>
-<li>How two things relate: <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Show the shortest path between knowledge-graph nodes.">magus path</a> &lt;a&gt; &lt;b&gt;</code> gives the shortest edge chain -
-use it to test whether a proposed boundary actually separates them.</li>
-<li>Owners: <code><a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> kind:owner</code> (populated from CODEOWNERS) tells you whose
-review a move needs.</li>
-</ol>
-<h2 id="match-the-existing-conventions">Match the existing conventions</h2>
-<p>Derive the pattern from the graph rather than imposing one: where similar code
-already lives (<code>magus query kind:&lt;kind&gt; &lt;term&gt;</code>), which modules import which
-(<code>relation:imports</code>), how existing projects segment (<code>magus graph deps</code>). A
+either declare the dependency or move the shared concern.
+
+## Sizing a specific refactor
+
+1. Blast radius of a node: `magus explain &lt;node&gt;` shows its edges and how many
+   nodes reach it. A high reached-by count means migration plan, not quick
+   rename.
+2. Fan-in of a symbol: `magus refs &lt;symbol&gt;` lists the defining file and every
+   referencing file:line from the SCIP index. Run it before moving or renaming
+   any exported symbol. (If it reports no match for a symbol that surely
+   exists, the index is likely unbuilt: check `magus status`, then
+   `magus graph build`.)
+3. How two things relate: `magus path &lt;a&gt; &lt;b&gt;` gives the shortest edge chain -
+   use it to test whether a proposed boundary actually separates them.
+4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+   review a move needs.
+
+## Match the existing conventions
+
+Derive the pattern from the graph rather than imposing one: where similar code
+already lives (`magus query kind:&lt;kind&gt; &lt;term&gt;`), which modules import which
+(`relation:imports`), how existing projects segment (`magus graph deps`). A
 suggestion that follows the workspace's own conventions costs less than an
 imported ideal. State the observed convention in the proposal, with the query
-that shows it.</p>
-<h2 id="audit-the-domain-model-itself">Audit the domain model itself</h2>
-<p>The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+that shows it.
+
+## Audit the domain model itself
+
+The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):</p>
-<pre><code class="language-sh">magus graph stats                    # god nodes, orphans, doc coverage
+stats for smells (see the magus-query skill for the query syntax):
+
+```sh
+magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
   printf &quot;%-11s %s\n&quot; &quot;$k&quot; &quot;$(magus query &quot;kind:$k&quot; -o json | jq length)&quot;
 done                                  # population per abstraction
 magus explain &quot;&lt;node&gt;&quot;               # compare a kind's edges against a neighbour's
-</code></pre>
-<p>Confirm each smell against the source before acting on it:</p>
-<ul>
-<li>A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
-kind, or fold into an attr on an existing one?</li>
-<li>Two kinds with near-identical population AND edge shape may be one concept
-under two names. Keep them distinct only if their PROVENANCE differs (the kind
-doctrine in <code>types/knowledge.go</code>): a kind whose every instance is derivable
-from another kind's attr fails that test and should fold.</li>
-<li>An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
-which; an undeclared-but-available builtin is neither.</li>
-<li>A NODE LABEL that varies by checkout (a worktree name where a stable module
-name belongs) is an identity smell, even when the ID is stable.</li>
-</ul>
-<p>A kind or edge earns its place only if it answers a question the others cannot;
+```
+
+Confirm each smell against the source before acting on it:
+
+- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+  kind, or fold into an attr on an existing one?
+- Two kinds with near-identical population AND edge shape may be one concept
+  under two names. Keep them distinct only if their PROVENANCE differs (the kind
+  doctrine in `types/knowledge.go`): a kind whose every instance is derivable
+  from another kind's attr fails that test and should fold.
+- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+  which; an undeclared-but-available builtin is neither.
+- A NODE LABEL that varies by checkout (a worktree name where a stable module
+  name belongs) is an identity smell, even when the ID is stable.
+
+A kind or edge earns its place only if it answers a question the others cannot;
 prefer folding into an existing mechanism over adding one (pre-1.0: break
-freely). Ground every claim in a query, exactly as for a layout proposal.</p>
-<h2 id="verify-the-change">Verify the change</h2>
-<p>After restructuring, show the impact in graph terms: `magus graph diff --rev</p>
-<base> -o markdown` lists the nodes and edges the change added, removed, or
+freely). Ground every claim in a query, exactly as for a layout proposal.
+
+## Verify the change
+
+After restructuring, show the impact in graph terms: `magus graph diff --rev
+&lt;base&gt; -o markdown` lists the nodes and edges the change added, removed, or
 altered - blast radius as data, suitable for a PR description. Then run
-`magus <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>` to prove the <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> projects still pass.
-<h2 id="do-not-render-the-graph-yourself">Do not render the graph yourself</h2>
-<p>magus emits; it does not render. To look at structure, offer an export
-(<code>magus graph export -o json</code> or <code>-o graphml</code>) that opens in Gephi, yEd, or a
-browser graph tool - do not hand-draw diagrams of what the graph already knows.</p>
-<pre><code>
-## Short form (`--simple`)
+`magus affected ci` to prove the affected projects still pass.
 
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
+## Do not render the graph yourself
 
-&lt;details&gt;
-&lt;summary&gt;Show the short form&lt;/summary&gt;
-
-```markdown
-# Architecture decisions from the graph
+magus emits; it does not render. To look at structure, offer an export
+(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
+browser graph tool - do not hand-draw diagrams of what the graph already knows.
+</code></pre>
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># Architecture decisions from the graph
 
 magus already measured the workspace: what depends on what, what changes
 together, where churn and complexity concentrate, who owns what. Query those
@@ -209,67 +259,73 @@ magus insight hotspots       # churn x complexity per project, with blast radius
 magus insight affinity       # projects that change together: hidden coupling
 magus insight ownership      # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
-</code></pre>
-<p>MCP: <code>magus_stats</code>, <code>magus_insight</code> {lens}, and <code>magus_query</code> cover the same
-ground. Affinity deserves special weight: two projects that keep changing
-together WITHOUT a declared dependency edge are coupled through the back door -
-either declare the dependency or move the shared concern.</p>
-<h2 id="sizing-a-specific-refactor-1">Sizing a specific refactor</h2>
-<ol>
-<li>Blast radius of a node: <code>magus <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> &lt;node&gt;</code> shows its edges and how many
-nodes reach it.</li>
-<li>Fan-in of a symbol: <code>magus <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a> &lt;symbol&gt;</code> lists the defining file and every
-referencing file:line from the SCIP index. Run it before moving or renaming
-any exported symbol. (If it reports no match for a symbol that surely
-exists, the index is likely unbuilt: check <code>magus <a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a></code>, then
-<code>magus graph build</code>.)</li>
-<li>How two things relate: <code>magus <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> &lt;a&gt; &lt;b&gt;</code> gives the shortest edge chain.</li>
-<li>Owners: <code>magus query kind:owner</code> (populated from CODEOWNERS) tells you whose
-review a move needs.</li>
-</ol>
-<h2 id="match-the-existing-conventions-1">Match the existing conventions</h2>
-<p>Derive the pattern from the graph rather than imposing one: where similar code
-already lives (<code>magus query kind:&lt;kind&gt; &lt;term&gt;</code>), which modules import which
-(<code>relation:imports</code>), how existing projects segment (<code>magus graph deps</code>). State the observed convention in the proposal, with the query
-that shows it.</p>
-<h2 id="audit-the-domain-model-itself-1">Audit the domain model itself</h2>
-<p>The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
-names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):</p>
-<pre><code class="language-sh">magus graph stats                    # god nodes, orphans, doc coverage
+```
+
+MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+ground. Weight affinity most: changing
+together with no declared edge is back-door coupling.
+
+## Sizing a specific refactor
+
+1. Blast radius of a node: `magus explain &lt;node&gt;` shows its edges and how many
+   nodes reach it.
+2. Fan-in of a symbol: `magus refs &lt;symbol&gt;` lists the defining file and every
+   referencing file:line from the SCIP index. Run it before moving or renaming
+   any exported symbol. No match for a symbol that exists means an unbuilt
+   index: `magus graph build`.
+3. How two things relate: `magus path &lt;a&gt; &lt;b&gt;` gives the shortest edge chain.
+4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
+   review a move needs.
+
+## Match the existing conventions
+
+Derive the pattern from the graph rather than imposing one: where similar code
+already lives (`magus query kind:&lt;kind&gt; &lt;term&gt;`), which modules import which
+(`relation:imports`), how existing projects segment (`magus graph deps`). State the observed convention in the proposal, with the query
+that shows it.
+
+## Audit the domain model itself
+
+Census the kinds, then read the stats for smells:
+
+```sh
+magus graph stats                    # god nodes, orphans, doc coverage
 for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
   printf &quot;%-11s %s\n&quot; &quot;$k&quot; &quot;$(magus query &quot;kind:$k&quot; -o json | jq length)&quot;
 done                                  # population per abstraction
 magus explain &quot;&lt;node&gt;&quot;               # compare a kind's edges against a neighbour's
-</code></pre>
-<p>Confirm each smell against the source before acting on it:</p>
-<ul>
-<li>A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
-kind, or fold into an attr on an existing one?</li>
-<li>Two kinds with near-identical population AND edge shape may be one concept
-under two names. Keep them distinct only if their PROVENANCE differs (the kind
-doctrine in <code>types/knowledge.go</code>).</li>
-<li>An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
-which.</li>
-<li>A NODE LABEL that varies by checkout (a worktree name where a stable module
-name belongs) is an identity smell.</li>
-</ul>
-<p>A kind or edge earns its place only if it answers a question the others cannot;
-prefer folding into an existing mechanism over adding one (pre-1.0: break
-freely). Ground every claim in a query, exactly as for a layout proposal.</p>
-<h2 id="verify-the-change-1">Verify the change</h2>
-<p>After restructuring, show the impact in graph terms: `magus graph diff --rev</p>
-<base> -o markdown` lists the nodes and edges the change added, removed, or
+```
+
+Confirm each smell against the source before acting on it:
+
+- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+  kind, or fold into an attr on an existing one?
+- Two kinds with near-identical population AND edge shape may be one concept
+  under two names. Keep them distinct only if their PROVENANCE differs (the kind
+  doctrine in `types/knowledge.go`).
+- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+  which.
+- A NODE LABEL that varies by checkout (a worktree name where a stable module
+  name belongs) is an identity smell.
+
+A kind or edge earns its place only if it answers a question the others cannot;
+prefer folding into an existing mechanism over adding one. Ground every claim in a query, exactly as for a layout proposal.
+
+## Verify the change
+
+After restructuring, show the impact in graph terms: `magus graph diff --rev
+&lt;base&gt; -o markdown` lists the nodes and edges the change added, removed, or
 altered. Then run
-`<a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci` to prove the affected projects still pass.
-<h2 id="do-not-render-the-graph-yourself-1">Do not render the graph yourself</h2>
-<p>magus emits; it does not render. To look at structure, offer an export
-(<code>magus graph export -o json</code> or <code>-o graphml</code>) that opens in Gephi, yEd, or a
-browser graph tool - do not hand-draw diagrams of what the graph already knows.</p>
-<pre><code>
-&lt;/details&gt;
+`magus affected ci` to prove the affected projects still pass.
+
+## Do not render the graph yourself
+
+magus emits; it does not render. To look at structure, offer an export
+(`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
+browser graph tool.
 </code></pre>
+</details>
     </article>
     </div>
     </div>
@@ -288,7 +344,7 @@ browser graph tool - do not hand-draw diagrams of what the graph already knows.<
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-architecture%22">magus-architecture</a></div>
-    <small>Last updated <time datetime="2026-07-29T23:55:02Z">July 29, 2026, 11:55 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed" data-tooltip="32393b3650099222a26a55a57669a18f203b1bed" title="32393b3650099222a26a55a57669a18f203b1bed">32393b36</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T00:58:27Z">July 30, 2026, 12:58 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4062215a1eb6b298777667e20c2992908dfab76c" data-tooltip="4062215a1eb6b298777667e20c2992908dfab76c" title="4062215a1eb6b298777667e20c2992908dfab76c">4062215a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/32393b3650099222a26a55a57669a18f203b1bed"><code>32393b36</code></a> <small><time datetime="2026-07-29T23:55:02Z">Jul 29, 2026</time></small> - showcase every skill on the docs site, both permutations, with a Pico progress bar for the ratio</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -352,6 +408,71 @@ distinct-author count (the bus factor), and abandonment. See
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

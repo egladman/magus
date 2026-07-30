@@ -4,7 +4,8 @@ magus ships one official documentation corpus.<!-- why --> It is a static site, 
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT.<!-- /why --> Reach for it when a magus-domain fact
 is not derivable from the workspace graph<!-- why --> - the docs are the source of truth for
-magus's own behavior, so read them rather than guessing<!-- /why -->.
+magus's own behavior, so read them rather than guessing<!-- /why --><!-- terse --> - they are the source of
+truth for magus's own behavior<!-- /terse -->.
 
 Two places serve the same pages:
 
@@ -21,7 +22,7 @@ Two files at the docs root turn "find the right page" into a lookup, not a guess
   Markdown (`<url>index.md`), with a one-line description. Read this FIRST to
   locate a page, then fetch its `index.md`.
 - `search-index.json` - a flat array of `{url, title, text, tags, description}`,
-  one record per page. Grep it for a keyword when you do not know the page name.
+  one record per page.<!-- why --> Grep it for a keyword when you do not know the page name.<!-- /why --><!-- terse --> Search it when you do not know the page name.<!-- /terse -->
 
 <!-- why -->WRONG: guess `https://.../go-spell` or grep the open web.
 CORRECT: read `llms.txt` (or `docs/` locally), find the entry, fetch its Markdown.<!-- /why -->
@@ -59,14 +60,15 @@ Every page gives you three axes<!-- why -->, so from one page you can reach its 
   section landing.<!-- why --> A `page_type: overview` page IS a section landing.<!-- /why -->
 - Prev / next (pager): the adjacent pages in the same section.
 
-So: land via `llms.txt`, read the page, then use "In this section" to sweep its
-siblings - do not re-search for each one.
+<!-- why -->So: land via `llms.txt`, read the page, then use "In this section" to sweep its
+siblings - do not re-search for each one.<!-- /why --><!-- terse -->Land via `llms.txt`, then sweep siblings via "In this section".<!-- /terse -->
 
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it<!-- why -->: it is true only as of the
-last regeneration, and every fact in it has a live command<!-- /why -->. The knowledge graph
+last regeneration, and every fact in it has a live command<!-- /why -->.<!-- why --> The knowledge graph
 carries every page as a `doc` node, so `magus query "kind:doc"` (see the
-magus-query skill) lists them from the graph.
+magus-query skill) lists them from the graph.<!-- /why --><!-- terse --> `magus query "kind:doc"` lists every
+page from the graph.<!-- /terse -->

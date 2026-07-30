@@ -3,7 +3,7 @@ title: magus-docs
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs]
 skill_full_bytes: 3670
-skill_simple_bytes: 3012
+skill_simple_bytes: 2917
 ---
 
 # magus-docs
@@ -18,6 +18,22 @@ magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
@@ -109,7 +125,8 @@ The same steps with the rationale withheld; the bar under the heading above show
 # Navigating the magus docs
 
 magus ships one official documentation corpus. Reach for it when a magus-domain fact
-is not derivable from the workspace graph.
+is not derivable from the workspace graph - they are the source of
+truth for magus's own behavior.
 
 Two places serve the same pages:
 
@@ -126,7 +143,7 @@ Two files at the docs root turn "find the right page" into a lookup, not a guess
   Markdown (`<url>index.md`), with a one-line description. Read this FIRST to
   locate a page, then fetch its `index.md`.
 - `search-index.json` - a flat array of `{url, title, text, tags, description}`,
-  one record per page. Grep it for a keyword when you do not know the page name.
+  one record per page. Search it when you do not know the page name.
 
 ## URL scheme
 
@@ -161,16 +178,14 @@ Every page gives you three axes:
   section landing.
 - Prev / next (pager): the adjacent pages in the same section.
 
-So: land via `llms.txt`, read the page, then use "In this section" to sweep its
-siblings - do not re-search for each one.
+Land via `llms.txt`, then sweep siblings via "In this section".
 
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 (never edit it - change the source and regenerate). MAGUS.md is a routing index
-generated for HUMAN readers, so do not answer from it. The knowledge graph
-carries every page as a `doc` node, so `magus query "kind:doc"` (see the
-magus-query skill) lists them from the graph.
+generated for HUMAN readers, so do not answer from it. `magus query "kind:doc"` lists every
+page from the graph.
 ```
 
 

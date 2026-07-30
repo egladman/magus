@@ -19,6 +19,60 @@ magus completion <shell>    # e.g. bash, zsh, fish
 
 `<target>`, `<path>`, `<shell>`, `<name>` and the like are stand-ins, not literal text.
 
+## Command synopsis notation
+
+Every synopsis on this site and in `magus <verb> -h` and the manpages uses the
+same five marks. This is the whole vocabulary:
+
+| notation | means | example |
+| --- | --- | --- |
+| `<value>` | required; replace it | `magus run <target>` |
+| `[thing]` | optional; omit the brackets if you use it | `magus ls [flags]` |
+| `<a\|b\|c>` | required, and one of these exact words | `magus completion <bash\|zsh\|fish\|powershell>` |
+| `<value>...` | repeatable; one or more, space separated | `magus describe file <path> [<path>...]` |
+| `word[s]` | the `s` is optional - both spellings work | `magus describe spell[s]` |
+
+The last one is the only place square brackets do NOT mean "optional argument":
+`spell[s]` means `magus describe spell` and `magus describe spells` are the same
+command, not that `s` is a separate thing you can pass.
+
+Combining them reads left to right, so `[<path>...]` is "optional, and if you give
+it, one or more paths":
+
+```sh
+magus run <target> [flags] [project...]
+magus describe file <path> [<path>...] [flags]
+```
+
+`[flags]` and `[args]` are categories rather than placeholders - there is nothing
+called "flags" to substitute. Run the command with `-h` to see which it accepts.
+
+A bare `--` ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:
+
+```sh
+magus run test libs/foo -- -run TestX
+```
+
+Values are written `--flag <value>` in synopses, but every magus flag also accepts
+`--flag=<value>`, `-flag <value>` and `-flag=<value>`. Pick whichever reads
+better; they parse identically.
+
+Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:
+
+```sh
+magus status --probe=mcp,liveness
+```
+
+A few take a structured value spelled `key=<value>` pairs, comma separated. Where
+a pattern is accepted it is always the same three types:
+
+```sh
+magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+```
+
 ## Shell commands
 
 Command blocks omit the shell prompt - copy the whole block as-is, no leading `$` or

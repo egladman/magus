@@ -63,7 +63,7 @@ func graphOpen(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&useTargets, "targets", false, "open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project")
 		fs.BoolVar(&useLive, "live", false, "connect the explorer to the running daemon for a live workspace view (requires 'magus server start')")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus graph open [flags] [project-path]")
+			fmt.Fprintln(os.Stderr, "Usage: magus graph open [flags] [<project>]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Open this workspace's knowledge graph in the hosted, interactive Graph")
 			fmt.Fprintln(os.Stderr, "Explorer. The graph is delivered privately and never leaves your machine:")

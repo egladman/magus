@@ -18,7 +18,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	skills, err := agentSkills.EmbeddedSkills(agent.VariantFull)
 	require.NoError(t, err)
-	require.Len(t, skills, 8)
+	require.Len(t, skills, 9)
 	for _, skill := range skills {
 		assert.NotEmpty(t, skill.Name)
 		assert.NotEmpty(t, skill.Description)
@@ -294,6 +294,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// `git reset --hard` almost never did. Without anchoring, writing this very
 		// test file through a shell heredoc was itself denied.
 		{command: "echo 'run go test ./... to check'"},
+		// A BACKSLASH-escaped separator is not a shell separator: it is a regex
+		// alternation inside a quoted argument. Peeling must not reintroduce this -
+		// splitting the line into segments does, which is why peeling substitutes.
+		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
 		// Still caught in every real command position.
@@ -301,9 +305,47 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "make lint; pytest tests/", deny: true},
 		{command: "go build ./... | tee log", deny: true},
 		// Exempt: these bypass nothing, so advising on them is pure noise.
-		{command: "go build -o /tmp/magus ./cmd/magus"},
 		{command: "gofmt -l ./libs"},
 		{command: "gofmt -d x.go"},
+		// `go build` denies at EVERY output path. Producing a binary is a write,
+		// and the write rule has no destination-shaped exceptions.
+		{command: "go build -o /tmp/magus ./cmd/magus", deny: true},
+		{command: "go build ./...", deny: true},
+		// PASS-THROUGH WRAPPERS. Each of these passed while its bare form denied,
+		// because every raw-tool pattern is anchored at a command position and a
+		// wrapper moves the real command off it. The guard peels them and judges
+		// the payload, so the verdict is the inner command's on its own merits.
+		{command: "mise exec -- env -u GOROOT go test ./...", deny: true},
+		{command: "mise x -- go test ./...", deny: true},
+		{command: "env -u GOROOT go test ./...", deny: true},
+		{command: "GOFLAGS=-count=1 go test ./...", deny: true},
+		{command: "GOFLAGS=-count=1 GOEXPERIMENT=jsonv2 go vet ./...", deny: true},
+		{command: "bash -c 'go test ./...'", deny: true},
+		{command: `sh -c "gofmt -w x.go"`, deny: true},
+		{command: "timeout 300 go test ./...", deny: true},
+		{command: "nohup pnpm build", deny: true},
+		{command: "time npx prettier --write .", deny: true},
+		{command: "nice -n 10 cargo build", deny: true},
+		{command: "make deps && mise exec -- go generate ./...", deny: true},
+		// Stacked wrappers reduce all the way down.
+		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", deny: true},
+		// The WRAPPER is never the finding. Peeling exists so the payload can be
+		// judged, and a magus payload is exactly what the wrapper should carry -
+		// `mise exec` is how this workspace reaches its pinned toolchain.
+		{command: "mise exec -- magus run test"},
+		{command: "env -u GOROOT magus run build"},
+		{command: "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus", deny: true},
+		{command: "bash -c 'ls -la'"},
+		{command: "mise install"},
+		// `mise run <task>` runs a DECLARED mise task, not a smuggled command, so
+		// it is not peeled - peeling would misattribute the task's contents.
+		{command: "mise run setup"},
+		// THE WRITE RULE. A build landing on a tracked path is a write, so only an
+		// absolute -o (the documented `/tmp/magus` dev loop) is exempt.
+		{command: "go build -o ./bin/magus ./cmd/magus", deny: true},
+		{command: "go mod tidy", deny: true},
+		{command: "go mod vendor", deny: true},
+		{command: "govulncheck ./...", deny: true},
 		// The rule set is language-agnostic on purpose: magus workspaces are not
 		// Go-only, and a guard that only knows Go is useless in a Rust or JS repo.
 		{command: "ruff check .", deny: true},
@@ -314,11 +356,20 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "golangci-lint run", deny: true},
 		{command: "buf generate", deny: true},
 		{command: "mockery", deny: true},
-		// Trimming magus's own output with the shell: magus has output flags, and
-		// a pipe discards exactly what the agent then has to guess at.
-		{command: "magus affected ci 2>&1 | tail -30", context: "--silent"},
-		{command: "/tmp/magus run test | head -5", context: "--silent"},
-		{command: "MAGUS_X=1 magus query foo | grep bar", context: "--silent"},
+		// Trimming magus's own output with the shell. DENIED, not advised: as an
+		// advisory this fired repeatedly in one session while its own author kept
+		// piping magus into grep anyway - the same trained-reflex result the raw
+		// tool advisory produced, so it gets the same answer.
+		{command: "magus affected ci 2>&1 | tail -30", deny: true},
+		{command: "/tmp/magus run test | head -5", deny: true},
+		{command: "MAGUS_X=1 magus query foo | grep bar", deny: true},
+		{command: "magus describe targets | wc -l", deny: true},
+		{command: "magus run test -s | grep -i fail | head -3", deny: true},
+		// `magus query output <ref>` is the ONE exemption: a raw captured tool log
+		// has no schema for magus to project, so searching it has no flag that
+		// replaces it.
+		{command: "magus query output ref1a2b3c | grep -n error"},
+		{command: "magus query output ref1a2b3c | tail -50"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
 		{command: "grep -n x cmd/magus/agent_test.go | head"},
 		{command: "ls cmd/magus | wc -l"},
@@ -356,12 +407,285 @@ func TestEvaluateBashGuard(t *testing.T) {
 			assert.Empty(t, v.Context, "%q denies, no context", tt.command)
 			continue
 		}
-		assert.Empty(t, v.Deny, "%q must not deny", tt.command)
+		cmds, _ := parseGuardCommands(tt.command)
+		assert.Empty(t, v.Deny, "%q must not deny (parsed: %+v)", tt.command, cmds)
 		if tt.context == "" {
 			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
 		} else {
 			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
 		}
+	}
+}
+
+// TestParseGuardCommands pins the resolution itself, separately from the
+// verdicts it feeds. The decision table above proves the verdicts are right;
+// this proves they are right for the right reason - that what the guard judges
+// is the command the shell would actually run.
+func TestParseGuardCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    []guardCommand
+	}{
+		{"bare", "go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		// An assignment prefix is a separate AST field, so it never has to be
+		// peeled and can never strand the payload.
+		{"assignment prefix", "GOFLAGS=-count=1 go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"quoted assignment value", `GOFLAGS="-count=1 -v" go test ./...`, []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -u", "env -u GOROOT go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"mise exec", "mise exec -- go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"stacked wrappers", "mise exec -- env -u GOROOT go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"timeout duration is not the program", "timeout 300 go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"absolute path resolves to its base", "/usr/local/bin/go test ./...", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		// A -c payload is a script, so it is parsed rather than treated as a word.
+		{"shell -c", "bash -c 'go test ./...'", []guardCommand{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"bundled -c flag", `sh -ec "go vet ./..."`, []guardCommand{{Name: "go", Args: []string{"vet", "./..."}}}},
+		// Both sides of a compound are commands.
+		{"compound", "make deps && mise exec -- go vet ./...", []guardCommand{
+			{Name: "make", Args: []string{"deps"}},
+			{Name: "go", Args: []string{"vet", "./..."}},
+		}},
+		// The tokenizing bugs the parser exists to make impossible: a separator
+		// inside quotes is one word, structurally, not a pipe into another command.
+		{"pipe inside quotes is one word", `grep -n "golangci-lint|gofmt" cmd/`, []guardCommand{
+			{Name: "grep", Args: []string{"-n", "golangci-lint|gofmt", "cmd/"}},
+		}},
+		{"tool name in prose is an argument", "echo 'run go test to check'", []guardCommand{
+			{Name: "echo", Args: []string{"run go test to check"}},
+		}},
+		// `mise run` is a declared task, not a smuggled command.
+		{"mise run is not a wrapper", "mise run setup", []guardCommand{{Name: "mise", Args: []string{"run", "setup"}}}},
+		// The wrapper is not the finding: a magus payload resolves and is judged
+		// on its own merits, which is to say fine.
+		{"magus payload", "mise exec -- magus run test", []guardCommand{{Name: "magus", Args: []string{"run", "test"}}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := parseGuardCommands(tt.command)
+			assert.True(t, ok, "must parse")
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestParseGuardCommandsUnparseable pins the fail-open contract: a line the
+// parser cannot read skips the raw-tool rule rather than guessing at it.
+func TestParseGuardCommandsUnparseable(t *testing.T) {
+	_, ok := parseGuardCommands("go test ./... && (")
+	assert.False(t, ok)
+	_, denied := firstRawToolDenied("go test ./... && (")
+	assert.False(t, denied)
+}
+
+// TestGuardAdversarial is the hostile pass: every way found to smuggle a covered
+// tool past the guard, and every way found to trip it on something innocent.
+//
+// It is written as an attack list rather than a feature list because that is how
+// the failures actually arrived. The wrapper cases are not hypothetical - the
+// `mise exec -- env -u GOROOT go test` form is what an agent reached for in a
+// real session, unprompted, after the bare form denied. An agent does not need
+// to intend evasion to evade; it just needs a habit and a toolchain that is
+// awkward to reach. Treat any new entry here as a bug report, not a nice-to-have.
+func TestGuardAdversarial(t *testing.T) {
+	denied := []struct{ name, command string }{
+		// Wrapper smuggling, the observed failure mode.
+		{"mise exec", "mise exec -- go test ./..."},
+		{"mise exec with tool pin", "mise exec go@1.26.5 -- go test ./..."},
+		{"mise x", "mise x -- go test ./..."},
+		{"env unset", "env -u GOROOT go test ./..."},
+		{"env assignment operand", "env GOFLAGS=-v go test ./..."},
+		{"env -i", "env -i go test ./..."},
+		{"assignment prefix", "GOFLAGS=-count=1 go test ./..."},
+		{"quoted assignment value", `GOFLAGS="-count=1 -v" go test ./...`},
+		{"two assignment prefixes", "A=1 B=2 go test ./..."},
+		{"timeout", "timeout 300 go test ./..."},
+		{"timeout with flag", "timeout --foreground 5m go test ./..."},
+		{"nice", "nice -n 10 go test ./..."},
+		{"nice old syntax", "nice -10 go test ./..."},
+		{"stdbuf", "stdbuf -o0 go test ./..."},
+		{"nohup", "nohup go test ./..."},
+		{"command builtin", "command go test ./..."},
+		{"exec builtin", "exec go test ./..."},
+		{"time", "time go test ./..."},
+		{"xargs", "xargs -n1 go vet"},
+		{"setsid", "setsid go test ./..."},
+		{"sudo", "sudo go test ./..."},
+		{"stacked wrappers", "mise exec -- env -u GOROOT timeout 60 go test ./..."},
+		{"deeply stacked", "nohup nice -n 5 stdbuf -o0 env -u GOROOT go test ./..."},
+
+		// Shell re-entry.
+		{"bash -c", "bash -c 'go test ./...'"},
+		{"sh -c double quotes", `sh -c "go test ./..."`},
+		{"bundled flags", "bash -lc 'go test ./...'"},
+		{"absolute shell path", "/bin/sh -c 'go test ./...'"},
+		{"shell inside wrapper", "mise exec -- bash -c 'go test ./...'"},
+		{"nested shells", `bash -c "sh -c 'go test ./...'"`},
+		{"eval", `eval "go test ./..."`},
+
+		// Program-name obfuscation. A regex could be beaten by every one of
+		// these; a parser resolves the word first and then looks it up.
+		{"absolute path", "/usr/local/bin/go test ./..."},
+		{"relative path", "./bin/go test ./..."},
+		{"quoted program", `"go" test ./...`},
+		{"partially quoted program", `g"o" test ./...`},
+		{"single-quoted fragment", "g'o' test ./..."},
+
+		// Control flow: every branch is a command.
+		{"semicolon", "make deps; go test ./..."},
+		{"and-and", "make deps && go test ./..."},
+		{"or-or", "make deps || go test ./..."},
+		{"pipe", "go test ./... | tee log"},
+		{"subshell", "(cd libs/diag && go test ./...)"},
+		{"brace block", "{ go test ./...; }"},
+		{"if branch", "if true; then go test ./...; fi"},
+		{"for body", "for d in a b; do go test ./$d; done"},
+		{"while body", "while true; do go test ./...; done"},
+		{"function body", "run() { go test ./...; }; run"},
+		{"command substitution", "echo $(go test ./...)"},
+		{"backtick substitution", "echo `go test ./...`"},
+		{"background", "go test ./... &"},
+		{"negated", "! go test ./..."},
+		{"redirected", "go test ./... > /dev/null 2>&1"},
+
+		// The write rule. `go build` produces a binary, so it is a write at EVERY
+		// destination - including the /tmp dev loop that used to be exempt.
+		{"relative build output", "go build -o ./bin/magus ./cmd/magus"},
+		{"relative build output no dot", "go build -o bin/magus ./cmd/magus"},
+		{"absolute build output", "go build -o /tmp/magus ./cmd/magus"},
+		{"wrapped absolute build", "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus"},
+		{"bare build", "go build ./..."},
+		{"go mod tidy", "go mod tidy"},
+		{"go mod vendor", "go mod vendor"},
+		{"gofmt -w", "gofmt -w ."},
+		{"go generate", "go generate ./..."},
+		{"prettier write", "npx prettier --write ."},
+		{"wrapped write", "mise exec -- go generate ./..."},
+
+		// Destructive git still denies however it is REACHED - the safety property
+		// the old unanchored regexes existed for, kept by parsing both commands.
+		{"stash after cd", "cd /repo && git stash"},
+		{"stash in a subshell", "(cd libs/diag && git stash)"},
+		{"stash push", "git stash push -u"},
+		{"bare stash", "git stash"},
+		{"reset hard", "git reset --hard origin/main"},
+		{"clean -fd", "git clean -fd"},
+		{"checkout dot", "git checkout ."},
+		{"checkout dash dash dot", "git checkout -- ."},
+		{"restore dot", "git restore ."},
+		{"stage everything", "git add -A"},
+		{"stage dot", "git add ."},
+		{"stash behind a wrapper", "bash -c 'git stash'"},
+	}
+	for _, tt := range denied {
+		t.Run("deny/"+tt.name, func(t *testing.T) {
+			cmds, _ := parseGuardCommands(tt.command)
+			assert.NotEmpty(t, evaluateBashGuard(tt.command).Deny,
+				"%q must deny (parsed: %+v)", tt.command, cmds)
+		})
+	}
+
+	// The other half of the job. A guard that cries wolf gets switched off, and
+	// these are the shapes that made it cry wolf: a tool NAME is not a tool CALL.
+	allowed := []struct{ name, command string }{
+		// The wrapper is never the finding.
+		{"mise exec magus", "mise exec -- magus run test"},
+		{"env magus", "env -u GOROOT magus run build"},
+		{"mise run is a declared task", "mise run setup"},
+		{"mise install", "mise install"},
+		{"bash -c innocuous", "bash -c 'ls -la'"},
+
+		// Documented exemptions.
+		{"gofmt list", "gofmt -l ./libs"},
+		{"gofmt diff", "gofmt -d x.go"},
+		{"version probe", "golangci-lint --version"},
+		{"go version", "go version"},
+		{"go help", "go help test"},
+		{"go mod download reads", "go mod download"},
+		{"go list reads", "go list ./..."},
+
+		// A tool name as DATA. Every one of these denied at some point.
+		{"prose in echo", "echo 'run go test to check'"},
+		{"prose in commit message", `git commit -m "stop reaching for go test"`},
+		{"grep pattern", `grep -rn "go test" docs/`},
+		{"pipe inside a quoted pattern", `grep -n "golangci-lint|gofmt" cmd/`},
+		{"escaped alternation", `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
+		{"backtick in a quoted argument", "echo 'run `go test` first'"},
+		{"tool name in a path", "cat cmd/magus/gofmt_test.go"},
+		{"heredoc body is data", "cat <<'EOF'\ngo test ./...\nEOF"},
+
+		// Neighbouring programs that merely start the same way.
+		{"godoc", "godoc -http=:6060"},
+		{"gopls", "gopls check ."},
+
+		// Plain magus usage must never be obstructed.
+		{"magus run", "magus run test"},
+		{"magus affected", "magus affected ci"},
+
+		// DESTRUCTIVE GIT COMMANDS AS PROSE. These denied until the git rules moved
+		// onto the parser, and the cost was concrete: writing the magus-vcs skill -
+		// the document whose entire subject is these commands - through a heredoc
+		// was blocked twice in one session.
+		{"stash named in a heredoc", "cat <<'EOF' > s.md\nNever run git stash here.\nEOF"},
+		{"stash named in an echo", "echo 'never run git stash to verify a build'"},
+		{"clean named in a commit message", `git commit -m "document why git clean -fd is banned"`},
+		{"reset --hard as documentation", "echo 'git reset --hard destroys untracked work'"},
+		{"checkout dot inside a quoted string", `printf '%s' "git checkout . is denied"`},
+		// Safe stash subcommands stay safe.
+		{"stash list", "git stash list"},
+		{"stash pop", "git stash pop"},
+		// A branch checkout is not a revert.
+		{"checkout a branch", "git checkout main"},
+		{"checkout -b", "git checkout -b feat/x"},
+		// A scoped clean flag-less invocation is a dry run.
+		{"clean -n", "git clean -n"},
+		{"reset without --hard", "git reset HEAD~1"},
+	}
+	for _, tt := range allowed {
+		t.Run("allow/"+tt.name, func(t *testing.T) {
+			cmds, _ := parseGuardCommands(tt.command)
+			assert.Empty(t, evaluateBashGuard(tt.command).Deny,
+				"%q must not deny (parsed: %+v)", tt.command, cmds)
+		})
+	}
+}
+
+// TestGuardKnownHoles records what this guard CANNOT catch, as executable fact
+// rather than as a caveat in a comment someone will not read.
+//
+// These are not todos. Each one is unclosable by anything short of running the
+// command, and the entry exists so that nobody re-derives that the hard way, and
+// so a future change that accidentally closes one is noticed. The conclusion to
+// draw is the one the architecture already reflects: this guard is the fast,
+// explanatory layer, and the filesystem sandbox is the enforcement. A hook that
+// reads a command string is defence in depth, never a boundary.
+func TestGuardKnownHoles(t *testing.T) {
+	holes := []struct{ name, command, why string }{
+		{
+			"script file", "sh /tmp/build.sh",
+			"the guard sees a path; the contents are not readable from the command line",
+		},
+		{
+			"command substitution as the program", "$(which go) test ./...",
+			"the program name is produced at runtime, so it has no literal value to resolve",
+		},
+		{
+			"variable as the program", "$GO test ./...",
+			"same: a parameter expansion has no value until the shell runs",
+		},
+		{
+			"alias defined earlier in the session", "gt ./...",
+			"an alias lives in the shell's state, not in the command line the hook receives",
+		},
+		{
+			"make target that shells out", "make test",
+			"the recipe is in a Makefile; only the make invocation is visible",
+		},
+	}
+	for _, tt := range holes {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Empty(t, evaluateBashGuard(tt.command).Deny,
+				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
+		})
 	}
 }
 
@@ -371,6 +695,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 func TestAgentHookCmd(t *testing.T) {
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
+		// The display flags live on a package global and default to whatever it
+		// already holds, so one case passing -o json would otherwise leak into
+		// every later case. Harmless in the real CLI (one command per process),
+		// load-bearing here - and the reason this reset exists rather than a
+		// local output flag, which is what the command used to have.
+		global = globalFlags{}
 		require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(stdin), &out, args))
 		return out.String()
 	}

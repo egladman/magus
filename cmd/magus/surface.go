@@ -48,6 +48,7 @@ var subcommands = []subcommand{
 	{Name: "man", Short: "install the man pages embedded in this binary"},
 	{Name: "init", Short: "bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)"},
 	{Name: "agent", Short: "install the knowledge-graph agent skills into a repo (agent install <dir>)"},
+	{Name: "vcs", Short: "stage a change by what the workspace declares (vcs add), instead of git add -A"},
 	{Name: "self", Short: "manage the magus binary (self update / install)"},
 	{Name: "version", Short: "print version, commit, and build date"},
 	{Name: "help", Short: "show this message"},

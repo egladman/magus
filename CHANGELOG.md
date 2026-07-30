@@ -9,8 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Removed
+
+- The `assume_interactive` config key (`MAGUS_ASSUME_INTERACTIVE`,
+  `--assume-interactive`) is gone. It existed to lift the TTY gate on `magus tail` and
+  `magus x`, and did not earn its place on either. For `x` it never reached a working
+  state: past the outer gate the picker hit its own TTY check and failed anyway, so the
+  escape hatch only moved the error later. For `tail` it was a workaround for a gate
+  that was too broad, now narrowed instead (see Changed). Nothing replaces it; if you
+  set it in `magus.yaml` it is now inert.
+
 ### Changed
 
+- `magus tail` only requires an interactive terminal for `-f`. Without it, tail prints
+  the last `-n` lines to stdout and exits, which works in a script, a CI step, or an
+  agent - the whole command used to be gated on `isatty`, which made the useful half
+  unreachable for every non-human caller.
 - Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
   fingerprints are now computed by streaming fields into SHA256 rather than by hashing
   marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest

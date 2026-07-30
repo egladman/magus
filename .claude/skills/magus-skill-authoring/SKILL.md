@@ -13,7 +13,7 @@ either.
 ## 1. Empiricism before documentation
 
 Never teach behavior you have not executed against a freshly built binary in
-this session. Build HEAD (`go build -o /tmp/magus ./cmd/magus`), start the
+this session. Build HEAD (`magus run build .`), start the
 daemon, call the actual tool (over MCP HTTP as well as the CLI), and paste the
 observed output into your analysis before writing a word of skill text.
 

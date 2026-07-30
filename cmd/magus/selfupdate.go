@@ -85,6 +85,7 @@ func selfCmdUsage() {
 // release.
 func selfUpdateCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self update", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus self update [flags]")
 		fmt.Fprintln(os.Stderr, "")

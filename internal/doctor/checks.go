@@ -1075,3 +1075,93 @@ func (r *runner) checkStaleWorktrees() Check {
 func (r *runner) checkSpellContract() Check {
 	return checkSpellContract(project.DefaultSpellRegistry().All())
 }
+
+// checkGuardBinary reports which magus binary an agent-host guard hook would
+// actually execute, and whether it predates the working tree's Go sources.
+//
+// This exists because of a real and expensive failure. The hook resolved its
+// binary as `command -v magus || /tmp/magus`, nothing was on PATH, and so every
+// verdict for a whole session came from a months-old binary left in /tmp by an
+// earlier session. The guard looked like it was working - it denied things, it
+// printed reasons - while every bypass being fixed that session was still wide
+// open in the binary doing the enforcing. Nothing anywhere said so.
+//
+// A stale guard is worse than an absent one: an absent guard is noticed within a
+// command or two, and a stale one is trusted indefinitely. So this check reports
+// the resolved path always, not only on failure, because the question it answers
+// ("which binary is judging me?") has no other way to be asked.
+//
+// The staleness test is deliberately coarse - binary mtime against the newest
+// tracked .go file - because it only has to catch "you edited the guard and did
+// not rebuild", which is the case that actually bites.
+func (r *runner) checkGuardBinary() Check {
+	const name = "guard binary"
+
+	bin := filepath.Join(r.ws.Root(), "magus")
+	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
+		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
+			return Check{Name: name, Status: StatusOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
+		}
+		return Check{
+			Name:    name,
+			Status:  StatusFail,
+			Message: "no ./magus and no magus on PATH, so a guard hook is unenforced",
+			Details: []string{"build one: magus run build ."},
+		}
+	}
+
+	info, err := os.Stat(bin)
+	if err != nil {
+		return Check{Name: name, Status: StatusFail, Message: err.Error()}
+	}
+	newest, newestPath := newestGoSource(r.ws.Root())
+	if !newest.IsZero() && info.ModTime().Before(newest) {
+		return Check{
+			Name:    name,
+			Status:  StatusFail,
+			Message: "./magus is older than the working tree, so guard verdicts come from stale rules",
+			Details: []string{
+				"binary:  " + info.ModTime().Format(time.RFC3339),
+				"newest:  " + newest.Format(time.RFC3339) + "  (" + newestPath + ")",
+				"rebuild: magus run build .",
+			},
+		}
+	}
+	return Check{Name: name, Status: StatusOK, Message: "hook would run ./magus, newer than every tracked Go source"}
+}
+
+// newestGoSource returns the modification time of the most recently changed .go
+// file in the tree, skipping the directories that never hold guard sources.
+func newestGoSource(root string) (time.Time, string) {
+	var newest time.Time
+	var at string
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // an unreadable subtree is not a doctor failure
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "node_modules", "gen", ".claude":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".go" {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil //nolint:nilerr // ditto
+		}
+		if info.ModTime().After(newest) {
+			newest, at = info.ModTime(), path
+		}
+		return nil
+	})
+	if at != "" {
+		if rel, err := filepath.Rel(root, at); err == nil {
+			at = rel
+		}
+	}
+	return newest, at
+}

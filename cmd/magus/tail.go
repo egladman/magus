@@ -27,11 +27,11 @@ func tailCmd(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&follow, "f", false, "follow: print last -n lines then stream appended output")
 		fs.IntVar(&lines, "n", 10, "number of lines to print (0 = entire file)")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus tail [-f] [-n N] [target]")
+			fmt.Fprintln(os.Stderr, "Usage: magus tail [-f] [-n <count>] [target]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Stream the captured build log of the most recent cache entry for a")
 			fmt.Fprintln(os.Stderr, "project. The log was written during a cache miss (when the build")
-			fmt.Fprintln(os.Stderr, "actually ran). Requires an interactive terminal.")
+			fmt.Fprintln(os.Stderr, "actually ran). Only -f requires an interactive terminal.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A convenience for the LATEST log of a project/target, with -f follow. For")
 			fmt.Fprintln(os.Stderr, "a SPECIFIC past execution's exact output (any target, by the ref shown on")
@@ -51,9 +51,12 @@ func tailCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	if !isInteractiveTTY() && !globalCfg.AssumeInteractive {
-		fmt.Fprintln(os.Stderr, "magus: tail requires an interactive terminal; pipe the output instead")
-		fmt.Fprintln(os.Stderr, "       (set assume_interactive: true in magus.yaml or MAGUS_ASSUME_INTERACTIVE=1 to override)")
+	// Only FOLLOW needs a terminal. Printing the last N lines writes to stdout
+	// and exits, which is exactly what a script or an agent wants - gating that
+	// on a TTY made `magus tail -n 50` unreachable for every non-human caller,
+	// and an escape-hatch config key existed largely to undo it.
+	if follow && !isInteractiveTTY() {
+		fmt.Fprintln(os.Stderr, "magus: tail -f requires an interactive terminal; drop -f to print the last lines and exit")
 		return errSilent{exitCode: 2}
 	}
 

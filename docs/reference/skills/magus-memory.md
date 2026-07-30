@@ -3,7 +3,7 @@ title: magus-memory
 description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
 tags: [agents, skills, magus-memory]
 skill_full_bytes: 3845
-skill_simple_bytes: 3190
+skill_simple_bytes: 3167
 ---
 
 # magus-memory
@@ -18,6 +18,22 @@ magus agent install .claude/skills --simple   # the short form below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+
+## What an installed copy carries
+
+`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+
+| field | value |
+| --- | --- |
+| `license` | `GPL-3.0-or-later` |
+| `compatibility` | `any-agent` |
+| `source` | `magus` |
+| `agent-skill-version` | `20` |
+| `knowledge-schema-version` | `7` |
+| `skill-content` | `7a4455e07c55` |
+| `skill-variant` | `full` |
+
+The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
@@ -110,8 +126,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
-handoff journal. It lives outside the repo, is shared by its worktrees, and is
-visible in the console. It is not automatic model memory: add an entry only
+handoff journal. It is not automatic model memory: add an entry only
 when a person or a later session needs a named decision, plan, or saved lens.
 
 The graph remains the source of truth.
@@ -134,8 +149,8 @@ Record types (the subject axis):
 | `decision` | a choice, its refs, and the WHY the graph can't derive | yes (a one-line caption) |
 | `plan`     | forward intent, its refs, and the why               | yes    |
 
-There is no free-text/`note` type. A claim that is true about the code is a
-`pointer` of kind `query` (fetch it live) or `output`, never stored prose.
+There is no free-text/`note` type. A claim true
+about the code is a `query` or `output` pointer, never stored prose.
 
 ## Read and write deliberately
 
@@ -162,7 +177,8 @@ There is no free-text/`note` type. A claim that is true about the code is a
   by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
   `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
 - Made a choice another session would otherwise re-derive (architecture, naming,
-  a rejected approach and why): record a `decision`.
+  a rejected approach and why): record a `decision`. Put the why
+  in `body` and anchor it with refs.
 - Prefer a ref over prose: if a fact is derivable, record the `query` that proves
   it.
 - Prune with `op: "delete"`; list-then-get with `op: "list"` / `op: "get"`.
@@ -173,7 +189,7 @@ There is no free-text/`note` type. A claim that is true about the code is a
   `magus_scratchpad`, not here.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
-- Records live outside the repo, keyed by repository identity.
+- Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.
 ```
 
 

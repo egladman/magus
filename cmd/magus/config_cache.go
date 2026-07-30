@@ -11,6 +11,7 @@ import (
 
 func configCacheCmd(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
@@ -53,12 +54,13 @@ func configCacheCmd(ctx context.Context, root string, args []string) error {
 
 func configCachePrune(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache prune", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	olderThan := fs.Duration("older-than", 0, "Remove entries older than this duration (e.g. 168h = 7 days)")
 	keepLast := fs.Int("keep-last", 0, "Keep only the newest N entries, evict the rest (--remote only)")
 	remote := fs.Bool("remote", false, "Prune the configured remote backend instead of the local cache")
 	dryRun := fs.Bool("dry-run", false, "Print what would be removed without deleting anything")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config cache prune [--older-than <duration>] [--keep-last N] [--remote] [flags]")
+		fmt.Fprintln(os.Stderr, "Usage: magus config cache prune [--older-than <duration>] [--keep-last <count>] [--remote] [flags]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Remove cache entries by retention policy. By default prunes the LOCAL cache:")
 		fmt.Fprintln(os.Stderr, "entries whose CreatedAt is older than --older-than, then GCs orphaned blobs.")
@@ -121,13 +123,17 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 
 func configCacheExport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache export", flag.ContinueOnError)
-	out := fs.String("output", "", "Write the archive to this file (default: stdout)")
+	bindDisplayFlags(fs)
+	// --to, not --output: the global --output selects a FORMAT on every other
+	// command, and one command redefining it to mean a destination path is the
+	// kind of inconsistency that makes callers stop trusting the flag set.
+	out := fs.String("to", "", "Write the archive to this file (default: stdout)")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--output <file>]")
+		fmt.Fprintln(os.Stderr, "Usage: magus config cache export [--to <file>]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Write the entire build cache to a gzip-compressed tar archive, for")
 		fmt.Fprintln(os.Stderr, "persisting across CI runs via artifact upload/download. Writes to stdout")
-		fmt.Fprintln(os.Stderr, "when --output is omitted.")
+		fmt.Fprintln(os.Stderr, "when --to is omitted.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
@@ -165,6 +171,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 
 func configCacheImport(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache import", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config cache import [<file>]")
 		fmt.Fprintln(os.Stderr, "")

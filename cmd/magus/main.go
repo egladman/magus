@@ -14,7 +14,7 @@
 //	magus run <target> [project...]     run a target for selected projects (use --graph for dependency view)
 //	magus x [filter...]                 interactive shorthand: pick project + target
 //	magus where [filter...]             print the absolute path of a project
-//	magus tail [-f] [-n N] [target]     stream the most recent cached log (interactive only)
+//	magus tail [-f] [-n <count>] [target]     stream the most recent cached log (interactive only)
 //	magus affected <target>             run a target for VCS-diff affected projects
 //	magus affected --plan               emit shard plan JSON for CI fan-out
 //	magus graph <deps|export|stats>     the graphs as objects: project DAG, knowledge-graph export, shape stats
@@ -560,6 +560,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return initCmd(ctx, root, subArgs)
 	case "agent":
 		return agentCmd(ctx, subArgs)
+	case "vcs":
+		return vcsCmd(ctx, root, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":
@@ -615,6 +617,11 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 		ignoredV      verbosity
 		ignoredQ      bool
 	)
+	// nodisplayflags: this FlagSet exists to ABSORB and discard the global flags
+	// a caller repeated after the subcommand, so it redeclares them into ignored
+	// variables on purpose. Binding the real ones here would double-register and
+	// panic, and would also write through to the live globals this is designed
+	// to swallow.
 	fs := flag.NewFlagSet("adopted", flag.ContinueOnError)
 	fs.StringVar(&ignoredRoot, "root", "", "")
 	fs.StringVar(&ignoredRoot, "C", "", "")
