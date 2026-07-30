@@ -323,6 +323,12 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []strin
 	return matched
 }
 
+// CtxMarker identifies a value as a magus.Context, base or derived. An op call needs
+// to tell a leading context from a leading opts table, and with a map-based value model
+// and no protocol conformance in gopherbuzz on this base there is no type to ask. Not
+// part of the authored surface; it disappears when the context becomes a real type.
+const CtxMarker = "__magus_context"
+
 // buildTargetContext assembles the shared magus.Context value every target receives
 // as its first argument. Its methods are the injected, per-target form of what used to
 // be global magus.* declarations: `ctx.needs(format)` binds on the context the function
@@ -348,6 +354,40 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	c.MapSet("glob", directVal(obs, "ctx.glob", buildBuzzGlob(targets, exports)))
 	// inputs/outputs are declarations read statically by describe.Extract; at run time
 	// they do nothing.
+	c.MapSet(CtxMarker, vm.BoolValue(true))
+	// ctx.derive({env: {...}, cwd: ".."}): a NARROWED context carrying execution
+	// overrides, for passing to one op call - go["go-test"](ctx.derive({env: {...}})).
+	//
+	// It deliberately carries only the overrides and the marker, NOT the declaration
+	// methods: `ctx.derive(...).inputs("x")` fails loudly instead of silently no-op'ing,
+	// which is the guarantee a narrower TYPE would give if gopherbuzz had protocol
+	// conformance on this base. When it does, this becomes a real type.
+	//
+	// A single map rather than labeled arguments because labels are not name-matched on
+	// a native callable - they parse and run, but positionally, so a labeled form here
+	// would be decoration that silently rewards the right argument order.
+	c.MapSet("derive", directVal(obs, "ctx.derive", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		d := vm.NewMap()
+		d.MapSet(CtxMarker, vm.BoolValue(true))
+		if len(args) == 0 || !args[0].IsMap() {
+			return d, nil
+		}
+		for _, k := range []string{"env", "cwd"} {
+			if v, ok := args[0].MapGet(k); ok {
+				d.MapSet(k, v)
+			}
+		}
+		// Bind the declaration names to an explaining error rather than leaving them
+		// absent. Absent, the author gets "null is not callable" pointing at the call
+		// site with no hint that the receiver is the problem.
+		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "has_charm", "derive"} {
+			d.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+				return vm.Null, fmt.Errorf(
+					"ctx.%s: a derived context carries execution overrides only; declare on the context the target received", decl)
+			}))
+		}
+		return d, nil
+	}))
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))
 	c.MapSet("outputs", directVal(obs, "ctx.outputs", footprintDecl))

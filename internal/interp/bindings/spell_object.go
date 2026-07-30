@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"maps"
 
 	"github.com/egladman/magus/internal/proc/run"
 	ispell "github.com/egladman/magus/internal/spell"
@@ -52,7 +53,19 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
 // so spell.<target>(opts?) forks the target.
 func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		opts := spellOptsFromBuzz(args, 0)
+		// A leading magus.Context supplies cwd/env; an explicit opts table still wins
+		// for the same key, being the more specific statement at the call site.
+		base, consumed := ctxOverridesFromBuzz(args, 0)
+		opts := spellOptsFromBuzz(args, consumed)
+		if opts.cwd == "" {
+			opts.cwd = base.cwd
+		}
+		if len(base.env) > 0 {
+			merged := map[string]string{}
+			maps.Copy(merged, base.env)
+			maps.Copy(merged, opts.env)
+			opts.env = merged
+		}
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -97,6 +110,37 @@ func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (r
 // table at args[idx], the Buzz analogue of spellOptsFromLua. opts.hasArgs
 // reports whether an "args" key was present, so callers know to fall back to
 // project.ExtraArgs when it was not.
+// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// reports how many arguments it consumed, so the caller can parse opts from the next
+// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// consumes nothing.
+//
+// Charms are deliberately NOT readable here. They are run-level - what makes "what did
+// this run do" answerable from the invocation alone - and a per-op override would move
+// that reasoning from global to local.
+func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
+	if idx >= len(args) || !args[idx].IsMap() {
+		return opts, 0
+	}
+	if m, ok := args[idx].MapGet(CtxMarker); !ok || !m.AsBool() {
+		return opts, 0
+	}
+	c := args[idx]
+	if cv, ok := c.MapGet("cwd"); ok && cv.IsStr() {
+		opts.cwd = cv.AsString()
+	}
+	if ev, ok := c.MapGet("env"); ok && ev.IsMap() {
+		opts.env = map[string]string{}
+		for _, k := range ev.MapKeys() {
+			if v, ok := ev.MapGet(k); ok {
+				opts.env[k] = v.AsString()
+			}
+		}
+	}
+	return opts, 1
+}
+
 func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts
