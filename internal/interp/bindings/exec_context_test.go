@@ -12,7 +12,7 @@ import (
 // execution overrides.
 func execCtxValue(env map[string]string, cwd string) vm.Value {
 	m := vm.NewMap()
-	m.MapSet(CtxMarker, vm.BoolValue(true))
+	m.MapSet(ctxMarker, vm.BoolValue(true))
 	if env != nil {
 		e := vm.NewMap()
 		for k, v := range env {

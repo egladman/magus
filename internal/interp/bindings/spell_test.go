@@ -166,7 +166,7 @@ magus.project(".", {"spells": [noops]});`)
 }
 
 // TestBuzzSpellMethodForwardsOpts verifies a Buzz spell handle's per-target method
-// (widget.capture(opts)): opts.args are appended to the target's base argv and the
+// (widget.capture(ctx, opts)): opts.args are appended to the target's base argv and the
 // command runs in opts.cwd — what lets a magusfile drive a flag-carrying tool (e.g.
 // docker.build({cwd: "..", args: [...]})) through the spell instead of os.exec. It
 // also checks listTargets() still exposes the op names for introspection.
@@ -187,23 +187,25 @@ import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final names = widget.listTargets();
     if (names[0] != "capture") { error("listTargets mismatch"); }
-    widget.capture({"cwd": "sub", "args": ["alpha", "beta"]});
+    widget.capture(ctx.withCwd("sub"), {"args": ["alpha", "beta"]});
 }`)
 
 	srcs, err := interp.FindAll(dir)
 	require.NoError(t, err)
 	require.NoError(t, interp.Run(context.Background(), srcs[0], "build", nil, dir), "invoking spell method with opts")
 
-	// The file must land in opts.cwd (sub/), proving cwd was honored, and contain
-	// exactly the appended args, proving opts.args reached the forked command.
+	// The file must land in the context's cwd (sub/), proving withCwd was honored, and
+	// contain exactly the appended args, proving opts.args reached the forked command.
+	// cwd rides the context now, not the opts table: only the context reaches the cache
+	// key, and an opts-table cwd changed what ran while the key said otherwise.
 	got, err := os.ReadFile(filepath.Join(dir, "sub", "captured.txt"))
 	require.NoError(t, err, "expected captured.txt under opts.cwd")
 	assert.Equal(t, "alpha beta ", string(got))
 }
 
-// TestBuzzSpellMethodEnv verifies the env opt overlays the forked subprocess
+// TestBuzzSpellMethodEnv verifies ctx.withEnv overlays the forked subprocess
 // environment — the cross-compile vars (GOOS/GOARCH/CGO_ENABLED) a release build
-// needs. The capture target echoes $MYVAR into out.txt; the call sets it via env,
+// needs. The capture target echoes $MYVAR into out.txt; the call sets it via withEnv,
 // proving the overlay reached the subprocess.
 func TestBuzzSpellMethodEnv(t *testing.T) {
 	dir := t.TempDir()
@@ -217,7 +219,7 @@ export fun mgs_listTargets() > any {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    widget.capture({"env": {"MYVAR": "overridden"}});
+    widget.capture(ctx.withEnv({"MYVAR": "overridden"}));
 }`)
 
 	srcs, err := interp.FindAll(dir)
@@ -244,7 +246,7 @@ export fun mgs_listTargets() > any {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    final r = widget.hash();
+    final r = widget.hash(ctx);
     if (r.stdout != "abc123") { error("stdout mismatch: " + r.stdout); }
     if (r.code != 0) { error("code mismatch"); }
     if (r.ok != true) { error("ok mismatch"); }
@@ -272,8 +274,8 @@ export fun mgs_listTargets() > any {
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void {
-    final a = widget.emit();
-    final b = widget.shout({"stdin": a.stdout});
+    final a = widget.emit(ctx);
+    final b = widget.shout(ctx, {"stdin": a.stdout});
     if (b.stdout != "ALPHA") { error("pipe mismatch: " + b.stdout); }
 }`)
 

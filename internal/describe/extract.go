@@ -154,6 +154,15 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// collected, so len(globs) < len(args) means the call had a computed
 					// argument - flag DynamicIO so the load path can reject it (a computed
 					// glob is invisible to this static read).
+					// A declaration member called on something OTHER than the target's ctx - an
+					// aliased derivation (final e = ctx.withEnv(...); e.withCwd(..)), or a context
+					// parameter named something other than ctx - is invisible to this static read.
+					// Dropping it silently under-declares the cache key, so it is rejected at load
+					// exactly as a computed glob is.
+					if me, isMember := e.Callee.(*ast.MemberExpr); isMember && !me.Namespaced &&
+						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
+						node.DynamicIO = true
+					}
 					if kind, globs, ok := ioCall(e); ok {
 						// Record the callee (ctx.inputs) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
@@ -193,11 +202,14 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								}
 							}
 						case "withCwd":
-							for _, a := range e.Args {
-								if lit, ok := a.(*ast.StringLit); ok {
-									recognized++
-									node.ExecOverrides = appendUniqStr(node.ExecOverrides, "cwd:"+lit.Val)
-								}
+							// Iterate the globs ioCall already collected rather than
+							// re-walking Args: recognized is seeded from len(globs), so
+							// counting the same literals again pushed it past len(Args) and
+							// left the DynamicIO guard dead for this kind - a computed second
+							// argument would have passed silently, under-declaring the key
+							// the guard exists to protect.
+							for _, g := range globs {
+								node.ExecOverrides = appendUniq(node.ExecOverrides, "cwd:"+g)
 							}
 						case "withEnv":
 							// Canonicalized onto the node so buildStep can fold it into the
@@ -207,6 +219,10 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							for _, a := range e.Args {
 								m, ok := a.(*ast.MapExpr)
 								if !ok {
+									// ctx.withEnv("K=V"): ioCall already counted the bare
+									// literal, so without this the call looked fully
+									// attributed and contributed nothing to the key.
+									node.DynamicIO = true
 									continue
 								}
 								recognized++
@@ -217,7 +233,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 										node.DynamicIO = true
 										continue
 									}
-									node.ExecOverrides = appendUniqStr(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
+									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
 								}
 							}
 						case "updates":
@@ -310,7 +326,7 @@ func UnreachedIO(source string) []IORef {
 		}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates" && me.Name != "withEnv" && me.Name != "withCwd") {
+			if !ok || !ctxDeclNames[me.Name] {
 				return true
 			}
 			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
@@ -344,6 +360,13 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 	return ok && id.Name == "ctx"
 }
 
+// ctxDeclNames is the ctx declaration surface in one place: the static reader, the
+// not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
+// leave one of the three behind.
+var ctxDeclNames = map[string]bool{
+	"inputs": true, "outputs": true, "updates": true, "withEnv": true, "withCwd": true,
+}
+
 // ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
 // derivation - ctx.withEnv({...}).withCwd("..") - is recognized as well as a direct
 // call. Without walking the spine only the first link is seen, and the rest of the
@@ -374,9 +397,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	if !ok {
 		return "", nil, false
 	}
-	switch me.Name {
-	case "inputs", "outputs", "updates", "withEnv", "withCwd":
-	default:
+	if !ctxDeclNames[me.Name] {
 		return "", nil, false
 	}
 	if !ctxRooted(me.Object) {
@@ -438,14 +459,6 @@ func appendUniqOutRef(s []types.OutputRef, ref types.OutputRef) []types.OutputRe
 		return s
 	}
 	return append(s, ref)
-}
-
-// appendUniqStr appends s uniquely, keeping declaration order.
-func appendUniqStr(list []string, v string) []string {
-	if slices.Contains(list, v) {
-		return list
-	}
-	return append(list, v)
 }
 
 // appendUniqUpdRef is appendUniqOutRef for ctx.updates refs.

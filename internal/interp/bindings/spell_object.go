@@ -3,7 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
-	"maps"
+	"strings"
 
 	"github.com/egladman/magus/internal/proc/run"
 	ispell "github.com/egladman/magus/internal/spell"
@@ -61,19 +61,14 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
 		base, consumed := ctxOverridesFromBuzz(args, 0)
 		if consumed == 0 {
 			return vm.Null, fmt.Errorf(
-				"%s: pass the target's context as the first argument - %s(ctx)%s. Derive it with ctx.withEnv({...}) / ctx.withCwd(\"..\") to override env or cwd for this call alone",
-				target, target, optsHint(args))
+				"%s: pass the target's context as the first argument, %s(ctx); override env or cwd for one call with ctx.withEnv({...}) / ctx.withCwd(\"..\")",
+				target, target)
 		}
-		opts := spellOptsFromBuzz(args, consumed)
-		if opts.cwd == "" {
-			opts.cwd = base.cwd
+		opts, err := spellOptsFromBuzz(args, consumed)
+		if err != nil {
+			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
-		if len(base.env) > 0 {
-			merged := map[string]string{}
-			maps.Copy(merged, base.env)
-			maps.Copy(merged, opts.env)
-			opts.env = merged
-		}
+		opts.cwd, opts.env = base.cwd, base.env
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -123,6 +118,15 @@ func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (r
 // Charms are deliberately NOT readable here. They are run-level - what makes "what did
 // this run do" answerable from the invocation alone - and a per-op override would move
 // that reasoning from global to local.
+// ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
+// reports how many arguments it consumed, so the caller can parse opts from the next
+// one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
+// context; go["go-test"]({args: [...]}) (no context) is the transitional form and
+// consumes nothing.
+//
+// Charms are deliberately NOT readable here. They are run-level - what makes "what did
+// this run do" answerable from the invocation alone - and a per-op override would move
+// that reasoning from global to local.
 // optsHint renders ", {...}" when the call already passed an options table, so the
 // error shows the author their own call with ctx inserted rather than a generic form.
 func optsHint(args []vm.Value) string {
@@ -136,7 +140,7 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts, 0
 	}
-	if m, ok := args[idx].MapGet(CtxMarker); !ok || !m.AsBool() {
+	if m, ok := args[idx].MapGet(ctxMarker); !ok || !m.IsBool() || !m.AsBool() {
 		return opts, 0
 	}
 	c := args[idx]
@@ -146,7 +150,7 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 	if ev, ok := c.MapGet("env"); ok && ev.IsMap() {
 		opts.env = map[string]string{}
 		for _, k := range ev.MapKeys() {
-			if v, ok := ev.MapGet(k); ok {
+			if v, ok := ev.MapGet(k); ok && v.IsStr() {
 				opts.env[k] = v.AsString()
 			}
 		}
@@ -157,30 +161,29 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 // spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options table at
 // args[idx]. opts.hasArgs reports whether an "args" key was present, so callers know to
 // fall back to project.ExtraArgs when it was not.
-func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts) {
+func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 	if idx >= len(args) || !args[idx].IsMap() {
-		return opts
+		return opts, nil
 	}
 	o := args[idx]
-	if cv, ok := o.MapGet("cwd"); ok && cv.IsStr() {
-		opts.cwd = cv.AsString()
+	// cwd and env are REJECTED here, not read. They are execution context, and the
+	// context is the only channel that reaches the cache key: set through the opts
+	// table they changed what the tool did while the key said otherwise, and they won
+	// over the derived value that WAS in the key. Two doors, one of them unchecked.
+	for _, k := range []string{"cwd", "env"} {
+		if _, has := o.MapGet(k); has {
+			return opts, fmt.Errorf("%q belongs on the context, not the options table: use ctx.with%s%s(...) so it reaches the cache key",
+				k, strings.ToUpper(k[:1]), k[1:])
+		}
 	}
 	if av, ok := o.MapGet("args"); ok {
 		opts.args = buzzValToStringSlice(av)
 		opts.hasArgs = true
 	}
-	if ev, ok := o.MapGet("env"); ok && ev.IsMap() {
-		opts.env = map[string]string{}
-		for _, k := range ev.MapKeys() {
-			if v, ok := ev.MapGet(k); ok {
-				opts.env[k] = v.AsString()
-			}
-		}
-	}
 	if sv, ok := o.MapGet("stdin"); ok && sv.IsStr() {
 		opts.stdin = sv.AsString()
 	}
-	return opts
+	return opts, nil
 }
 
 // targetsToBuzzMap marshals resolved targets back to the nested ops map shape

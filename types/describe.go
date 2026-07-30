@@ -152,7 +152,8 @@ type TargetGraphNode struct {
 	// UpdateRef for why magus must neither delete nor restore one.
 	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty"`
 	// ExecOverrides are the canonical per-op execution overrides this target declares
-	// via ctx.withEnv / ctx.withCwd, as sorted "env:K=V" / "cwd:V" strings. They fold into the target's
+	// via ctx.withEnv / ctx.withCwd, as "env:K=V" / "cwd:V" strings in declaration
+	// order (hash.go sorts a copy at hash time; nothing sorts the stored value). They fold into the target's
 	// CACHE KEY: a derived env changes what the tool does, so two runs differing only by
 	// it must not share an entry. Read statically for the same reason inputs are - the
 	// key is computed before the body runs, so a purely runtime derivation could never

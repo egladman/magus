@@ -323,11 +323,11 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []strin
 	return matched
 }
 
-// CtxMarker identifies a value as a magus.Context, base or derived. An op call needs
+// ctxMarker identifies a value as a magus.Context, base or derived. An op call needs
 // to tell a leading context from a leading opts table, and with a map-based value model
 // and no protocol conformance in gopherbuzz on this base there is no type to ask. Not
 // part of the authored surface; it disappears when the context becomes a real type.
-const CtxMarker = "__magus_context"
+const ctxMarker = "__magus_context"
 
 // buildTargetContext assembles the shared magus.Context value every target receives
 // as its first argument. Its methods are the injected, per-target form of what used to
@@ -354,7 +354,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	c.MapSet("glob", directVal(obs, "ctx.glob", buildBuzzGlob(targets, exports)))
 	// inputs/outputs are declarations read statically by describe.Extract; at run time
 	// they do nothing.
-	c.MapSet(CtxMarker, vm.BoolValue(true))
+	c.MapSet(ctxMarker, vm.BoolValue(true))
 	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
 	// carrying overrides for the op calls made with it -
 	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
@@ -373,7 +373,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	var execCtx func(env, cwd vm.Value) vm.Value
 	execCtx = func(env, cwd vm.Value) vm.Value {
 		e := vm.NewMap()
-		e.MapSet(CtxMarker, vm.BoolValue(true))
+		e.MapSet(ctxMarker, vm.BoolValue(true))
 		if !env.IsNull() {
 			e.MapSet("env", env)
 		}

@@ -559,6 +559,5 @@ func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
 	require.Equal(t, []types.UpdateRef{{Project: ".", Glob: "concepts/spells.md"}},
 		p.TargetUpdates["generate"], "ctx.updates should resolve to the declaring project")
 	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
-		"an update must never reach AllOutputs, which is what clean and the snapshot walk")
+		"an update must never reach AllOutputs - that is the set clean deletes and the cache snapshots")
 }
-

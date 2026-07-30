@@ -142,8 +142,8 @@ type Project struct {
 	// Deliberately absent from AllOutputs, which is what makes magus clean skip them and
 	// the cache neither snapshot nor replay them. See types.UpdateRef.
 	TargetUpdates map[string][]UpdateRef
-	// TargetExecOverrides are per-target ctx.withEnv / ctx.withCwd overrides, canonical
-	// sorted strings, folded into the cache key. See TargetGraphNode.ExecOverrides.
+	// TargetExecOverrides are per-target ctx.withEnv / ctx.withCwd overrides, in
+	// declaration order, folded into the cache key. See TargetGraphNode.ExecOverrides.
 	TargetExecOverrides map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.outputs(<alias>.file(...)), keyed by the WRITING project's path. Globs are

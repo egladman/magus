@@ -1790,7 +1790,7 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val}
+			node = &ast.MemberExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Object: node, Name: nameTok.Val, Namespaced: true}
 		case token.Bang:
 			// Postfix force-unwrap: operand!. A lone '!' here (not '!=') unwraps an
 			// optional, erroring at runtime if the value is null.

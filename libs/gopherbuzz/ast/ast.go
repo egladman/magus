@@ -254,6 +254,11 @@ type MemberExpr struct {
 	Object       Node
 	Name         string
 	OptionalRecv bool
+	// Namespaced marks the backslash form (std\print), a member of an IMPORTED MODULE,
+	// as opposed to the dot form (value.field). Resolution treats them identically, but
+	// a static reader cannot: os\withEnv and someCtx.withEnv are otherwise the same
+	// node, and conflating them makes a host-module call look like a ctx declaration.
+	Namespaced bool
 }
 
 // IndexExpr: object[index]. Optional is set for the checked subscript form
