@@ -1,8 +1,9 @@
 // Buzz, running in your browser. gopherbuzz (the interpreter magus embeds to read
 // magusfiles) is compiled to WebAssembly and runs entirely in this tab: no server,
 // no network, nothing leaves the page. The console below evaluates real Buzz
-// against these definitions, so try `eval fibo(30)`, `eval fact(10)`, or
-// `eval sum([2, 4, 6, 8])`. `run demo` prints the same values, computed live.
+// against these definitions, so try `eval fibo(30)`, `eval fact(10)`,
+// `eval sum([2, 4, 6, 8])`, `eval classify(7)`, or `eval tally()`. `run demo` prints
+// the same values, computed live.
 
 import "magus";
 
@@ -29,6 +30,40 @@ fun sum(items: [int]) > int {
     return reduce(items, 0, fun(a: int, b: int) > int { return a + b; });
 }
 
+// `match` picks a branch by more than equality. A range condition tests containment,
+// a pattern condition tests a regex, and `else` catches the rest - so one expression
+// replaces an if/else ladder. In a real magusfile this is how you branch on a target
+// name or an argument. `eval classify(7)` -> "middle".
+fun classify(n: int) > str {
+    return match (n) {
+        0 -> "zero",
+        1, 2 -> "low",
+        3..10 -> "middle",
+        else -> "high",
+    };
+}
+
+// `match` on a string, with a pattern arm. `eval kind("v1.2.3")` -> "version".
+fun kind(text: str) > str {
+    return match (text) {
+        $"v[0-9]+\.[0-9]+" -> "version",
+        "main" -> "branch",
+        else -> "other",
+    };
+}
+
+// A closure captures the enclosing variable BY REFERENCE, so `bump` updates the same
+// `count` the function returns - the two names are one variable, not a copy.
+// `eval tally()` -> 6.
+fun tally() > int {
+    var count = 0;
+    final bump = fun (n: int) > void { count = count + n; };
+    bump(1);
+    bump(2);
+    bump(3);
+    return count;
+}
+
 // The one target: it prints values the functions above compute. `run demo`
 // evaluates them for real (the calls run inside the string interpolation), so the
 // trace shows the actual numbers, not placeholders.
@@ -36,4 +71,7 @@ export fun demo(ctx: magus\Context, args: [str]) > void {
     magus\info("fibo(20)  = {fibo(20)}");
     magus\info("fact(10) = {fact(10)}");
     magus\info("sum      = {sum([2, 4, 6, 8])}");
+    magus\info("classify = {classify(7)}");
+    magus\info("kind     = {kind("v1.2.3")}");
+    magus\info("tally    = {tally()}");
 }

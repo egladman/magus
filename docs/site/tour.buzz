@@ -120,8 +120,8 @@ export fun tourSteps() > [TourStep] {
     steps.append(TourStep{ file = "03-spells.buzz", title = "Spells: bind a real toolchain",
         desc = "Bind a real toolchain (Go, TypeScript, Docker) as cached, kebab-case ops.",
         docLabel = "Spells", docSlug = "concepts/spells" });
-    steps.append(TourStep{ file = "04-buzz.buzz", title = "Buzz: branch, loop, recurse",
-        desc = "Variables, functions, recursion, closures - evaluated live in your browser.",
+    steps.append(TourStep{ file = "04-buzz.buzz", title = "Buzz: branch, match, recurse",
+        desc = "Functions, recursion, closures and match - evaluated live in your browser.",
         docLabel = "Engines", docSlug = "concepts/engines" });
     steps.append(TourStep{ file = "05-slots.buzz", title = "Slots: taming a greedy target",
         desc = "A target starts with one slot; reserve more so a parallel tool cannot starve the rest.",
