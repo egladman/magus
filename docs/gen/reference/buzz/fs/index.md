@@ -294,7 +294,7 @@ if (fs\isFile("go.mod")) { std\print("go.mod is a file"); }
 
 Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.
 
-**Signature:** `fs\stat(path) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L384)
+**Signature:** `fs\stat(path) → FileInfo` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L384)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

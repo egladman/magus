@@ -31,7 +31,7 @@ Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true whe
 
 Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.
 
-**Signature:** `semver\parse(v) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
+**Signature:** `semver\parse(v) → SemverVersion` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Changed
+
+- Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
+  fingerprints are now computed by streaming fields into SHA256 rather than by hashing
+  marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
+  check treats a version mismatch as a full rebuild, which is the whole migration. The
+  old approach marshalled each shard purely to hash the bytes, putting an encode on the
+  hot path of every magus command (fingerprinting all shards costs 757 ms at 50k
+  projects) and coupling the fingerprint to the storage format, so a future format
+  change would have silently invalidated every cached shard. Measured: -44% sec/op,
+  -23% B/op, -41% allocs/op.
+- Host methods that return a record now say so in their signature: `magus\cmd(args,
+  [opts]) -> ExecResult` where it previously read `map[string]any`. Nineteen methods
+  across nine modules were affected. Annotating the named type (`final r: ExecResult =
+  magus\cmd(...)`) makes the checker verify field access, turning a typo from a runtime
+  nil into a load error; that already worked and was simply undiscoverable.
+
 ### Added
 
 - `magus agent install --simple` installs a shorter permutation of every agent skill: the
