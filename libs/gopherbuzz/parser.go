@@ -236,6 +236,14 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		p.peekAt(1).Kind == token.String && p.peekAt(2).Kind == token.LBrace {
 		return p.parseTestDecl()
 	}
+	// `protocol` is contextual for the same reason `test` is: upstream hard-reserves
+	// it, but reserving it here would break any embedding that already uses the word
+	// as a name. The statement-leading `protocol Name {` shape is unambiguous -- two
+	// juxtaposed identifiers followed by a brace is not otherwise valid Buzz.
+	if t.Kind == token.Ident && t.Val == "protocol" && !t.Raw &&
+		p.peekAt(1).Kind == token.Ident && p.peekAt(2).Kind == token.LBrace {
+		return p.parseProtocolDecl()
+	}
 	// `extern fun name(...) > T;` declares a native function's SIGNATURE with no
 	// body - how upstream types its stdlib (src/lib/*.buzz). Contextual like
 	// `test`: `extern` is a reserved word, so it can never be a binding name, but
@@ -1292,8 +1300,80 @@ func (p *parser) parseTestDecl() (*ast.TestDecl, error) {
 	return &ast.TestDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Body: body}, nil
 }
 
+// parseProtocolDecl parses `protocol Name { fun sig; mut fun sig; }` into an
+// ObjectDecl carrying only method signatures. Bodies are not allowed and none is
+// parsed: a protocol names an interface, so every member is a bare signature
+// terminated by a semicolon, exactly like `extern fun`.
+func (p *parser) parseProtocolDecl() (*ast.ObjectDecl, error) {
+	t := p.advance() // `protocol`
+	nameTok, err := p.eatBindingIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.eat(token.LBrace); err != nil {
+		return nil, err
+	}
+	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, IsProtocol: true}
+	for !p.check(token.RBrace) && !p.check(token.EOF) {
+		// `mut fun` marks a method that mutates its receiver. It constrains the
+		// implementor, not the signature, so consume it and parse the rest normally.
+		if p.check(token.Mut) && p.peekAt(1).Kind == token.Fun {
+			p.advance()
+		}
+		if !p.check(token.Fun) {
+			return nil, fmt.Errorf("buzz: line %d:%d: a protocol member must be a `fun` signature", p.peek().Line, p.peek().Col)
+		}
+		ft := p.advance() // `fun`
+		mName, err := p.eatBindingIdent()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.skipTypeParams(); err != nil {
+			return nil, err
+		}
+		// parseFunRest(true) is the signature-only form `extern fun` uses: params and
+		// return annotation, no body.
+		fr, err := p.parseFunRest(true)
+		if err != nil {
+			return nil, err
+		}
+		decl.Methods = append(decl.Methods, &ast.FunDecl{
+			Pos: ast.Pos{Line: ft.Line, Col: ft.Col}, Name: mName.Val,
+			Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults,
+			RetAnnot: fr.retAnnot, YieldAnnot: fr.yieldAnnot,
+		})
+		p.optSemicolon()
+	}
+	if _, err := p.eat(token.RBrace); err != nil {
+		return nil, err
+	}
+	p.optSemicolon()
+	return decl, nil
+}
+
 func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	t, _ := p.eat(token.Object)
+	// `object<A, B> Name` declares conformance to protocols A and B. Note this is
+	// BEFORE the name and uses plain angle brackets, which is what distinguishes it
+	// from the `object Name::<K, V>` type parameters handled below.
+	var conforms []string
+	if p.check(token.Lt) {
+		p.advance()
+		for {
+			id, err := p.eatBindingIdent()
+			if err != nil {
+				return nil, err
+			}
+			conforms = append(conforms, id.Val)
+			if !p.check(token.Comma) {
+				break
+			}
+			p.advance()
+		}
+		if _, err := p.eat(token.Gt); err != nil {
+			return nil, err
+		}
+	}
 	nameTok, err := p.eatBindingIdent()
 	if err != nil {
 		return nil, err
@@ -1308,7 +1388,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	if _, err := p.eat(token.LBrace); err != nil {
 		return nil, err
 	}
-	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val}
+	decl := &ast.ObjectDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Conforms: conforms}
 	for !p.check(token.RBrace) && !p.check(token.EOF) {
 		// `static` marks a member that lives on the type rather than an instance:
 		// `static fun` is a method called as Foo.make() with no receiver, and a

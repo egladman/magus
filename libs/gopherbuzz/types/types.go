@@ -92,6 +92,13 @@ type ObjectType struct {
 	Fields      map[string]Type
 	Methods     map[string]*FuncType
 	IsNamespace bool
+	// IsProtocol marks this as a `protocol` rather than an `object`: a set of method
+	// signatures that other object types declare conformance to.
+	IsProtocol bool
+	// Conforms names the protocols this object type declared (`object<A, B> Name`).
+	// Compat consults it, so an object is assignable to a protocol only when it said
+	// so -- matching upstream, where conformance is declared and not inferred.
+	Conforms []string
 }
 
 func (o *ObjectType) TypeName() string { return o.Name }
@@ -176,7 +183,24 @@ func Compat(got, want Type) bool {
 	if gmOK && wmOK {
 		return Compat(gm.Key, wm.Key) && Compat(gm.Val, wm.Val)
 	}
-	return got.TypeName() == want.TypeName()
+	if got.TypeName() == want.TypeName() {
+		return true
+	}
+	// An object is assignable to a protocol it declared conformance to. The check is
+	// on the DECLARATION, not the method set: upstream rejects an object that happens
+	// to have matching methods but never named the protocol, and a structural check
+	// here would silently accept it. This sits AFTER the name comparison above so a
+	// protocol stays compatible with itself, which has no Conforms entry of its own.
+	if gotObj, gOK := got.(*ObjectType); gOK {
+		if wantObj, wOK := want.(*ObjectType); wOK && wantObj.IsProtocol {
+			for _, name := range gotObj.Conforms {
+				if name == wantObj.Name {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 type annotParser struct {

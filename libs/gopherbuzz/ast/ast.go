@@ -172,6 +172,17 @@ type ObjectDecl struct {
 	// static holds one value on the type, not a slot per instance.
 	StaticFields []ObjField
 	Methods      []*FunDecl
+	// IsProtocol marks a `protocol Name { ... }` declaration. A protocol is exactly
+	// an object with method SIGNATURES and no fields or bodies, so it reuses this
+	// node rather than adding a parallel one: the checker registers it as a named
+	// type the same way, and the compiler skips it because a protocol has no runtime
+	// representation (dispatch on a protocol-typed value is ordinary dynamic
+	// dispatch on whatever object is actually there).
+	IsProtocol bool
+	// Conforms lists the protocols named in `object<A, B> Name`. Upstream requires
+	// conformance to be DECLARED, not merely structural, so this is what makes an
+	// instance assignable to a protocol-typed target.
+	Conforms []string
 }
 
 // ObjField is a single object field declaration with an optional default.

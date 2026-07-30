@@ -224,7 +224,10 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 }
 
 func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
-	ot := &types.ObjectType{Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}}
+	ot := &types.ObjectType{
+		Name: v.Name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{},
+		IsProtocol: v.IsProtocol, Conforms: v.Conforms,
+	}
 	for _, f := range v.Fields {
 		ot.Fields[f.Name] = types.ParseAnnot(f.TypeAnnot)
 	}
@@ -546,6 +549,12 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 }
 
 func (c *checker) checkObjectDecl(v *ast.ObjectDecl) {
+	if v.IsProtocol {
+		// Nothing to check inside a protocol: its members are signatures, already
+		// recorded as the type's method set by registerTypeDecls. Walking them as
+		// method declarations would look for bodies that by definition do not exist.
+		return
+	}
 	ot, _ := c.types[v.Name].(*types.ObjectType)
 	if ot == nil {
 		ot = c.buildObjectType(v)

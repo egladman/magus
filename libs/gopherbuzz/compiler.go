@@ -899,6 +899,13 @@ func (c *compiler) compileStmt(n ast.Node) error {
 		return c.compileTestDecl(v)
 
 	case *ast.ObjectDecl:
+		if v.IsProtocol {
+			// A protocol has no runtime representation: its members are signatures with
+			// no bodies, and a call through a protocol-typed value is ordinary dynamic
+			// dispatch on whichever object is actually there. Emitting a def would build
+			// method entries with nil bodies for something nothing can instantiate.
+			return nil
+		}
 		return c.compileObjectDecl(v)
 
 	case *ast.EnumDecl:
