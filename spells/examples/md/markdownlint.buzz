@@ -5,5 +5,5 @@ import "magus/spell/md";
 magus\project({ "spells": [md] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    md["markdownlint"]();
+    md["markdownlint"](ctx);
 }

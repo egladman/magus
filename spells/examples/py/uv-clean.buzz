@@ -5,5 +5,5 @@ import "magus/spell/py";
 magus\project({ "spells": [py] });
 
 export fun clean(ctx: magus\Context, args: [str]) > void {
-    py["uv-clean"]();
+    py["uv-clean"](ctx);
 }

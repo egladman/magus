@@ -35,8 +35,8 @@ import "magus/spell/buf";
 magus\project({ "spells": [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    buf["buf-lint"]();
-    buf["buf-breaking"]();
+    buf["buf-lint"](ctx);
+    buf["buf-breaking"](ctx);
 }
 ```
 

@@ -5,5 +5,5 @@ import "magus/spell/rs";
 magus\project({ "spells": [rs] });
 
 export fun format(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-fmt"]();
+    rs["cargo-fmt"](ctx);
 }

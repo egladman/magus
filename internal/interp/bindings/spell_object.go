@@ -2,6 +2,7 @@ package bindings
 
 import (
 	"context"
+	"fmt"
 	"maps"
 
 	"github.com/egladman/magus/internal/proc/run"
@@ -53,9 +54,16 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
 // so spell.<target>(opts?) forks the target.
 func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		// A leading magus.Context supplies cwd/env; an explicit opts table still wins
-		// for the same key, being the more specific statement at the call site.
+		// The leading magus.Context is REQUIRED, not optional. Optional would overload
+		// argument one on TYPE - f(), f(ctx), f({args:...}), f(ctx, {args:...}) - which
+		// reads fine to the author and badly to everyone else. One shape always, and a
+		// grep that finds every op invocation.
 		base, consumed := ctxOverridesFromBuzz(args, 0)
+		if consumed == 0 {
+			return vm.Null, fmt.Errorf(
+				"%s: pass the target's context as the first argument - %s(ctx)%s. Derive it with ctx.withEnv({...}) / ctx.withCwd(\"..\") to override env or cwd for this call alone",
+				target, target, optsHint(args))
+		}
 		opts := spellOptsFromBuzz(args, consumed)
 		if opts.cwd == "" {
 			opts.cwd = base.cwd
@@ -106,10 +114,6 @@ func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (r
 	return runCommand(ctx, tgt, opts)
 }
 
-// spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options
-// table at args[idx], the Buzz analogue of spellOptsFromLua. opts.hasArgs
-// reports whether an "args" key was present, so callers know to fall back to
-// project.ExtraArgs when it was not.
 // ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
 // one. An op invoked as go["go-test"](ctx, {args: [...]}) gets its cwd/env from the
@@ -119,6 +123,15 @@ func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (r
 // Charms are deliberately NOT readable here. They are run-level - what makes "what did
 // this run do" answerable from the invocation alone - and a per-op override would move
 // that reasoning from global to local.
+// optsHint renders ", {...}" when the call already passed an options table, so the
+// error shows the author their own call with ctx inserted rather than a generic form.
+func optsHint(args []vm.Value) string {
+	if len(args) > 0 && args[0].IsMap() {
+		return ", {...}"
+	}
+	return ""
+}
+
 func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts, 0
@@ -141,6 +154,9 @@ func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed 
 	return opts, 1
 }
 
+// spellOptsFromBuzz reads an optional {cwd=, args=[...], env={...}} options table at
+// args[idx]. opts.hasArgs reports whether an "args" key was present, so callers know to
+// fall back to project.ExtraArgs when it was not.
 func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts

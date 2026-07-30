@@ -7,5 +7,5 @@ import "magus/spell/py";
 magus\project({ "spells": [py] });
 
 export fun test(ctx: magus\Context, args: [str]) > void {
-    py["pytest"]({ "args": ["-k", "integration"] });
+    py["pytest"](ctx, { "args": ["-k", "integration"] });
 }

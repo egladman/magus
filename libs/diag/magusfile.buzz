@@ -54,10 +54,10 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](); go["go-mod-tidy"](); }
-export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](); }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](); }
-export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](); }
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }
 
 // The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 export fun ci(ctx: magus\Context, args: [str]) > void {

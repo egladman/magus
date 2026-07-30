@@ -140,15 +140,15 @@ magus\project({ "spells": [ts] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(shared.build);   // folds into depends_on automatically
-    ts["tsc-build"]();
+    ts["tsc-build"](ctx);
 }
 
-export fun test(ctx: magus\Context, args: [str]) > void { ts["vitest"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { ts["vitest"](ctx); }
 
 // tsc composes into lint alongside eslint - not a bespoke `typecheck` target.
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    ts["tsc"]();
-    ts["eslint"]();
+    ts["tsc"](ctx);
+    ts["eslint"](ctx);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

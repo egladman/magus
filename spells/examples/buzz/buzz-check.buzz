@@ -5,5 +5,5 @@ import "magus/spell/buzz";
 magus\project({ "spells": [buzz] });
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    buzz["buzz-check"]();
+    buzz["buzz-check"](ctx);
 }

@@ -6,5 +6,5 @@ import "magus/spell/go";
 magus\project({ "spells": [go] });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    go["go-generate"]();
+    go["go-generate"](ctx);
 }

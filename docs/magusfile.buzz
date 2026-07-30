@@ -121,7 +121,7 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 // must not be edited by hand. generate calls this; the drift gate catches any manual
 // edit to a released section on the next render.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
-    go["go-run"]({"args": ["../cmd/magus-utils", "generate-changelog",
+    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "generate-changelog",
         "-releases", ROOT + "/releases", "-changelog", ROOT + "/CHANGELOG.md"]});
 }
 
@@ -147,11 +147,11 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
     // were excluded from the source hash, so editing the prose around a generated region
     // invalidated nothing. ctx.updates fixes both halves.
     ctx.updates("concepts/spells.md", "concepts/knowledge.md");
-    go["go-run"]({"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
-    go["go-run"]({"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
-    go["go-run"]({"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
-    go["go-run"]({"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
-    go["go-run"]({"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
 }
 
 // generateJsBundles builds the committed browser bundles that import npm

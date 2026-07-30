@@ -31,12 +31,12 @@ magus\project("app", {
 });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    go["go-build"]();
+    go["go-build"](ctx);
 }
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-test"]();
+    go["go-test"](ctx);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

@@ -22,22 +22,22 @@ magus\project({
 });
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    go["go-generate"]();
+    go["go-generate"](ctx);
 }
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    go["go-build"]({"args": ["-o", "bin/app", "./cmd/app"]});
+    go["go-build"](ctx, {"args": ["-o", "bin/app", "./cmd/app"]});
 }
 
 // Both of these need build. In the plan it appears once, not twice.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-test"]();
+    go["go-test"](ctx);
 }
 export fun bundle(ctx: magus\Context, args: [str]) > void {
     ctx.needs(build);
-    go["go-build"]({"args": ["-o", "bin/app-release", "./cmd/app"]});
+    go["go-build"](ctx, {"args": ["-o", "bin/app-release", "./cmd/app"]});
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
