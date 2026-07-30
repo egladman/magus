@@ -23,7 +23,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Architecture decisions from the graph
 
 magus already measured the workspace: what depends on what, what changes
@@ -116,7 +116,7 @@ altered - blast radius as data, suitable for a PR description. Then run
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
 browser graph tool - do not hand-draw diagrams of what the graph already knows.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -125,7 +125,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Architecture decisions from the graph
 
 magus already measured the workspace: what depends on what, what changes
@@ -212,6 +212,7 @@ altered. Then run
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
 browser graph tool - do not hand-draw diagrams of what the graph already knows.
-```
+````
+
 
 </details>

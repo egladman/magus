@@ -23,7 +23,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Running work through magus
 
 magus is the task orchestrator: targets declare their inputs, outputs, and
@@ -190,7 +190,7 @@ Flags and target sets differ per workspace and magus version. Trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
 over anything remembered - and over `MAGUS.md`, which is generated output that
 lags the tree between regenerations.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -199,7 +199,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Running work through magus
 
 magus is the task orchestrator: targets declare their inputs, outputs, and
@@ -344,6 +344,7 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 Flags and target sets differ per workspace and magus version. Trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
 over anything remembered - and over `MAGUS.md`.
-```
+````
+
 
 </details>

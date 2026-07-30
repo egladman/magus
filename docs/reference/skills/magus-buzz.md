@@ -23,7 +23,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Writing Buzz
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
@@ -194,7 +194,7 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 
 Prefer a target over a script for anything that will be run more than once: a
 script re-runs from scratch every time, a target replays from cache.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -203,7 +203,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Writing Buzz
 
 Buzz is the language magusfiles and spells are written in, and `magus buzz` runs
@@ -362,6 +362,7 @@ magus buzz -t script.buzz     # ok/fail per block, then a summary line
 - **A tool adapter** - a spell, so every project of that type gets the ops.
 
 Prefer a target over a script for anything that will be run more than once.
-```
+````
+
 
 </details>

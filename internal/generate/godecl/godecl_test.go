@@ -43,7 +43,6 @@ var Dir string
 	assert.Empty(t, DocLine(nil, "Dir"), "no doc comment is not an error")
 }
 
-
 func TestSliceOfStructs(t *testing.T) {
 	f := parseSrc(t, `package p
 type sc struct{ Name, Short string }

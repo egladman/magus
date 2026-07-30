@@ -46,11 +46,7 @@ func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, l
 			if err := egctx.Err(); err != nil {
 				return err
 			}
-			fp, err := fingerprintShardContent(shards[i])
-			if err != nil {
-				return err
-			}
-			fpByIndex[i] = fp
+			fpByIndex[i] = fingerprintShardContent(shards[i])
 			return nil
 		})
 	}

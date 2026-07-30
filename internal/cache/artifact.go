@@ -1,67 +1,65 @@
 package cache
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
-	"time"
 
 	"github.com/egladman/magus/internal/cache/reflink"
 	"github.com/egladman/magus/internal/codec"
+	"time"
 )
 
-// ArtifactVersion is one cached version of a declared output: the bytes a target
-// produced on some earlier run, still addressable because the store is
-// content-addressed (cas/ blobs keyed by sha256, referenced by per-entry manifests).
+// ArtifactVersion is one cached version of a declared output: the record a run
+// snapshotted, plus which run it was.
 //
-// This is the fact that makes an artifact's history answerable at all, and it was
-// already on disk before anything exposed it. Nothing here writes.
+// Output is EMBEDDED rather than restated. An earlier version copied four of its
+// five fields and dropped Symlink, which was a live bug: a symlink record carries no
+// Blob, so every symlink version hashed alike, collapsed to one row, and resolved to
+// the cas/ directory itself.
 type ArtifactVersion struct {
-	Path      string    // repo-relative, as the manifest recorded it
-	Blob      string    // sha256 hex of the contents; the CAS key
-	Size      int64     // bytes
-	Mode      uint32    // permission bits
+	Output    OutputRecord
 	Target    string    // the target whose run produced it
 	CreatedAt time.Time // when that entry was written
-	EntryHash string    // the cache key, so a caller can reach the run's log
+	EntryHash string    // the cache key; Cache.LatestRef maps it to an output ref
 }
 
-// Short returns the abbreviated blob hash, for display next to a path.
-func (v ArtifactVersion) Short() string {
-	if len(v.Blob) > 12 {
-		return v.Blob[:12]
+// ShortBlob abbreviates the content hash for display. Empty for a symlink record,
+// which has no content of its own.
+func (v ArtifactVersion) ShortBlob() string {
+	if len(v.Output.Blob) > 12 {
+		return v.Output.Blob[:12]
 	}
-	return v.Blob
+	return v.Output.Blob
 }
 
-// ErrArtifactEvicted reports that a version's blob is no longer in the store.
+// ErrArtifactMissing reports that a version's bytes are not in the store.
 //
-// It is a distinct error because it is the one failure a caller must not paper
-// over. The store evicts LRU blobs, so a version can be listed from a surviving
-// manifest and still have no bytes behind it. Reporting that as "no differences"
-// would be a lie in the most misleading direction available: the reader concludes
-// the artifact is unchanged when the truth is that the comparison could not happen.
-var ErrArtifactEvicted = errors.New("cache: artifact blob evicted")
+// Named for the observation, not the cause: eviction is the usual reason, but a
+// hand-cleared store or an entry that never stored its blob reach here too. Callers
+// must not treat it as "no differences" - an empty diff reads as "unchanged", which
+// is the most misleading answer available.
+var ErrArtifactMissing = errors.New("cache: artifact content not in store")
 
-// ArtifactHistory returns every cached version of the repo-relative path under
-// projectPath, newest first.
+// ArtifactHistory returns every cached version of wsPath, newest first.
 //
-// Consecutive entries holding identical bytes collapse to one. A target that ran
-// four times and produced the same output each time changed the artifact once, and
-// listing it four times would bury the change the reader is looking for. The
-// surviving record is the OLDEST occurrence of that blob, because the question a
-// history answers is "when did this content first appear", not "when was it most
-// recently re-confirmed".
-func (c *Cache) ArtifactHistory(projectPath, path string) ([]ArtifactVersion, error) {
-	manifests, err := c.projectManifests(projectPath)
+// wsPath is WORKSPACE-relative, matching how snapshot recorded it and what
+// TargetArtifact.Path carries; it is not relative to projectPath.
+//
+// Consecutive versions with identical content collapse to one, keeping the earliest
+// of each run: a target that ran twenty times producing the same bytes changed the
+// artifact once, and the question is when content first appeared.
+func (c *Cache) ArtifactHistory(ctx context.Context, projectPath, wsPath string) ([]ArtifactVersion, error) {
+	manifests, err := c.projectManifests(ctx, projectPath)
 	if err != nil {
 		return nil, err
 	}
-	want := filepath.ToSlash(path)
+	want := filepath.ToSlash(wsPath)
 
 	var out []ArtifactVersion
 	for _, entry := range manifests {
@@ -70,23 +68,23 @@ func (c *Cache) ArtifactHistory(projectPath, path string) ([]ArtifactVersion, er
 				continue
 			}
 			out = append(out, ArtifactVersion{
-				Path:      rec.Path,
-				Blob:      rec.Blob,
-				Size:      rec.Size,
-				Mode:      rec.Mode,
+				Output:    rec,
 				Target:    entry.man.Target,
 				CreatedAt: entry.man.CreatedAt,
 				EntryHash: entry.hash,
 			})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	slices.SortStableFunc(out, func(a, b ArtifactVersion) int { return b.CreatedAt.Compare(a.CreatedAt) })
 
-	// Walk newest-first and drop a version whose blob matches the one before it,
-	// keeping the oldest of each run of identical content.
+	// Identity is (blob, symlink target): a symlink record has no blob, so comparing
+	// blobs alone would treat two links pointing at different files as one version.
+	same := func(a, b ArtifactVersion) bool {
+		return a.Output.Blob == b.Output.Blob && a.Output.Symlink == b.Output.Symlink
+	}
 	deduped := make([]ArtifactVersion, 0, len(out))
 	for i, v := range out {
-		if i > 0 && out[i-1].Blob == v.Blob {
+		if i > 0 && same(out[i-1], v) {
 			deduped[len(deduped)-1] = v
 			continue
 		}
@@ -95,39 +93,43 @@ func (c *Cache) ArtifactHistory(projectPath, path string) ([]ArtifactVersion, er
 	return deduped, nil
 }
 
-// MaterializeArtifact writes v's bytes to dst, creating parent directories.
+// MaterializeArtifact writes v to dst, creating parent directories.
 //
-// It clones from the CAS rather than copying when the filesystem supports it
-// (APFS, btrfs, XFS), so materializing a large artifact to compare against is
-// near-free. A filesystem without reflink falls back to a plain copy.
-//
-// The blob is checked for existence first so an evicted version reports
-// [ErrArtifactEvicted] rather than a bare open failure the caller would have to
-// interpret.
-func (c *Cache) MaterializeArtifact(v ArtifactVersion, dst string) error {
-	src := c.blobPath(v.Blob)
-	if _, err := os.Stat(src); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("%w: %s (%s) produced %s; re-run the target with --no-cache to regenerate it",
-				ErrArtifactEvicted, v.Path, v.Short(), v.CreatedAt.Format(time.RFC3339))
-		}
+// Content is cloned from the store rather than copied where the filesystem supports
+// reflink (APFS, btrfs, XFS), so comparing a large artifact costs almost nothing.
+func (c *Cache) MaterializeArtifact(ctx context.Context, v ArtifactVersion, dst string) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	if err := reflink.Clone(src, dst); err == nil {
-		return os.Chmod(dst, os.FileMode(v.Mode).Perm())
+	// A symlink record stores its target, not content: recreate the link.
+	if v.Output.Symlink != "" {
+		_ = os.Remove(dst)
+		return os.Symlink(v.Output.Symlink, dst)
 	}
-	// Reflink is an optimization, not a requirement: any failure (unsupported
-	// filesystem, cross-device) falls back to a copy rather than surfacing.
-	return copyBlob(src, dst, os.FileMode(v.Mode).Perm())
+	if v.Output.Blob == "" {
+		return fmt.Errorf("%w: %s recorded no content", ErrArtifactMissing, v.Output.Path)
+	}
+
+	src := c.blobPath(v.Output.Blob)
+	if fi, err := os.Stat(src); err != nil || fi.IsDir() {
+		return fmt.Errorf("%w: %s (%s), produced by %s at %s; re-run that target with --no-cache to regenerate it",
+			ErrArtifactMissing, v.Output.Path, v.ShortBlob(), v.Target, v.CreatedAt.UTC().Format(time.RFC3339))
+	}
+	mode := os.FileMode(v.Output.Mode).Perm()
+	if err := reflink.Clone(src, dst); err == nil {
+		return os.Chmod(dst, mode)
+	}
+	// Reflink is an optimization; any failure falls back to a copy.
+	return copyBlob(ctx, src, dst, mode)
 }
 
-// copyBlob writes src to dst atomically via a temp file beside it, for the same
-// reasons the chain's export does: a partial read must not leave a truncated file
-// where a valid artifact was, and dst may already exist as a symlink.
-func copyBlob(src, dst string, mode os.FileMode) error {
+// copyBlob writes src to dst via a temp file beside it, so a failed read cannot
+// leave a truncated file where a valid artifact was and a symlink at dst is replaced
+// rather than written through.
+func copyBlob(ctx context.Context, src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -152,32 +154,38 @@ func copyBlob(src, dst string, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return os.Rename(tmpName, dst)
 }
 
-// storedManifest pairs a decoded manifest with its cache key. (eviction.go has its
-// own manifestEntry holding paths and blob refs for the LRU scan; this one carries
-// the decoded content, which is what a history read needs.)
+// storedManifest pairs a decoded manifest with its cache key. (eviction.go's
+// manifestEntry holds paths and blob refs for the LRU scan; this carries content.)
 type storedManifest struct {
 	man  Manifest
 	hash string
 }
 
-// projectManifests decodes every manifest for projectPath. A manifest that fails
-// to decode is skipped rather than failing the read: one corrupt entry should not
-// make an artifact's whole history unavailable, and the store is a cache whose
-// worst-case answer is "fewer versions than exist".
-func (c *Cache) projectManifests(projectPath string) ([]storedManifest, error) {
+// projectManifests decodes every manifest for projectPath.
+//
+// A manifest that cannot be read or decoded is skipped rather than failing the whole
+// read: this is a cache, and one corrupt entry should not make an artifact's history
+// unavailable. The cost is that an I/O fault looks like a shorter history.
+func (c *Cache) projectManifests(ctx context.Context, projectPath string) ([]storedManifest, error) {
 	dir := filepath.Join(c.dir, "manifests", flattenPath(projectPath))
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("no cache entries for %q: %w", projectPath, fs.ErrNotExist)
+		return nil, fmt.Errorf("cache: no entries for %q: %w", projectPath, fs.ErrNotExist)
 	}
 	if err != nil {
 		return nil, err
 	}
 	out := make([]storedManifest, 0, len(entries))
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}

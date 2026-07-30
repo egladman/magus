@@ -173,4 +173,5 @@ carries every page as a `doc` node, so `magus query "kind:doc"` (see the
 magus-query skill) lists them from the graph.
 ```
 
+
 </details>

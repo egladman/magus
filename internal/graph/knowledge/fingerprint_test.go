@@ -5,7 +5,6 @@ import (
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // shardFor builds a one-node one-edge shard, so a test can vary a single field and
@@ -33,10 +32,8 @@ func baseEdge() types.KnowledgeEdge {
 // If it did not, Build would rewrite every shard on every command and the
 // fingerprint would be pure cost.
 func TestShardFingerprintStable(t *testing.T) {
-	a, err := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
-	require.NoError(t, err)
-	b, err := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
-	require.NoError(t, err)
+	a := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
+	b := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
 	assert.Equal(t, a, b, "identical content must fingerprint identically")
 	assert.Len(t, a, 64, "hex-encoded SHA256")
 }
@@ -48,10 +45,8 @@ func TestShardFingerprintIgnoresInputOrder(t *testing.T) {
 	n1 := baseNode()
 	n2 := types.KnowledgeNode{ID: "target:.:test", Kind: "target", Label: "test"}
 
-	fwd, err := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{n1, n2}})
-	require.NoError(t, err)
-	rev, err := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{n2, n1}})
-	require.NoError(t, err)
+	fwd := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{n1, n2}})
+	rev := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{n2, n1}})
 	assert.Equal(t, fwd, rev, "Graph.Nodes sorts by ID, so emission order cannot leak in")
 }
 
@@ -63,8 +58,7 @@ func TestShardFingerprintIgnoresInputOrder(t *testing.T) {
 // Every field is exercised individually rather than in one mutated blob, so a
 // failure names which field stopped counting.
 func TestShardFingerprintChangesPerField(t *testing.T) {
-	base, err := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
-	require.NoError(t, err)
+	base := fingerprintShardContent(shardFor(baseNode(), baseEdge()))
 
 	nodeMutations := map[string]func(*types.KnowledgeNode){
 		"ID":          func(n *types.KnowledgeNode) { n.ID = "target:.:other" },
@@ -80,8 +74,7 @@ func TestShardFingerprintChangesPerField(t *testing.T) {
 		t.Run("node "+name, func(t *testing.T) {
 			n := baseNode()
 			mutate(&n)
-			got, err := fingerprintShardContent(shardFor(n, baseEdge()))
-			require.NoError(t, err)
+			got := fingerprintShardContent(shardFor(n, baseEdge()))
 			assert.NotEqual(t, base, got, "a changed node %s must change the fingerprint", name)
 		})
 	}
@@ -98,8 +91,7 @@ func TestShardFingerprintChangesPerField(t *testing.T) {
 		t.Run("edge "+name, func(t *testing.T) {
 			e := baseEdge()
 			mutate(&e)
-			got, err := fingerprintShardContent(shardFor(baseNode(), e))
-			require.NoError(t, err)
+			got := fingerprintShardContent(shardFor(baseNode(), e))
 			assert.NotEqual(t, base, got, "a changed edge %s must change the fingerprint", name)
 		})
 	}
@@ -110,14 +102,12 @@ func TestShardFingerprintChangesPerField(t *testing.T) {
 // identically, so a node whose label ended where the next field began could be
 // swapped for a different node without the fingerprint noticing.
 func TestShardFingerprintResistsFieldSplitCollision(t *testing.T) {
-	left, err := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{
+	left := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{
 		{ID: "a", Kind: "bc"},
 	}})
-	require.NoError(t, err)
-	right, err := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{
+	right := fingerprintShardContent(Shard{Nodes: []types.KnowledgeNode{
 		{ID: "ab", Kind: "c"},
 	}})
-	require.NoError(t, err)
 	assert.NotEqual(t, left, right, "the length prefix must keep a field split from colliding")
 }
 
@@ -132,9 +122,7 @@ func BenchmarkFingerprintShard(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, sh := range shards {
-			if _, err := fingerprintShardContent(sh); err != nil {
-				b.Fatal(err)
-			}
+			_ = fingerprintShardContent(sh)
 		}
 	}
 }

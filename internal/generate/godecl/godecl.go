@@ -74,7 +74,6 @@ func DocLine(cg *ast.CommentGroup, declName string) string {
 	return ""
 }
 
-
 // StructLiteral is one entry of a slice-of-struct declaration: its field names mapped
 // to their string values. Only string-valued fields are captured, which is all a
 // generator reading a declaration table needs.

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,12 +62,12 @@ func TestArtifactHistoryNewestFirst(t *testing.T) {
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v2", base.Add(time.Hour))
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v3", base.Add(2*time.Hour))
 
-	got, err := c.ArtifactHistory("pkg/a", "dist/app")
+	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 	assert.True(t, got[0].CreatedAt.After(got[1].CreatedAt), "newest first")
 	assert.True(t, got[1].CreatedAt.After(got[2].CreatedAt))
-	assert.Equal(t, int64(2), got[0].Size)
+	assert.Equal(t, int64(2), got[0].Output.Size)
 	assert.Equal(t, "build", got[0].Target)
 }
 
@@ -84,10 +85,10 @@ func TestArtifactHistoryCollapsesIdenticalContent(t *testing.T) {
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", base.Add(2*time.Hour))
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v2", base.Add(3*time.Hour))
 
-	got, err := c.ArtifactHistory("pkg/a", "dist/app")
+	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 2, "three identical v1 entries collapse to one")
-	assert.Equal(t, int64(2), got[0].Size)
+	assert.Equal(t, int64(2), got[0].Output.Size)
 	assert.Equal(t, base, got[1].CreatedAt, "the kept v1 row is the earliest, not the latest")
 }
 
@@ -101,12 +102,12 @@ func TestArtifactHistoryScopesToPathAndProject(t *testing.T) {
 	writeEntry(t, c, "pkg/a", "build", "dist/other", "o1", now)
 	writeEntry(t, c, "pkg/b", "build", "dist/app", "b1", now)
 
-	got, err := c.ArtifactHistory("pkg/a", "dist/app")
+	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, int64(2), got[0].Size)
+	assert.Equal(t, int64(2), got[0].Output.Size)
 
-	_, err = c.ArtifactHistory("pkg/zzz", "dist/app")
+	_, err = c.ArtifactHistory(context.Background(), "pkg/zzz", "dist/app")
 	require.Error(t, err, "an unknown project is not an empty history")
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -118,7 +119,7 @@ func TestArtifactHistoryEmptyForUnknownPath(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "v1", time.Now().UTC())
 
-	got, err := c.ArtifactHistory("pkg/a", "dist/nope")
+	got, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/nope")
 	require.NoError(t, err, "a built project with no such output is not an error")
 	assert.Empty(t, got)
 }
@@ -129,14 +130,14 @@ func TestArtifactHistoryEmptyForUnknownPath(t *testing.T) {
 func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "hello", time.Now().UTC())
-	versions, err := c.ArtifactHistory("pkg/a", "dist/app")
+	versions, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 
 	v := versions[0]
-	v.Mode = 0o755
+	v.Output.Mode = 0o755
 	dst := filepath.Join(t.TempDir(), "nested", "app")
-	require.NoError(t, c.MaterializeArtifact(v, dst))
+	require.NoError(t, c.MaterializeArtifact(context.Background(), v, dst))
 
 	body, err := os.ReadFile(dst)
 	require.NoError(t, err)
@@ -154,17 +155,17 @@ func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 func TestMaterializeArtifactReportsEviction(t *testing.T) {
 	c := testCacheDir(t)
 	writeEntry(t, c, "pkg/a", "build", "dist/app", "hello", time.Now().UTC())
-	versions, err := c.ArtifactHistory("pkg/a", "dist/app")
+	versions, err := c.ArtifactHistory(context.Background(), "pkg/a", "dist/app")
 	require.NoError(t, err)
 	require.Len(t, versions, 1)
 
 	// Evict the blob but keep the manifest, which is exactly what GC leaves behind.
-	require.NoError(t, os.Remove(c.blobPath(versions[0].Blob)))
+	require.NoError(t, os.Remove(c.blobPath(versions[0].Output.Blob)))
 
 	dst := filepath.Join(t.TempDir(), "app")
-	err = c.MaterializeArtifact(versions[0], dst)
+	err = c.MaterializeArtifact(context.Background(), versions[0], dst)
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrArtifactEvicted)
+	assert.ErrorIs(t, err, ErrArtifactMissing)
 	assert.Contains(t, err.Error(), "--no-cache", "the error names the way out")
 	assert.NoFileExists(t, dst, "a failed materialize leaves nothing behind to be mistaken for the artifact")
 }
@@ -172,6 +173,6 @@ func TestMaterializeArtifactReportsEviction(t *testing.T) {
 // TestArtifactVersionShort keeps the display hash short enough to scan in a column
 // and long enough to identify a blob.
 func TestArtifactVersionShort(t *testing.T) {
-	assert.Equal(t, "0123456789ab", ArtifactVersion{Blob: "0123456789abcdef"}.Short())
-	assert.Equal(t, "abc", ArtifactVersion{Blob: "abc"}.Short(), "a short hash is returned whole")
+	assert.Equal(t, "0123456789ab", ArtifactVersion{Output: OutputRecord{Blob: "0123456789abcdef"}}.ShortBlob())
+	assert.Equal(t, "abc", ArtifactVersion{Output: OutputRecord{Blob: "abc"}}.ShortBlob(), "a short hash is returned whole")
 }

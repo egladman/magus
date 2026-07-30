@@ -26,12 +26,12 @@ func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 type TargetArtifact struct {
 	Path string // workspace-relative
 	Glob string // the declaration it matched
-	// Project is the project whose target DECLARED the glob - not necessarily the
+	// ProjectPath is the project whose target DECLARED the glob - not necessarily the
 	// project the file sits in, since a target may declare an output into another
-	// project's tree. It is recorded here because this is the only place that knows
-	// it: a consumer re-deriving attribution from the path has to guess, and the
-	// guess fails outright for a file no project's tree claims.
-	Project string
+	// project's tree. Recorded here because this is the only place that knows it: a
+	// consumer re-deriving attribution from Path has to guess, and the guess fails
+	// outright for a file no project's tree claims.
+	ProjectPath string
 }
 
 // ResolveTargetOutputs expands the output globs target declares for each project
@@ -71,7 +71,7 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 				if err != nil {
 					continue
 				}
-				found = append(found, TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, Project: p.Path})
+				found = append(found, TargetArtifact{Path: filepath.ToSlash(wsRel), Glob: glob, ProjectPath: p.Path})
 			}
 		}
 	}

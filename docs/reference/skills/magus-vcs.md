@@ -23,7 +23,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
@@ -109,7 +109,7 @@ pristine tree (e.g. to diff regenerated output), use a throwaway
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set (the changed files and dependency chains that pulled it in) when
 the result surprises you.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -118,7 +118,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
@@ -184,6 +184,7 @@ pristine tree (e.g. to diff regenerated output), use a throwaway
 
 `magus_affected_explain` {project} answers why a specific project is in the
 affected set.
-```
+````
+
 
 </details>

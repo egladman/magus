@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -186,19 +187,19 @@ func (c *replCompleter) matching(word string) []string {
 			out = append(out, p)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
 // list prints the alternatives in columns, capped. An unbounded dump on Tab can
 // scroll the transcript away, which costs the reader more than the list gives them.
 func (c *replCompleter) list(matches []string) {
-	const max = 40
+	const maxRows = 40
 	shown := matches
 	trailer := ""
-	if len(shown) > max {
-		shown = shown[:max]
-		trailer = fmt.Sprintf("  ... and %d more", len(matches)-max)
+	if len(shown) > maxRows {
+		shown = shown[:maxRows]
+		trailer = fmt.Sprintf("  ... and %d more", len(matches)-maxRows)
 	}
 	fmt.Fprintln(c.out)
 	width := 0
@@ -207,7 +208,7 @@ func (c *replCompleter) list(matches []string) {
 			width = len(m)
 		}
 	}
-	perRow := max2(1, 76/(width+2))
+	perRow := max(1, 76/(width+2))
 	for i, m := range shown {
 		fmt.Fprintf(c.out, "%-*s", width+2, m)
 		if (i+1)%perRow == 0 {
@@ -220,13 +221,6 @@ func (c *replCompleter) list(matches []string) {
 	if trailer != "" {
 		fmt.Fprintln(c.out, trailer)
 	}
-}
-
-func max2(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 // wordStart finds where the word under the cursor begins. Buzz member access is a
@@ -263,14 +257,18 @@ func commonPrefix(items []string) string {
 	return p
 }
 
-// metaCommands lists the dot-commands, one per driver plus the fixed set, so Tab
-// offers exactly what handleReplMeta accepts.
+// metaCommands lists the dot-commands Tab offers.
+//
+// It is exactly what handleReplMeta accepts, and deliberately does NOT include a
+// `.<language>` entry per driver. replHelp advertises language switching, but
+// handleReplMeta discards its driver argument and has no case for it, so `.buzz`
+// falls through and is evaluated as Buzz source. Completing to a command that errors
+// is worse than not offering it; if the switch is implemented, add it here and to
+// handleReplMeta together.
 func metaCommands(drivers []engine.ReplDriver) []string {
-	out := []string{".exit", ".quit", ".help", ".load"}
-	for _, d := range drivers {
-		out = append(out, "."+d.Language())
-	}
-	sort.Strings(out)
+	_ = drivers
+	out := []string{".exit", ".help", ".load", ".quit"}
+	slices.Sort(out)
 	return out
 }
 

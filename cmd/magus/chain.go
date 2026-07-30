@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/internal/cache"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,6 +46,7 @@ func chainUsage() {
 	fmt.Fprintln(os.Stderr, "  file <path>                      print one artifact's absolute path")
 	fmt.Fprintln(os.Stderr, "  file <path> contents             write its bytes to stdout")
 	fmt.Fprintln(os.Stderr, "  file <path> export --path <dst>  copy it to <dst>")
+	fmt.Fprintln(os.Stderr, "  file <path> hash                 print its content hash (the store's blob key)")
 	fmt.Fprintln(os.Stderr, "  file <path> history              every cached version: when its bytes changed")
 	fmt.Fprintln(os.Stderr, "  file <path> diff                 compare it against the last cached version")
 	fmt.Fprintln(os.Stderr, "  value                            print what the target returned")
@@ -70,7 +72,7 @@ func chainUsage() {
 type chainPlan struct {
 	verb   string // outputs | file | value
 	path   string // file <path>
-	action string // "" | contents | export
+	action string // "" | contents | export | hash | history | diff
 	dst    string // export --path <dst>
 }
 
@@ -113,7 +115,7 @@ func prepareChain(argv []string) (plan chainPlan, proceed bool, err error) {
 			plan.action = rest[1]
 		}
 		switch plan.action {
-		case "", "contents", "history", "diff":
+		case "", "contents", "history", "diff", "hash":
 			// These take nothing further, so anything trailing is a mistake worth
 			// naming. The commonest is a global flag put after the verb
 			// (`--then file x history -o json`), which the grammar sends to the verb
@@ -130,7 +132,7 @@ func prepareChain(argv []string) (plan chainPlan, proceed bool, err error) {
 			}
 		default:
 			chainUsage()
-			return plan, false, usagef("magus run: unknown verb %q after file (want contents, export, history, or diff)", plan.action)
+			return plan, false, usagef("magus run: unknown verb %q after file (want contents, export, hash, history, or diff)", plan.action)
 		}
 	default:
 		chainUsage()
@@ -151,7 +153,7 @@ func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target st
 	if plan.verb == "outputs" {
 		return chainOutputs(m, opts, artifacts, plan)
 	}
-	return chainFile(m, opts, artifacts, plan)
+	return chainFile(ctx, m, opts, artifacts, plan)
 }
 
 // chainOutputs implements `--then outputs [export --path <dir>]`.
@@ -183,8 +185,10 @@ func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetAr
 	return nil
 }
 
-// chainFile implements `--then file <path> [contents | export --path <dst>]`.
-func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
+// chainFile implements `--then file <path> [contents | export --path <dst> | history | diff]`.
+//
+// The action was validated by prepareChain, so the switch below trusts it.
+func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
 	want := plan.path
 	var match *magus.TargetArtifact
 	for i, a := range artifacts {
@@ -209,10 +213,20 @@ func chainFile(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtif
 	abs := filepath.Join(m.Root(), filepath.FromSlash(match.Path))
 
 	switch plan.action {
+	case "hash":
+		// The content hash of what is on disk NOW, which is what makes a comparison
+		// scriptable: it is the same sha256 the store keys blobs by, so it can be set
+		// against any row of `history` without materializing anything.
+		body, err := os.ReadFile(abs)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s\n", hex.EncodeToString(sha256Of(body)))
+		return nil
 	case "history":
-		return chainFileHistory(m, opts, match.Project, match.Path)
+		return chainFileHistory(ctx, m, opts, match.ProjectPath, match.Path)
 	case "diff":
-		return chainFileDiff(m, match.Project, match.Path, abs)
+		return chainFileDiff(ctx, m, match.ProjectPath, match.Path, abs)
 	case "contents":
 		f, err := os.Open(abs)
 		if err != nil {
@@ -379,11 +393,12 @@ func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, re
 
 // artifactVersion is one row of `--then file <p> history`, shaped for -o json.
 type artifactVersion struct {
-	Blob    string `json:"blob"     yaml:"blob"`
-	Size    int64  `json:"size"     yaml:"size"`
-	Target  string `json:"target"   yaml:"target"`
-	Created string `json:"created"  yaml:"created"`
-	Entry   string `json:"entry"    yaml:"entry"`
+	Blob    string `json:"blob"    yaml:"blob"`
+	Short   string `json:"short"   yaml:"short"`
+	Size    int64  `json:"size"    yaml:"size"`
+	Target  string `json:"target"  yaml:"target"`
+	Created string `json:"created" yaml:"created"`
+	Entry   string `json:"entry"   yaml:"entry"`
 }
 
 // chainFileHistory implements `--then file <path> history`: every cached version of
@@ -393,15 +408,15 @@ type artifactVersion struct {
 // actually change" without consulting the VCS - which matters precisely for the files
 // the VCS is a poor witness for. A generated artifact's git history tells you when
 // someone committed a regeneration; this tells you when the bytes changed.
-func chainFileHistory(m *magus.Magus, opts OutputOptions, project, path string) error {
-	versions, err := m.ArtifactHistory(project, path)
+func chainFileHistory(ctx context.Context, m *magus.Magus, opts OutputOptions, projectPath, wsPath string) error {
+	versions, err := m.ArtifactHistory(ctx, projectPath, wsPath)
 	if err != nil {
 		return err
 	}
 	out := make([]artifactVersion, 0, len(versions))
 	for _, v := range versions {
 		out = append(out, artifactVersion{
-			Blob: v.Blob, Size: v.Size, Target: v.Target,
+			Blob: v.Output.Blob, Short: v.ShortBlob(), Size: v.Output.Size, Target: v.Target,
 			Created: v.CreatedAt.UTC().Format(time.RFC3339), Entry: v.EntryHash,
 		})
 	}
@@ -412,11 +427,11 @@ func chainFileHistory(m *magus.Magus, opts OutputOptions, project, path string) 
 	if len(out) == 0 {
 		// Not an error: an artifact built once and never rebuilt has no history to
 		// show, and neither does one whose versions have been evicted.
-		fmt.Printf("%s: no cached versions\n", path)
+		fmt.Printf("%s: no cached versions\n", wsPath)
 		return nil
 	}
 	for _, v := range out {
-		fmt.Printf("%s  %-12s  %8d  %s\n", v.Created, v.Blob[:min(12, len(v.Blob))], v.Size, v.Target)
+		fmt.Printf("%s  %-12s  %8d  %s\n", v.Created, v.Short, v.Size, v.Target)
 	}
 	return nil
 }
@@ -429,8 +444,8 @@ func chainFileHistory(m *magus.Magus, opts OutputOptions, project, path string) 
 // MAGUS_DIFFTOOL, then DIFFTOOL, then `git diff --no-index`. The emit-never-render
 // rule that keeps a graph renderer out of magus applies here for the same reason: a
 // built-in differ would be a worse version of a tool the user has already chosen.
-func chainFileDiff(m *magus.Magus, project, path, workingCopy string) error {
-	versions, err := m.ArtifactHistory(project, path)
+func chainFileDiff(ctx context.Context, m *magus.Magus, projectPath, wsPath, workingCopy string) error {
+	versions, err := m.ArtifactHistory(ctx, projectPath, wsPath)
 	if err != nil {
 		return err
 	}
@@ -441,16 +456,25 @@ func chainFileDiff(m *magus.Magus, project, path, workingCopy string) error {
 	if err != nil {
 		return err
 	}
-	currentBlob := fmt.Sprintf("%x", sha256.Sum256(current))
+	currentBlob := hex.EncodeToString(sha256Of(current))
 	var prev *cache.ArtifactVersion
 	for i := range versions {
-		if versions[i].Blob != currentBlob {
+		// A symlink record stores a target, not content, so there is nothing to
+		// compare and materializing it would only produce a dangling link in the
+		// temp dir. Report the recorded target instead of handing a differ a file
+		// that is not there.
+		if versions[i].Output.Symlink != "" {
+			fmt.Fprintf(os.Stderr, "magus run: %s is a symlink to %q; diff compares content, not link targets\n",
+				wsPath, versions[i].Output.Symlink)
+			return nil
+		}
+		if versions[i].Output.Blob != currentBlob {
 			prev = &versions[i]
 			break
 		}
 	}
 	if prev == nil {
-		fmt.Fprintf(os.Stderr, "magus run: %s matches every cached version; nothing to diff\n", path)
+		fmt.Fprintf(os.Stderr, "magus run: %s matches every cached version; nothing to diff\n", wsPath)
 		return nil
 	}
 
@@ -461,15 +485,15 @@ func chainFileDiff(m *magus.Magus, project, path, workingCopy string) error {
 	defer func() { _ = os.RemoveAll(dir) }()
 	// Named after the artifact, not "old", so the difftool's own header and the
 	// editor tab both say which file this is.
-	staged := filepath.Join(dir, filepath.Base(path))
-	if err := m.MaterializeArtifact(*prev, staged); err != nil {
+	staged := filepath.Join(dir, filepath.Base(wsPath))
+	if err := m.MaterializeArtifact(ctx, *prev, staged); err != nil {
 		return err
 	}
 
 	name, args := difftool()
 	args = append(args, staged, workingCopy)
 	fmt.Fprintf(os.Stderr, "magus run: %s %s (cached %s) vs the working tree\n",
-		path, prev.Short(), prev.CreatedAt.UTC().Format(time.RFC3339))
+		wsPath, prev.ShortBlob(), prev.CreatedAt.UTC().Format(time.RFC3339))
 	cmd := exec.Command(name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -482,6 +506,13 @@ func chainFileDiff(m *magus.Magus, project, path, workingCopy string) error {
 		return fmt.Errorf("magus run: could not run %q (set MAGUS_DIFFTOOL to a command that takes two paths): %w", name, err)
 	}
 	return nil
+}
+
+// sha256Of is the one place a content hash is computed, so `hash` and the
+// same-content check in diff cannot disagree about what identity means.
+func sha256Of(b []byte) []byte {
+	sum := sha256.Sum256(b)
+	return sum[:]
 }
 
 // difftool resolves the command to compare two paths with.

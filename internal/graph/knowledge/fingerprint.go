@@ -42,7 +42,7 @@ import (
 // (source, target, relation); the length prefixes below make the stream
 // unambiguous, so no pair of distinct shards can hash alike by concatenation
 // (an "ab"+"c" versus "a"+"bc" collision).
-func fingerprintShardContent(sh Shard) (string, error) {
+func fingerprintShardContent(sh Shard) string {
 	g := NewGraph()
 	g.Merge(sh.Nodes, sh.Edges)
 	h := sha256.New()
@@ -103,7 +103,7 @@ func fingerprintShardContent(sh Shard) (string, error) {
 	if len(buf) > 0 {
 		h.Write(buf) //nolint:errcheck // hash.Hash never errors
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // appendField appends one length-prefixed string. The prefix is what stops two

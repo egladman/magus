@@ -126,7 +126,7 @@ func TestFileSurfacesAnUnreadablePath(t *testing.T) {
 }
 
 // TestGoTemplateNamesTheFailingKey covers the template-execution branch. missingkey
-//=error is what turned a misspelled field from a silent "<no value>" in shipped
+// =error is what turned a misspelled field from a silent "<no value>" in shipped
 // output into a failure, so the error must name the lookup that failed - otherwise
 // the report is "template failed" over a template with fifty fields.
 func TestGoTemplateNamesTheFailingKey(t *testing.T) {

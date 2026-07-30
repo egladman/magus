@@ -2,7 +2,6 @@ package magus
 
 import (
 	"context"
-	"errors"
 	"io"
 	"time"
 
@@ -11,11 +10,6 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/types"
 )
-
-// errNoCache reports that this workspace was opened read-only (Inspect), so there is
-// no cache to read. Distinct from an empty result: a caller must be able to tell
-// "this artifact has no cached versions" from "there is no store to look in".
-var errNoCache = errors.New("magus: workspace has no cache (opened read-only)")
 
 // LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
 func (m *Magus) LogScope(label, source string) {
@@ -153,26 +147,23 @@ func (m *Magus) TailLog(projectPath, target string) (logPath string, err error) 
 	return logPath, err
 }
 
-// ArtifactHistory returns every cached version of a declared output under
-// projectPath, newest first, with identical consecutive content collapsed.
+// ArtifactHistory returns every cached version of the workspace-relative wsPath,
+// newest first, with identical consecutive content collapsed.
 //
-// This reads the content-addressed store, which already held every past run's
-// artifacts; nothing new is persisted to answer it. An Inspect workspace has no
-// cache, so it reports that rather than an empty history - "no versions" and "no
-// store to look in" are different answers and a caller must be able to tell them
-// apart.
-func (m *Magus) ArtifactHistory(projectPath, path string) ([]cache.ArtifactVersion, error) {
+// Returns types.ErrNoCache on an Inspect workspace: "no versions" and "no store to
+// look in" are different answers.
+func (m *Magus) ArtifactHistory(ctx context.Context, projectPath, wsPath string) ([]cache.ArtifactVersion, error) {
 	if m.cache == nil {
-		return nil, errNoCache
+		return nil, types.ErrNoCache
 	}
-	return m.cache.ArtifactHistory(projectPath, path)
+	return m.cache.ArtifactHistory(ctx, projectPath, wsPath)
 }
 
-// MaterializeArtifact writes a cached version's bytes to dst, cloning from the
-// store when the filesystem supports reflink.
-func (m *Magus) MaterializeArtifact(v cache.ArtifactVersion, dst string) error {
+// MaterializeArtifact writes a cached version to dst, cloning from the store when
+// the filesystem supports reflink.
+func (m *Magus) MaterializeArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
 	if m.cache == nil {
-		return errNoCache
+		return types.ErrNoCache
 	}
-	return m.cache.MaterializeArtifact(v, dst)
+	return m.cache.MaterializeArtifact(ctx, v, dst)
 }

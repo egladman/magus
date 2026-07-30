@@ -101,14 +101,38 @@ func renderSkill(full, simple agent.AgentSkill) string {
 	fmt.Fprintf(&b, "An installed copy carries a provenance stamp, so `magus graph verify` can tell "+
 		"you when a magus upgrade has made it stale. Text copied from this page carries none.\n\n")
 
-	fmt.Fprintf(&b, "## Full form\n\nThe default: the steps plus the rationale for each.\n\n")
-	fmt.Fprintf(&b, "```markdown\n%s\n```\n\n", full.Body)
+	b.WriteString("## Full form\n\nThe default: the steps plus the rationale for each.\n\n")
+	writeFenced(&b, full.Body)
 	fmt.Fprintf(&b, "## Short form (`--simple`)\n\nThe same steps with the rationale withheld; the bar under "+
 		"the heading above shows by how much. Both are hand-authored from one source body; see "+
 		"[Agents](../../guides/integrations/agents.md) for when to prefer which.\n\n")
-	fmt.Fprintf(&b, "<details>\n<summary>Show the short form</summary>\n\n```markdown\n%s\n```\n\n</details>\n",
-		simple.Body)
+	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
+	writeFenced(&b, simple.Body)
+	b.WriteString("\n</details>\n")
 	return b.String()
+}
+
+// writeFenced wraps body in a code fence LONGER than any backtick run inside it.
+//
+// A fixed three-backtick fence is broken here, and it shipped that way: every skill
+// body contains its own fenced examples (18 of them in magus-buzz), and Markdown
+// fences do not nest - the body's first ```sh closed the wrapper, so most of the page
+// rendered as live Markdown instead of verbatim text. CommonMark closes a fence only
+// on a run at least as long as the opener, so measuring the longest run and adding
+// one is the fix.
+func writeFenced(w *strings.Builder, body string) {
+	longest := 0
+	for _, line := range strings.Split(body, "\n") {
+		run := 0
+		for run < len(line) && line[run] == '`' {
+			run++
+		}
+		if run > longest {
+			longest = run
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	w.WriteString(fence + "markdown\n" + body + "\n" + fence + "\n\n")
 }
 
 // renderIndex is the section landing: a table of every skill with what each

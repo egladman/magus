@@ -568,7 +568,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		// in an N-project result. The declaring project is already on the artifact and
 		// cannot come back nil.
 		for _, a := range artifacts {
-			byProject[a.Project] = append(byProject[a.Project], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
+			byProject[a.ProjectPath] = append(byProject[a.ProjectPath], runArtifact{Path: a.Path, Glob: a.Glob, Role: roleOf[a.Path]})
 		}
 	}
 

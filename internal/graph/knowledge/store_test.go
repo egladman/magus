@@ -61,8 +61,7 @@ func TestInputFingerprintRetainsSkippedShard(t *testing.T) {
 	vcs := Shard{Name: "@vcs", Nodes: []types.KnowledgeNode{
 		{ID: "file:a.go", Kind: types.KindFile, Source: "a.go", Attrs: map[string]string{"vcs_last_author": "Ada"}},
 	}}
-	fp, err := fingerprintShardContent(vcs)
-	require.NoError(t, err)
+	fp := fingerprintShardContent(vcs)
 
 	// Build 1: produce @vcs, keyed by input fingerprint "head1".
 	g1, err := store.Sync(ctx, []Shard{vcs}, map[string]string{"@vcs": fp}, map[string]string{"@vcs": "head1"}, false)

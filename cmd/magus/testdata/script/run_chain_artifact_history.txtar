@@ -48,7 +48,12 @@ stdout 'stub-diff saw 2 paths'
 
 # An unknown sub-verb names the whole set rather than only what failed.
 ! exec magus run bundle:rw -s --then file dist/app.txt bogus
-stderr 'want contents, export, history, or diff'
+stderr 'want contents, export, hash, history, or diff'
+
+# hash prints the content hash of what is on disk: the same sha256 the store keys
+# blobs by, so it can be set against any row of history without materializing.
+exec magus run bundle:rw -s --then file dist/app.txt hash
+stdout '^[0-9a-f]{64}$'
 
 # history on a path the target does not produce is a usage error naming what it does.
 ! exec magus run bundle:rw -s --then file nope.txt history

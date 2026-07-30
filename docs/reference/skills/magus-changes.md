@@ -23,7 +23,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Recent changes in a magus workspace
 
 Turn a large workspace's recent change history into a short, evidence-backed
@@ -148,7 +148,7 @@ paths collapses to the handful that are declared sources.
 Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did. Reading a raw diff to work out
 what a change affects is the work these verbs already did.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -157,7 +157,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Recent changes in a magus workspace
 
 Turn a large workspace's recent change history into a short, evidence-backed
@@ -275,6 +275,7 @@ paths collapses to the handful that are declared sources.
 
 Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did.
-```
+````
+
 
 </details>
