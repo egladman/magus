@@ -21,6 +21,12 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Changed
 
+- Agent skill version 21. The `magus-run` skill described `-s`/`--silent` as printing "a
+  few lines (result line + output ref)" on a pass; a passing run under `-s` prints zero
+  bytes. The skill now states that, and states the consequence it exists to prevent: a
+  caller that treats "no output yet" as "not finished" cannot distinguish success from a
+  run that never started, so a run is judged by its exit status and never by whether
+  output appeared. Drop `-s` when a pass should print its result line and ref.
 - `magus tail` only requires an interactive terminal for `-f`. Without it, tail prints
   the last `-n` lines to stdout and exits, which works in a script, a CI step, or an
   agent - the whole command used to be gated on `isatty`, which made the useful half

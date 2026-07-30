@@ -69,10 +69,14 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
 <!-- why -->You are a machine reader; no news is good news. Shape the output instead of
 truncating it after the fact:
 
-<!-- /why -->- `-s` / `--silent`: the default for every CLI run.<!-- why --> Progress is dropped; a pass
-  is a few lines (result line + output ref), a failure keeps a bounded tail of
-  the failing project plus the ref to fetch the rest.<!-- /why --><!-- terse --> A pass prints a
-  result line plus an output ref; a failure adds a bounded tail.<!-- /terse -->
+<!-- /why -->- `-s` / `--silent`: the default for every CLI run.<!-- why --> Progress is dropped and a
+  PASS prints nothing at all - zero bytes, exit 0. A failure keeps a bounded tail of
+  the failing project plus the ref to fetch the rest. So silence means "still running"
+  or "passed", never "not started": judge a run by its EXIT STATUS, never by whether
+  output appeared. Drop `-s` when you want a pass to print its result line and output
+  ref.<!-- /why --><!-- terse --> A pass prints nothing (zero bytes, exit 0); a failure prints a
+  bounded tail plus an output ref. Judge by exit status, not by whether output
+  appeared. Drop `-s` to get the result line and ref on a pass.<!-- /terse -->
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.<!-- why --> Ask for the
@@ -103,7 +107,7 @@ Replace the filter with the flag that already does it:
 | `\| grep <field>` | `-o template='{{.Field}}'` |
 | `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
 | `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
-| `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
+| `\| grep -i error` | `-s` (a pass prints nothing; failures already surface) |
 | `\| awk '{print $1}'` | `-o name` |
 | `\| jq` after `-o text` | `-o json` first, then `jq` |
 
