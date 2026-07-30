@@ -100,7 +100,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">11 min read</small>
+    <small class="reading-time" title="Estimated reading time">12 min read</small>
     <article>
 <h1 id="targets">Targets</h1>
 <p>A <strong><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a></strong> is the addressable unit of work in magus: <em>what <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></em> (<a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">Path</a>) and <em>what <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a></em> (Name). Everything else (shards, <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> filters, charms) is configuration layered on top, not part of the Target's identity.</p>
@@ -327,6 +327,60 @@ magus run GoBuild       # pascal
 <p>This is <strong>normalize-both-sides</strong>, not an alias table: there is exactly one
 registered target (<code>go-build</code>), and the same normalizer runs over your input
 before lookup, wherever that input enters.</p>
+<p>The normalizer lowercases, inserts <code>-</code> at camelCase and letter/digit boundaries,
+collapses each run of non-alphanumerics to a single <code>-</code>, and trims leading and
+trailing <code>-</code>. What that means in practice, including the cases people trip over:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>You write</th>
+<th>magus resolves to</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>go-build</code></td>
+<td><code>go-build</code></td>
+<td>already canonical</td>
+</tr>
+<tr>
+<td><code>go_build</code></td>
+<td><code>go-build</code></td>
+<td><code>_</code> is a delimiter, not part of the name</td>
+</tr>
+<tr>
+<td><code>goBuild</code></td>
+<td><code>go-build</code></td>
+<td>camelCase boundary</td>
+</tr>
+<tr>
+<td><code>GoBuild</code></td>
+<td><code>go-build</code></td>
+<td>PascalCase boundary</td>
+</tr>
+<tr>
+<td><code>HTTPServer</code></td>
+<td><code>http-<a class="code-xref" href="../../reference/manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a></code></td>
+<td>an acronym run breaks before its last letter</td>
+</tr>
+<tr>
+<td><code>build2</code></td>
+<td><code>build-2</code></td>
+<td>letter/digit boundary</td>
+</tr>
+<tr>
+<td><code>go--build</code></td>
+<td><code>go-build</code></td>
+<td>delimiter runs collapse to one</td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last three are the surprising ones. <code>HTTPServer</code> does not become
+<code>h-t-t-p-server</code>, and <code>build2</code> gains a <code>-</code> you did not type, so a target declared
+<code>build2</code> is referenced as <code>build-2</code> in anything that reports canonical names.</p>
+<p>Names are constrained to alphanumerics plus <code>-</code> and <code>_</code>. Everything else, <code>:</code> and
+<code>@</code> especially, is reserved for reference grammar such as <code>spell::target</code>.</p>
 <h3 id="the-contract">The contract</h3>
 <ul>
 <li><strong>Declare in any convention, call in any convention.</strong> The declaration side
@@ -390,7 +444,7 @@ different (missing) key, not a normalized alias.</li>
 </ul>
 <h3 id="worked-example">Worked example</h3>
 <p>Given a magusfile declaring:</p>
-<pre><code class="language-buzz">export fun go_build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+<pre><code class="language-buzz">export fun go_build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](ctx); }
 </code></pre>
 <p>all four of these resolve to the <strong>one</strong> registered target <code>go-build</code>, and thus
 the <strong>one</strong> <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> entry:</p>
@@ -525,7 +579,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../search/?q=tag%3A%22build%22">build</a><a class="tag" href="../../search/?q=tag%3A%22projects%22">projects</a><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../search/?q=tag%3A%22grammar%22">grammar</a><a class="tag" href="../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../search/?q=tag%3A%22charms%22">charms</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/targets.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/targets.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T19:12:45Z">July 30, 2026, 7:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c650590009c235c82964048f99d1782361555af6" data-tooltip="c650590009c235c82964048f99d1782361555af6" title="c650590009c235c82964048f99d1782361555af6">c6505900</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a"><code>7bf22e6f</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - merge the execution-context work into main: ctx.updates, per-op cwd/env, required ctx</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/targets.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/targets.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

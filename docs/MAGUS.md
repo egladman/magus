@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2197 nodes** and **4771 edges** (schema v6). Query it instead of grepping:
+This workspace has a knowledge graph of **2228 nodes** and **4953 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,24 +45,24 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 82 | `magus query kind:target` | `content-generate`, `generate`, `image-build` |
+| target | 84 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
-| tool | 13 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| tool | 14 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 5 | `magus query kind:charm` | `rw`, `gha`, `static` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
-| method | 158 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 45 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 218 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 126 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 230 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1102 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 117 | `magus query kind:import` | `std`, `magus`, `fs` |
-| rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
+| method | 159 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
+| doc | 234 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 130 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 220 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
+| function | 1114 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 119 | `magus query kind:import` | `std`, `magus`, `fs` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 25 | `magus query project:.` | `generate`, `image-build`, `lint` |
+| . | 27 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |

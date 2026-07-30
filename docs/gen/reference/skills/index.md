@@ -14,7 +14,7 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 
 | skill | full | short | saved | what it is for |
 | --- | --- | --- | --- | --- |
-| [magus-architecture](magus-architecture.md) | 4510 | 3532 | 21% | Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. |
+| [magus-architecture](magus-architecture.md) | 6278 | 5031 | 19% | Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. |
 | [magus-buzz](magus-buzz.md) | 6148 | 5180 | 15% | Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. |
 | [magus-changes](magus-changes.md) | 5134 | 3864 | 24% | Summarize what changed in a magus workspace, write it up, or answer a granular diff question. |
 | [magus-context-audit](magus-context-audit.md) | 5171 | 3687 | 28% | Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. |
@@ -23,4 +23,4 @@ See [Agents](../../guides/integrations/agents.md) for how to choose.
 | [magus-query](magus-query.md) | 7785 | 5576 | 28% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
 | [magus-run](magus-run.md) | 7970 | 4199 | 47% | Run builds, tests, lints, and codegen through magus targets. |
 | [magus-vcs](magus-vcs.md) | 5402 | 3443 | 36% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
-| **all 9** | **49635** | **35565** | **28%** | |
+| **all 9** | **51403** | **37064** | **27%** | |

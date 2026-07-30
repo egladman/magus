@@ -150,6 +150,27 @@ This is **normalize-both-sides**, not an alias table: there is exactly one
 registered target (`go-build`), and the same normalizer runs over your input
 before lookup, wherever that input enters.
 
+The normalizer lowercases, inserts `-` at camelCase and letter/digit boundaries,
+collapses each run of non-alphanumerics to a single `-`, and trims leading and
+trailing `-`. What that means in practice, including the cases people trip over:
+
+| You write     | magus resolves to | Rule                                        |
+| ------------- | ----------------- | ------------------------------------------- |
+| `go-build`    | `go-build`        | already canonical                           |
+| `go_build`    | `go-build`        | `_` is a delimiter, not part of the name    |
+| `goBuild`     | `go-build`        | camelCase boundary                          |
+| `GoBuild`     | `go-build`        | PascalCase boundary                         |
+| `HTTPServer`  | `http-server`     | an acronym run breaks before its last letter |
+| `build2`      | `build-2`         | letter/digit boundary                       |
+| `go--build`   | `go-build`        | delimiter runs collapse to one              |
+
+The last three are the surprising ones. `HTTPServer` does not become
+`h-t-t-p-server`, and `build2` gains a `-` you did not type, so a target declared
+`build2` is referenced as `build-2` in anything that reports canonical names.
+
+Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` and
+`@` especially, is reserved for reference grammar such as `spell::target`.
+
 ### The contract
 
 - **Declare in any convention, call in any convention.** The declaration side
@@ -195,7 +216,7 @@ before lookup, wherever that input enters.
 Given a magusfile declaring:
 
 ```buzz
-export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun go_build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 ```
 
 all four of these resolve to the **one** registered target `go-build`, and thus

@@ -99,7 +99,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">1 min read</small>
+    <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1008-target-missing-its-context-parameter">MGS1008: target missing its context parameter</h1>
 <p>Every <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> is an exported <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> function whose FIRST parameter is a
@@ -117,7 +117,9 @@ Binding those to the received <code>ctx</code> - rather than a floating global -
 magus read the graph off the source text, so <code><a class="code-xref" href="../../../manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code>, <code><a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a></code>, and the
 graph render never execute a target body. A function without the context parameter
 cannot declare anything that way, so magus rejects it rather than dispatch it with
-the wrong arguments.</p>
+the wrong arguments. That context is also the first argument of every <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> op the
+target calls (<code>go[&quot;go-build&quot;](ctx)</code>), so a function without it cannot <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> one
+either.</p>
 <p><a class="glossary-term" href="../../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> qualifies a namespaced type with a backslash, so the type is spelled
 <code>magus\Context</code> (not <code>magus.Context</code>, which is not valid Buzz type syntax).</p>
 <h2 id="resolution">Resolution</h2>
@@ -126,7 +128,7 @@ the wrong arguments.</p>
 export fun build(args: [str]) &gt; void { go[&quot;go-build&quot;](); }
 
 // after
-export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
+export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](ctx); }
 </code></pre>
 <p>Declare dependencies and footprint through the context:</p>
 <pre><code class="language-buzz">export fun ci(ctx: magus\Context, args: [str]) &gt; void {
@@ -139,7 +141,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&
 <ul>
 <li><strong>Not about the second parameter.</strong> Only the first parameter is checked; the
 <code>args: [str]</code> is conventional and may be named or omitted.</li>
-<li><strong>Not a <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> error.</strong> Spell contract functions (<code>mgs_getName</code>,
+<li><strong>Not a spell error.</strong> Spell contract functions (<code>mgs_getName</code>,
 <code>mgs_listTargets</code>, op definitions) are not targets and are not subject to this.</li>
 </ul>
 <h2 id="see-also">See also</h2>
@@ -165,7 +167,7 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1008%22">MGS1008</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../../search/?q=tag%3A%22context%22">context</a><a class="tag" href="../../../../search/?q=tag%3A%22signature%22">signature</a></div>
-    <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T18:36:27Z">July 30, 2026, 6:36 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" data-tooltip="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" title="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a">7bf22e6f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1008.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1008.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

@@ -102,7 +102,7 @@
 <p><strong><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a> probe:</strong> <code>buf --version</code></p>
 <p><strong>Provides:</strong> <code>gen/**</code></p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
-<p>Every op is invoked as <code>buf[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<p>Every op is invoked as <code>buf[&quot;&lt;op&gt;&quot;](ctx, opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>. The first argument is the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s context, which is what carries the execution environment; the optional options map shapes the command itself:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -117,31 +117,20 @@
 <td><code>args</code></td>
 <td><code>[str]</code></td>
 <td>Extra arguments appended to the resolved command. Omit it and a bare <code>buf[&quot;&lt;op&gt;&quot;]()</code> forwards <code><a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
-</tr>
-<tr>
-<td><code>cwd</code></td>
-<td><code>str</code></td>
-<td>Working directory the command runs in. Defaults to the <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
-</tr>
-<tr>
-<td><code>env</code></td>
-<td><code>{str: str}</code></td>
-<td>Environment variables set for the process, on top of the inherited environment.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L179" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>stdin</code></td>
 <td><code>str</code></td>
 <td>Data written to the command's standard input.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L183" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 </tbody>
 </table></figure>
+<p>Working directory and environment are NOT options: they ride the context, as <code>buf[&quot;&lt;op&gt;&quot;](ctx.withCwd(&quot;sub&quot;))</code> and <code>buf[&quot;&lt;op&gt;&quot;](ctx.withEnv({&quot;CGO_ENABLED&quot;: &quot;0&quot;}))</code>. Only the context reaches the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.</p>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="buf-breaking">buf-breaking</h2>
-<p>breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> pattern; point it elsewhere with a function <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into <code>lint</code> so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> swaps buf's reporter to GitHub Actions annotations.</p>
+<p>breaking checks the current schema against a baseline for backward-incompatible changes (wire and JSON compatibility). It defaults to comparing against the main branch, buf's standard <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> pattern; point it elsewhere with a function target when a repo uses a different default branch or an image baseline. This is the protobuf analogue of an API-contract gate: compose it into <code>lint</code> so a breaking .proto change fails the same read-only stage as go-vet and golangci-lint. The gha <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> swaps buf's reporter to GitHub Actions annotations.</p>
 <p><strong>Command:</strong> <code>buf breaking --against .git#branch=main</code></p>
 <h3 id="gha">gha</h3>
 <p>Appends <code>--error-format=github-actions</code>.</p>
@@ -168,8 +157,8 @@ import &quot;magus/spell/buf&quot;;
 magus\project({ &quot;spells&quot;: [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
-    buf[&quot;buf-lint&quot;]();
-    buf[&quot;buf-breaking&quot;]();
+    buf[&quot;buf-lint&quot;](ctx);
+    buf[&quot;buf-breaking&quot;](ctx);
 }
 </code></pre>
 <h2 id="buf-build">buf-build</h2>
@@ -183,7 +172,7 @@ import &quot;magus/spell/buf&quot;;
 magus\project({ &quot;spells&quot;: [buf] });
 
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
-    buf[&quot;buf-build&quot;]();
+    buf[&quot;buf-build&quot;](ctx);
 }
 </code></pre>
 <h2 id="buf-format">buf-format</h2>
@@ -211,7 +200,7 @@ import &quot;magus/spell/buf&quot;;
 magus\project({ &quot;spells&quot;: [buf] });
 
 export fun format(ctx: magus\Context, args: [str]) &gt; void {
-    buf[&quot;buf-format&quot;]();
+    buf[&quot;buf-format&quot;](ctx);
 }
 </code></pre>
 <h2 id="buf-generate">buf-generate</h2>
@@ -225,7 +214,7 @@ import &quot;magus/spell/buf&quot;;
 magus\project({ &quot;spells&quot;: [buf] });
 
 export fun generate(ctx: magus\Context, args: [str]) &gt; void {
-    buf[&quot;buf-generate&quot;]();
+    buf[&quot;buf-generate&quot;](ctx);
 }
 </code></pre>
 <h2 id="buf-lint">buf-lint</h2>
@@ -252,7 +241,7 @@ import &quot;magus/spell/buf&quot;;
 magus\project({ &quot;spells&quot;: [buf] });
 
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
-    buf[&quot;buf-lint&quot;]();
+    buf[&quot;buf-lint&quot;](ctx);
 }
 </code></pre>
     </article>
@@ -267,14 +256,14 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../../concepts/spells/py/"><span class="related-card-title">py spell</span><span class="related-card-desc">Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.</span></a>
-        <a class="related-card" href="../../../concepts/spells/rs/"><span class="related-card-title">rs spell</span><span class="related-card-desc">Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.</span></a>
-        <a class="related-card" href="../../../concepts/spells/ts/"><span class="related-card-title">ts spell</span><span class="related-card-desc">TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.</span></a>
+        <a class="related-card" href="../../../concepts/spells/bash/"><span class="related-card-title">bash spell</span><span class="related-card-desc">Bash spell: shellcheck linting for shell scripts.</span></a>
+        <a class="related-card" href="../../../concepts/spells/go/"><span class="related-card-title">go spell</span><span class="related-card-desc">Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.</span></a>
+        <a class="related-card" href="../../../concepts/spells/md/"><span class="related-card-title">md spell</span><span class="related-card-desc">Markdown docs spell: markdownlint and prettier for linting and formatting prose.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22buf%22">buf</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22protobuf%22">protobuf</a><a class="tag" href="../../../search/?q=tag%3A%22codegen%22">codegen</a><a class="tag" href="../../../search/?q=tag%3A%22lint%22">lint</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/buf.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/buf.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T18:36:27Z">July 30, 2026, 6:36 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" data-tooltip="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" title="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a">7bf22e6f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/buf.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/buf.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

@@ -102,7 +102,7 @@
           <li><a href="../../../reference/buzz/yaml/" title="yaml module">yaml module</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#cmd" title="cmd">cmd</a></li><li><a href="#ls" title="ls">ls</a></li><li><a href="#affected" title="affected">affected</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#where" title="where">where</a></li><li><a href="#run" title="run">run</a></li><li><a href="#describe" title="describe">describe</a></li><li><a href="#insight" title="insight">insight</a></li><li><a href="#doctor" title="doctor">doctor</a></li><li><a href="#bustcache" title="bustCache">bustCache</a></li><li><a href="#has-charm" title="has_charm">has_charm</a></li></ul></li></ul>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#cmd" title="cmd">cmd</a></li><li><a href="#ls" title="ls">ls</a></li><li><a href="#targets" title="targets">targets</a></li><li><a href="#affected" title="affected">affected</a></li><li><a href="#graph" title="graph">graph</a></li><li><a href="#where" title="where">where</a></li><li><a href="#run" title="run">run</a></li><li><a href="#describe" title="describe">describe</a></li><li><a href="#insight" title="insight">insight</a></li><li><a href="#doctor" title="doctor">doctor</a></li><li><a href="#bustcache" title="bustCache">bustCache</a></li><li><a href="#has-charm" title="has_charm">has_charm</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -117,7 +117,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="cmd">cmd</h3>
 <p>Escape hatch: <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <code>magus &lt;args&gt;</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> for any subcommand, in the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory. Prefer the dedicated methods (run, <a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a>, <a class="glossary-term" href="../../../glossary/#insight" data-def="The reports magus derives over the graph and history (hotspots, affinity, ownership, trend).">insight</a>, <a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a>) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>; opts.quiet captures the output without echoing it to the <a class="glossary-term" href="../../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#cmd" data-kind="method" data-def="">magus\cmd</a>(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L238" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#cmd" data-kind="method" data-def="">magus\cmd</a>(args, [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L257" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -145,11 +145,15 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="ls">ls</h3>
 <p>List the workspace's projects: {workspace, count, projects}, each project {<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>, dir, <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, spells, sources, outputs, dependsOn, exclusive}. Annotate the result <code>&gt; Projects</code> (magus/target) for compile-checked field access. Unlike magus.cmd(&quot;<a class="code-xref" href="../../manpage/magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a>&quot;), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#ls" data-kind="method" data-def="">magus\ls</a>() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L178" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#ls" data-kind="method" data-def="">magus\ls</a>() → ProjectsOutput</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L185" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Returns:</strong> map[string]any</p>
+<h3 id="targets">targets</h3>
+<p>The TARGET dependency <a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> of every project: {projects}, each project {path, name, <a class="glossary-term" href="../../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result <code>&gt; TargetGraph</code> (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.</p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#targets" data-kind="method" data-def="">magus\targets</a>() → TargetGraphOutput</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L197" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="affected">affected</h3>
 <p>Compute the VCS-<a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, <a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a>}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#affected" data-kind="method" data-def="">magus\affected</a>([base]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L193" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#affected" data-kind="method" data-def="">magus\affected</a>([base]) → AffectedResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L212" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -171,11 +175,11 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="graph">graph</h3>
 <p>The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#graph" data-kind="method" data-def="">magus\graph</a>() → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L222" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#graph" data-kind="method" data-def="">magus\graph</a>() → GraphView</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L241" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="where">where</h3>
 <p>Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#where" data-kind="method" data-def="">magus\where</a>(dir) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L208" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#where" data-kind="method" data-def="">magus\where</a>(dir) → string</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L227" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -197,7 +201,7 @@
 <p><strong>Returns:</strong> string</p>
 <h3 id="run">run</h3>
 <p>Run <code><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;args&gt;</code> recursively in the target's project directory and capture its output. Child invocations share the parent's <a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#run" data-kind="method" data-def="">magus\run</a>(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L255" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#run" data-kind="method" data-def="">magus\run</a>(args, [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L274" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -225,7 +229,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="describe">describe</h3>
 <p>Run <code><a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#describe" data-kind="method" data-def="">magus\describe</a>(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L260" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#describe" data-kind="method" data-def="">magus\describe</a>(args, [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L279" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -253,7 +257,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="insight">insight</h3>
 <p>Run <code><a class="code-xref" href="../../manpage/magus-insight/" data-kind="command" data-def="Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">magus insight</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#insight" data-kind="method" data-def="">magus\insight</a>(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L265" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#insight" data-kind="method" data-def="">magus\insight</a>(args, [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L284" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -281,7 +285,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="doctor">doctor</h3>
 <p>Run <code><a class="code-xref" href="../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a> &lt;args&gt;</code> in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#doctor" data-kind="method" data-def="">magus\doctor</a>(args, [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L270" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#doctor" data-kind="method" data-def="">magus\doctor</a>(args, [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L289" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -309,7 +313,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="bustcache">bustCache</h3>
 <p>Invalidate the build <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#bustcache" data-kind="method" data-def="">magus\bustCache</a>([project_path])</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L146" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#bustcache" data-kind="method" data-def="">magus\bustCache</a>([project_path])</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L153" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -330,7 +334,7 @@
 </table></figure>
 <h3 id="has-charm">has_charm</h3>
 <p>True when execution <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> <code>name</code> is active, letting a target body branch on a charm carried in context (e.g. has_charm(&quot;rw&quot;)).</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#has-charm" data-kind="method" data-def="">magus\has_charm</a>(name) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L139" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#has-charm" data-kind="method" data-def="">magus\has_charm</a>(name) → bool</code> · <a href="https://github.com/egladman/magus/blob/main/std/magus.go#L146" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -364,12 +368,12 @@
         <a class="related-card" href="../../../reference/buzz/"><span class="related-card-title">magus stdlib</span><span class="related-card-desc">Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.</span></a>
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
-        <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+        <a class="related-card" href="../../../reference/manpage/magus-graph/"><span class="related-card-title">magus graph</span><span class="related-card-desc">Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph&#39;s shape (god nodes, orphans, doc coverage).</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/magus.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/magus.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T19:11:30Z">July 30, 2026, 7:11 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b" data-tooltip="bd8572b42f1c666df079878328daa964751a294b" title="bd8572b42f1c666df079878328daa964751a294b">bd8572b4</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/magus.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/magus.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -396,6 +400,9 @@ place, and <code>ci</code> always strips it. See <a href="../../../concepts/char
 <h3 id="module">Module</h3>
 <p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
 exec, vcs, and more. See <a href="../../../reference/buzz/">the module reference</a>.</p>
+<h3 id="engine">Engine</h3>
+<p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
+<a href="../../../concepts/engines/">engines</a>.</p>
 <h3 id="cache">Cache</h3>
 <p>The content-addressed store magus consults before running a target, so unchanged
 work is skipped. See <a href="../../../concepts/cache/">cache</a>.</p>
@@ -427,6 +434,71 @@ ownership, trend). See <a href="../../../guides/insight/">insight</a>.</p>
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

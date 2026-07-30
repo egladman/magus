@@ -22,6 +22,7 @@ const shorthandName = "mgs"
 // underneath a link that keeps pointing at it.
 func installShorthandCmd(args []string) error {
 	fs := flag.NewFlagSet("self install-shorthand", flag.ContinueOnError)
+	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = installShorthandUsage
 	dir := fs.String("dir", "", "directory for the shorthand (default: the running binary's directory)")

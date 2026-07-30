@@ -169,6 +169,11 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
+	m.MapSet("targets", fn("magus.targets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.StrValue(""), nil
 	}))

@@ -150,13 +150,13 @@ autoload -Uz compinit &amp;&amp; compinit
     <div class="related-grid">
         <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.</span></a>
         <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
+        <a class="related-card" href="../../../reference/skills/magus-architecture/"><span class="related-card-title">magus-architecture</span><span class="related-card-desc">Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.</span></a>
         <a class="related-card" href="../../../guides/integrations/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
-        <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22completion%22">completion</a><a class="tag" href="../../../search/?q=tag%3A%22shell%22">shell</a><a class="tag" href="../../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../../search/?q=tag%3A%22zsh%22">zsh</a><a class="tag" href="../../../search/?q=tag%3A%22fish%22">fish</a><a class="tag" href="../../../search/?q=tag%3A%22powershell%22">powershell</a><a class="tag" href="../../../search/?q=tag%3A%22mgs%22">mgs</a><a class="tag" href="../../../search/?q=tag%3A%22shorthand%22">shorthand</a><a class="tag" href="../../../search/?q=tag%3A%22setup%22">setup</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small>
+    <small>Last updated <time datetime="2026-07-30T19:12:45Z">July 30, 2026, 7:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/c650590009c235c82964048f99d1782361555af6" data-tooltip="c650590009c235c82964048f99d1782361555af6" title="c650590009c235c82964048f99d1782361555af6">c6505900</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -223,6 +223,71 @@ positive delta is a rising hotspot; a negative one is cooling. See
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

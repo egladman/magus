@@ -101,7 +101,7 @@
 <p><strong>Runtime name:</strong> <code>cosign</code> (source <code>spells/cosign/</code>)</p>
 <p><strong><a class="code-xref" href="../../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">Version</a> probe:</strong> <code>cosign version</code></p>
 <h2 id="passing-arguments-to-ops">Passing arguments to ops</h2>
-<p>Every op is invoked as <code>cosign[&quot;&lt;op&gt;&quot;](opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>, <a class="code-xref" href="../../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the optional options map accepts these keys - all optional, each appended to or shaping the forked command:</p>
+<p>Every op is invoked as <code>cosign[&quot;&lt;op&gt;&quot;](ctx, opts?)</code><a class="convention-hint" href="../../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a>. The first argument is the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s context, which is what carries the execution environment; the optional options map shapes the command itself:</p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -116,28 +116,17 @@
 <td><code>args</code></td>
 <td><code>[str]</code></td>
 <td>Extra arguments appended to the resolved command. Omit it and a bare <code>cosign[&quot;&lt;op&gt;&quot;]()</code> forwards <code><a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> &lt;target&gt; -- &lt;extra&gt;</code> to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L108" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
-</tr>
-<tr>
-<td><code>cwd</code></td>
-<td><code>str</code></td>
-<td>Working directory the command runs in. Defaults to the <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> directory.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L105" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
-</tr>
-<tr>
-<td><code>env</code></td>
-<td><code>{str: str}</code></td>
-<td>Environment variables set for the process, on top of the inherited environment.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L112" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L179" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 <tr>
 <td><code>stdin</code></td>
 <td><code>str</code></td>
 <td>Data written to the command's standard input.</td>
-<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L120" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
+<td><a href="https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L183" rel="noopener noreferrer" target="_blank" data-external>source</a></td>
 </tr>
 </tbody>
 </table></figure>
+<p>Working directory and environment are NOT options: they ride the context, as <code>cosign[&quot;&lt;op&gt;&quot;](ctx.withCwd(&quot;sub&quot;))</code> and <code>cosign[&quot;&lt;op&gt;&quot;](ctx.withEnv({&quot;CGO_ENABLED&quot;: &quot;0&quot;}))</code>. Only the context reaches the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.</p>
 <p>Charms (the <code>:charm</code> suffix, e.g. <code>magus <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> test:rw</code>) are orthogonal: they patch the base argv, while these options add to it. See <a href="../../charms/">Charms</a>.</p>
 <h2 id="cosign-attest">cosign-attest</h2>
 <p><strong>Command:</strong> <code>cosign attest --yes</code></p>
@@ -151,11 +140,11 @@ import &quot;magus/spell/cosign&quot;;
 magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun attest(ctx: magus\Context, args: [str]) &gt; void {
-    cosign[&quot;cosign-attest&quot;]({ &quot;args&quot;: [&quot;--predicate&quot;, &quot;sbom.json&quot;, &quot;--type&quot;, &quot;cyclonedx&quot;, &quot;app:latest&quot;] });
+    cosign[&quot;cosign-attest&quot;](ctx, { &quot;args&quot;: [&quot;--predicate&quot;, &quot;sbom.json&quot;, &quot;--type&quot;, &quot;cyclonedx&quot;, &quot;app:latest&quot;] });
 }
 </code></pre>
 <h2 id="cosign-sign">cosign-sign</h2>
-<p>--yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> reference and flags.</p>
+<p>--yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the target reference and flags.</p>
 <p><strong>Command:</strong> <code>cosign sign --yes</code></p>
 <h3 id="example-1">Example</h3>
 
@@ -167,7 +156,7 @@ import &quot;magus/spell/cosign&quot;;
 magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun sign(ctx: magus\Context, args: [str]) &gt; void {
-    cosign[&quot;cosign-sign&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
+    cosign[&quot;cosign-sign&quot;](ctx, { &quot;args&quot;: [&quot;app:latest&quot;] });
 }
 </code></pre>
 <h2 id="cosign-verify">cosign-verify</h2>
@@ -182,7 +171,7 @@ import &quot;magus/spell/cosign&quot;;
 magus\project({ &quot;spells&quot;: [cosign] });
 
 export fun verify(ctx: magus\Context, args: [str]) &gt; void {
-    cosign[&quot;cosign-verify&quot;]({ &quot;args&quot;: [&quot;app:latest&quot;] });
+    cosign[&quot;cosign-verify&quot;](ctx, { &quot;args&quot;: [&quot;app:latest&quot;] });
 }
 </code></pre>
     </article>
@@ -204,7 +193,7 @@ export fun verify(ctx: magus\Context, args: [str]) &gt; void {
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cosign%22">cosign</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22sigstore%22">sigstore</a><a class="tag" href="../../../search/?q=tag%3A%22signing%22">signing</a><a class="tag" href="../../../search/?q=tag%3A%22supply-chain%22">supply-chain</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/cosign.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/cosign.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T18:36:27Z">July 30, 2026, 6:36 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" data-tooltip="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" title="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a">7bf22e6f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/cosign.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/cosign.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -228,6 +217,9 @@ anti-pattern before it runs. See <a href="../../../concepts/wards/">wards</a>.</
 <h3 id="buzz">Buzz</h3>
 <p>The language magusfiles are written in (the <code>.buzz</code> engine). See
 <a href="../../../concepts/engines/">engines</a>.</p>
+<h3 id="cache">Cache</h3>
+<p>The content-addressed store magus consults before running a target, so unchanged
+work is skipped. See <a href="../../../concepts/cache/">cache</a>.</p>
 <h3 id="ci">CI</h3>
 <p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in

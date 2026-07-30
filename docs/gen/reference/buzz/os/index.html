@@ -117,7 +117,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="exec">exec</h3>
 <p><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> cmd directly (no shell; args are never shell-interpolated). Output streams live and is captured. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. Optional dir runs cmd there (relative to the <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>'s cwd). opts.stdin is fed to the process as standard input - pipe by passing a prior call's stdout.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#exec" data-kind="method" data-def="">os\exec</a>(cmd, [args], [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#exec" data-kind="method" data-def="">os\exec</a>(cmd, [args], [dir], [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L360" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -157,7 +157,7 @@
 <p><strong>Returns:</strong> map[string]any</p>
 <h3 id="execsh">execSh</h3>
 <p>Run line through a shell - for pipes, redirection, globs, and variable expansion. Default shell is /bin/sh (cmd on Windows); pass opts.shell (e.g. &quot;bash&quot;) to override, resolved via <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a>. A shell line is written in the platform shell's dialect, so sh and cmd lines are not portable across OSes - for cross-platform logic prefer os.exec plus the fs/os helpers. Same result and raise semantics as exec (opts.stdin and opts.allow_failure included); optional dir runs the shell there.</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#execsh" data-kind="method" data-def="">os\execSh</a>(line, [dir], [opts]) → map[string]any</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L374" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#execsh" data-kind="method" data-def="">os\execSh</a>(line, [dir], [opts]) → ExecResult</code> · <a href="https://github.com/egladman/magus/blob/main/std/os.go#L374" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -380,7 +380,7 @@
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22os%22">os</a><a class="tag" href="../../../search/?q=tag%3A%22module%22">module</a><a class="tag" href="../../../search/?q=tag%3A%22stdlib%22">stdlib</a><a class="tag" href="../../../search/?q=tag%3A%22magusfile%22">magusfile</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/faec048274ec09feb066cf9b772e45d50bf6668c"><code>faec0482</code></a> <small><time datetime="2026-07-25T13:33:56Z">Jul 25, 2026</time></small> - add os.executable; refuse to keep regenerating in serve when the binary changed</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/os.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/os.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T19:08:00Z">July 30, 2026, 7:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64" data-tooltip="25fcf68aeee54cc165b2725861139d059ebcee64" title="25fcf68aeee54cc165b2725861139d059ebcee64">25fcf68a</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/faec048274ec09feb066cf9b772e45d50bf6668c"><code>faec0482</code></a> <small><time datetime="2026-07-25T13:33:56Z">Jul 25, 2026</time></small> - add os.executable; refuse to keep regenerating in serve when the binary changed</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/buzz/os.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/buzz/os.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -427,6 +427,71 @@ a silent no-op. See <a href="../../../concepts/targets/#the-target-name">targets
 magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
 </code></pre>
 <p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
 <h2 id="shell-commands">Shell commands</h2>
 <p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
 <code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>

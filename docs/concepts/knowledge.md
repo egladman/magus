@@ -104,7 +104,7 @@ So `magus explain tool:go` lists every op that runs go:
 $ magus explain tool:go
 tool:go   tool
 tool: go
-13 nodes reach this
+12 nodes reach this
 
 used by (9)  op:go:go-build, op:go:go-clean, op:go:go-generate,
              op:go:go-mod-tidy, op:go:go-run, op:go:go-test, op:go:go-vet,

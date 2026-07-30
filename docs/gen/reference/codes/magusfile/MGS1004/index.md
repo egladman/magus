@@ -51,12 +51,12 @@ the target invokes by name:
 ```buzz
 // Before: the glob lives in a helper nothing calls, so it never keys anything.
 fun srcGlobs() > void { ctx.inputs("src/**"); }
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 
 // After: declared in the body (or a bare-called helper), so it enters the key.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.inputs("src/**");
-    go["go-build"]();
+    go["go-build"](ctx);
 }
 ```
 

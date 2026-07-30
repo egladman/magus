@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 8178
-skill_simple_bytes: 4324
+skill_full_bytes: 7970
+skill_simple_bytes: 4199
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `21` |
+| `agent-skill-version` | `20` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `67218b729af4` |
+| `skill-content` | `c34815650c30` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -109,12 +109,9 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
 You are a machine reader; no news is good news. Shape the output instead of
 truncating it after the fact:
 
-- `-s` / `--silent`: the default for every CLI run. Progress is dropped and a
-  PASS prints nothing at all - zero bytes, exit 0. A failure keeps a bounded tail of
-  the failing project plus the ref to fetch the rest. So silence means "still running"
-  or "passed", never "not started": judge a run by its EXIT STATUS, never by whether
-  output appeared. Drop `-s` when you want a pass to print its result line and output
-  ref.
+- `-s` / `--silent`: the default for every CLI run. Progress is dropped; a pass
+  is a few lines (result line + output ref), a failure keeps a bounded tail of
+  the failing project plus the ref to fetch the rest.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`. Ask for the
@@ -145,7 +142,7 @@ Replace the filter with the flag that already does it:
 | `\| grep <field>` | `-o template='{{.Field}}'` |
 | `\| grep -c .` (counting) | `-o json` and read the count, or the verb's own summary |
 | `\| head` / `\| tail` (quieting) | `-s` / `--silent` |
-| `\| grep -i error` | `-s` (a pass prints nothing; failures already surface) |
+| `\| grep -i error` | `-s` (a pass prints almost nothing; failures already surface) |
 | `\| awk '{print $1}'` | `-o name` |
 | `\| jq` after `-o text` | `-o json` first, then `jq` |
 
@@ -265,9 +262,8 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
 
 ## Output control: silence runs, read structure
 
-- `-s` / `--silent`: the default for every CLI run. A pass prints nothing (zero bytes, exit 0); a failure prints a
-  bounded tail plus an output ref. Judge by exit status, not by whether output
-  appeared. Drop `-s` to get the result line and ref on a pass.
+- `-s` / `--silent`: the default for every CLI run. A pass prints a
+  result line plus an output ref; a failure adds a bounded tail.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.

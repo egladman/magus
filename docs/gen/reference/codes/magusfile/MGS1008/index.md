@@ -25,7 +25,9 @@ Binding those to the received `ctx` - rather than a floating global - is what le
 magus read the graph off the source text, so `magus ls`, `magus affected`, and the
 graph render never execute a target body. A function without the context parameter
 cannot declare anything that way, so magus rejects it rather than dispatch it with
-the wrong arguments.
+the wrong arguments. That context is also the first argument of every spell op the
+target calls (`go["go-build"](ctx)`), so a function without it cannot run one
+either.
 
 Buzz qualifies a namespaced type with a backslash, so the type is spelled
 `magus\Context` (not `magus.Context`, which is not valid Buzz type syntax).
@@ -39,7 +41,7 @@ Add `ctx: magus\Context` as the first parameter:
 export fun build(args: [str]) > void { go["go-build"](); }
 
 // after
-export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }
 ```
 
 Declare dependencies and footprint through the context:

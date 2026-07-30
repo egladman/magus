@@ -36,10 +36,10 @@ concurrency: 4
 import "magus";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
-export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint);
-    if (ctx.has_charm("rw")) { acme.lint(); }
+    if (ctx.has_charm("rw")) { acme.lint(ctx); }
 }
 -- spells/acme/spell.buzz --
 import "magus/target";

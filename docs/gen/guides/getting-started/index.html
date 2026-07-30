@@ -147,7 +147,7 @@ magus run build     # run the build target for the project under the cwd
 <p><code><a class="code-xref" href="../../reference/manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> prints every project it found; <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> build</code> runs your <code>build</code> target (the starter one echoes a greeting after <code>format</code>). With no project argument, <code>magus run</code> selects the project containing the current directory.</p>
 <h2 id="4-bind-your-first-spell">4. Bind your first spell</h2>
 <p>The starter <code>build</code> shells out with <code><a class="code-xref" href="../../reference/buzz/os/#exec" data-kind="method" data-def="">os\exec</a></code>. That is fine for a <a class="glossary-term" href="../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a>, but real toolchains belong in a <strong>spell</strong>: a library of tool-native operations plus the <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> metadata that toolchain needs. A spell runs nothing on its own; it contributes operations (<code>go-build</code>, <code>go-test</code>, <code>go-vet</code>, ...) that your targets compose, and it tells the cache which files are inputs and outputs. See <a href="../../concepts/spells/">spells</a>, and <a href="../../concepts/spells/#spells-vs-targets">Spells vs Targets</a> for <a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the line falls.</p>
-<p>Bind the built-in <code>go</code> spell by importing it and listing it in <code>magus\project</code>, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (<code>go[&quot;go-build&quot;]</code>):</p>
+<p>Bind the built-in <code>go</code> spell by importing it and listing it in <code>magus\project</code>, then compose its ops into your targets. Op keys are the CLI command in kebab-case, so they are reached by subscript (<code>go[&quot;go-build&quot;]</code>), and every op call takes the target's <code>ctx</code> as its first argument:</p>
 <pre><code class="language-buzz">import &quot;magus&quot;;
 import &quot;magus/spell/go&quot;;
 
@@ -156,22 +156,22 @@ magus\project({ &quot;spells&quot;: [go] });
 // Each exported function is a runnable target; its body calls the spell's ops.
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
     ctx.needs(format);
-    go[&quot;go-build&quot;]();
+    go[&quot;go-build&quot;](ctx);
 }
 
-export fun format(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-fmt&quot;](); }
+export fun format(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-fmt&quot;](ctx); }
 
 // go-vet, golangci-lint, and govulncheck are all static analysis, so they
 // compose into the canonical `lint` target, not bespoke targets.
 export fun lint(ctx: magus\Context, args: [str]) &gt; void {
-    go[&quot;go-vet&quot;]();
-    go[&quot;golangci-lint&quot;]();
-    go[&quot;govulncheck&quot;]();
+    go[&quot;go-vet&quot;](ctx);
+    go[&quot;golangci-lint&quot;](ctx);
+    go[&quot;govulncheck&quot;](ctx);
 }
 
 export fun test(ctx: magus\Context, args: [str]) &gt; void {
     ctx.needs(format);
-    go[&quot;go-test&quot;]();
+    go[&quot;go-test&quot;](ctx);
 }
 </code></pre>
 <p>Now the canonical targets run the real toolchain:</p>
@@ -246,7 +246,7 @@ magus affected ci --base main # compare against a specific base ref
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22getting-started%22">getting-started</a><a class="tag" href="../../search/?q=tag%3A%22install%22">install</a><a class="tag" href="../../search/?q=tag%3A%22init%22">init</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22tutorial%22">tutorial</a><a class="tag" href="../../search/?q=tag%3A%22cli%22">cli</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/getting-started.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/getting-started.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-30T18:36:27Z">July 30, 2026, 6:36 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" data-tooltip="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a" title="7bf22e6f1bf570a8c9ff0676ba8cb11fa83b6b3a">7bf22e6f</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/getting-started.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/getting-started.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

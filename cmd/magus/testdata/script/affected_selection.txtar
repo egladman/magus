@@ -72,7 +72,7 @@ changed-*.txt
 import "magus";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
-export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(); }
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
 import "magus/target";
 export fun mgs_getName() > str { return "acme"; }
@@ -84,7 +84,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint
 import "magus";
 import "spells/beta" as beta;
 magus.project({ "spells": [beta] });
-export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(); }
+export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(ctx); }
 -- proj-b/spells/beta/spell.buzz --
 import "magus/target";
 export fun mgs_getName() > str { return "beta"; }
