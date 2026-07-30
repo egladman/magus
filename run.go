@@ -329,10 +329,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// region invalidates the target that maintains that region. Declared as an output
 	// instead, the file was excluded from the source hash, so an edit to it could not
 	// invalidate anything.
-	// ctx.derive overrides fold into the KEY, not the sources: they change what the
+	// ctx.withEnv / ctx.withCwd overrides fold into the KEY, not the sources: they change what the
 	// tool does without naming a file, so two runs differing only by a derived env must
 	// not share an entry.
-	step.Derived = append(step.Derived, p.TargetDerives[target]...)
+	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
 	for _, ref := range p.TargetUpdates[target] {
 		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)

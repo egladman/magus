@@ -355,38 +355,64 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// inputs/outputs are declarations read statically by describe.Extract; at run time
 	// they do nothing.
 	c.MapSet(CtxMarker, vm.BoolValue(true))
-	// ctx.derive({env: {...}, cwd: ".."}): a NARROWED context carrying execution
-	// overrides, for passing to one op call - go["go-test"](ctx.derive({env: {...}})).
+	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
+	// carrying overrides for the op calls made with it -
+	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
 	//
-	// It deliberately carries only the overrides and the marker, NOT the declaration
-	// methods: `ctx.derive(...).inputs("x")` fails loudly instead of silently no-op'ing,
-	// which is the guarantee a narrower TYPE would give if gopherbuzz had protocol
-	// conformance on this base. When it does, this becomes a real type.
+	// Named for WHAT DIFFERS, not for the act of making it, following context.WithValue /
+	// WithCancel / WithTimeout: at a call site you want to read the change. (Go's docs
+	// call the result a "derived context"; the API never says derive, and neither should
+	// this.) Temporal's workflow.WithActivityOptions(ctx, ao) is the same shape - a
+	// derived context carrying options for the calls made with it - and its
+	// workflow.Context / context.Context split is the same separation magus\Exec makes.
 	//
-	// A single map rather than labeled arguments because labels are not name-matched on
-	// a native callable - they parse and run, but positionally, so a labeled form here
-	// would be decoration that silently rewards the right argument order.
-	c.MapSet("derive", directVal(obs, "ctx.derive", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		d := vm.NewMap()
-		d.MapSet(CtxMarker, vm.BoolValue(true))
-		if len(args) == 0 || !args[0].IsMap() {
-			return d, nil
+	// magus\Exec deliberately carries no declaration methods, so
+	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing. That is
+	// the guarantee a checked type would give once gopherbuzz has protocol conformance;
+	// until then the names are bound to an explaining error.
+	var execCtx func(env, cwd vm.Value) vm.Value
+	execCtx = func(env, cwd vm.Value) vm.Value {
+		e := vm.NewMap()
+		e.MapSet(CtxMarker, vm.BoolValue(true))
+		if !env.IsNull() {
+			e.MapSet("env", env)
 		}
-		for _, k := range []string{"env", "cwd"} {
-			if v, ok := args[0].MapGet(k); ok {
-				d.MapSet(k, v)
+		if !cwd.IsNull() {
+			e.MapSet("cwd", cwd)
+		}
+		// Chainable: ctx.withEnv({...}).withCwd(".."). Each returns a fresh Exec, so a
+		// derivation hoisted into a variable is never mutated by a later one.
+		e.MapSet("withEnv", directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsMap() {
+				return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
 			}
-		}
-		// Bind the declaration names to an explaining error rather than leaving them
-		// absent. Absent, the author gets "null is not callable" pointing at the call
-		// site with no hint that the receiver is the problem.
-		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "has_charm", "derive"} {
-			d.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+			return execCtx(args[0], cwd), nil
+		}))
+		e.MapSet("withCwd", directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+			if len(args) == 0 || !args[0].IsStr() {
+				return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
+			}
+			return execCtx(env, args[0]), nil
+		}))
+		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "has_charm"} {
+			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
-					"ctx.%s: a derived context carries execution overrides only; declare on the context the target received", decl)
+					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
 			}))
 		}
-		return d, nil
+		return e
+	}
+	c.MapSet("withEnv", directVal(obs, "ctx.withEnv", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf("ctx.withEnv: requires a {NAME: value} map")
+		}
+		return execCtx(args[0], vm.Null), nil
+	}))
+	c.MapSet("withCwd", directVal(obs, "ctx.withCwd", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("ctx.withCwd: requires a directory string")
+		}
+		return execCtx(vm.Null, args[0]), nil
 	}))
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
 	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))

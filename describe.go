@@ -371,11 +371,11 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
 					}
 				}
-				if len(n.Derives) > 0 {
-					if p.TargetDerives == nil {
-						p.TargetDerives = map[string][]string{}
+				if len(n.ExecOverrides) > 0 {
+					if p.TargetExecOverrides == nil {
+						p.TargetExecOverrides = map[string][]string{}
 					}
-					p.TargetDerives[n.Name] = append([]string(nil), n.Derives...)
+					p.TargetExecOverrides[n.Name] = append([]string(nil), n.ExecOverrides...)
 				}
 				for _, ref := range n.Updates {
 					owner := ref.Project

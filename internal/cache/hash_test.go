@@ -275,7 +275,7 @@ func TestDerivedOverridesChangeTheKey(t *testing.T) {
 
 	base := Step{ProjectPath: ".", WorkspaceRoot: root}
 	withDerive := base
-	withDerive.Derived = []string{"env:CGO_ENABLED=0"}
+	withDerive.ExecOverrides = []string{"env:CGO_ENABLED=0"}
 
 	plainKey, err := c.hashStep(ctx, &base)
 	require.NoError(t, err, "hashStep(base)")
@@ -287,7 +287,7 @@ func TestDerivedOverridesChangeTheKey(t *testing.T) {
 
 	// And it is the VALUE that matters, not merely the presence of an override.
 	other := base
-	other.Derived = []string{"env:CGO_ENABLED=1"}
+	other.ExecOverrides = []string{"env:CGO_ENABLED=1"}
 	otherKey, err := c.hashStep(ctx, &other)
 	require.NoError(t, err, "hashStep(other)")
 	assert.NotEqual(t, derivedKey, otherKey, "two different derived values must key differently")

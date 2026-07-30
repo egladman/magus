@@ -101,10 +101,10 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 		}
 	}
 
-	derived := append([]string(nil), s.Derived...)
-	slices.Sort(derived)
-	for _, d := range derived {
-		writeLine("derived:", d)
+	execOv := append([]string(nil), s.ExecOverrides...)
+	slices.Sort(execOv)
+	for _, d := range execOv {
+		writeLine("exec:", d)
 	}
 
 	deps := append([]string(nil), s.Deps...)

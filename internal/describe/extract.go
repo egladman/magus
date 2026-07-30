@@ -192,47 +192,32 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									node.Outputs = appendUniqOutRef(node.Outputs, types.OutputRef{Project: ref.Project, Glob: ref.Glob})
 								}
 							}
-						case "derive":
-							// ctx.derive({env: {...}, cwd: ".."}): canonicalize the literal
-							// overrides into the node so buildStep can fold them into the
-							// cache key. A non-literal value is invisible here, and an
-							// under-declared key is the failure this refuses to cause, so it
-							// trips DynamicIO exactly as a computed ctx.inputs glob does.
+						case "withCwd":
+							for _, a := range e.Args {
+								if lit, ok := a.(*ast.StringLit); ok {
+									recognized++
+									node.ExecOverrides = appendUniqStr(node.ExecOverrides, "cwd:"+lit.Val)
+								}
+							}
+						case "withEnv":
+							// Canonicalized onto the node so buildStep can fold it into the
+							// CACHE KEY. Read statically because the key is computed before the
+							// body runs, so a purely runtime override could never reach it; a
+							// non-literal trips DynamicIO exactly as a computed glob does.
 							for _, a := range e.Args {
 								m, ok := a.(*ast.MapExpr)
 								if !ok {
 									continue
 								}
 								recognized++
-								for i, kn := range m.Keys {
-									kl, ok := kn.(*ast.StringLit)
-									if !ok {
+								for j, ekn := range m.Keys {
+									ekl, kok := ekn.(*ast.StringLit)
+									evl, vok := m.Values[j].(*ast.StringLit)
+									if !kok || !vok {
 										node.DynamicIO = true
 										continue
 									}
-									switch kl.Val {
-									case "cwd":
-										if lit, ok := m.Values[i].(*ast.StringLit); ok {
-											node.Derives = appendUniqStr(node.Derives, "cwd:"+lit.Val)
-										} else {
-											node.DynamicIO = true
-										}
-									case "env":
-										em, ok := m.Values[i].(*ast.MapExpr)
-										if !ok {
-											node.DynamicIO = true
-											continue
-										}
-										for j, ekn := range em.Keys {
-											ekl, kok := ekn.(*ast.StringLit)
-											evl, vok := em.Values[j].(*ast.StringLit)
-											if !kok || !vok {
-												node.DynamicIO = true
-												continue
-											}
-											node.Derives = appendUniqStr(node.Derives, "env:"+ekl.Val+"="+evl.Val)
-										}
-									}
+									node.ExecOverrides = appendUniqStr(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
 								}
 							}
 						case "updates":
@@ -325,7 +310,7 @@ func UnreachedIO(source string) []IORef {
 		}
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			me, ok := n.(*ast.MemberExpr)
-			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates" && me.Name != "derive") {
+			if !ok || (me.Name != "inputs" && me.Name != "outputs" && me.Name != "updates" && me.Name != "withEnv" && me.Name != "withCwd") {
 				return true
 			}
 			if id, ok := me.Object.(*ast.IdentExpr); !ok || id.Name != "ctx" {
@@ -359,6 +344,26 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 	return ok && id.Name == "ctx"
 }
 
+// ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
+// derivation - ctx.withEnv({...}).withCwd("..") - is recognized as well as a direct
+// call. Without walking the spine only the first link is seen, and the rest of the
+// chain silently under-declares the cache key: the precise stale-hit risk these
+// overrides exist to close.
+func ctxRooted(n ast.Node) bool {
+	for {
+		switch v := n.(type) {
+		case *ast.IdentExpr:
+			return v.Name == "ctx"
+		case *ast.CallExpr:
+			n = v.Callee
+		case *ast.MemberExpr:
+			n = v.Object
+		default:
+			return false
+		}
+	}
+}
+
 // ioCall recognizes a ctx.inputs(...) / ctx.outputs(...) call and returns its
 // kind ("inputs"/"outputs") and the string-literal glob arguments. ok is false for any
 // other call. Only string literals are collected; the caller detects a non-literal
@@ -370,12 +375,11 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 		return "", nil, false
 	}
 	switch me.Name {
-	case "inputs", "outputs", "updates", "derive":
+	case "inputs", "outputs", "updates", "withEnv", "withCwd":
 	default:
 		return "", nil, false
 	}
-	id, ok := me.Object.(*ast.IdentExpr)
-	if !ok || id.Name != "ctx" {
+	if !ctxRooted(me.Object) {
 		return "", nil, false
 	}
 	for _, a := range e.Args {

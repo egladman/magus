@@ -561,3 +561,4 @@ func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
 	assert.NotContains(t, p.AllOutputs(), "concepts/spells.md",
 		"an update must never reach AllOutputs, which is what clean and the snapshot walk")
 }
+
