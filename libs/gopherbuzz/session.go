@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -1056,6 +1058,24 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	sub.syntheticModules = s.syntheticModules
 	sub.sourceModules = s.sourceModules
 	sub.moduleResolver = s.moduleResolver
+
+	// Inherit what the parent has already collected from its own flat imports.
+	// loadedPaths is shared (just above), so a module the parent imported returns
+	// ImportBound here and never re-runs collectImportedModule, and without this the
+	// sub-session's CHECKER never learns those types.
+	//
+	// The resulting failure is far from its cause, which is why this is worth the
+	// three lines: an annotation naming such a type still resolves, so nothing errors
+	// at the declaration. What breaks is `x.field ?? []` - joining a declared [T] with
+	// an untyped empty list literal needs T resolvable, and unresolved it collapses to
+	// any, taking the loop binding with it. See
+	// TestSourceModule_TypesReachAnAliasedSubSession.
+	//
+	// Copied, not aliased: what the sub-session imports on its own must not appear in
+	// the parent.
+	sub.importedTypes = slices.Clone(s.importedTypes)
+	sub.importedModuleFuncs = maps.Clone(s.importedModuleFuncs)
+	sub.importedModuleTypes = maps.Clone(s.importedModuleTypes)
 
 	// Copy parent's current globals into the sub-session so the imported file
 	// can reference host APIs (magus, print, etc.).

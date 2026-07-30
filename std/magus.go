@@ -47,9 +47,9 @@ var Magus = Module{
 			Impl:    MagusLs,
 		},
 		{
-			Name: "targets",
-			Doc: "The TARGET dependency graph of every project: {definition, projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
-			Args: nil,
+			Name:    "targets",
+			Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
+			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Record: "TargetGraphOutput"}},
 			Impl:    MagusTargets,
 		},

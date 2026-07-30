@@ -506,9 +506,12 @@ func TestImport_AsAlias(t *testing.T) {
 // TestCyclicImportTerminates verifies that mutually-importing .buzz files do
 // not cause infinite recursion. loadedPaths in the Session guards the cycle.
 func TestCyclicImportTerminates(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.buzz"), []byte(`import "b"; final from_a = 1;`), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.buzz"), []byte(`import "a"; final from_b = 2;`), 0644))
+	dir := writeTxtar(t, `
+-- a.buzz --
+import "b"; final from_a = 1;
+-- b.buzz --
+import "a"; final from_b = 2;
+`)
 
 	ctx := context.Background()
 	sess := NewSession(ctx, WithEmbedded())
@@ -522,9 +525,10 @@ func TestCyclicImportTerminates(t *testing.T) {
 // its trailing segment — is substituted for `?` in a search-path template,
 // matching upstream Buzz: import "lib/mod" resolves lib/mod.buzz, not mod.buzz.
 func TestImport_SearchPathFullImportPath(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "lib"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "mod.buzz"), []byte(`export final answer = 42;`), 0o644))
+	dir := writeTxtar(t, `
+-- lib/mod.buzz --
+export final answer = 42;
+`)
 
 	ctx := context.Background()
 	sess := NewSession(ctx, WithEmbedded(), WithSearchPaths(filepath.Join(dir, "?.buzz")))
@@ -540,9 +544,10 @@ func TestImport_SearchPathFullImportPath(t *testing.T) {
 // the upstream `./?/main.buzz` layout relative to the working directory, and that
 // WithSearchPaths() with no arguments leaves the session on DefaultSearchPaths.
 func TestImport_DefaultSearchPathsNested(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "widget"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "widget", "main.buzz"), []byte(`export final tag = "w";`), 0o644))
+	dir := writeTxtar(t, `
+-- widget/main.buzz --
+export final tag = "w";
+`)
 	t.Chdir(dir) // ./widget/main.buzz resolves relative to cwd
 
 	ctx := context.Background()

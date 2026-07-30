@@ -181,7 +181,53 @@ type TargetGraphNode struct {
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
-	DynamicIO bool `json:"-" yaml:"-"`
+	DynamicIO bool `json:"-" yaml:"-" buzz:"-"`
+}
+
+// buzzList is the Buzz boundary form of an optional []string: never nil.
+//
+// Every list below is `omitempty` on the wire, where absent and empty are the same
+// thing. On the Buzz boundary they are NOT: a nil slice arrives as null, and null is
+// not a list - `deps.len()` on it raises "null is not callable" at render time, far
+// from the field that was empty. The mirrors generated from these structs default
+// every list field to `[]`, so returning one is also what the annotation promises.
+func buzzList(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// ToMap is the Buzz boundary map for one target. Keys are the camelCase names the
+// generated mirror declares, not the snake_case JSON ones.
+func (n TargetGraphNode) ToMap() map[string]any {
+	spells := make([]any, len(n.Spells))
+	for i, s := range n.Spells {
+		spells[i] = s.ToMap()
+	}
+	cross := make([]any, len(n.CrossDependencies))
+	for i, c := range n.CrossDependencies {
+		cross[i] = c.ToMap()
+	}
+	inputs := make([]any, len(n.Inputs))
+	for i, in := range n.Inputs {
+		inputs[i] = in.ToMap()
+	}
+	outputs := make([]any, len(n.Outputs))
+	for i, o := range n.Outputs {
+		outputs[i] = o.ToMap()
+	}
+	return map[string]any{
+		"name":              n.Name,
+		"declared":          n.Declared,
+		"doc":               n.Doc,
+		"dependencies":      buzzList(n.Dependencies),
+		"charms":            buzzList(n.Charms),
+		"spells":            spells,
+		"crossDependencies": cross,
+		"inputs":            inputs,
+		"outputs":           outputs,
+	}
 }
 
 // CrossTargetRef names one target in another project: a target-level cross-project
@@ -190,6 +236,14 @@ type TargetGraphNode struct {
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
+}
+
+// ToMap is the Buzz boundary map for one cross-project target reference.
+func (c CrossTargetRef) ToMap() map[string]any {
+	return map[string]any{
+		"project": c.Project,
+		"target":  c.Target,
+	}
 }
 
 // InputRef names one file input a target declares via ctx.inputs, in a single shape
@@ -207,6 +261,14 @@ type InputRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
+// ToMap is the Buzz boundary map for one declared file input.
+func (r InputRef) ToMap() map[string]any {
+	return map[string]any{
+		"project": r.Project,
+		"glob":    r.Glob,
+	}
+}
+
 // OutputRef names one file output a target declares via ctx.outputs, in the same shape
 // as InputRef: Project is the OWNING project (the tree written into) and Glob is relative
 // to that root. For a same-project output (ctx.outputs("glob")) Project is empty at
@@ -222,6 +284,14 @@ type OutputRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
+// ToMap is the Buzz boundary map for one declared file output.
+func (r OutputRef) ToMap() map[string]any {
+	return map[string]any{
+		"project": r.Project,
+		"glob":    r.Glob,
+	}
+}
+
 // CrossFileMember is the reserved member on a project-import handle
 // (`<alias>.file("rel")`) that resolves a cross-project file to a workspace-relative
 // path. The static extractor (internal/describe) and the runtime resolver
@@ -233,6 +303,14 @@ const CrossFileMember = "file"
 type TargetSpellUse struct {
 	Spell string   `json:"spell"         yaml:"spell"`
 	Ops   []string `json:"ops,omitempty" yaml:"ops,omitempty"`
+}
+
+// ToMap is the Buzz boundary map for one spell a target drives.
+func (u TargetSpellUse) ToMap() map[string]any {
+	return map[string]any{
+		"spell": u.Spell,
+		"ops":   buzzList(u.Ops),
+	}
 }
 
 // TargetGraphProject is one project's target graph, plus a detected cycle (a path
@@ -252,7 +330,7 @@ type TargetGraphProject struct {
 	// unambiguous MAGUS.md heading when a project sits at the workspace root (Path
 	// is "."). Display-only and repo-derived, so it is not serialized; the run path
 	// still addresses the project by Path. Empty outside a repo.
-	RelPath string `json:"-" yaml:"-"`
+	RelPath string `json:"-" yaml:"-" buzz:"-"`
 }
 
 // Label is the human display name for this project, the single source every render site
@@ -266,10 +344,44 @@ func (p TargetGraphProject) Label() string {
 	return ProjectDisplayName(p.Path, name, "")
 }
 
+// ToMap is the Buzz boundary map for one project's target graph. RelPath is dropped:
+// it exists for Label(), which a Go render site calls, and mirroring it would put a
+// field on the Buzz value that the value never carries.
+func (p TargetGraphProject) ToMap() map[string]any {
+	nodes := make([]any, len(p.Nodes))
+	for i, n := range p.Nodes {
+		nodes[i] = n.ToMap()
+	}
+	return map[string]any{
+		"path":      p.Path,
+		"name":      p.Name,
+		"engine":    p.Engine,
+		"nodes":     nodes,
+		"cycle":     buzzList(p.Cycle),
+		"dependsOn": buzzList(p.DependsOn),
+	}
+}
+
 // TargetGraphOutput is the top-level result for "describe graph".
+//
+// The Buzz `object TargetGraph` mirror is generated from this struct by
+// cmd/magus-utils types, so magus.targets's result can be annotated `> TargetGraph`
+// for compile-checked field access. Definition carries `buzz:"-"` for the same reason
+// ProjectsOutput's does: ToMap drops it, so a mirrored field would be one the Buzz
+// value never has.
 type TargetGraphOutput struct {
-	Definition string               `json:"definition" yaml:"definition"`
+	Definition string               `json:"definition" yaml:"definition" buzz:"-"`
 	Projects   []TargetGraphProject `json:"projects"   yaml:"projects"`
+}
+
+// ToMap is the Buzz boundary map magus.targets returns. Definition is dropped: it is
+// prose for a human reading `magus describe`, not something a magusfile branches on.
+func (o TargetGraphOutput) ToMap() map[string]any {
+	projects := make([]any, len(o.Projects))
+	for i, p := range o.Projects {
+		projects[i] = p.ToMap()
+	}
+	return map[string]any{"projects": projects}
 }
 
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".

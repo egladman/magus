@@ -139,6 +139,14 @@ export object Site {
     // above forbids.
     targets: any = {},
 
+    // The PROJECT dependency DAG, injected the same way from magus.graph(). targets
+    // above carries the targets inside each project; this carries how the projects
+    // themselves relate - nodes in topological order, each node's direct dependencies,
+    // and its blast radius. /development/ needs both: one answers "what can I run in
+    // this project", the other "what does changing it reach".
+    // Opaque here for the same reason as targets; the consumer casts it to target\Graph.
+    graph: any = {},
+
     // The site-specific config, injected once by site_render() from site/config.buzz.
     // Immutable input kept beside the mutable build state so every engine function that
     // threads a Site reaches baseURL/title/nav/generator dirs without a global.

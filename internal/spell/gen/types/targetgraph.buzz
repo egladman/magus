@@ -4,6 +4,5 @@
 // magus/target module. Edit the Go struct and rerun `go generate`, never this file.
 
 export object TargetGraph {
-    definition: str = "",
     projects: [TargetGraphProject] = [],
 }

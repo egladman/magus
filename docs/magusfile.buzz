@@ -189,10 +189,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(content_generate);
     ctx.needs(md_generate);
     ctx.needs(changelog_generate);
-    // magus.targets() is the typed target graph (annotated for compile-checked field
-    // access). Fetched HERE because only the magusfile imports the host magus module;
-    // the SSG receives it as data.
-    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT, magus\targets() as target\TargetGraph);
+    // magus.targets() is the typed target graph and magus.graph() the project DAG, both
+    // annotated for compile-checked field access. Fetched HERE because only the magusfile
+    // imports the host magus module; the SSG receives them as data.
+    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT,
+        magus\targets() as target\TargetGraph, magus\graph() as target\Graph);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
@@ -298,5 +299,8 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
 export fun render(ctx: magus\Context, args: [str]) > void {
 	magus\hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
-    renderer\site_render(ROOT, DOCS, BLOG, OUT);
+    // Same graphs generate() passes: /development/ renders from them, so leaving them out
+    // made the fast path render a different site than the committed one.
+    renderer\site_render(ROOT, DOCS, BLOG, OUT,
+        magus\targets() as target\TargetGraph, magus\graph() as target\Graph);
 }

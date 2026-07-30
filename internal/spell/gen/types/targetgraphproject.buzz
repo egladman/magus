@@ -10,5 +10,4 @@ export object TargetGraphProject {
     nodes: [TargetGraphNode] = [],
     cycle: [str] = [],
     dependsOn: [str] = [],
-    relPath: str = "",
 }

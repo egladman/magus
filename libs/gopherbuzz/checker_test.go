@@ -517,6 +517,62 @@ export final tname = pick().name;
 	assert.Equal(t, "build", v.AsString(), "tname")
 }
 
+// TestSourceModule_TypesReachAnAliasedSubSession covers the case where the
+// importer of a source module is not the top-level chunk but a file imported
+// under an alias, which runs in its own sub-session.
+//
+// The sub-session shares the parent's loadedPaths, so the parent's earlier
+// `import "magus/lib"` makes the same import inside the aliased file a no-op:
+// collectImportedModule never runs a second time, and the sub-session's checker
+// therefore never learns Node or Proj.
+//
+// `p.nodes ?? []` is what makes that visible, and the reason this test asserts on
+// it rather than a plain `p.nodes`: joining the declared `[Node]` with an untyped
+// empty list literal needs the ELEMENT type resolvable. Unresolved, the join
+// collapses to any, the foreach binding degrades with it, and the failure finally
+// surfaces as "`any` is not field accessible" at the first field read - several
+// lines below, and in a different file from, the import that was actually wrong.
+func TestSourceModule_TypesReachAnAliasedSubSession(t *testing.T) {
+	// page.buzz is flat-imported BY the aliased module, not by the top-level chunk:
+	// that is the docs SSG's own shape (magusfile -> `import "render" as renderer` ->
+	// `import "site/development" as _`), and the extra hop is what puts the annotated
+	// file inside the sub-session.
+	dir := writeTxtar(t, `
+-- page.buzz --
+import "magus/lib";
+export fun catalog(p: Proj) > str {
+    var s = "";
+    foreach (n in p.nodes ?? []) { s = s + n.name; }
+    return s;
+}
+-- render.buzz --
+import "page" as _;
+export fun run(p: Proj) > str { return catalog(p); }
+`)
+
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetIncludeDirs([]string{dir})
+	sess.SetSourceModule("magus/lib", `
+export object Node { name: str = "" }
+export object Proj { nodes: [Node] = [] }
+`)
+
+	// The parent imports the source module FIRST; that ordering is what armed the
+	// loadedPaths guard before the aliased import below ran.
+	src := `
+import "magus/lib";
+import "render" as renderer;
+export final got = renderer\run(Proj{ nodes = [Node{ name = "build" }] });
+`
+	require.NoError(t, sess.Exec(ctx, src), "exec with source-module types used inside an aliased import")
+	v, ok := sess.Exports()["got"]
+	require.True(t, ok, "got not exported")
+	require.True(t, v.IsStr(), "got = %v, want \"build\"", v.String())
+	assert.Equal(t, "build", v.AsString(), "got")
+}
+
 // TestImport_NonExportedObjectType_Errors verifies that only EXPORTED types
 // cross the module boundary: a non-exported imported object is not visible to
 // the importer's checker, so using it is a compile-time "undefined type" error.

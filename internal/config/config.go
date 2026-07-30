@@ -54,7 +54,6 @@ type Config struct {
 	// DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.
 	DryRun bool `json:"dry_run" yaml:"dry_run" cli:"short=u"`
 
-
 	// DefaultCharms are execution charms applied to every `magus run` / `magus x` by
 	// default, e.g. ["rw"] to make targets write locally without typing :rw. Per-run
 	// :charms stack on top. The ci anchor still strips "rw" (RunCI), so a local

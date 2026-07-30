@@ -72,8 +72,67 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
 // slugifyProject turns a workspace-relative project path into one URL segment:
 // "libs/gopherbuzz" -> "libs-gopherbuzz". Nested projects are the reason this exists --
 // the previous shallow scan never produced a path with a separator in it.
+//
+// split/join, not replace: str.replace substitutes only the FIRST match, so a
+// two-separator path ("cmd/magus/starter") kept the rest and the "one segment" this
+// promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid
+// node id with slashes still in it.
 fun slugifyProject(name: str) > str {
-    return name.replace("/", "-");
+    return name.split("/").join("-");
+}
+
+// projectLabel is the display name for a workspace-relative project path. The root
+// project's path is ".", which reads as nothing at all in a URL, a card, or a graph
+// node; every render site here goes through this so they cannot disagree.
+fun projectLabel(path: str) > str {
+    return if (path == ".") "magus" else path;
+}
+
+// workspaceDependencies renders how the PROJECTS relate, as Markdown. The per-project
+// pages answer "what can I run here"; this answers "what does changing it reach", which
+// no page showed before.
+//
+// It reads magus.graph()'s typed view: nodes already in topological order (so the table
+// IS a valid build order, sorted by nobody here), each node's direct dependencies, and
+// its blast radius - the count of projects a change can transitively affect, which is
+// the number that tells a contributor whether an edit is contained or workspace-wide.
+fun workspaceDependencies(graph: Graph) > str {
+    final nodes = graph.nodes;
+    if (nodes.len() == 0) { return ""; }
+
+    var buf = "## Workspace dependencies\n\n"
+        + "The projects above in dependency order: each row runs after everything it "
+        + "depends on. Blast radius counts the projects a change here can reach, so it "
+        + "is the cost of touching that project.\n\n"
+        + "| project | depends on | blast radius |\n| --- | --- | --- |\n";
+    var edges = "";
+    foreach (n in nodes) {
+        final label = projectLabel(n);
+        final slug = slugifyProject(label);
+        // A typed empty list, not `[]`: joining a bare list literal with the declared
+        // [str] collapses the element type to any (see the note in projectCatalog).
+        final deps = graph.dependsOn[n] ?? [<str>];
+        var depCell = "-";
+        if (deps.len() > 0) {
+            var parts = "";
+            foreach (d in deps) {
+                if (parts != "") { parts = parts + ", "; }
+                final dLabel = projectLabel(d);
+                parts = parts + "[`" + dLabel + "`](" + slugifyProject(dLabel) + "/)";
+                // Edge direction matches the per-project run-order graphs: the arrow
+                // points from a dependency to what waits on it.
+                edges = edges + "    " + slugifyProject(dLabel) + "[\"" + dLabel + "\"] --> "
+                    + slug + "[\"" + label + "\"]\n";
+            }
+            depCell = parts;
+        }
+        buf = buf + "| [`" + label + "`](" + slug + "/) | " + depCell + " | "
+            + "{graph.blastRadius[n] ?? 0}" + " |\n";
+    }
+    if (edges != "") {
+        buf = buf + "\n```mermaid\ngraph LR\n" + edges + "```\n";
+    }
+    return buf;
 }
 
 // projectCatalog renders one project's target catalog as Markdown from the TYPED graph
@@ -85,18 +144,20 @@ fun slugifyProject(name: str) > str {
 // A Mermaid block draws the run order from each node's declared dependencies, so the
 // arrows are the real ctx.needs edges and not a hand-maintained picture.
 fun projectCatalog(proj: TargetGraphProject) > str {
-    // Every list below is read through `?? []`. The annotation gives compile-checked
-    // field NAMES, but the value arrives as the host's map and the Go structs tag their
-    // optional fields `omitempty`, so an absent one is missing entirely rather than an
-    // empty list - and the mirror's defaults are not materialized by an identity cast.
+    // No `?? []` guards below: TargetGraphOutput.ToMap normalizes every optional list to
+    // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
+    // rather than null. That is what makes the annotation worth having - the field names
+    // are compile-checked AND the values have the shape the mirror declares.
     var buf = "";
-    final nodes = proj.nodes ?? [];
-    final cycle = proj.cycle ?? [];
-    final dependsOn = proj.dependsOn ?? [];
+    final nodes = proj.nodes;
+    final cycle = proj.cycle;
+    final dependsOn = proj.dependsOn;
     if (nodes.len() == 0) {
         // A project on a non-Buzz engine has no statically extractable targets yet.
+        // Engine is empty, not absent, when the project declares none.
+        final engine = if (proj.engine == "") "unknown" else proj.engine;
         return "No statically extractable targets: this project runs on the `"
-            + (proj.engine ?? "unknown") + "` engine.\n";
+            + engine + "` engine.\n";
     }
     if (cycle.len() > 0) {
         buf = buf + "> **Cycle detected:** " + cycle.join(" -> ") + "\n\n";
@@ -108,13 +169,13 @@ fun projectCatalog(proj: TargetGraphProject) > str {
     buf = buf + "| target | depends on | drives |\n| --- | --- | --- |\n";
     foreach (n in nodes) {
         var drives = "";
-        foreach (use in n.spells ?? []) {
+        foreach (use in n.spells) {
             if (drives != "") { drives = drives + ", "; }
             drives = drives + use.spell;
         }
         if (drives == "") { drives = "-"; }
         var deps = "-";
-        final nd = n.dependencies ?? [];
+        final nd = n.dependencies;
         if (nd.len() > 0) { deps = "`" + nd.join("`, `") + "`"; }
         buf = buf + "| `" + n.name + "` | " + deps + " | " + drives + " |\n";
     }
@@ -123,9 +184,8 @@ fun projectCatalog(proj: TargetGraphProject) > str {
     // intent a table cannot.
     buf = buf + "\n";
     foreach (n in nodes) {
-        final doc = n.doc ?? "";
-        if (doc != "") {
-            buf = buf + "### `" + n.name + "`\n\n" + doc + "\n\n";
+        if (n.doc != "") {
+            buf = buf + "### `" + n.name + "`\n\n" + n.doc + "\n\n";
         }
     }
 
@@ -133,7 +193,7 @@ fun projectCatalog(proj: TargetGraphProject) > str {
     // unconnected boxes tells a reader nothing.
     var edges = "";
     foreach (n in nodes) {
-        foreach (d in n.dependencies ?? []) {
+        foreach (d in n.dependencies) {
             edges = edges + "    " + d + " --> " + n.name + "\n";
         }
     }
@@ -169,9 +229,7 @@ export fun renderDevelopment(site: Site) > void {
     if (projects.len() == 0) { return; }
 
     foreach (proj in projects) {
-        // The root project's path is "."; give it the workspace's own name so the URL
-        // and card read as "magus" rather than a bare dot.
-        final name = if (proj.path == ".") "magus" else proj.path;
+        final name = projectLabel(proj.path);
         final slug = slugifyProject(name);
         final md = projectCatalog(proj);
         renderDevelopmentPage(name + " targets",
@@ -186,12 +244,12 @@ export fun renderDevelopment(site: Site) > void {
     // the /development/ landing; the old projects-index URL redirects here.
     var projectCards = "";
     foreach (proj in projects) {
-        final name = if (proj.path == ".") "magus" else proj.path;
+        final name = projectLabel(proj.path);
         // The card subtitle carries the project's real shape - which toolchains it
         // binds - so a reader can tell a Go library from the docs site without
         // opening it. Falls back to the generic line for a project with no spells.
         var desc = "target catalog and run-order graph";
-        final n = proj.nodes ?? [];
+        final n = proj.nodes;
         if (n.len() > 0) {
             desc = "{n.len()} targets";
         }
@@ -201,6 +259,16 @@ export fun renderDevelopment(site: Site) > void {
             + "<span class=\"related-card-desc\">" + escapeAttr(desc) + "</span></a>\n";
     }
     site.collectAlias("development/projects", "development/");
+
+    // The project-level view, rendered through the markdown pipeline for its table and
+    // Mermaid block and then spliced into the raw landing. renderContentHTML is skipped
+    // for the same reason the landing is raw at all: its link rewrite would strip the
+    // trailing slash off every project href here.
+    final depsMd = workspaceDependencies(site.graph as Graph);
+    var depsSection = "";
+    if (depsMd != "") {
+        depsSection = wrapTables(tagMermaid(markdown\toHtml(depsMd)));
+    }
 
     // CONTRIBUTING.md (repo root) as its own page under /development/.
     var haveContributing = false;
@@ -240,7 +308,7 @@ magus run ci</code></pre>
 <p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
-<h2 id="reference">Reference</h2>
+{{{depsSection}}}<h2 id="reference">Reference</h2>
 <p>The deeper references a contributor reaches for once the build is running:</p>
 <ul>
   <li><a href="../conventions/">Conventions</a> - the naming and layout rules magus expects of a workspace, and that this repository follows.</li>
@@ -249,7 +317,7 @@ magus run ci</code></pre>
   <li><a href="../concepts/wards/">Diagnostic codes</a> - the <code>MGSxxxx</code> wards, what each one catches, and how to author your own.</li>
   <li><a href="../guides/debugging/">Debugging</a> - dry runs, verbose output, and pry breakpoints for when a target misbehaves.</li>
 </ul>
-`, {"contributingSection": contributingSection, "projectCards": projectCards});
+`, {"contributingSection": contributingSection, "projectCards": projectCards, "depsSection": depsSection});
     renderDevelopmentPageRaw("Development", "Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.",
-        devHtml, "Development contributing getting started build test project target catalogs conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md", site);
+        devHtml, "Development contributing getting started build test project target catalogs workspace dependencies dependency order blast radius conventions operations configuration diagnostic codes debugging reference", "development/", "development/_index.md", site);
 }

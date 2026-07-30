@@ -13,5 +13,4 @@ export object TargetGraphNode {
     crossDependencies: [CrossTargetRef] = [],
     inputs: [InputRef] = [],
     outputs: [OutputRef] = [],
-    dynamicIO: bool = false,
 }
