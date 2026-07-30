@@ -402,7 +402,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 			}
 			return execCtx(env, args[0]), nil
 		}))
-		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "has_charm"} {
+		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "envInputs", "has_charm"} {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
 					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
@@ -425,6 +425,13 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// updates is outputs' counterpart for a file the target EDITS rather than produces,
 	// so magus never deletes it and never replays it from a snapshot. See types.UpdateRef.
 	c.MapSet("updates", directVal(obs, "ctx.updates", footprintDecl))
+	// env names variables whose PROCESS value folds into the key - the counterpart to
+	// withEnv, which carries a value written in the magusfile. Declaration only: the
+	// static read collects the names, and hashing reads the values.
+	// envInputs, not env: "env" is already the key carrying the Exec's actual
+	// environment map, which spell dispatch reads back - a declaration under that name
+	// silently replaced the environment with a no-op and dropped every withEnv override.
+	c.MapSet("envInputs", directVal(obs, "ctx.envInputs", footprintDecl))
 	c.MapSet("has_charm", directVal(obs, "ctx.has_charm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
 	}))

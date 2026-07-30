@@ -271,6 +271,43 @@ func TestShortHash(t *testing.T) {
 //
 // Two Steps differing ONLY in Derived, so the assertion cannot pass for an unrelated
 // reason (a different target name or source set would move the key by itself).
+// TestDeclaredEnvVariablesChangeTheKey is the correctness property behind
+// ctx.envVariables, and the complement of the ExecOverrides test below: an override's
+// value is written in the magusfile and hashed directly, while a declared variable's
+// value is only knowable at run time, so the NAME is declared and the VALUE is read
+// when the key is computed. Without that read, a target whose behavior depends on an
+// environment variable replays a result computed under a different value.
+func TestDeclaredEnvVariablesChangeTheKey(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{}
+	ctx := context.Background()
+
+	base := Step{ProjectPath: ".", WorkspaceRoot: root}
+	declared := base
+	declared.EnvAllow = []string{"MAGUS_TEST_TOOLCHAIN"}
+
+	t.Setenv("MAGUS_TEST_TOOLCHAIN", "a")
+	keyA, err := c.hashStep(ctx, &declared)
+	require.NoError(t, err, "hashStep(declared, value a)")
+
+	// Declaring a variable must not be inert: the key has to move with the value.
+	t.Setenv("MAGUS_TEST_TOOLCHAIN", "b")
+	keyB, err := c.hashStep(ctx, &declared)
+	require.NoError(t, err, "hashStep(declared, value b)")
+	assert.NotEqual(t, keyA, keyB,
+		"a declared env variable's VALUE must reach the key, or the target replays across a toolchain change")
+
+	// And an undeclared variable must stay out of it, so the key does not drift with
+	// every unrelated variable in the caller's environment.
+	plainKey, err := c.hashStep(ctx, &base)
+	require.NoError(t, err, "hashStep(base)")
+	t.Setenv("MAGUS_TEST_TOOLCHAIN", "c")
+	plainAgain, err := c.hashStep(ctx, &base)
+	require.NoError(t, err, "hashStep(base again)")
+	assert.Equal(t, plainKey, plainAgain,
+		"an undeclared variable must not move the key of a step that never declared it")
+}
+
 func TestDerivedOverridesChangeTheKey(t *testing.T) {
 	root := t.TempDir()
 	c := &Cache{}

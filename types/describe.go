@@ -189,6 +189,14 @@ type TargetGraphNode struct {
 	// key is computed before the body runs, so a purely runtime derivation could never
 	// reach it. A non-literal derive sets DynamicIO and is rejected at load.
 	ExecOverrides []string `json:"exec_overrides,omitempty" yaml:"exec_overrides,omitempty"`
+	// EnvAllow names environment variables this target declares via ctx.env, whose
+	// PROCESS values fold into the cache key. The complement of ExecOverrides: an
+	// override's value is written in the magusfile and hashed directly, while these
+	// values are only knowable at run time, so the NAME is what is declared statically
+	// and the value is read when the key is computed. That is what lets a target whose
+	// env is genuinely derived from the environment stay cacheable instead of having to
+	// opt out of the cache entirely.
+	EnvAllow []string `json:"env_allow,omitempty" yaml:"env_allow,omitempty"`
 	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
 	// argument. A computed glob is invisible to this static read, so the load path
 	// rejects it loudly rather than silently caching an under-declared footprint.

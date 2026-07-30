@@ -145,6 +145,9 @@ type Project struct {
 	// TargetExecOverrides are per-target ctx.withEnv / ctx.withCwd overrides, in
 	// declaration order, folded into the cache key. See TargetGraphNode.ExecOverrides.
 	TargetExecOverrides map[string][]string
+	// TargetEnvAllow are per-target ctx.env declarations: env var NAMES whose process
+	// values fold into the cache key. See TargetGraphNode.EnvAllow.
+	TargetEnvAllow map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.outputs(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly - which is

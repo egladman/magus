@@ -236,6 +236,12 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
 								}
 							}
+						case "envInputs":
+							// Names only: the value is read when the key is computed, so a
+							// literal name is all the static read needs - and all it can get.
+							for _, g := range globs {
+								node.EnvAllow = appendUniq(node.EnvAllow, g)
+							}
 						case "updates":
 							for _, g := range globs {
 								node.Updates = appendUniq(node.Updates, types.UpdateRef{Glob: g})
@@ -364,7 +370,7 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"inputs": true, "outputs": true, "updates": true, "withEnv": true, "withCwd": true,
+	"inputs": true, "outputs": true, "updates": true, "envInputs": true, "withEnv": true, "withCwd": true,
 }
 
 // ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
@@ -443,9 +449,6 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	}
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
-
-
-
 
 // charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
 // It matches both receivers a target can read a charm through - the magus.has_charm
@@ -652,7 +655,6 @@ func targetPatternRe(pattern string) *regexp.Regexp {
 	}
 	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
 }
-
 
 // lastPathSegment returns the text after the final '/', or the whole string if
 // none — the default alias for an `import "project/<path>"` (basename of the path).

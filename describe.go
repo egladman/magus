@@ -306,7 +306,14 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						extra = append(extra, r)
 					}
 				}
-				if n.DynamicIO {
+				// A skip_cache target has no cache key, so there is no stale hit to
+				// prevent and the literal-argument rule has nothing to protect. Enforcing
+				// it there made a genuinely dynamic target (release-build derives GOOS,
+				// GOARCH and a cgo toolchain from its arguments and the environment)
+				// inexpressible: the value cannot be a literal, and moving it back to an
+				// options table is rejected too. The rule exists for the key, so it ends
+				// where the key does.
+				if n.DynamicIO && !p.TargetPolicies[n.Name].SkipCache {
 					return fmt.Errorf("%s: target %q: ctx.inputs/outputs/updates/withEnv/withCwd take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final e = ctx.withEnv(...); e.withCwd(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
@@ -382,6 +389,16 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
 						}
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
+					}
+				}
+				if len(n.EnvAllow) > 0 {
+					if p.TargetEnvAllow == nil {
+						p.TargetEnvAllow = map[string][]string{}
+					}
+					for _, e := range n.EnvAllow {
+						if !slices.Contains(p.TargetEnvAllow[n.Name], e) {
+							p.TargetEnvAllow[n.Name] = append(p.TargetEnvAllow[n.Name], e)
+						}
 					}
 				}
 				if len(n.ExecOverrides) > 0 {

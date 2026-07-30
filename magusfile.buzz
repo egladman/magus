@@ -94,8 +94,7 @@ fun ld_flags() > str {
 // Compiles the version-stamped magus binary.
 export fun go_build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz\build);
-    go["go-build"](ctx, {
-        "env": {"GOEXPERIMENT": "jsonv2"},
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
             "-o", "magus",
@@ -347,8 +346,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
         env["CGO_ENABLED"] = "0";
     }
 
-    go["go-build"](ctx, {
-        "env": env,
+    go["go-build"](ctx.withEnv(env), {
         "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs\join(stage, binary), "./cmd/magus"],
     });
 

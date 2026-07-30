@@ -333,6 +333,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// tool does without naming a file, so two runs differing only by a derived env must
 	// not share an entry.
 	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
+	// Names, not values: hashStep reads each variable's process value at hash time.
+	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
 	for _, ref := range p.TargetUpdates[target] {
 		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)
