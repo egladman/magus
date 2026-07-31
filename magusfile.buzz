@@ -22,6 +22,13 @@ import "magus/spell/bash";
 
 import "badge" as badge;
 
+// Version-selection rules for the `release` target below. ALIASED deliberately:
+// an unaliased import flat-merges the module's exports into this file's scope,
+// where magus reads every exported fun as a target and rejects the ones without a
+// magus\Context first parameter (MGS1008). Aliasing keeps them namespaced, which
+// is the same reason docs/magusfile.buzz aliases its renderer.
+import "releaser" as releaser;
+
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
 
@@ -449,105 +456,6 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 //
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
 
-// releasableModules enumerates every independently-versioned module: the root,
-// plus each libs/<name> carrying its own go.mod. Discovered rather than listed,
-// so a new nested module is picked up the moment it gets one.
-//
-// prefix is what Go requires of a nested module's tags: the root releases as
-// `vX.Y.Z`, a module at libs/foo as `libs/foo/vX.Y.Z`. key is the same string a
-// human types, so what you name is exactly what gets tagged.
-fun releasableModules() > [{str: str}] {
-    var mods = mut [{"key": "magus", "prefix": "", "module": "", "dir": "."}];
-    foreach (gomod in fs\glob("libs/*/go.mod")) {
-        final dir = fs\dirname(gomod);
-        mods.append({"key": dir, "prefix": dir + "/",
-                    "module": "github.com/egladman/magus/" + dir, "dir": dir});
-    }
-    return mods;
-}
-
-// currentVersion returns a module's highest STABLE released version, or "" when
-// it has never had one. Compared on the PARSED major/minor/patch, not the tag
-// text, because string order puts v0.10.0 before v0.9.0.
-//
-// Prereleases are skipped: per semver.org item 9 a prerelease has LOWER
-// precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not
-// v0.4.0 released and must not become the base the next version is computed from
-// - otherwise cutting rc1 would silently advance everyone's floor.
-//
-// Build metadata does NOT disqualify a tag. Item 10 says metadata is ignored when
-// determining precedence, so v1.0.0+ci42 IS v1.0.0; excluding it would re-offer a
-// version already released.
-fun currentVersion(prefix: str) > str {
-    var best = "";
-    var bestMajor = 0 - 1;
-    var bestMinor = 0 - 1;
-    var bestPatch = 0 - 1;
-    foreach (t in vcs\tags(pattern: prefix + "v*")) {
-        // A bare "v*" also matches libs/foo/v1.2.3, so the prefix is checked
-        // exactly - otherwise the root would adopt a nested module's tag.
-        if (t.prefix != prefix) { continue; }
-        if (t.version.original == "") { continue; } // an annotated non-version tag
-        if (t.version.prerelease != "") { continue; } // anticipates a release, is not one
-        final newer = t.version.major > bestMajor
-            or (t.version.major == bestMajor and t.version.minor > bestMinor)
-            or (t.version.major == bestMajor and t.version.minor == bestMinor
-                and t.version.patch > bestPatch);
-        if (newer) {
-            bestMajor = t.version.major;
-            bestMinor = t.version.minor;
-            bestPatch = t.version.patch;
-            best = t.version.original;
-        }
-    }
-    return best;
-}
-
-// nextFor returns the three legal next versions for a module currently at cur.
-// An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
-// of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
-// special case someone has to remember.
-fun nextFor(cur: str) > SemverNext {
-    if (cur == "") { return semver\next("0.0.0"); }
-    return semver\next(cur);
-}
-
-// isCandidate reports whether v is one of the three versions nextFor offers,
-// comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
-// minor candidate. A prerelease of a legal next version is itself legal; that is
-// how you cut an rc without first inventing a version nobody agreed to.
-fun isCandidate(v: str, cur: str) > bool {
-    final want = semver\parse(v);
-    final n = nextFor(cur);
-    foreach (c in [n.patch, n.minor, n.major]) {
-        final cv = semver\parse(c);
-        if (cv.major == want.major and cv.minor == want.minor and cv.patch == want.patch) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// rewriteRequire points go.mod's require for module at version, preserving the
-// line's indentation. The `replace` directive names the same module and must NOT
-// be touched: it is the local-development path, ignored by every downstream
-// consumer, and rewriting it would break building inside this repo.
-fun rewriteRequire(gomod: str, module: str, version: str) > str {
-    var kept = mut [];
-    var found = false;
-    foreach (line in gomod.split("\n")) {
-        final at = line.indexOf(module + " v");
-        if (at != null and line.indexOf("=>") == null) {
-            kept.append(line.sub(0, at) + module + " " + version);
-            found = true;
-        } else {
-            kept.append(line);
-        }
-    }
-    if (!found) { throw "release: go.mod has no require line for " + module; }
-    return kept.join("\n");
-}
-
 export fun release(ctx: magus\Context, args: [str]) > void {
     // `cd` rather than a release-only charm: image_build above already uses it to
     // mean "this is the real delivery path, do the side-effectful thing" (push and
@@ -555,7 +463,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     // second one that has to be learned separately.
     final deliver = ctx.has_charm("cd");
     final dirty = vcs\isDirty();
-    final modules = releasableModules();
+    final modules = releaser\releasableModules();
 
     // Parse `key=version`. Anything unnamed is surveyed, never released.
     var wanted = mut {};
@@ -577,8 +485,8 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     // a version, and printing it up front means the numbers you act on are the
     // numbers you just read.
     foreach (m in modules) {
-        final cur = currentVersion(m["prefix"]);
-        final n = nextFor(cur);
+        final cur = releaser\currentVersion(m["prefix"]);
+        final n = releaser\nextFor(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
         magus\info("release: " + m["key"] + " - " + at
@@ -614,9 +522,9 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null) { continue; }
-        final cur = currentVersion(m["prefix"]);
-        if (!isCandidate(v, cur)) {
-            final n = nextFor(cur);
+        final cur = releaser\currentVersion(m["prefix"]);
+        if (!releaser\isCandidate(v, cur)) {
+            final n = releaser\nextFor(cur);
             throw "release: " + m["key"] + " v" + v + " is not a legal next version from "
                 + cur + " - choose " + n.patch + ", " + n.minor + " or " + n.major
                 + " (a prerelease or +metadata build of one of those is fine)";
@@ -650,7 +558,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
         magus\info("release: tag " + m["prefix"] + "v" + v);
         if (deliver) { os\exec(vcs\exe(), ["tag", m["prefix"] + "v" + v]); }
         magus\info("release: go.mod  " + m["module"] + "  ->  v" + v);
-        gomod = rewriteRequire(gomod, m["module"], "v" + v);
+        gomod = releaser\rewriteRequire(gomod, m["module"], "v" + v);
         rewrote = true;
     }
     if (deliver and rewrote) { fs\writeFile("go.mod", gomod); }
