@@ -305,8 +305,8 @@ func artifactRoles(m *magus.Magus, artifacts []magus.TargetArtifact) map[string]
 		paths[i] = a.Path
 	}
 	roles := m.DescribeFiles(paths)
-	out := make(map[string]string, len(roles.Files))
-	for _, f := range roles.Files {
+	out := make(map[string]string, len(roles))
+	for _, f := range roles {
 		out[f.Path] = f.Role
 	}
 	return out

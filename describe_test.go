@@ -446,10 +446,9 @@ func TestDescribeFiles_Classification(t *testing.T) {
 	require.NoError(t, err, "Inspect")
 
 	out := ws.DescribeFiles([]string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz"})
-	require.Equal(t, 6, out.Count)
-	require.NotEmpty(t, out.Definition)
+	require.Len(t, out, 6)
 	byPath := map[string]types.FileEntry{}
-	for _, f := range out.Files {
+	for _, f := range out {
 		byPath[f.Path] = f
 	}
 
@@ -525,13 +524,13 @@ func TestDescribeFiles_PerTargetOutputs(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	out := m.DescribeFiles([]string{"GEN.md"})
-	require.Equal(t, 1, out.Count)
+	require.Len(t, out, 1)
 	assert.Equal(t, types.FileEntry{
 		Path:     "GEN.md",
 		Project:  ".",
 		Role:     "output",
 		OutputOf: []string{"."},
-		Hint:     out.Files[0].Hint,
-	}, out.Files[0])
-	assert.Contains(t, out.Files[0].Hint, "generated")
+		Hint:     out[0].Hint,
+	}, out[0])
+	assert.Contains(t, out[0].Hint, "generated")
 }

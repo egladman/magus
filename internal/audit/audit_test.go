@@ -69,7 +69,7 @@ func (f *fakeWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 	panic("not used")
 }
 
-func (f *fakeWS) DescribeFiles([]string) types.FilesOutput {
+func (f *fakeWS) DescribeFiles([]string) []types.FileEntry {
 	panic("not used")
 }
 

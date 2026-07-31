@@ -127,7 +127,8 @@ func (t *describeFileTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 	if len(paths) == 0 {
 		return spells.InvokeResponse{}, errors.New("mcp: paths is required (one or more workspace-relative paths, space-separated)")
 	}
-	return spells.InvokeResponse{Data: t.ws.DescribeFiles(paths)}, nil
+	files := t.ws.DescribeFiles(paths)
+	return spells.InvokeResponse{Data: types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files}}, nil
 }
 
 var _ spells.Driver = (*describeFileTool)(nil)

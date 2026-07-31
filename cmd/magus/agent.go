@@ -389,10 +389,10 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 		return ""
 	}
 	files := ws.DescribeFiles([]string{path})
-	if len(files.Files) != 1 || files.Files[0].Role != "output" {
+	if len(files) != 1 || files[0].Role != "output" {
 		return ""
 	}
-	f := files.Files[0]
+	f := files[0]
 	owner := f.Project
 	if owner == "" {
 		owner = "."

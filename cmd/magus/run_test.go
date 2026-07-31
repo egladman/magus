@@ -92,7 +92,7 @@ func (w *resolveWS) DescribeTarget(types.Target) (types.EvaluatedTargetsOutput, 
 	panic("not used")
 }
 func (w *resolveWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput { panic("not used") }
-func (w *resolveWS) DescribeFiles([]string) types.FilesOutput                 { panic("not used") }
+func (w *resolveWS) DescribeFiles([]string) []types.FileEntry                 { panic("not used") }
 
 // TestResolveTargetsCwdScope proves resolveTargets keys the cwd-scope on the explicit
 // cwd argument (the client's, for an adopted run) rather than the process's os.Getwd.

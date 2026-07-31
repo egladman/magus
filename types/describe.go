@@ -691,9 +691,28 @@ type FileEntry struct {
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
 }
 
-// FilesOutput is the top-level result for "describe file <path>...".
-type FilesOutput struct {
+// The *Report types below are RENDER shapes, not domain types: the {definition,
+// count, items} envelope `magus describe ... -o json` emits. Nothing on Describer
+// returns one - its methods hand back the slice, and the caller that is actually
+// serializing wraps it here, so both the CLI and the MCP handler emit the same JSON
+// without either of them owning the shape.
+//
+// They are deliberately not what the repository returns. Definition is a package
+// constant and Count is len(items), so carrying them on a domain type meant every
+// call site that filtered the slice had to reassign Count by hand - a
+// denormalization that a single forgotten line ships as a wrong count, and which
+// had grown a test (len(Spells) != Count) purely to catch itself.
+
+// FileReport is the "describe file <path>..." envelope.
+type FileReport struct {
 	Definition string      `json:"definition" yaml:"definition"`
 	Count      int         `json:"count"      yaml:"count"`
 	Files      []FileEntry `json:"files"      yaml:"files"`
+}
+
+// CharmReport is the "describe charm[s]" envelope.
+type CharmReport struct {
+	Definition string       `json:"definition" yaml:"definition"`
+	Count      int          `json:"count"      yaml:"count"`
+	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
 }

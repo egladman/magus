@@ -864,7 +864,7 @@ func appendUniq(s []string, v string) []string {
 // declaration lookup - no target evaluation, no VCS - so it is cheap enough to
 // run over a whole dirty tree. An absolute path is re-rooted onto the workspace;
 // a path outside it (or matching nothing) reports as unclaimed.
-func (m *Magus) DescribeFiles(paths []string) types.FilesOutput {
+func (m *Magus) DescribeFiles(paths []string) []types.FileEntry {
 	all := m.ws.All()
 	// Longest project path first, so nested projects claim ownership before ".".
 	owners := slices.Clone(all)
@@ -879,11 +879,7 @@ func (m *Magus) DescribeFiles(paths []string) types.FilesOutput {
 	for _, raw := range paths {
 		entries = append(entries, m.describeFile(raw, all, owners))
 	}
-	return types.FilesOutput{
-		Definition: types.FileDefinition,
-		Count:      len(entries),
-		Files:      entries,
-	}
+	return entries
 }
 
 func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {

@@ -45,13 +45,13 @@ func TestStatusPaths(t *testing.T) {
 // both are staged; an undeclared path is the hazard `git add -A` poses, so it is
 // reported instead.
 func TestClassifyForStaging(t *testing.T) {
-	out := types.FilesOutput{Files: []types.FileEntry{
+	out := []types.FileEntry{
 		{Path: "cmd/magus/agent.go", Role: "source"},
 		{Path: "MAGUS.md", Role: "output"},
 		{Path: "docs/gen/index.html", Role: "output"},
 		{Path: "scratch.txt", Role: "unclaimed"},
 		{Path: "notes.md", Role: ""},
-	}}
+	}
 
 	sources, outputs, undeclared := classifyForStaging(out)
 	assert.Equal(t, []string{"cmd/magus/agent.go"}, sources)

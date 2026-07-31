@@ -72,7 +72,7 @@ func (f *fakeDescriber) DescribeWorkspaces(types.WorkspaceConfig) types.Workspac
 func (f *fakeDescriber) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 	return types.EvaluatedProjectsOutput{}
 }
-func (f *fakeDescriber) DescribeFiles([]string) types.FilesOutput { return types.FilesOutput{} }
+func (f *fakeDescriber) DescribeFiles([]string) []types.FileEntry { return nil }
 func (f *fakeDescriber) DescribeTarget(target types.Target) (types.EvaluatedTargetsOutput, error) {
 	f.gotTarget = target
 	return types.EvaluatedTargetsOutput{Count: 1}, nil

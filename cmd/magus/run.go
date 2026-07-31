@@ -556,8 +556,8 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 			paths[i] = a.Path
 		}
 		roles := m.DescribeFiles(paths)
-		roleOf := make(map[string]string, len(roles.Files))
-		for _, f := range roles.Files {
+		roleOf := make(map[string]string, len(roles))
+		for _, f := range roles {
 			roleOf[f.Path] = f.Role
 		}
 		// Bucket by the project that DECLARED the glob, in one pass. This used to ask

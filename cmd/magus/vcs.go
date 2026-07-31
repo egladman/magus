@@ -157,8 +157,8 @@ func statusPaths(lines []string) []string {
 // them, so they affect nothing and are usually build residue or a scratch file -
 // but they are also where a genuinely new, not-yet-declared source file lives, so
 // they are reported rather than dropped.
-func classifyForStaging(out types.FilesOutput) (sources, outputs, undeclared []string) {
-	for _, f := range out.Files {
+func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
+	for _, f := range out {
 		switch f.Role {
 		case "source":
 			sources = append(sources, f.Path)

@@ -421,11 +421,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		// is len(charms), so carrying them on the domain type meant re-deriving Count
 		// by hand after every filter - a denormalization one forgotten line ships as
 		// a wrong count.
-		return emitFormatted(opts, struct {
-			Definition string             `json:"definition" yaml:"definition"`
-			Count      int                `json:"count"      yaml:"count"`
-			Charms     []types.CharmEntry `json:"charms"     yaml:"charms"`
-		}{types.CharmDefinition, len(charms), charms})
+		return emitFormatted(opts, types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms})
 	case outputName:
 		for _, c := range charms {
 			fmt.Println(c.Name)
@@ -1034,21 +1030,21 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	out := ws.DescribeFiles(pos)
+	files := ws.DescribeFiles(pos)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files})
 	case outputName:
-		for _, f := range out.Files {
+		for _, f := range files {
 			fmt.Printf("%s\t%s\n", f.Path, f.Role)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	for _, f := range out.Files {
+	fmt.Printf("definition: %s\n\n", types.FileDefinition)
+	for _, f := range files {
 		fmt.Printf("%s\n", f.Path)
 		if f.Project != "" {
 			fmt.Printf("  project: %s\n", f.Project)
