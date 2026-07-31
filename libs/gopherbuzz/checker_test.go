@@ -492,7 +492,7 @@ export final got = build().inner.v;
 // TestSourceModule_ExportsTypes verifies a host-registered source module
 // (embedded .buzz, no file on the include path) exposes its exported object/enum
 // types to the importer — including object-typed and list field defaults, which
-// the canonical magus/target module relies on.
+// the canonical magus/spell module relies on.
 func TestSourceModule_ExportsTypes(t *testing.T) {
 	ctx := context.Background()
 	sess := NewSession(ctx, WithEmbedded())

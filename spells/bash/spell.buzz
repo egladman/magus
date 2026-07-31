@@ -1,4 +1,4 @@
-import "magus/target";
+import "magus/spell";
 
 export fun mgs_getName() > str { return "bash"; }
 

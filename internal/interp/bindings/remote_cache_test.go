@@ -392,17 +392,17 @@ func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
 	}
 }
 
-// TestCanonicalTargetModule verifies the embedded "magus/target" source module
+// TestCanonicalSpellModule verifies the embedded "magus/spell" source module
 // imports through the normal host-module registration and its Target/Charm
 // types resolve in both annotations and (nested) literals.
-func TestCanonicalTargetModule(t *testing.T) {
+func TestCanonicalSpellModule(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	registerMagusModules(ctx, sess)
 
 	src := `
-import "magus/target";
+import "magus/spell";
 fun build() > Target {
     return Target{
         name = "test",
@@ -413,7 +413,7 @@ fun build() > Target {
 export final tname = build().name;
 export final cname = build().charms[0];
 `
-	require.NoError(t, sess.Exec(ctx, src), "import \"magus/target\"")
+	require.NoError(t, sess.Exec(ctx, src), "import \"magus/spell\"")
 	exp := sess.Exports()
 	tname, ok := exp["tname"]
 	require.True(t, ok, "tname not exported")

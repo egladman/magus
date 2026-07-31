@@ -72,7 +72,7 @@ func TestBuzzUnresolvableImportTaggedMGS7001(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "a.buzz", `import "fs";
 import "buzz:os";
-import "magus/target";
+import "magus/spell";
 import "spells/missing";
 export fun f(ctx: magus\Context, args: [str]) > void {}
 `)
@@ -80,7 +80,7 @@ export fun f(ctx: magus\Context, args: [str]) > void {}
 
 	// Compiled-in modules (buzz stdlib, magus/*) are expected to be unresolvable
 	// and are NOT flagged.
-	for _, id := range []string{"import:fs", "import:buzz:os", "import:magus/target"} {
+	for _, id := range []string{"import:fs", "import:buzz:os", "import:magus/spell"} {
 		n, ok := nodeByID(out, id)
 		require.Truef(t, ok, "missing import node %q", id)
 		assert.Emptyf(t, n.Attrs[AttrDiagnostic], "%q should not be flagged", id)

@@ -24,6 +24,7 @@ docs/gen/** merge=magus linguist-generated
 docs/MAGUS.md merge=magus linguist-generated
 docs/src/gen/** merge=magus linguist-generated
 docs/dist/** merge=magus linguist-generated
+docs/active.urls.lock merge=magus linguist-generated
 docs/concepts/spells/*.md merge=magus linguist-generated
 docs/reference/buzz/*.md merge=magus linguist-generated
 docs/reference/config.md merge=magus linguist-generated

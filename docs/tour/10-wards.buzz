@@ -11,7 +11,7 @@
 // truly want fire-and-forget, make it a Command op instead of a Service. Delete
 // the "-d" below and `run serve` again to watch the ward clear.
 
-import "magus/target";
+import "magus/spell";
 
 export fun mgs_getName() > str { return "postgres"; }
 

@@ -36,14 +36,14 @@ import "spells/chore" as chore;
 magus.project({ "spells": [acme, chore] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
 -- spells/chore/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "chore"; }
 fun sweep(target: Target) > Command {
     return Command{bin = "chore", args = ["sweep"]};

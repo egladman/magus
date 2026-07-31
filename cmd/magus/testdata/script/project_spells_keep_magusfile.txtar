@@ -40,7 +40,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
     acme["lint"](ctx);
 }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {
     return Command{bin = "touch", args = ["MARKER"]};

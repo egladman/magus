@@ -10,7 +10,7 @@
 // your buf.gen.yaml: under-declare and the cache won't replay codegen; over-declare
 // and every replay snapshots more than necessary.
 
-import "magus/target";
+import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 

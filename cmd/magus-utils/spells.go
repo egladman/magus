@@ -54,7 +54,7 @@ func runSpells(args []string) error {
 		if err != nil {
 			continue // not a spell dir
 		}
-		// A built-in may import only the pure-types magus/target module; we
+		// A built-in may import only the pure-types magus/spell module; we
 		// inline its source so the compiled chunk is self-contained (imports
 		// leave no bytecode, so the type would otherwise be absent at load).
 		// A spell importing any host module (e.g. spells/github) can't be a

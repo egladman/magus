@@ -1,4 +1,4 @@
-import "magus/target";
+import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 

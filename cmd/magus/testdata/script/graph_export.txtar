@@ -82,7 +82,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) { acme.lint(ctx); }
 }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {

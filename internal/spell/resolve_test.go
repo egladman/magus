@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// resolve builds a bare session with the magus/target types registered, execs
+// resolve builds a bare session with the magus/spell types registered, execs
 // src, and resolves its spec — the same setup Extract uses. Every op resolves to
 // its declared command.
 func resolve(t *testing.T, src string) (spells.Descriptor, error) {
@@ -19,7 +19,7 @@ func resolve(t *testing.T, src string) (spells.Descriptor, error) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	sess.SetSourceModule(TargetModulePath, builtinModuleSources[TargetModulePath])
+	sess.SetSourceModule(SpellModulePath, builtinModuleSources[SpellModulePath])
 	require.NoError(t, sess.Exec(ctx, src), "exec")
 	return Resolve(ctx, sess)
 }
@@ -57,7 +57,7 @@ export fun mgs_listTargets() > any {
 // would — proving the function form is behaviorally identical to a record.
 func TestResolve_FunctionValueTargets(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "fnpkg"; }
 fun build(t: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun fmt(t: Target) > Command {
@@ -88,7 +88,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 // uniformly.
 func TestResolve_ServiceAndCommandCoexist(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "node"; }
 fun nodeBuild(t: Target) > Command { return Command{bin = "npm", args = ["run", "build"]}; }
 fun nodeServe(t: Target) > Service {
@@ -129,7 +129,7 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 // the Buzz object Service into spells.Service.
 func TestResolve_ServiceDistinctAndIdle(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "db"; }
 fun pg(t: Target) > Service {
     return Service{ command  = Command{bin = "docker", args = ["run", "postgres:16"]},
@@ -152,7 +152,7 @@ export fun mgs_listTargets() > any { return {"pg": pg}; }
 // anything forks, because detaching breaks foreground supervision.
 func TestResolve_DetachedServiceRejected(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "db"; }
 fun pg(t: Target) > Service {
     return Service{ command = Command{bin = "docker", args = ["run", "-d", "postgres:16"]} };
@@ -171,7 +171,7 @@ export fun mgs_listTargets() > any { return {"pg": pg}; }
 // it lives on a spell's plain exported functions, not in mgs_listTargets.
 func TestResolve_NonCommandOpRejected(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "fnpkg"; }
 export fun enabled(tg: Target, cb: fun(any)) > bool { return true; }
 export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
@@ -189,7 +189,7 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 // carry none. This is the data `magus describe` prints and `magus doctor` enforces.
 func TestResolve_CommandCapturesHandlerDoc(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "forkpkg"; }
 
 // build compiles the project.
@@ -217,7 +217,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 // {cmd,args} record op does not, so it is never required to carry a comment.
 func TestResolve_DocTargetsExcludesRecordOps(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "mixed"; }
 
 // build is a function handler.
@@ -240,7 +240,7 @@ export fun mgs_listTargets() > any {
 // recording a command built from empty fields.
 func TestResolve_CommandRejectsTargetRead(t *testing.T) {
 	src := `
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "forkpkg"; }
 export fun build(tg: Target) > Command { return Command{bin = "echo", args = [tg.name]}; }
 export fun mgs_listTargets() > {str: fun(Target) Command} {

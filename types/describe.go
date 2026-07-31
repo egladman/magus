@@ -180,7 +180,12 @@ type TargetGraphNode struct {
 	// Updates are the per-target ctx.updates(...) refs: files the target edits in place
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
 	// UpdateRef for why magus must neither delete nor restore one.
-	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty"`
+	//
+	// buzz:"-": TargetGraphNode.BuzzObject() below does not emit an "updates" key
+	// (JSON/YAML carry it; the Buzz boundary map does not), so a generated mirror
+	// field would promise a key the runtime value never has. Same reasoning as
+	// TargetGraphOutput.Definition / TargetGraphProject.RelPath just below.
+	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty" buzz:"-"`
 	// ExecOverrides are the canonical per-op execution overrides this target declares
 	// via ctx.withEnv / ctx.withCwd, as "env:K=V" / "cwd:V" strings in declaration
 	// order (hash.go sorts a copy at hash time; nothing sorts the stored value). They fold into the target's

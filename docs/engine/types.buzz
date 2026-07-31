@@ -128,15 +128,15 @@ export object Site {
 
     // Every project's TARGET graph, injected once by site_render() from magus.targets()
     // in the magusfile. The SSG cannot call magus.targets() itself: a site module may
-    // import the pure-types magus/target module but not the host `magus` module, which
-    // is deliberate - the generator takes data in and stays config-agnostic. This is the
-    // authoritative project inventory (magus's own, not a filesystem scan) and it
-    // carries each project's targets, so /development/ renders from typed data with no
-    // subprocess and no markdown to re-parse.
-    // Opaque here, cast to target\TargetGraph by the consumer (site/development.buzz).
-    // Site stays a plain data carrier that imports only leaf modules - annotating the
-    // field would pull magus/target into this file's import graph, which the header rule
-    // above forbids.
+    // read magus's own declared types (TargetGraph, Projects, ...) but not call the host
+    // `magus` module itself, which is deliberate - the generator takes data in and stays
+    // config-agnostic. This is the authoritative project inventory (magus's own, not a
+    // filesystem scan) and it carries each project's targets, so /development/ renders
+    // from typed data with no subprocess and no markdown to re-parse.
+    // Opaque here, cast to TargetGraph by the consumer (site/development.buzz). Site
+    // stays a plain data carrier that imports only leaf modules - the field is left
+    // untyped here to keep this file's own declarations decoupled from magus's shape,
+    // consistent with the header rule above.
     targets: any = {},
 
     // The PROJECT dependency DAG, injected the same way from magus.graph(). targets

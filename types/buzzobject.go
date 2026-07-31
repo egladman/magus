@@ -8,8 +8,9 @@ import "fmt"
 // Impl returns the struct; its BuzzObject method is the {field: value} map the
 // generated Buzz trampoline marshals (see host.BuzzObjecter). The Buzz `object`
 // mirrors are generated from these structs by cmd/magus-utils types (go:generate)
-// and shipped in the magus/target module, so the Go struct stays the single
-// source of truth and struct, BuzzObject, and mirror can't drift.
+// and shipped with the host module that returns each one (os, fs, http, encoding,
+// semver, vcs - see internal/spell/hosttypes.go), so the Go struct stays the
+// single source of truth and struct, BuzzObject, and mirror can't drift.
 
 // BuzzObject is the Buzz `object` a host method's return crosses the boundary
 // as: the map a magusfile sees when it annotates a result (`> FileInfo`,

@@ -66,7 +66,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 }
 
 // spellScaffold renders the starter spell.buzz for a handle. It is a complete,
-// self-contained built-in-style spell (it imports only the pure magus/target and
+// self-contained built-in-style spell (it imports only the pure magus/spell and
 // magus/charm modules, so it compiles without host bindings) plus a test block,
 // with teaching comments on every contract function.
 func spellScaffold(name string) string {
@@ -92,7 +92,7 @@ const spellScaffoldTemplate = `// spells/SPELLNAME/spell.buzz - a magus spell fo
 //
 // Test this file:  magus buzz -t --embedded spells/SPELLNAME/spell.buzz
 
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 import "assert";
 

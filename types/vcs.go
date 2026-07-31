@@ -160,16 +160,21 @@ type CommitAuthor struct {
 }
 
 // CommitRecord is the boundary mirror of the object vcs.commit / vcs.history
-// return: the serializable, every-field-present view of a Commit (Date as an
-// RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
-// compile-checked field access on a commit object; the runtime value is the
-// matching map (see Commit.BuzzObject). The Buzz `object Commit` mirror is generated
-// from this struct by cmd/magus-utils types (go:generate -type Commit).
+// return: the serializable, every-field-present view of a Commit. A magusfile
+// annotates `> Commit` to get compile-checked field access on a commit object;
+// the runtime value is the matching map (see Commit.BuzzObject), never this
+// struct directly - it exists so cmd/magus-utils types has something to
+// reflect over. Date stays time.Time, same as Commit.Date: buzzType (in
+// cmd/magus-utils/types.go) special-cases time.Time to the Buzz `str` type
+// mirroring Commit.BuzzObject's RFC3339 formatting, so the two can share a
+// type without the generated mirror changing shape. The Buzz `object Commit`
+// mirror is generated from this struct by cmd/magus-utils types
+// (go:generate -type Commit).
 type CommitRecord struct {
 	ID      string `buzz:"id"`
 	Short   string
 	Author  CommitAuthor
-	Date    string
+	Date    time.Time
 	Subject string
 	Body    string
 	Parents []string
@@ -177,9 +182,17 @@ type CommitRecord struct {
 
 // VCSMeta holds per-revision metadata for embedding in build artifacts.
 type VCSMeta struct {
-	ShortHash  string
-	Hash       string
-	Branch     string
+	ShortHash string
+	Hash      string
+	Branch    string
+	// CommitDate stays a string, deliberately not time.Time: each backend
+	// formats it with its own native command (git's `log --format=%ci`, hg's
+	// `{date|isodate}` template, jj's custom "%Y-%m-%d %H:%M:%S %z") and the
+	// formats do not even agree with each other (hg's isodate filter omits
+	// seconds; git and jj include them). It is opaque, backend-provided
+	// display text meant for a build banner, not a value any caller parses
+	// back into a time - forcing one shared layout here would mean discarding
+	// or reformatting what the VCS itself chose to report.
 	CommitDate string
 	IsDirty    bool
 }

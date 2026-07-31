@@ -31,18 +31,32 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
 
-	sess.SetGlobal("magus", buildMagus(sess, tr))
+	// A synthetic MODULE, not a global: the playground must make you write
+	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
+	// without the import, so a snippet that ran here failed the moment it was pasted
+	// into a real magusfile - a Run button validating syntax the language rejects
+	// teaches worse than no Run button. Every other module beside it (the WASM set
+	// above, the spells below) is already registered this way.
+	sess.SetSyntheticModule("magus", buildMagus(sess, tr))
 	for name, ops := range spells {
 		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the canonical value-type modules as embedded SOURCE modules, mirroring
-	// the real runtime (internal/interp/bindings.registerMagusModules), so a SPELL
-	// buffer's `import "magus/target"` resolves the Target/Command/Service object types
-	// instead of failing with `undefined type "Service"`. The session's import lookup
-	// order (synthetic, then source, then resolver) means these are never shadowed by
-	// the catch-all resolver below.
-	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
+	// Register the canonical value-type module as an embedded SOURCE module so a
+	// SPELL buffer's or magusfile's `import "magus/spell"` resolves the
+	// Target/Command/Service object types instead of failing with `undefined type
+	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
+	// host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
+	// vcs, ...) - but this sandbox never registers os/fs/http/vcs as real importable
+	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
+	// there is no owning-module import for a probed buffer to reach those types
+	// through. Bundling them here, under the one import path this sandbox does
+	// wire, is this dry-only host's deliberate simplification - it keeps every
+	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
+	// resolvable without also having to fake functional os/fs/http/vcs bindings.
+	// The session's import lookup order (synthetic, then source, then resolver)
+	// means this is never shadowed by the catch-all resolver below.
+	sess.SetSourceModule(ispell.SpellModulePath, strings.Join([]string{
 		ispell.TargetModuleSource,
 		ispell.PatchOpSource,
 		ispell.CharmTypeSource,

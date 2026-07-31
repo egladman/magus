@@ -11,8 +11,6 @@ import "serialize";
 import "io";
 import "std";
 import "semver";
-// Value-type mirrors (ExecResult, Commit, etc.) for compile-checked field access.
-import "magus/target";
 
 import "magus/spell/magusfile";
 import "magus/spell/go";

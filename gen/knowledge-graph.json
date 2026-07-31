@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2535,
-  "edge_count": 5002,
+  "edge_count": 4999,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -11372,7 +11372,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:232",
+      "source": "docs/magusfile.buzz:241",
       "attrs": {
         "exported": "true"
       }
@@ -11382,7 +11382,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:292",
+      "source": "docs/magusfile.buzz:301",
       "attrs": {
         "exported": "true"
       }
@@ -11392,7 +11392,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:279",
+      "source": "docs/magusfile.buzz:288",
       "attrs": {
         "exported": "true"
       }
@@ -11402,7 +11402,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo tha",
-      "source": "docs/magusfile.buzz:259",
+      "source": "docs/magusfile.buzz:268",
       "attrs": {
         "exported": "true"
       }
@@ -11412,7 +11412,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:237",
+      "source": "docs/magusfile.buzz:246",
       "attrs": {
         "exported": "true"
       }
@@ -11422,7 +11422,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and must not be edited by hand. generate calls this; the drift gate catches any manual edit to a released section on the next render.",
-      "source": "docs/magusfile.buzz:130",
+      "source": "docs/magusfile.buzz:134",
       "attrs": {
         "exported": "true"
       }
@@ -11432,7 +11432,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the site render, the JS bundles it builds, and the drift gate are first-class ci steps (not just reached transitively through the mutating lint/build chain).",
-      "source": "docs/magusfile.buzz:248",
+      "source": "docs/magusfile.buzz:257",
       "attrs": {
         "exported": "true"
       }
@@ -11442,7 +11442,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:146",
+      "source": "docs/magusfile.buzz:150",
       "attrs": {
         "exported": "true"
       }
@@ -11451,7 +11451,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:215",
+      "source": "docs/magusfile.buzz:224",
       "attrs": {
         "exported": "true"
       }
@@ -11461,7 +11461,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the full publication and drift gate. Use render while iterating on docs.",
-      "source": "docs/magusfile.buzz:186",
+      "source": "docs/magusfile.buzz:190",
       "attrs": {
         "exported": "true"
       }
@@ -11471,14 +11471,14 @@
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages - the d3-force graph explorer, the CodeMirror playground editor, and the vendored mermaid/highlight.js libraries. These are pnpm-managed packages (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age gate), `pnpm run build` runs the esbuild invocations, which live in package.json \"scripts\" as their single source of truth",
-      "source": "docs/magusfile.buzz:178"
+      "source": "docs/magusfile.buzz:182"
     },
     {
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:220",
+      "source": "docs/magusfile.buzz:229",
       "attrs": {
         "exported": "true"
       }
@@ -11488,7 +11488,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:121",
+      "source": "docs/magusfile.buzz:125",
       "attrs": {
         "exported": "true"
       }
@@ -11497,7 +11497,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:116",
+      "source": "docs/magusfile.buzz:120",
       "attrs": {
         "exported": "true"
       }
@@ -11507,7 +11507,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:302",
+      "source": "docs/magusfile.buzz:311",
       "attrs": {
         "exported": "true"
       }
@@ -11516,7 +11516,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:241",
+      "source": "docs/magusfile.buzz:250",
       "attrs": {
         "exported": "true"
       }
@@ -11560,28 +11560,28 @@
       "kind": "function",
       "label": "projectCatalog",
       "doc": "projectCatalog renders one project's target catalog as Markdown from the TYPED graph (TargetGraphProject) rather than by capturing `describe graph -o markdown` from a subprocess. Building it here means the page is assembled from the same in-process data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field access on every node.  A Mermaid block draws the run order from each node's declared dependencies, so the arrows are the real ctx.needs edges and not a hand-maintained picture.",
-      "source": "docs/site/development.buzz:146"
+      "source": "docs/site/development.buzz:145"
     },
     {
       "id": "function:docs/site/development.buzz:projectLabel",
       "kind": "function",
       "label": "projectLabel",
       "doc": "projectLabel is the display name for a workspace-relative project path. The root project's path is \".\", which reads as nothing at all in a URL, a card, or a graph node; every render site here goes through this so they cannot disagree.",
-      "source": "docs/site/development.buzz:87"
+      "source": "docs/site/development.buzz:86"
     },
     {
       "id": "function:docs/site/development.buzz:registerDevPage",
       "kind": "function",
       "label": "registerDevPage",
       "doc": "registerDevPage adds a synthesized /development/ page to docPages, the corpus every navigation helper walks. addRecord alone only feeds the search index, so without this these pages were reachable by search and invisible to Related, the section list, and the subtree.  The landing page is the section's overview, so it anchors the others rather than listing itself.",
-      "source": "docs/site/development.buzz:25"
+      "source": "docs/site/development.buzz:24"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopment",
       "kind": "function",
       "label": "renderDevelopment",
-      "doc": "renderDevelopment writes the /development/ section: one themed page per project rendering its target catalog and run-order graph, plus a /development/ landing linking to them and showing how the projects depend on each other. Retired /development/projects/ URLs redirect to the flattened locations.  The project set comes from magus itself (magus.ls, annotated `> target\\Projects` for compile-checked field access), NOT from scanning the filesystem for MAGUS.md files. The scan it replaced looked only at site.ro",
-      "source": "docs/site/development.buzz:224",
+      "doc": "renderDevelopment writes the /development/ section: one themed page per project rendering its target catalog and run-order graph, plus a /development/ landing linking to them and showing how the projects depend on each other. Retired /development/projects/ URLs redirect to the flattened locations.  The project set comes from magus itself (magus.ls, annotated `> Projects` for compile-checked field access), NOT from scanning the filesystem for MAGUS.md files. The scan it replaced looked only at site.root and",
+      "source": "docs/site/development.buzz:223",
       "attrs": {
         "exported": "true"
       }
@@ -11591,28 +11591,28 @@
       "kind": "function",
       "label": "renderDevelopmentPage",
       "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
-      "source": "docs/site/development.buzz:40"
+      "source": "docs/site/development.buzz:39"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopmentPageRaw",
       "kind": "function",
       "label": "renderDevelopmentPageRaw",
       "doc": "renderDevelopmentPageRaw is renderDevelopmentPage for bodies already in final HTML (the /development/ landing). It skips renderContentHTML - whose link-rewrite strips the trailing slash off relative links - so card hrefs like \"magus/\" stay slash-terminated and resolve without a directory redirect. searchText is the plain text to index, since the HTML carries no useful prose.",
-      "source": "docs/site/development.buzz:61"
+      "source": "docs/site/development.buzz:60"
     },
     {
       "id": "function:docs/site/development.buzz:slugifyProject",
       "kind": "function",
       "label": "slugifyProject",
       "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -> \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid node id with slashes still in it.",
-      "source": "docs/site/development.buzz:80"
+      "source": "docs/site/development.buzz:79"
     },
     {
       "id": "function:docs/site/development.buzz:workspaceDependencies",
       "kind": "function",
       "label": "workspaceDependencies",
       "doc": "workspaceDependencies renders how the PROJECTS relate, as Markdown. The per-project pages answer \"what can I run here\"; this answers \"what does changing it reach\", which no page showed before.  It reads magus.graph()'s typed view: nodes already in topological order (so the table IS a valid build order, sorted by nobody here), each node's direct dependencies, and its blast radius - the count of projects a change can transitively affect, which is the number that tells a contributor whether an edit is containe",
-      "source": "docs/site/development.buzz:99"
+      "source": "docs/site/development.buzz:98"
     },
     {
       "id": "function:docs/site/public.buzz:loadReleases",
@@ -17670,7 +17670,7 @@
       "kind": "function",
       "label": "bindings_generate",
       "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:189",
+      "source": "magusfile.buzz:187",
       "attrs": {
         "exported": "true"
       }
@@ -17680,7 +17680,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:574",
+      "source": "magusfile.buzz:572",
       "attrs": {
         "exported": "true"
       }
@@ -17690,28 +17690,28 @@
       "kind": "function",
       "label": "build_date",
       "doc": "Commit record date (RFC3339) for reproducible builds; empty => \"unknown\".",
-      "source": "magusfile.buzz:86"
+      "source": "magusfile.buzz:84"
     },
     {
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
-      "source": "magusfile.buzz:326"
+      "source": "magusfile.buzz:324"
     },
     {
       "id": "function:magusfile.buzz:build_variant",
       "kind": "function",
       "label": "build_variant",
       "doc": "Builds one image variant; publish => multi-arch --push + cosign-sign, else single-arch --load.",
-      "source": "magusfile.buzz:115"
+      "source": "magusfile.buzz:113"
     },
     {
       "id": "function:magusfile.buzz:buzz_check",
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:561",
+      "source": "magusfile.buzz:559",
       "attrs": {
         "exported": "true"
       }
@@ -17721,7 +17721,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:566",
+      "source": "magusfile.buzz:564",
       "attrs": {
         "exported": "true"
       }
@@ -17731,7 +17731,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:606",
+      "source": "magusfile.buzz:604",
       "attrs": {
         "exported": "true"
       }
@@ -17741,7 +17741,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:642",
+      "source": "magusfile.buzz:640",
       "attrs": {
         "exported": "true"
       }
@@ -17750,14 +17750,14 @@
       "id": "function:magusfile.buzz:commit",
       "kind": "function",
       "label": "commit",
-      "source": "magusfile.buzz:79"
+      "source": "magusfile.buzz:77"
     },
     {
       "id": "function:magusfile.buzz:completion_test",
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:625",
+      "source": "magusfile.buzz:623",
       "attrs": {
         "exported": "true"
       }
@@ -17767,7 +17767,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:239",
+      "source": "magusfile.buzz:237",
       "attrs": {
         "exported": "true"
       }
@@ -17777,7 +17777,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:603",
+      "source": "magusfile.buzz:601",
       "attrs": {
         "exported": "true"
       }
@@ -17787,7 +17787,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not a raw git/porcelain shell-out), so uncommitted-but-current generated files pass; only a regeneration that changes a clean file fails (a generator input changed but its output was not re-run and committed).",
-      "source": "magusfile.buzz:309",
+      "source": "magusfile.buzz:307",
       "attrs": {
         "exported": "true"
       }
@@ -17797,7 +17797,7 @@
       "kind": "function",
       "label": "go_build",
       "doc": "Compiles the version-stamped magus binary.",
-      "source": "magusfile.buzz:100",
+      "source": "magusfile.buzz:98",
       "attrs": {
         "exported": "true"
       }
@@ -17807,7 +17807,7 @@
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:265",
+      "source": "magusfile.buzz:263",
       "attrs": {
         "exported": "true"
       }
@@ -17817,7 +17817,7 @@
       "kind": "function",
       "label": "image_build",
       "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally. Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default, or the static/no-libc variant (Dockerfile.static) under the `static` charm — the same default-cgo/opt-in-static convention as release_build() in this file.",
-      "source": "magusfile.buzz:141",
+      "source": "magusfile.buzz:139",
       "attrs": {
         "exported": "true"
       }
@@ -17827,7 +17827,7 @@
       "kind": "function",
       "label": "image_scan",
       "doc": "Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.",
-      "source": "magusfile.buzz:155",
+      "source": "magusfile.buzz:153",
       "attrs": {
         "exported": "true"
       }
@@ -17836,20 +17836,20 @@
       "id": "function:magusfile.buzz:image_tag",
       "kind": "function",
       "label": "image_tag",
-      "source": "magusfile.buzz:112"
+      "source": "magusfile.buzz:110"
     },
     {
       "id": "function:magusfile.buzz:ld_flags",
       "kind": "function",
       "label": "ld_flags",
-      "source": "magusfile.buzz:92"
+      "source": "magusfile.buzz:90"
     },
     {
       "id": "function:magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:589",
+      "source": "magusfile.buzz:587",
       "attrs": {
         "exported": "true"
       }
@@ -17859,7 +17859,7 @@
       "kind": "function",
       "label": "man_generate",
       "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/manpage registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
-      "source": "magusfile.buzz:181",
+      "source": "magusfile.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -17869,7 +17869,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:252",
+      "source": "magusfile.buzz:250",
       "attrs": {
         "exported": "true"
       }
@@ -17879,7 +17879,7 @@
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:209",
+      "source": "magusfile.buzz:207",
       "attrs": {
         "exported": "true"
       }
@@ -17889,7 +17889,7 @@
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. The final CI step; never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose; the host that sets it (the workflow) is what knows it's GitHub Actions and points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the safe Mermaid subset so older or partial renderers handle it.",
-      "source": "magusfile.buzz:284",
+      "source": "magusfile.buzz:282",
       "attrs": {
         "exported": "true"
       }
@@ -17899,7 +17899,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:571",
+      "source": "magusfile.buzz:569",
       "attrs": {
         "exported": "true"
       }
@@ -17909,14 +17909,14 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:700"
+      "source": "magusfile.buzz:698"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
       "doc": "release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand:  1. tag each nested module (libs/<name>/vX.Y.Z) - each has to be independently `go get`-able before anything downstream can require it at a real version instead of v0.0.0. 2. rewrite root go.mod's `require .../libs/<name> v0.0.0` lines to the real vX.Y.Z, now that those tags exist to resolve to. 3. tag root vX.Y.Z last - only now does the root tag's own go.mod resolve",
-      "source": "magusfile.buzz:439",
+      "source": "magusfile.buzz:437",
       "attrs": {
         "exported": "true"
       }
@@ -17926,7 +17926,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is dynamically-linked (cgo): internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for whatever (goos, goarch) you ask for, so cross-compiling this variant only works if you already have that toolchain around — CD never does, sticking to each native job's own platform. The `static` charm (`magus run release-build:static`) switches to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the cgo default it's ch",
-      "source": "magusfile.buzz:394",
+      "source": "magusfile.buzz:392",
       "attrs": {
         "exported": "true"
       }
@@ -17936,7 +17936,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:411",
+      "source": "magusfile.buzz:409",
       "attrs": {
         "exported": "true"
       }
@@ -17946,21 +17946,21 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:370"
+      "source": "magusfile.buzz:368"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:714"
+      "source": "magusfile.buzz:712"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:735",
+      "source": "magusfile.buzz:733",
       "attrs": {
         "exported": "true"
       }
@@ -17970,7 +17970,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is deliberately NOT declared.",
-      "source": "magusfile.buzz:226",
+      "source": "magusfile.buzz:224",
       "attrs": {
         "exported": "true"
       }
@@ -17980,7 +17980,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of them.",
-      "source": "magusfile.buzz:201",
+      "source": "magusfile.buzz:199",
       "attrs": {
         "exported": "true"
       }
@@ -17990,7 +17990,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:540",
+      "source": "magusfile.buzz:538",
       "attrs": {
         "exported": "true"
       }
@@ -18000,20 +18000,20 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:531"
+      "source": "magusfile.buzz:529"
     },
     {
       "id": "function:magusfile.buzz:version",
       "kind": "function",
       "label": "version",
-      "source": "magusfile.buzz:73"
+      "source": "magusfile.buzz:71"
     },
     {
       "id": "function:magusfile.buzz:watch",
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:517",
+      "source": "magusfile.buzz:515",
       "attrs": {
         "exported": "true"
       }
@@ -20127,6 +20127,11 @@
       "label": "magus/charm"
     },
     {
+      "id": "import:magus/spell",
+      "kind": "import",
+      "label": "magus/spell"
+    },
+    {
       "id": "import:magus/spell/bash",
       "kind": "import",
       "label": "magus/spell/bash"
@@ -20180,11 +20185,6 @@
       "id": "import:magus/spell/typescript",
       "kind": "import",
       "label": "magus/spell/typescript"
-    },
-    {
-      "id": "import:magus/target",
-      "kind": "import",
-      "label": "magus/target"
     },
     {
       "id": "import:markdown",
@@ -21327,7 +21327,7 @@
       "id": "method:magus.ls",
       "kind": "method",
       "label": "magus.ls",
-      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
+      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
       "attrs": {
         "buzz": "magus\\ls() → ProjectsOutput"
       }
@@ -21345,7 +21345,7 @@
       "id": "method:magus.targets",
       "kind": "method",
       "label": "magus.targets",
-      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, an",
+      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never",
       "attrs": {
         "buzz": "magus\\targets() → TargetGraphOutput"
       }
@@ -22655,11 +22655,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:625:TODO",
+      "id": "rationale:magusfile.buzz:623:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:625"
+      "source": "magusfile.buzz:623"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",
@@ -22804,7 +22804,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outb7087c7e",
+        "last_output_ref": "outb101b791",
         "last_run_ok": "true"
       }
     },
@@ -22893,7 +22893,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outfa2d014a",
+        "last_output_ref": "out39a0ee5f",
         "last_run_ok": "true"
       }
     },
@@ -22951,7 +22951,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out9bcae80e",
+        "last_output_ref": "out83584780",
         "last_run_ok": "false"
       }
     },
@@ -23082,7 +23082,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "oute1199658",
+        "last_output_ref": "out63fb1806",
         "last_run_ok": "true"
       }
     },
@@ -37875,7 +37875,7 @@
     },
     {
       "source": "file:benchmarks/large-monorepo/spells/nextjs.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -37915,7 +37915,7 @@
     },
     {
       "source": "file:benchmarks/large-monorepo/spells/tslib.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -40467,14 +40467,6 @@
     },
     {
       "source": "file:docs/magusfile.buzz",
-      "target": "import:magus/target",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/magusfile.buzz",
       "target": "import:os",
       "relation": "imports",
       "confidence": "inferred",
@@ -40980,14 +40972,6 @@
     {
       "source": "file:docs/site/development.buzz",
       "target": "import:lib/text",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/site/development.buzz"
-    },
-    {
-      "source": "file:docs/site/development.buzz",
-      "target": "import:magus/target",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -41779,7 +41763,7 @@
     },
     {
       "source": "file:docs/tour/09-services.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -41811,7 +41795,7 @@
     },
     {
       "source": "file:docs/tour/10-wards.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -42131,7 +42115,7 @@
     },
     {
       "source": "file:docs/tour/15-charms-custom.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -42267,7 +42251,7 @@
     },
     {
       "source": "file:internal/spell/charm.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -49947,14 +49931,6 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "import:magus/target",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
       "target": "import:os",
       "relation": "imports",
       "confidence": "inferred",
@@ -50203,7 +50179,7 @@
     },
     {
       "source": "file:spells/aws/s3-cache/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50275,7 +50251,7 @@
     },
     {
       "source": "file:spells/bash/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50371,7 +50347,7 @@
     },
     {
       "source": "file:spells/buf/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50427,7 +50403,7 @@
     },
     {
       "source": "file:spells/buzz/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50483,7 +50459,7 @@
     },
     {
       "source": "file:spells/cosign/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -50563,7 +50539,7 @@
     },
     {
       "source": "file:spells/docker/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -51851,7 +51827,7 @@
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -51963,7 +51939,7 @@
     },
     {
       "source": "file:spells/gitlab/ci/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -52147,7 +52123,7 @@
     },
     {
       "source": "file:spells/golang/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -52219,7 +52195,7 @@
     },
     {
       "source": "file:spells/markdown/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -52331,7 +52307,7 @@
     },
     {
       "source": "file:spells/python/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -52443,7 +52419,7 @@
     },
     {
       "source": "file:spells/rust/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -52619,7 +52595,7 @@
     },
     {
       "source": "file:spells/typescript/spell.buzz",
-      "target": "import:magus/target",
+      "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -60566,12 +60542,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:625:TODO",
+      "source": "rationale:magusfile.buzz:623:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:625"
+      "provenance": "magusfile.buzz:623"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",

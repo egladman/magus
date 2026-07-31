@@ -152,6 +152,24 @@ func (s *Session) SetSourceModule(importPath, src string) {
 	s.sourceModules[importPath] = src
 }
 
+// DeclareModuleTypes parses src and registers its exported object/enum types under
+// boundName's namespace immediately, without waiting for a matching `import`
+// statement to trigger it (contrast SetSourceModule, whose src is only collected
+// lazily, when resolveImport processes a real `import "<importPath>";`).
+//
+// Every synthetic module (crypto, io, os, vcs, ...) can use the lazy path, because
+// nothing binds its name into the session env before the import runs. It does NOT
+// work for a module whose native value a host binds some OTHER way before any
+// import is processed - e.g. a namespace meant to be callable without an explicit
+// import, via SetGlobal. resolveImport's "already bound" check fires before it ever
+// consults sourceModules, so a SetSourceModule registered under that same name would
+// never be collected. Call DeclareModuleTypes directly instead, once, when setting
+// up such a namespace, to get the same "import this path, get its types" outcome
+// SetSourceModule gives every other module.
+func (s *Session) DeclareModuleTypes(boundName, src string) {
+	s.collectImportedModule(boundName, src)
+}
+
 // SetModuleResolver installs fn as the on-demand resolver for path-style imports
 // (see the moduleResolver field). fn is called with the import path and binds its
 // returned value under the path's basename (or alias) when it reports ok; a false

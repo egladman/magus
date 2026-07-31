@@ -4,20 +4,20 @@
 // charm patches without hand-writing brittle positional JSON Pointers.
 //
 // `import "magus/charm"` brings the constructors into scope as bare names (the
-// flat-import idiom magus/target uses for Target); the runtime registers the
+// flat-import idiom magus/spell uses for Target); the runtime registers the
 // module and the built-in generator inlines its source (SelfContainedBuiltinSource).
-// Each returns a Charm (the magus/target object) holding RFC 6902 ops — the same
+// Each returns a Charm (the magus/spell object) holding RFC 6902 ops — the same
 // patch the Go host module produces, kept in lockstep by charm_parity_test. A
 // namespace map is not used: the built-in map methods (remove/size/keys/…) would
 // shadow stored keys of the same name, and inlining flattens exports to top level
 // regardless.
 //
-// magus/target is imported for the Charm / PatchOp object types (the recursive
+// magus/spell is imported for the Charm / PatchOp object types (the recursive
 // built-in inliner resolves it). This is the inlinable CORE
 // (append/prepend/after/before/set/drop) the bundled spells need; the full
 // constructor set (move/copy/test, predicate _func variants) remains on the
 // charm.* host module for magusfiles and function-op spells.
-import "magus/target";
+import "magus/spell";
 
 fun _charmAnchorIndex(argv: [str], anchor: str) > int {
     for (var i = 0; i < argv.len(); i = i + 1) {

@@ -75,7 +75,7 @@ func TestEvalInContext_compileError(t *testing.T) {
 // suggestNearest/levenshtein: a near-miss project option key yields a "did you
 // mean" hint naming the intended key.
 func TestTraceProject_unknownKeyHint(t *testing.T) {
-	const src = `magus.project({"outputz": ["bin/**"]});`
+	const src = `import "magus"; magus.project({"outputz": ["bin/**"]});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK, "an unknown project option must fail the load")
 	require.NotNil(t, g.Diag)
@@ -86,7 +86,7 @@ func TestTraceProject_unknownKeyHint(t *testing.T) {
 // TestTraceProject_unknownKeyNoHint: a key far from every known option lists the
 // known options but offers no suggestion.
 func TestTraceProject_unknownKeyNoHint(t *testing.T) {
-	const src = `magus.project({"zzzzzzzz": true});`
+	const src = `import "magus"; magus.project({"zzzzzzzz": true});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -98,7 +98,7 @@ func TestTraceProject_unknownKeyNoHint(t *testing.T) {
 // TestTraceProject_unknownTargetPolicyKey exercises the per-target policy
 // rejectUnknownKeys path (a distinct call site from the top-level options).
 func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
-	const src = `magus.project({"targets": {"lint": {"skipcache": true}}});`
+	const src = `import "magus"; magus.project({"targets": {"lint": {"skipcache": true}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -109,7 +109,7 @@ func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
 // TestTraceProject_slotsNotInt: a non-integer slots value is rejected with a
 // type-shaped message.
 func TestTraceProject_slotsNotInt(t *testing.T) {
-	const src = `magus.project({"targets": {"lint": {"slots": "four"}}});`
+	const src = `import "magus"; magus.project({"targets": {"lint": {"slots": "four"}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -118,7 +118,7 @@ func TestTraceProject_slotsNotInt(t *testing.T) {
 
 // TestTraceProject_slotsBelowOne: slots must be >= 1.
 func TestTraceProject_slotsBelowOne(t *testing.T) {
-	const src = `magus.project({"targets": {"lint": {"slots": 0}}});`
+	const src = `import "magus"; magus.project({"targets": {"lint": {"slots": 0}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -128,7 +128,8 @@ func TestTraceProject_slotsBelowOne(t *testing.T) {
 // TestTraceProject_exclusiveTargetAndBools flattens the exclusive per-target
 // policy plus the top-level exclusive/depends_on/sources fields into the project.
 func TestTraceProject_exclusiveTargetAndBools(t *testing.T) {
-	const src = `magus.project({
+	const src = `import "magus";
+magus.project({
     "exclusive": true,
     "depends_on": ["../lib"],
     "sources": ["src/**"],
@@ -150,7 +151,7 @@ export fun deploy(ctx: magus\Context, args: [str]) > void {}`
 // TestTraceProject_malformedCall: a non-map, non-str argument is a no-op config
 // (captureConfigure returns a null opts), so the project registers with defaults.
 func TestTraceProject_malformedCall(t *testing.T) {
-	const src = `magus.project(5);`
+	const src = `import "magus"; magus.project(5);`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a malformed magus.project should be a lenient no-op: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
@@ -160,13 +161,13 @@ func TestTraceProject_malformedCall(t *testing.T) {
 // TestTraceProject_explicitPath: the two-argument form sets an explicit project
 // path; a non-map second argument degrades to no options.
 func TestTraceProject_explicitPath(t *testing.T) {
-	g := LoadMagusfile(context.Background(), `magus.project("./sub", {"outputs": ["out/**"]});`)
+	g := LoadMagusfile(context.Background(), `import "magus"; magus.project("./sub", {"outputs": ["out/**"]});`)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
 	assert.Equal(t, "./sub", g.Projects[0].Path)
 	assert.Equal(t, []string{"out/**"}, g.Projects[0].Outputs)
 
-	g2 := LoadMagusfile(context.Background(), `magus.project("./sub", 5);`)
+	g2 := LoadMagusfile(context.Background(), `import "magus"; magus.project("./sub", 5);`)
 	require.True(t, g2.OK, "load failed: %+v", g2.Diag)
 	require.Len(t, g2.Projects, 1)
 	assert.Equal(t, "./sub", g2.Projects[0].Path)
@@ -177,7 +178,7 @@ func TestTraceProject_explicitPath(t *testing.T) {
 // branch (a scalar depends_on is dropped) and its list branch skipping non-str
 // items.
 func TestTraceProject_valToStringsShapes(t *testing.T) {
-	const src = `magus.project({"depends_on": 5, "outputs": [1, "keep", true]});`
+	const src = `import "magus"; magus.project({"depends_on": 5, "outputs": [1, "keep", true]});`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
@@ -295,6 +296,7 @@ export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-b
 // from a target body: calling it must not blow up and traces nothing itself.
 func TestRun_spellListTargets(t *testing.T) {
 	const src = `
+import "magus";
 import "magus/spell/go";
 magus.project({"spells": [go]});
 export fun show(ctx: magus\Context, args: [str]) > void { go.listTargets(); }
@@ -308,6 +310,7 @@ export fun show(ctx: magus\Context, args: [str]) > void { go.listTargets(); }
 // key renders an empty detail (spellArgsDetail's MapGet-miss branch).
 func TestRun_spellArgsDetailNoArgsKey(t *testing.T) {
 	const src = `
+import "magus";
 import "magus/spell/go";
 magus.project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"]({"env": {"CGO_ENABLED": "0"}}); }
@@ -321,7 +324,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"]({"env"
 
 // twoOpSpell is a spell buffer with two command ops declared out of order, so
 // probeSpell/sortSpellOps must sort them and renderCommand runs for each.
-const twoOpSpell = `import "magus/target";
+const twoOpSpell = `import "magus/spell";
 fun beta(t: Target) > Command { return Command{ bin = "b", args = ["go"] }; }
 fun alpha(t: Target) > Command { return Command{ bin = "a", args = ["run"] }; }
 export fun mgs_listTargets() > any { return {"beta": beta, "alpha": alpha}; }
@@ -424,6 +427,7 @@ export fun mgs_listTargets() > any { return {"svc": svc}; }
 // ctx form rather than the global.
 func TestRun_charmBranchViaCtx(t *testing.T) {
 	const src = `
+import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {

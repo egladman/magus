@@ -1,4 +1,4 @@
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 
 export fun mgs_getName() > str { return "go"; }

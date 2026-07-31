@@ -39,15 +39,15 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 	ctx := context.Background()
 
 	// eval loads the magus/charm source and evaluates a bare constructor call
-	// (exports are flat-imported, like magus/target's Target), returning the
+	// (exports are flat-imported, like magus/spell's Target), returning the
 	// marshalled Go value.
 	eval := func(t *testing.T, expr string) any {
 		t.Helper()
 		s := buzz.NewSession(ctx, buzz.WithEmbedded())
 		defer s.Close()
-		// charm.buzz imports magus/target for the Charm/PatchOp object types; register
+		// charm.buzz imports magus/spell for the Charm/PatchOp object types; register
 		// the same bundle the runtime does so the import resolves in this bare session.
-		s.SetSourceModule(spell.TargetModulePath, strings.Join([]string{
+		s.SetSourceModule(spell.SpellModulePath, strings.Join([]string{
 			spell.TargetModuleSource, spell.PatchOpSource, spell.CharmTypeSource, spell.CommandSource,
 		}, "\n"))
 		require.NoError(t, s.Exec(ctx, spell.CharmModuleSource), "load charm.buzz")

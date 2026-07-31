@@ -581,6 +581,11 @@
           ],
           "charms": [
             "rw"
+          ],
+          "outputs": [
+            {
+              "glob": "active.urls.lock"
+            }
           ]
         },
         {

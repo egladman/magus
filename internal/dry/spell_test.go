@@ -151,7 +151,7 @@ func TestLoadSpell_customCharms(t *testing.T) {
 // charm applied. The bare run (no charm) still plans cleanly.
 func TestRunSpell_badCharmPatchSurfaces(t *testing.T) {
 	ctx := context.Background()
-	src := `import "magus/target";
+	src := `import "magus/spell";
 export fun mgs_getName() > str { return "linter"; }
 fun lint(t: Target) > Command {
     return Command{ bin = "x", args = ["run"], charms = {

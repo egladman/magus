@@ -64,8 +64,9 @@ func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session)
 
 // PlaygroundHostModules names every magus host module the browser playground makes
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
-// installHost wires as a global (sess.SetGlobal("magus", ...)) rather than a registry
-// module. It is the single truth for what runs in the playground - kept next to the
+// installHost registers as a synthetic module like the rest, so the playground is a
+// blank slate and every surface it offers is reached by an explicit import - the same
+// import a magusfile writes. It is the single truth for what runs in the playground - kept next to the
 // wiring so the two can't drift - and the langservice manifest diffs against it to
 // decide which modules are reference-only there. Because magus is listed here (it is
 // genuinely wired), it is never reported as excluded: no special-casing downstream.
@@ -217,11 +218,12 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
 	registerWASMCompatibleMagusModules(ctx, sess)
-	// The pure-compute half of the magus surface. Plain mode is the mode with a Run
-	// button, so a doc example calling magus\normalize has to resolve here or the
-	// page teaches nothing; before this, `import "magus"` failed outright in plain
-	// mode while PlaygroundHostModules() advertised it as wired.
-	sess.SetGlobal("magus", pureMagus())
+	// The pure-compute half of the magus surface, registered as a MODULE so plain
+	// mode resolves `import "magus"` the way a magusfile does. It was previously a
+	// global, which made the import optional here and only here: a snippet that ran
+	// under the Run button then failed when pasted into a magusfile, so the page
+	// taught a form the language rejects.
+	sess.SetSyntheticModule("magus", pureMagus())
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

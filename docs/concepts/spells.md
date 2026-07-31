@@ -143,7 +143,7 @@ magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); retu
 
 ## Composing spells
 
-Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/target` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
+Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/spell` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
 ```buzz
 import "magus/spell/go";

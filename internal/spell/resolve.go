@@ -160,7 +160,7 @@ func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, e
 	if err != nil {
 		return vm.Null, err
 	}
-	// The handler returns a Command or Service object (magus/target); MapView yields
+	// The handler returns a Command or Service object (magus/spell); MapView yields
 	// its field map. MapView also accepts a plain map, so a spell or test that returns
 	// a bare record still resolves identically.
 	mv, ok := rv.MapView()

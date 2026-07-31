@@ -77,12 +77,12 @@ func TestBuzzType_Unsupported(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported Go type")
 }
 
-// TestEmitFields_InlinesEmbedded is the regression guard for the shape the Buzz
+// TestRenderFields_InlinesEmbedded is the regression guard for the shape the Buzz
 // mirror and encoding/json must agree on. encoding/json PROMOTES an anonymous
 // field's keys to the outer object; if the mirror nested them instead, the same
 // Go type would describe two different shapes and a magusfile would look for
 // promoted fields one level too deep.
-func TestEmitFields_InlinesEmbedded(t *testing.T) {
+func TestRenderFields_InlinesEmbedded(t *testing.T) {
 	t.Parallel()
 
 	type Embedded struct {
@@ -95,7 +95,7 @@ func TestEmitFields_InlinesEmbedded(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, emitFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
 
 	got := b.String()
 	assert.Contains(t, got, "alpha: str", "embedded field must be promoted, not nested")
@@ -104,10 +104,10 @@ func TestEmitFields_InlinesEmbedded(t *testing.T) {
 	assert.NotContains(t, got, "embedded:", "the embedded type name must not appear as a field")
 }
 
-// TestEmitFields_NamedEmbeddedNests covers the deliberate opt-out: tagging an
+// TestRenderFields_NamedEmbeddedNests covers the deliberate opt-out: tagging an
 // embedded field asks for it to be nested under that name, which is the only way
 // to express a nested record when the Go type happens to embed it.
-func TestEmitFields_NamedEmbeddedNests(t *testing.T) {
+func TestRenderFields_NamedEmbeddedNests(t *testing.T) {
 	t.Parallel()
 
 	type Embedded struct{ Alpha string }
@@ -116,16 +116,16 @@ func TestEmitFields_NamedEmbeddedNests(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, emitFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
 
 	got := b.String()
 	assert.Contains(t, got, "inner: Embedded", "a tagged embedded field nests under its tag")
 	assert.NotContains(t, got, "alpha:", "a tagged embedded field must not also promote")
 }
 
-// TestEmitFields_SkipsUnexportedAndOptedOut pins the two existing exclusions, so
+// TestRenderFields_SkipsUnexportedAndOptedOut pins the two existing exclusions, so
 // the recursive rewrite cannot quietly start emitting either.
-func TestEmitFields_SkipsUnexportedAndOptedOut(t *testing.T) {
+func TestRenderFields_SkipsUnexportedAndOptedOut(t *testing.T) {
 	t.Parallel()
 
 	type Outer struct {
@@ -135,7 +135,7 @@ func TestEmitFields_SkipsUnexportedAndOptedOut(t *testing.T) {
 	}
 
 	var b bytes.Buffer
-	require.NoError(t, emitFields(&b, reflect.TypeOf(Outer{})))
+	require.NoError(t, renderFields(&b, reflect.TypeOf(Outer{})))
 
 	got := b.String()
 	assert.Contains(t, got, "kept: str")
