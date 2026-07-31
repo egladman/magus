@@ -19527,7 +19527,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out0f27adb1",
+        "last_output_ref": "out61343133",
         "last_run_ok": "true"
       }
     },
@@ -19874,7 +19874,9 @@
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out6067d3d7",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19884,7 +19886,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out72f2cd8c",
+        "last_run_ok": "false"
       }
     },
     {
@@ -19894,7 +19898,9 @@
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
       "source": "console",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out7a26e2f7",
+        "last_run_ok": "true"
       }
     },
     {

@@ -72,7 +72,7 @@ import {
   type FlowEdge,
 } from "./particles.js";
 import { toMermaid } from "./mermaid.js";
-import { detectFlavor, isTargetGraphOutput, targetGraphToNodeLink } from "./target-adapter.js";
+import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
@@ -2099,9 +2099,9 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   if (askPanel) askPanel.open = true;
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
-  graphFlavor = detectFlavor(data);
+  graphFlavor = flavorOf(data);
   let raw: GraphPayload;
-  if (isTargetGraphOutput(data)) {
+  if (isTargetGraph(data)) {
     const nl = targetGraphToNodeLink(data);
     raw = { nodes: nl.nodes, links: nl.links };
     const nProjects = (data.projects || []).length;
@@ -3515,7 +3515,7 @@ function recomputeLiveMatchSet() {
 // activeView/query/activePreset/projectionUnfolded/layoutMode/search. Positions
 // carry over by node id via capturePositions/applyPositions (unchanged).
 function liveApplyGraphUpdate(data: GraphPayload) {
-  const flavor = detectFlavor(data);
+  const flavor = flavorOf(data);
   graphFlavor = flavor;
   let raw: GraphPayload = data;
   if (flavor === "targets") {
@@ -3881,7 +3881,7 @@ function finishInteractiveSetup() {
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
 // excluding the one-time interaction wiring, so the demo button can re-run it in place.
 function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
-  const flavor = detectFlavor(loaded.data);
+  const flavor = flavorOf(loaded.data);
   graphFlavor = flavor;
   let rawForPrepare = loaded.data;
   let cycleWarnings: string[] = [];
@@ -4481,7 +4481,7 @@ async function bootLive() {
     updateLiveBadge();
 
     // Render the skeleton immediately.
-    const flavor = detectFlavor(skeletonData);
+    const flavor = flavorOf(skeletonData);
     graphFlavor = flavor;
     let rawForPrepare = skeletonData;
     if (flavor === "targets") {
@@ -4500,7 +4500,7 @@ async function bootLive() {
         liveETag = fullResp.headers.get("ETag") || null;
         liveGraphQuery = fullQuery;
         const fullData = await fullResp.json();
-        const ff = detectFlavor(fullData);
+        const ff = flavorOf(fullData);
         graphFlavor = ff;
         let rr = fullData;
         if (ff === "targets") {

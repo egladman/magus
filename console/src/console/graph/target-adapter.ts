@@ -1,6 +1,6 @@
 // target-adapter.ts - converts the CLI's target-graph shape into the { nodes, links }
 // shape the explorer's knowledge-graph path already consumes. Pure functions extracted
-// from the monolith; no module state. main.ts calls detectFlavor on the raw payload and,
+// from the monolith; no module state. main.ts calls flavorOf on the raw payload and,
 // for the targets flavor, runs targetGraphToNodeLink before handing off to prepareGraph.
 //
 // The CLI emits two graph shapes:
@@ -16,21 +16,23 @@ import type {
   TargetGraphProject,
 } from "./types.js";
 
-// detectFlavor tells the two shapes apart so the existing knowledge-graph path stays
-// byte-identical in behavior; the target path is converted client-side via
-// targetGraphToNodeLink before entering prepareGraph.
-export function detectFlavor(raw: { projects?: unknown; definition?: unknown }): GraphFlavor {
-  return Array.isArray(raw.projects) && typeof raw.definition === "string"
-    ? "targets"
-    : "knowledge";
+// isTargetGraph narrows a fetched payload to the target shape. `projects` is the only
+// field that discriminates: both shapes carry `definition` (KnowledgeGraphOutput.Definition
+// is json:"definition" with no omitempty), so the string check this used to also perform
+// was vacuously true for either flavor and told the caller nothing.
+//
+// Sniffing at all is for payloads whose provenance is unknown - a static snapshot, a #demo
+// hash, a file the user opened. A live fetch already knows what it asked for, because it
+// built the "?flavor=targets" query itself.
+export function isTargetGraph(raw: GraphPayload | TargetGraphOutput): raw is TargetGraphOutput {
+  return Array.isArray(raw.projects);
 }
 
-// isTargetGraphOutput is detectFlavor as a type predicate, so a caller can branch on it
-// to narrow a raw graph input to the target shape without an `as` cast.
-export function isTargetGraphOutput(
-  raw: GraphPayload | TargetGraphOutput,
-): raw is TargetGraphOutput {
-  return detectFlavor(raw) === "targets";
+// flavorOf names what isTargetGraph found, for the call sites that store or compare the
+// flavor rather than narrowing a type. "flavor" is not a console coinage - it is the
+// wire term, the ?flavor= query param on GET /api/v1/graph.
+export function flavorOf(raw: GraphPayload | TargetGraphOutput): GraphFlavor {
+  return isTargetGraph(raw) ? "targets" : "knowledge";
 }
 
 // targetGraphToNodeLink converts a TargetGraphOutput to the { nodes, links }

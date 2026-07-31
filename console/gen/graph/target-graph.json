@@ -23,6 +23,9 @@
               "project": "libs/gopherbuzz",
               "target": "build"
             }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -46,6 +49,9 @@
                 "cosign-sign"
               ]
             }
+          ],
+          "exec_overrides": [
+            "cwd:."
           ]
         },
         {
@@ -134,6 +140,9 @@
             },
             {
               "glob": "internal/config/gen/*.go"
+            },
+            {
+              "glob": "cmd/magus/completions/*"
             }
           ]
         },
@@ -223,6 +232,9 @@
               "project": "libs/gopherbuzz",
               "target": "build"
             }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -241,6 +253,9 @@
                 "go-test"
               ]
             }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -254,6 +269,9 @@
                 "buzz-check"
               ]
             }
+          ],
+          "exec_overrides": [
+            "cwd:cmd/magus/starter/spells"
           ]
         },
         {
@@ -267,6 +285,9 @@
                 "magus-buzz"
               ]
             }
+          ],
+          "exec_overrides": [
+            "cwd:cmd/magus/starter/spells"
           ]
         },
         {
@@ -287,7 +308,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, and markdownlint.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -302,6 +323,12 @@
               "spell": "md",
               "ops": [
                 "markdownlint"
+              ]
+            },
+            {
+              "spell": "bash",
+              "ops": [
+                "shellcheck"
               ]
             }
           ]
@@ -330,6 +357,11 @@
             "build",
             "test"
           ]
+        },
+        {
+          "name": "completion-test",
+          "declared": "completion_test",
+          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell."
         },
         {
           "name": "ci-shard",
@@ -506,10 +538,15 @@
               "glob": "concepts/spells/*.md"
             },
             {
-              "glob": "concepts/spells.md"
+              "glob": "reference/manpage/*.md"
             },
             {
-              "glob": "reference/manpage/*.md"
+              "glob": "reference/skills/*.md"
+            }
+          ],
+          "updates": [
+            {
+              "glob": "concepts/spells.md"
             },
             {
               "glob": "concepts/knowledge.md"
