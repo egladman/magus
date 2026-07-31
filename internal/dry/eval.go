@@ -215,6 +215,11 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
 	registerWASMCompatibleMagusModules(ctx, sess)
+	// The pure-compute half of the magus surface. Plain mode is the mode with a Run
+	// button, so a doc example calling magus\normalize has to resolve here or the
+	// page teaches nothing; before this, `import "magus"` failed outright in plain
+	// mode while PlaygroundHostModules() advertised it as wired.
+	sess.SetGlobal("magus", pureMagus())
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

@@ -100,7 +100,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">12 min read</small>
+    <small class="reading-time" title="Estimated reading time">14 min read</small>
     <article>
 <h1 id="targets">Targets</h1>
 <p>A <strong><a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">Target</a></strong> is the addressable unit of work in magus: <em>what <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a></em> (<a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">Path</a>) and <em>what <a class="glossary-term" href="../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a></em> (Name). Everything else (shards, <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> filters, charms) is configuration layered on top, not part of the Target's identity.</p>
@@ -379,6 +379,54 @@ trailing <code>-</code>. What that means in practice, including the cases people
 <p>The last three are the surprising ones. <code>HTTPServer</code> does not become
 <code>h-t-t-p-server</code>, and <code>build2</code> gains a <code>-</code> you did not type, so a target declared
 <code>build2</code> is referenced as <code>build-2</code> in anything that reports canonical names.</p>
+<p>There is nothing proprietary here: the rule is ordinary kebab-case, and the <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>
+standard library's <code><a class="code-xref" href="../../reference/buzz/strings/#kebabcase" data-kind="method" data-def="">strings\kebabCase</a></code> computes exactly what magus resolves with.
+Run it and see:</p>
+
+<pre data-magus-run="true"><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+std\print(strings\kebabCase(&quot;go_build&quot;));    // -&gt; &quot;go-build&quot;
+std\print(strings\kebabCase(&quot;goBuild&quot;));     // -&gt; &quot;go-build&quot;
+std\print(strings\kebabCase(&quot;HTTPServer&quot;));  // -&gt; &quot;http-server&quot;
+std\print(strings\kebabCase(&quot;build2&quot;));      // -&gt; &quot;build-2&quot;
+</code></pre>
+<p>That the two agree is not a coincidence you have to take on faith - a test holds
+them to identical output on every case in the table above
+(<a href="https://github.com/egladman/magus/blob/main/std/strings_test.go" rel="noopener noreferrer" target="_blank" data-external><code>TestKebabCaseMatchesNormalize</code></a>).
+Internally the resolver calls <code>types.Normalize</code>, which is also reachable from a
+magusfile as <code>magus\normalize</code> when you want to canonicalize a name yourself.</p>
+<p>Buzz has testing built in, so the rule can be asserted rather than eyeballed - and
+a <code>test</code> block is exactly how the magusfiles and spells in this repo are tested.
+Save this and run <code>magus buzz -t names.buzz</code>:</p>
+<pre><code class="language-buzz">import &quot;std&quot;;
+import &quot;strings&quot;;
+
+test &quot;every spelling of a name reaches one canonical form&quot; {
+    std\assert(strings\kebabCase(&quot;go_build&quot;) == &quot;go-build&quot;);
+    std\assert(strings\kebabCase(&quot;goBuild&quot;) == &quot;go-build&quot;);
+    std\assert(strings\kebabCase(&quot;GoBuild&quot;) == &quot;go-build&quot;);
+    std\assert(strings\kebabCase(&quot;go-build&quot;) == &quot;go-build&quot;);
+}
+
+test &quot;the two that surprise people&quot; {
+    std\assert(strings\kebabCase(&quot;HTTPServer&quot;) == &quot;http-server&quot;);
+    std\assert(strings\kebabCase(&quot;build2&quot;) == &quot;build-2&quot;);
+}
+</code></pre>
+<pre><code>ok    test &quot;every spelling of a name reaches one canonical form&quot;
+ok    test &quot;the two that surprise people&quot;
+---
+2 passed, 0 failed, 0 skipped
+</code></pre>
+<p>Change one expected value and re-run to <a class="code-xref" href="../../reference/manpage/magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a> it fail - that is the whole testing
+workflow, and it is the same <code>-t</code> flag the spells in this repo are tested with.</p>
+<p>Two things about that snippet are deliberate. It has no Run button, because the
+in-browser playground evaluates a script but does not execute <code>test</code> blocks - a
+runnable <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a> would sit there reporting nothing while a wrong assertion looked
+like it passed. It also keeps to <code>strings\kebabCase</code>, which the standalone
+runner can resolve without a workspace - and which is the point rather than a
+concession: the rule really is just kebab-case.</p>
 <p>Names are constrained to alphanumerics plus <code>-</code> and <code>_</code>. Everything else, <code>:</code> and
 <code>@</code> especially, is reserved for reference grammar such as <code>spell::target</code>.</p>
 <h3 id="the-contract">The contract</h3>
@@ -576,7 +624,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 <li><a href="../operations/">operations</a>: the formal Operation definition and the work hierarchy (Spell → Operation → Target).</li>
 <li><a href="../spells/">spells</a>: the operations a target composes, and <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</li>
 <li><a href="../charms/">charms</a>: the execution modifiers attached after <code>:</code>.</li>
-<li><a href="../engines/">engines</a>: the <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> engine a magusfile runs on.</li>
+<li><a href="../engines/">engines</a>: the Buzz engine a magusfile runs on.</li>
 </ul>
     </article>
     </div>

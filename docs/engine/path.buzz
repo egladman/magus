@@ -34,3 +34,22 @@ export fun isGeneratorFile(name: str, files: [str]) > bool {
     }
     return false;
 }
+
+// isNeverContentDir reports whether a directory can never hold site content, at ANY
+// depth - as opposed to isGeneratorDir above, which is deliberately root-only.
+//
+// node_modules is the whole list. A package tree holds thousands of README.md files
+// and none of them are this site's pages. The root-only rule covered docs/node_modules
+// but not a nested one, so the moment a sub-project under docs/ had its dependencies
+// installed - which `magus run ci docs/guides/integrations/agents` does - the walk
+// started rendering every dependency's README into gen/. That is not a slow render:
+// it is an unbounded one, and it trips MGS3001 by writing into a descendant project.
+export fun isNeverContentDir(name: str) > bool {
+    return name == "node_modules";
+}
+
+test "isNeverContentDir catches node_modules at any depth, and nothing else" {
+    assert\equal(isNeverContentDir("node_modules"), true);
+    assert\equal(isNeverContentDir("gen"), false, "gen is root-only, handled by isGeneratorDir");
+    assert\equal(isNeverContentDir("guides"), false);
+}

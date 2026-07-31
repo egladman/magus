@@ -185,17 +185,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 
-	// magus.normalize is the REAL normalizer here, not a stub. It is pure computation
-	// over a string - no registry, no IO - so the sandbox can afford the honest answer,
-	// and the docs depend on that: the name-normalization page runs its examples in the
-	// playground, and an example that resolved to "" would teach nothing. Stubbing the
-	// pure functions is what turns a live doc into a decorative one.
-	m.MapSet("normalize", fn("magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		if len(args) == 0 || !args[0].IsStr() {
-			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
-		}
-		return vm.StrValue(types.Normalize(args[0].AsString())), nil
-	}))
+	addPureMagus(m)
 
 	// magus.modules()/magus.module(name) introspect the real host module registry,
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
@@ -613,4 +603,35 @@ func (r *Tracer) matchTargets(re *regexp.Regexp) []string {
 // casing or separator lands on the same target.
 func normalizeTarget(name string) string {
 	return types.Normalize(name)
+}
+
+// addPureMagus installs the magus.* members that are pure computation - no
+// workspace, no registry, no IO - so they answer honestly wherever they appear.
+//
+// Shared by both playground hosts on purpose. The tracer (buildMagus) needs them
+// because a magusfile example may call them; PLAIN Eval needs them because that is
+// the mode with a Run button, where a snippet's trailing value is what the reader
+// sees. Stubbing a pure function in either would turn a live doc into a decorative
+// one - docs/concepts/targets.md teaches normalization by running it.
+//
+// Everything else on the magus surface depends on a workspace and stays stubbed in
+// the tracer / absent in plain mode, which is why this is a small explicit list
+// rather than a share of the whole module.
+func addPureMagus(m vm.Value) {
+	// The one canonicalizer for every entity name: target, charm, spell op.
+	m.MapSet("normalize", fn("magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+		}
+		return vm.StrValue(types.Normalize(args[0].AsString())), nil
+	}))
+}
+
+// pureMagus is the plain-playground `magus` global: only the members that work
+// without a workspace. Plain Eval is the language playground, so a member that
+// would need one is better absent than present-and-lying.
+func pureMagus() vm.Value {
+	m := vm.NewMap()
+	addPureMagus(m)
+	return m
 }

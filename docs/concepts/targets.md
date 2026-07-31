@@ -168,6 +168,65 @@ The last three are the surprising ones. `HTTPServer` does not become
 `h-t-t-p-server`, and `build2` gains a `-` you did not type, so a target declared
 `build2` is referenced as `build-2` in anything that reports canonical names.
 
+There is nothing proprietary here: the rule is ordinary kebab-case, and the Buzz
+standard library's `strings\kebabCase` computes exactly what magus resolves with.
+Run it and see:
+
+<!-- magus-run -->
+```buzz
+import "std";
+import "strings";
+
+std\print(strings\kebabCase("go_build"));    // -> "go-build"
+std\print(strings\kebabCase("goBuild"));     // -> "go-build"
+std\print(strings\kebabCase("HTTPServer"));  // -> "http-server"
+std\print(strings\kebabCase("build2"));      // -> "build-2"
+```
+
+That the two agree is not a coincidence you have to take on faith - a test holds
+them to identical output on every case in the table above
+([`TestKebabCaseMatchesNormalize`](https://github.com/egladman/magus/blob/main/std/strings_test.go)).
+Internally the resolver calls `types.Normalize`, which is also reachable from a
+magusfile as `magus\normalize` when you want to canonicalize a name yourself.
+
+Buzz has testing built in, so the rule can be asserted rather than eyeballed - and
+a `test` block is exactly how the magusfiles and spells in this repo are tested.
+Save this and run `magus buzz -t names.buzz`:
+
+```buzz title="names.buzz"
+import "std";
+import "strings";
+
+test "every spelling of a name reaches one canonical form" {
+    std\assert(strings\kebabCase("go_build") == "go-build");
+    std\assert(strings\kebabCase("goBuild") == "go-build");
+    std\assert(strings\kebabCase("GoBuild") == "go-build");
+    std\assert(strings\kebabCase("go-build") == "go-build");
+}
+
+test "the two that surprise people" {
+    std\assert(strings\kebabCase("HTTPServer") == "http-server");
+    std\assert(strings\kebabCase("build2") == "build-2");
+}
+```
+
+```
+ok    test "every spelling of a name reaches one canonical form"
+ok    test "the two that surprise people"
+---
+2 passed, 0 failed, 0 skipped
+```
+
+Change one expected value and re-run to watch it fail - that is the whole testing
+workflow, and it is the same `-t` flag the spells in this repo are tested with.
+
+Two things about that snippet are deliberate. It has no Run button, because the
+in-browser playground evaluates a script but does not execute `test` blocks - a
+runnable version would sit there reporting nothing while a wrong assertion looked
+like it passed. It also keeps to `strings\kebabCase`, which the standalone
+runner can resolve without a workspace - and which is the point rather than a
+concession: the rule really is just kebab-case.
+
 Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` and
 `@` especially, is reserved for reference grammar such as `spell::target`.
 

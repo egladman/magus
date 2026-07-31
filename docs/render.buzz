@@ -106,6 +106,7 @@ fun walk(rel: str, site: Site) > void {
         if (rel != "") { childRel = rel + "/" + name; }
 
         if (isDirectory(site.root + "/" + site.docs + "/" + childRel)) {
+            if (isNeverContentDir(name)) { continue; }
             if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {

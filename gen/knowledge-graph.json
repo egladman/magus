@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2230,
-  "edge_count": 4972,
+  "node_count": 2229,
+  "edge_count": 4930,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1100,7 +1100,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "125",
+        "dir_files": "124",
         "dir_languages": "markdown"
       }
     },
@@ -1221,7 +1221,7 @@
       "source": "docs/reference/manpage",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "20",
+        "dir_files": "19",
         "dir_languages": "markdown"
       }
     },
@@ -4125,18 +4125,6 @@
         "section": "reference",
         "tags": "cli,magus status,status,concurrency,pool,daemon,monitoring",
         "title": "magus status"
-      }
-    },
-    {
-      "id": "doc:docs/reference/manpage/magus-tail.md",
-      "kind": "doc",
-      "label": "docs/reference/manpage/magus-tail.md",
-      "source": "docs/reference/manpage/magus-tail.md",
-      "attrs": {
-        "role": "doc",
-        "section": "reference",
-        "tags": "cli,magus tail,tail,logs,cache,interactive",
-        "title": "magus tail"
       }
     },
     {
@@ -19567,7 +19555,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out56c60618",
+        "last_output_ref": "out7e5c5a7e",
         "last_run_ok": "true"
       }
     },
@@ -22896,14 +22884,6 @@
     },
     {
       "source": "dir:docs/reference/manpage",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "dir:docs/reference/manpage",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -25400,14 +25380,6 @@
     },
     {
       "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
       "target": "doc:docs/reference/manpage/magus-x.md",
       "relation": "references",
       "confidence": "inferred",
@@ -25985,14 +25957,6 @@
     {
       "source": "doc:docs/concepts/cache/output-refs.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/cache/output-refs.md"
-    },
-    {
-      "source": "doc:docs/concepts/cache/output-refs.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -31272,14 +31236,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-affected.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31424,14 +31380,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-completion.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-completion.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31576,14 +31524,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-config.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-config.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31728,14 +31668,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-describe.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-describe.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31880,14 +31812,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-doctor.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-doctor.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32032,14 +31956,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-graph.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-graph.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32184,14 +32100,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-init.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-init.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32336,14 +32244,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-insight.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-insight.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-insight.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32488,14 +32388,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-ls.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-ls.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32640,14 +32532,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-man.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-man.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-man.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32792,14 +32676,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-run.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32944,14 +32820,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-self.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-self.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33096,14 +32964,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-server.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-server.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33248,14 +33108,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-status.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-status.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33293,158 +33145,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/manpage/magus-status.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-completion.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-config.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-graph.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-init.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-insight.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-man.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-self.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-server.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-version.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-watch.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-where.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus-x.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-tail.md",
-      "target": "doc:docs/reference/manpage/magus.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-tail.md"
     },
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
@@ -33553,14 +33253,6 @@
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-version.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-version.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -33712,14 +33404,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-watch.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-watch.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -33864,14 +33548,6 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-where.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-where.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
@@ -34009,14 +33685,6 @@
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus-x.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus-x.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -34169,14 +33837,6 @@
     {
       "source": "doc:docs/reference/manpage/magus.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/manpage/magus.md"
-    },
-    {
-      "source": "doc:docs/reference/manpage/magus.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -59398,14 +59058,6 @@
     {
       "source": "target:docs:content-generate",
       "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

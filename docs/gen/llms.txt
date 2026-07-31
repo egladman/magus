@@ -25,10 +25,14 @@
 - [cosign spell](https://eli.gladman.cc/magus/concepts/spells/cosign/index.md): Cosign spell: keyless sign, attest, and verify for container artifacts.
 - [docker spell](https://eli.gladman.cc/magus/concepts/spells/docker/index.md): Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.
 - [go spell](https://eli.gladman.cc/magus/concepts/spells/go/index.md): Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.
+- [markdown spell](https://eli.gladman.cc/magus/concepts/spells/markdown/index.md): Markdown docs spell: markdownlint and prettier for linting and formatting prose.
 - [md spell](https://eli.gladman.cc/magus/concepts/spells/md/index.md): Markdown docs spell: markdownlint and prettier for linting and formatting prose.
 - [py spell](https://eli.gladman.cc/magus/concepts/spells/py/index.md): Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.
+- [python spell](https://eli.gladman.cc/magus/concepts/spells/python/index.md): Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.
 - [rs spell](https://eli.gladman.cc/magus/concepts/spells/rs/index.md): Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.
+- [rust spell](https://eli.gladman.cc/magus/concepts/spells/rust/index.md): Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.
 - [ts spell](https://eli.gladman.cc/magus/concepts/spells/ts/index.md): TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.
+- [typescript spell](https://eli.gladman.cc/magus/concepts/spells/typescript/index.md): TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.
 - [Targets](https://eli.gladman.cc/magus/concepts/targets/index.md): A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.
 - [CI](https://eli.gladman.cc/magus/concepts/targets/ci/index.md): Compose a ci target from your magusfile, wire the flow with magus needs, and lock down shared-cache writes with Ed25519 trusted keys.
 - [Telemetry](https://eli.gladman.cc/magus/concepts/telemetry/index.md): Export magus metrics and traces to any OTLP collector you run, with head-based sampling, resource attributes, and full instrument reference.
@@ -173,7 +177,6 @@
 - [magus self](https://eli.gladman.cc/magus/reference/manpage/magus-self/index.md): Manage the magus binary in place, with a self-update subcommand supporting version pinning, dry-run, downgrade, and out-of-tree install directories, plus the mgs shorthand.
 - [magus server](https://eli.gladman.cc/magus/reference/manpage/magus-server/index.md): Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.
 - [magus status](https://eli.gladman.cc/magus/reference/manpage/magus-status/index.md): Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.
-- [magus tail](https://eli.gladman.cc/magus/reference/manpage/magus-tail/index.md): Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.
 - [magus version](https://eli.gladman.cc/magus/reference/manpage/magus-version/index.md): Print the magus version string, git commit hash, and build date for the currently installed binary.
 - [magus watch](https://eli.gladman.cc/magus/reference/manpage/magus-watch/index.md): Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.
 - [magus where](https://eli.gladman.cc/magus/reference/manpage/magus-where/index.md): Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd "$(magus where api)".

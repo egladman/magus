@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,4 +49,28 @@ func TestStringsEllipsis(t *testing.T) {
 	got, err := StringsEllipsis(context.Background(), "abcdefgh", 5)
 	require.NoError(t, err)
 	assert.Equal(t, "ab...", got)
+}
+
+// TestKebabCaseMatchesNormalize makes an equivalence the docs rely on into an
+// enforced one. types.Normalize (hand-rolled, no lo dependency) is what resolves
+// every target, charm and spell op; strings\kebabCase (samber/lo) is what a Buzz
+// author can call, and it is the version the runnable examples in
+// docs/concepts/targets.md execute in the browser playground - the plain
+// playground does not wire the magus module.
+//
+// They agree today by construction: types.kebabCase is documented as mirroring
+// lo.KebabCase's word-boundary regexes. Agreement by construction is not agreement
+// by contract, and a doc example demonstrating the wrong function would be a lie
+// nobody would catch. The cases below ARE the published table.
+func TestKebabCaseMatchesNormalize(t *testing.T) {
+	for _, in := range []string{
+		"go-build", "go_build", "goBuild", "GoBuild", "Go_Build",
+		"HTTPServer", "build2", "go--build", "build",
+		"image_build_static", "no_cache", "NoCache", "WRITE",
+	} {
+		got, err := StringsKebabCase(context.Background(), in)
+		require.NoErrorf(t, err, "StringsKebabCase(%q)", in)
+		assert.Equalf(t, types.Normalize(in), got,
+			"strings\\kebabCase(%q) must match types.Normalize - the docs demonstrate the former to teach the latter", in)
+	}
 }

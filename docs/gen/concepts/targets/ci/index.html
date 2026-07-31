@@ -218,7 +218,7 @@ in front of the merge. If a step can go red for a code reason, running it only o
 main means you have chosen to find out late.</p>
 <p>A useful test: <strong>could you run the main-branch pipeline against a pull request?</strong>
 If the honest answer is no, ask which part is actually delivery. Usually it is a
-small <a class="code-xref" href="../../../reference/manpage/magus-tail/" data-kind="command" data-def="magus tail: Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.">tail</a>, and everything before it could have run on the PR all along.</p>
+small tail, and everything before it could have run on the PR all along.</p>
 <p><strong>magus:</strong> both branches run the same contract.</p>
 <pre><code class="language-yaml">- run: magus affected ci
 </code></pre>

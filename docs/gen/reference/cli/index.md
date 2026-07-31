@@ -121,9 +121,6 @@ References are **local to your machine**. One pasted from CI or a teammate
 resolves to nothing, which is why the inspect hint disappears when magus
 detects CI. See [output references](../concepts/cache/output-refs.md).
 
-`magus tail` streams the most recent cached log for the project in your current
-directory - useful when a run has already scrolled past.
-
 For structural questions, the knowledge graph commands answer different shapes
 of "why":
 

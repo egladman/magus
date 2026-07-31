@@ -163,3 +163,10 @@ public/release/v0.2.1/
 # documented a coverage that never existed. No successor page: there is no network
 # sandbox to describe.
 reference/codes/sandbox/MGS2009/
+
+# `magus tail` was removed in v0.4.0. It streamed the most recent cached log for a
+# project, which `magus query output <ref>` already does from the run's own output
+# reference - the narrower command earned its own subcommand, flag surface, and man
+# page for a view you could already get. No successor page: the capability did not
+# move, it was folded into an existing verb.
+reference/manpage/magus-tail/

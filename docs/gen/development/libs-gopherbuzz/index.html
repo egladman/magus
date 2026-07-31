@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#pgo-generate" title="pgo-generate">pgo-generate</a></li><li><a href="#conformance" title="conformance">conformance</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
+        <ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#conformance" title="conformance">conformance</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -131,11 +131,6 @@
 <td>-</td>
 </tr>
 <tr>
-<td><code>pgo-generate</code></td>
-<td>-</td>
-<td>-</td>
-</tr>
-<tr>
 <td><code>conformance</code></td>
 <td><code>preflight</code></td>
 <td>-</td>
@@ -148,8 +143,6 @@
 <p>Renders MAGUS.md (target catalog plus graph) from this magusfile.</p>
 <h3 id="ci"><code>ci</code></h3>
 <p>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</p>
-<h3 id="pgo-generate"><code>pgo-generate</code></h3>
-<p>Regenerates default.pgo, the Buzz VM's PGO profile.</p>
 <h3 id="conformance"><code>conformance</code></h3>
 <p>Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).</p>
 <h2 id="run-order">Run order</h2>

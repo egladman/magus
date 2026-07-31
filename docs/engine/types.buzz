@@ -333,6 +333,7 @@ export object Site {
             if (isDirectory(this.root + "/" + this.docs + "/" + childRel)) {
                 // Skip the SSG's own root children (node_modules/gen/src/tour) - same skip as
                 // walk(), only at the docs root, so metadata matches what actually renders.
+                if (isNeverContentDir(name)) { continue; }
                 if (rel == "" and isGeneratorDir(name, this.config.generatorDirs)) { continue; }
                 this.collectDocPages(childRel);
             } else {

@@ -23,10 +23,14 @@
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/cosign/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/docker/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/go/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/concepts/spells/markdown/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/md/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/py/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/concepts/spells/python/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/rs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/concepts/spells/rust/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/spells/ts/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/concepts/spells/typescript/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/targets/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/targets/ci/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/telemetry/</loc></url>
@@ -172,7 +176,6 @@
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-self/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-server/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-status/</loc></url>
-  <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-tail/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-version/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-watch/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/manpage/magus-where/</loc></url>
