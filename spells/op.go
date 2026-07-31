@@ -133,7 +133,10 @@ func (o Op) IsService() bool { return o.Kind == OpKindService }
 // replayed and has no key to protect. A function-op computes its argv in-VM, so an empty
 // Bin likewise has nothing to say.
 func (o Op) Key() []string {
-	if o.Bin == "" {
+	// IsService first: decode mirrors a service op's command onto the embedded
+	// Command, so Bin is non-empty for one and the Bin check alone would hand back a
+	// key the doc above promises does not exist.
+	if o.IsService() || o.Bin == "" {
 		return nil
 	}
 	key := make([]string, 0, len(o.Args)+1)

@@ -274,3 +274,36 @@ func TestDecode_OpNameIsNormalized(t *testing.T) {
 		assert.Truef(t, ok, "op authored %q must be reachable as %q", authored, requested.Name)
 	}
 }
+
+// TestDecode_OpNameCollisionIsAnError guards the other half of op-name
+// normalization. Collapsing keys to canonical form means two spellings can land on
+// one, and a plain map assignment would resolve that by last-write-wins: `go-build`
+// and `goBuild` in one spell used to be two ops (one unreachable), and silently
+// became a single op whose body came from whichever key iteration reached last.
+// That is the same silent loss normalization exists to end, moved to the other side
+// - so it is a load error naming both spellings.
+func TestDecode_OpNameCollisionIsAnError(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"go-build": map[string]any{"bin": "go", "args": []string{"FIRST"}},
+			"goBuild":  map[string]any{"bin": "go", "args": []string{"SECOND"}},
+		},
+	}
+	_, err := Decode(src)
+	require.Error(t, err, "two spellings of one canonical op must not decode silently")
+	assert.Contains(t, err.Error(), "go-build", "the error names the canonical op")
+	assert.Contains(t, err.Error(), "goBuild", "and both authored spellings")
+
+	// A spell that declares each op once still decodes, whatever the spelling.
+	ok := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"go-build": map[string]any{"bin": "go", "args": []string{"build"}},
+			"goVet":    map[string]any{"bin": "go", "args": []string{"vet"}},
+		},
+	}
+	d, err := Decode(ok)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"go-build", "go-vet"}, d.OpNames())
+}

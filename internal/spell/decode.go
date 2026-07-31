@@ -72,6 +72,8 @@ func Decode(src Obj) (spells.Descriptor, error) {
 
 	if ops, ok := src.Obj("ops"); ok {
 		opMap := map[string]spells.Op{}
+		// canonical op name -> the spelling that claimed it, for the collision check below.
+		authored := map[string]string{}
 		var docOps []string
 		for _, op := range ops.Keys() {
 			spec, ok := ops.Obj(op)
@@ -88,7 +90,21 @@ func Decode(src Obj) (spells.Descriptor, error) {
 			// swallowed as a fan-out skip at debug level. Declared and unreachable,
 			// with no error anywhere. Normalizing on the way in is the other half of
 			// the rule ParseTarget already applies on the way out.
-			op = types.Normalize(op)
+			//
+			// Collapsing keys means two spellings can now land on one, so the
+			// collision is checked rather than resolved: `go-build` and `goBuild` in
+			// one spell used to be two ops (one of them unreachable) and would
+			// otherwise become a last-write-wins overwrite - the same silent loss this
+			// normalization exists to end, just moved to the other side. Which one
+			// survives depends on map iteration, so it is a load error naming both.
+			canonical := types.Normalize(op)
+			if prior, dup := authored[canonical]; dup {
+				return spells.Descriptor{}, fmt.Errorf(
+					"spell %q declares ops %q and %q, which are the same op %q; rename one",
+					name, prior, op, canonical)
+			}
+			authored[canonical] = op
+			op = canonical
 			t := spells.Op{Capture: spec.Bool("capture")}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc
