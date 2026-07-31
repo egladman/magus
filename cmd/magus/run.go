@@ -51,7 +51,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return targetUsage()
 	}
 	spellFilter, targetStr := parseTarget(rawTarget)
-	parsedTarget, parseErr := types.ParseTarget(targetStr)
+	parsedTarget, parseErr := parseTargetHinted(targetStr)
 	if parseErr != nil {
 		return parseErr
 	}

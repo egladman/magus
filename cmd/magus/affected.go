@@ -86,7 +86,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return flag.ErrHelp
 	}
 	spellFilter, targetStr := parseTarget(rawTarget)
-	parsed, perr := types.ParseTarget(targetStr)
+	parsed, perr := parseTargetHinted(targetStr)
 	if perr != nil {
 		return perr
 	}

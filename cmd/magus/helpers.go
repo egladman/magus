@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 )
@@ -254,4 +257,33 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 		before = append(before, extra...)
 	}
 	return before, head[i+1:], true
+}
+
+// parseTargetHinted is ParseTarget plus a one-time nudge toward the canonical
+// spelling. Normalization is deliberately forgiving - go_build, goBuild and
+// go-build all reach go-build - but silently accepting every spelling means an
+// author never learns which one magus will echo back in `describe`, in the graph,
+// or in a cache key. The hint teaches the rule at the moment it applies, then the
+// dedupe in interactive.Emit keeps it from nagging.
+//
+// Fires only when the spelling actually differs, so the canonical form - what the
+// docs and every generated index already show - stays silent.
+func parseTargetHinted(raw string) (types.Target, error) {
+	t, err := types.ParseTarget(raw)
+	if err != nil {
+		return t, err
+	}
+	// Compare the target and charm halves separately: "Lint:NoCache" differs in
+	// both, and naming only one of them would send the author back for a second
+	// guess at the other.
+	name, charms, _ := strings.Cut(raw, ":")
+	if types.Normalize(name) != name {
+		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q - both work, %q is what magus reports", name, t.Name, t.Name))
+	}
+	for _, c := range strings.Split(charms, ",") {
+		if c = strings.TrimSpace(c); c != "" && types.Normalize(c) != c {
+			interactive.Emit(os.Stderr, fmt.Sprintf("charm %q is canonically %q", c, types.Normalize(c)))
+		}
+	}
+	return t, nil
 }
