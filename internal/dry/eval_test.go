@@ -304,3 +304,29 @@ func TestEval_tracerParseError(t *testing.T) {
 	assert.False(t, r.OK)
 	assert.NotNil(t, r.Diag)
 }
+
+// TestEvalAnnouncesUnrunTestBlocks pins the fix for a silent no-op that nearly
+// shipped in the docs. A snippet of `test "..." { assert(...) }` evaluates here
+// with OK=true and no output whether the assertions hold or not - Buzz test bodies
+// run only under the test runner - so a Run button over one renders nothing while
+// implying the assertions passed. Skipping them is correct; saying nothing is not.
+func TestEvalAnnouncesUnrunTestBlocks(t *testing.T) {
+	// The exact shape that fooled me: a deliberately FALSE assertion.
+	wrong := "import \"std\";\nimport \"strings\";\n\ntest \"deliberately wrong\" {\n    std\\assert(strings\\kebabCase(\"go_build\") == \"WRONG\");\n}\n"
+	r := Eval(context.Background(), wrong)
+	require.True(t, r.OK, "a test block still evaluates cleanly; that is the trap")
+	assert.Contains(t, r.Output, "not run here",
+		"a snippet whose assertions never ran must say so")
+	assert.Contains(t, r.Output, "magus buzz -t",
+		"and must name the runner that does run them")
+
+	// Plural reads correctly.
+	two := "test \"a\" {}\ntest \"b\" {}\n"
+	assert.Contains(t, Eval(context.Background(), two).Output, "2 test blocks")
+
+	// A snippet with no test block gets no note - the common case stays silent.
+	plain := "import \"strings\";\nimport \"std\";\nstd\\print(strings\\kebabCase(\"go_build\"));"
+	out := Eval(context.Background(), plain).Output
+	assert.NotContains(t, out, "not run here")
+	assert.Contains(t, out, "go-build", "and still shows the real output")
+}

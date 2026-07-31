@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2229,
-  "edge_count": 4930,
+  "node_count": 2230,
+  "edge_count": 4932,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7215,6 +7215,16 @@
       }
     },
     {
+      "id": "function:docs/engine/path.buzz:isNeverContentDir",
+      "kind": "function",
+      "label": "isNeverContentDir",
+      "doc": "isNeverContentDir reports whether a directory can never hold site content, at ANY depth - as opposed to isGeneratorDir above, which is deliberately root-only.  node_modules is the whole list. A package tree holds thousands of README.md files and none of them are this site's pages. The root-only rule covered docs/node_modules but not a nested one, so the moment a sub-project under docs/ had its dependencies installed - which `magus run ci docs/guides/integrations/agents` does - the walk started rendering eve",
+      "source": "docs/engine/path.buzz:47",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:docs/engine/pwa.buzz:buildServiceWorker",
       "kind": "function",
       "label": "buildServiceWorker",
@@ -8294,7 +8304,7 @@
       "kind": "function",
       "label": "site_render",
       "doc": "site_render rebuilds gen/ from ../docs and the root README. Pure function of git history (footers) and the source tree - reproducible and gate-stable.",
-      "source": "docs/render.buzz:127",
+      "source": "docs/render.buzz:128",
       "attrs": {
         "exported": "true"
       }
@@ -19555,7 +19565,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out7e5c5a7e",
+        "last_output_ref": "outab003e4e",
         "last_run_ok": "true"
       }
     },
@@ -20035,7 +20045,9 @@
       "source": "docs",
       "attrs": {
         "declared_as": "buzz_test",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out76c564a2",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20069,7 +20081,9 @@
       "source": "docs",
       "attrs": {
         "declared_as": "content_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out62afbc07",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20130,7 +20144,9 @@
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out9d448007",
+        "last_run_ok": "true"
       }
     },
     {
@@ -35493,6 +35509,14 @@
     {
       "source": "file:docs/engine/path.buzz",
       "target": "function:docs/engine/path.buzz:isGeneratorFile",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/path.buzz"
+    },
+    {
+      "source": "file:docs/engine/path.buzz",
+      "target": "function:docs/engine/path.buzz:isNeverContentDir",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -59262,6 +59286,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
+    },
+    {
+      "source": "target:docs:render",
+      "target": "diagnostic:MGS3001",
+      "relation": "emits",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "runtime"
     },
     {
       "source": "target:docs:test",

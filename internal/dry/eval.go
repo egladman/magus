@@ -3,10 +3,12 @@ package dry
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
@@ -225,7 +227,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	if err != nil {
 		return EvalResult{Output: out.String(), Diag: toDiag(err)}
 	}
-	return EvalResult{OK: true, Result: v.String(), Output: out.String()}
+	return EvalResult{OK: true, Result: v.String(), Output: testBlockNote(src) + out.String()}
 }
 
 // mergeSpells returns the catalog's built-in spell surface with extra merged over it
@@ -289,4 +291,37 @@ func toDiag(err error) *Diag {
 		d.Col, _ = strconv.Atoi(m[2])
 	}
 	return d
+}
+
+// testBlockNote reports the warning a snippet declaring `test "..." {}` deserves,
+// or "" when it declares none.
+//
+// Buzz test bodies run only under the test runner (ast.TestDecl: "never during a
+// normal run"), so evaluating a snippet full of assertions here is a silent no-op:
+// OK is true, Output is empty, and a DELIBERATELY FAILING assertion looks exactly
+// like a passing one. A docs page nearly shipped with a Run button over such a
+// block - it would have rendered nothing while teaching that the assertions held.
+//
+// Skipping them is correct; being quiet about it is not. The note goes in Output so
+// the playground shows it where the results would have been, and a docs author sees
+// it the first time they press Run rather than never.
+func testBlockNote(src string) string {
+	prog, err := buzz.ParseEmbedded(src)
+	if err != nil || prog == nil {
+		return "" // a parse failure is reported on its own; do not double up
+	}
+	n := 0
+	for _, stmt := range prog.Stmts {
+		if _, ok := stmt.(*ast.TestDecl); ok {
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	blocks := "test block"
+	if n > 1 {
+		blocks = "test blocks"
+	}
+	return fmt.Sprintf("note: %d %s declared but not run here - `test` bodies execute under `magus buzz -t <file>`, not in the playground.\n", n, blocks)
 }
