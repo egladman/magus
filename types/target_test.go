@@ -78,13 +78,15 @@ func TestValidateTargetName(t *testing.T) {
 	}
 }
 
-func TestDefaultTargetNameNormalizer(t *testing.T) {
-	norm := DefaultTargetNameNormalizer
-	assert.Equal(t, "go-build", norm.NormalizeTargetName("go_build"))
-	assert.Equal(t, "go-build", norm.NormalizeTargetName("goBuild"))
-	assert.Equal(t, "go-build", norm.NormalizeTargetName("go-build"))
-	assert.Equal(t, "build", norm.NormalizeTargetName("build"))
-	assert.Equal(t, "image-build-static", norm.NormalizeTargetName("image_build_static"))
+// Normalize is the one canonicalizer for every entity kind, so the same three
+// spellings must converge whether they name a target, a charm, a spell or an op.
+func TestNormalize(t *testing.T) {
+	assert.Equal(t, "go-build", Normalize("go_build"))
+	assert.Equal(t, "go-build", Normalize("goBuild"))
+	assert.Equal(t, "go-build", Normalize("go-build"))
+	assert.Equal(t, "go-build", Normalize("Go_Build"))
+	assert.Equal(t, "build", Normalize("build"))
+	assert.Equal(t, "image-build-static", Normalize("image_build_static"))
 }
 
 func TestKebabCase(t *testing.T) {

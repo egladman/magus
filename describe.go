@@ -71,7 +71,7 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 	defaultSet := map[string]struct{}{}
 	for _, c := range defaults {
-		defaultSet[types.NormalizeCharmName(c)] = struct{}{}
+		defaultSet[types.Normalize(c)] = struct{}{}
 	}
 
 	byName := map[string]*types.CharmEntry{}
@@ -103,7 +103,7 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 		for _, s := range p.ResolvedSpells {
 			for _, target := range s.Targets() {
 				for _, c := range s.Charms(target) {
-					name := types.NormalizeCharmName(c)
+					name := types.Normalize(c)
 					decl := types.CharmDeclaration{Project: p.Path, Target: target, Spell: s.Name()}
 					// Render base -> +charm so the report shows the patch's effect on this
 					// target legibly rather than raw RFC 6902 ops. A charm that changes

@@ -52,14 +52,14 @@ func ReservedCharms() []string { return slices.Clone(reservedCharms) }
 // IsReservedCharm reports whether name — in any casing or separator form — is one
 // of magus's reserved built-in charms.
 func IsReservedCharm(name string) bool {
-	return slices.Contains(reservedCharms, NormalizeCharmName(name))
+	return slices.Contains(reservedCharms, Normalize(name))
 }
 
 // ReservedCharmDoc returns a one-line description of a reserved built-in charm, or
 // "" for a name that is not reserved. It is the single source `magus describe charm`
 // reads, so the built-in summaries cannot drift from the reserved set.
 func ReservedCharmDoc(name string) string {
-	switch NormalizeCharmName(name) {
+	switch Normalize(name) {
 	case CharmReadWrite:
 		return "mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci"
 	case CharmCD:
@@ -82,7 +82,7 @@ func WithCharms(ctx context.Context, charms []string) context.Context {
 	}
 	normalized := make([]string, len(charms))
 	for i, c := range charms {
-		normalized[i] = NormalizeCharmName(c)
+		normalized[i] = Normalize(c)
 	}
 	return context.WithValue(ctx, charmsContextKey{}, normalized)
 }
@@ -102,7 +102,7 @@ func CharmsFromContext(ctx context.Context) []string {
 // tests has_charm("noCache") matches a "target:no-cache" suffix regardless of
 // casing or separator.
 func HasCharm(ctx context.Context, charm string) bool {
-	want := NormalizeCharmName(charm)
+	want := Normalize(charm)
 	for _, c := range CharmsFromContext(ctx) {
 		if c == want {
 			return true

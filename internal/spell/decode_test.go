@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -244,4 +245,32 @@ func TestDecode_IgnoreDirs(t *testing.T) {
 	m, err = Decode(mapObj{"name": "bare"})
 	require.NoError(t, err)
 	assert.Nil(t, m.IgnoreDirs, "a spell with no ignore_dirs must decode to nil")
+}
+
+// TestDecode_OpNameIsNormalized guards a silent-unreachability bug: ValidateTargetName
+// admits '_' and uppercase, but every request reaching dispatchOp has already been
+// kebab-normalized by ParseTarget and dispatch is a plain map hit. An op authored as
+// go_build was therefore stored under go_build, looked up as go-build, missed, and
+// swallowed as a fan-out skip at debug level - declared, and reachable by nothing.
+func TestDecode_OpNameIsNormalized(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"go_build": map[string]any{"bin": "go", "args": []string{"build"}},
+			"goVet":    map[string]any{"bin": "go", "args": []string{"vet"}},
+		},
+	}
+	d, err := Decode(src)
+	require.NoError(t, err)
+
+	// Stored canonically, not as authored.
+	require.ElementsMatch(t, []string{"go-build", "go-vet"}, d.OpNames())
+
+	// And reachable by what a request actually carries.
+	for _, authored := range []string{"go_build", "goVet"} {
+		requested, perr := types.ParseTarget(authored)
+		require.NoErrorf(t, perr, "ParseTarget(%q)", authored)
+		_, ok := d.Ops[requested.Name]
+		assert.Truef(t, ok, "op authored %q must be reachable as %q", authored, requested.Name)
+	}
 }

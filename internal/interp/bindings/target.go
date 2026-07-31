@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
@@ -139,7 +138,10 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	if dep == nil {
 		return fmt.Errorf("magus: cross-project dependency: unknown project %q", depPath)
 	}
-	target := strings.ToLower(ref.Target)
+	// The real normalizer, not ToLower. Today's only producer of a cross ref already
+	// normalized it, so the two agree by luck; a producer that hands over a raw name
+	// would get goBuild -> gobuild here and dispatch a target that does not exist.
+	target := types.Normalize(ref.Target)
 	lim := cache.LimiterFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
 		return cd.Dispatch(cache.WithoutSlotHeld(ctx), dep.Dir, target)
@@ -211,7 +213,7 @@ func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Valu
 	if name == "" || name == "<fun>" {
 		return "", fmt.Errorf("anonymous function is not a target; pass an exported target function")
 	}
-	key := types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
+	key := types.Normalize(name)
 	if _, ok := targets[key]; !ok {
 		return "", fmt.Errorf("function %q does not name an exported target", name)
 	}

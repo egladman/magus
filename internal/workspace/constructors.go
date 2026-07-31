@@ -79,7 +79,7 @@ func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 // normalized (see types.DefaultTargetNameNormalizer) so a policy declared
 // under any spelling matches the target under any other.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {
-	name = types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
+	name = types.Normalize(name)
 	return func(p *types.Project) error {
 		if p.TargetPolicies == nil {
 			p.TargetPolicies = make(map[string]types.Target)

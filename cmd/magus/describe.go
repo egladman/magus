@@ -405,7 +405,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	charms := ws.DescribeCharms(globalCfg.DefaultCharms)
 	detail := len(pos) > 0
 	if detail {
-		name := types.NormalizeCharmName(pos[0])
+		name := types.Normalize(pos[0])
 		names := namesOf(charms, func(c types.CharmEntry) string { return c.Name })
 		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
 		if len(charms) == 0 {

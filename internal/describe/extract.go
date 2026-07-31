@@ -60,7 +60,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	attributedIO := map[ast.Pos]bool{}
 	// Node and dependency names both go through the run path's kebab-case
 	// normalizer, so a node and an edge that name the same target reconcile.
-	norm := types.DefaultTargetNameNormalizer.NormalizeTargetName
+	norm := types.Normalize
 
 	// First pass over the top-level statements: collect every exported target name
 	// (so a glob or regex edge can resolve against a target defined later), the spell

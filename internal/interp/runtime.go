@@ -20,7 +20,6 @@ import (
 )
 
 type sourceCtxKey struct{}
-type normCtxKey struct{}
 
 type projectPathCtxKey struct{}
 
@@ -43,7 +42,6 @@ func CtxFormTargetKeys(src string) map[string]bool {
 	if err != nil || prog == nil {
 		return nil
 	}
-	norm := types.DefaultTargetNameNormalizer
 	out := map[string]bool{}
 	for _, stmt := range prog.Stmts {
 		fd, ok := stmt.(*ast.FunDecl)
@@ -51,7 +49,7 @@ func CtxFormTargetKeys(src string) map[string]bool {
 			continue
 		}
 		if len(fd.ParamAnnots) > 0 && fd.ParamAnnots[0] == types.ContextParamAnnotation {
-			out[norm.NormalizeTargetName(fd.Name)] = true
+			out[types.Normalize(fd.Name)] = true
 		}
 	}
 	return out
@@ -81,19 +79,6 @@ func WithProjectPath(ctx context.Context, path string) context.Context {
 func ProjectPathFromContext(ctx context.Context) (string, bool) {
 	v, ok := ctx.Value(projectPathCtxKey{}).(string)
 	return v, ok
-}
-
-// WithTargetNameNormalizer stores n in ctx for use by target registration and lookup.
-func WithTargetNameNormalizer(ctx context.Context, n types.TargetNameNormalizer) context.Context {
-	return context.WithValue(ctx, normCtxKey{}, n)
-}
-
-// targetNameNormalizerFrom returns the normalizer stored in ctx, or DefaultTargetNameNormalizer.
-func targetNameNormalizerFrom(ctx context.Context) types.TargetNameNormalizer {
-	if n, ok := ctx.Value(normCtxKey{}).(types.TargetNameNormalizer); ok && n != nil {
-		return n
-	}
-	return types.DefaultTargetNameNormalizer
 }
 
 // Source describes a located magusfile source.
@@ -258,8 +243,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	}
 	defer func() { _ = load.Session.Close() }()
 
-	norm := targetNameNormalizerFrom(ctx)
-	key := norm.NormalizeTargetName(target)
+	key := types.Normalize(target)
 	fn, ok := load.Targets[key]
 	if !ok {
 		var names []string
@@ -436,7 +420,6 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	// exports that normalize to the same canonical name are a hard error rather
 	// than a silent last-write-wins clobber. Iterate in sorted order so the
 	// reported pair is deterministic.
-	norm := targetNameNormalizerFrom(ctx)
 	exports := buzzSess.Exports()
 	names := make([]string, 0, len(exports))
 	for name := range exports {
@@ -458,7 +441,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			_ = buzzSess.Close()
 			return nil, importTargetCollisionErr(name, importPath)
 		}
-		key := norm.NormalizeTargetName(name)
+		key := types.Normalize(name)
 		if prev, dup := seen[key]; dup {
 			_ = buzzSess.Close()
 			return nil, targetCollisionErr(prev, name, key)

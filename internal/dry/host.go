@@ -266,7 +266,10 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 // branches. For a plain graph/ls load the set is empty, so every branch reads un-charmed.
 func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		name := strArg(args, 0, "")
+		// Normalize the query the way types.HasCharm does on the real path: the
+		// stored set is canonical, so a raw compare here answers differently than
+		// the run being traced.
+		name := types.Normalize(strArg(args, 0, ""))
 		for _, c := range tr.charms {
 			if c == name {
 				return vm.BoolValue(true), nil
@@ -430,7 +433,7 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 					fmt.Sprintf("magus.project: targets[%q]", rawName)); err != nil {
 					return err
 				}
-				name := types.DefaultTargetNameNormalizer.NormalizeTargetName(rawName)
+				name := types.Normalize(rawName)
 				// Per-target policy mirrors the real binding (project_ns.go):
 				// skip_cache opts the target out of the cache; exclusive runs it
 				// alone against the batch.
@@ -555,8 +558,13 @@ func splitTargetRef(ref string) (target string, charms []string) {
 	}
 	target = normalizeTarget(ref[:i])
 	for _, c := range strings.Split(ref[i+1:], ",") {
+		// Charms canonicalize exactly as the target does. ParseTarget normalizes
+		// both halves on the real run path; normalizing only the target here made
+		// the tracer disagree with the run it exists to predict - `--dry-run
+		// lint:no_cache` took the un-charmed branch while the real `lint:no_cache`
+		// took the charmed one.
 		if c = strings.TrimSpace(c); c != "" {
-			charms = append(charms, c)
+			charms = append(charms, types.Normalize(c))
 		}
 	}
 	return target, charms
@@ -592,5 +600,5 @@ func (r *Tracer) matchTargets(re *regexp.Regexp) []string {
 // normalizer so the sandbox resolves names exactly like `magus run` does - any
 // casing or separator lands on the same target.
 func normalizeTarget(name string) string {
-	return types.DefaultTargetNameNormalizer.NormalizeTargetName(name)
+	return types.Normalize(name)
 }

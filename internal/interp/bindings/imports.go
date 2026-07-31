@@ -39,7 +39,7 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	if err != nil {
 		return vm.Null, false
 	}
-	norm := types.DefaultTargetNameNormalizer.NormalizeTargetName
+	norm := types.Normalize
 	m := vm.NewMap()
 	for _, s := range srcs {
 		if s.Engine != "buzz" {

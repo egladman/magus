@@ -112,7 +112,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 	if len(projects) == 0 {
 		return Check{Name: name, Status: StatusOK, Message: "no projects; skipped"}
 	}
-	norm := types.DefaultTargetNameNormalizer.NormalizeTargetName
+	norm := types.Normalize
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, decl := range declaredTargetNames(f) {
@@ -556,7 +556,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, raw := range declaredTargetNames(f) {
-				norm := types.DefaultTargetNameNormalizer.NormalizeTargetName(raw)
+				norm := types.Normalize(raw)
 				if !bespokePhaseFragmentNames[norm] {
 					continue
 				}
@@ -767,18 +767,18 @@ func (r *runner) checkCharmTargetCollision(projects []*types.Project) Check {
 	targets := map[string]string{} // normalized name -> first raw name seen
 	charms := map[string]string{}  // normalized name -> first raw name seen
 	for _, c := range types.ReservedCharms() {
-		charms[types.NormalizeCharmName(c)] = c
+		charms[types.Normalize(c)] = c
 	}
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, name := range declaredTargetNames(f) {
-				n := types.NormalizeCharmName(name)
+				n := types.Normalize(name)
 				if _, seen := targets[n]; !seen {
 					targets[n] = name
 				}
 			}
 			for _, name := range declaredCharmNames(f) {
-				n := types.NormalizeCharmName(name)
+				n := types.Normalize(name)
 				if _, seen := charms[n]; !seen {
 					charms[n] = name
 				}
@@ -849,7 +849,7 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
 	known := map[string]struct{}{}
 	var knownNames []string
 	add := func(c string) {
-		n := types.NormalizeCharmName(c)
+		n := types.Normalize(c)
 		if _, ok := known[n]; ok {
 			return
 		}
@@ -874,7 +874,7 @@ func (r *runner) checkHasCharmTypos(projects []*types.Project) Check {
 	for _, p := range projects {
 		for _, f := range magusfileSourcesInDir(p.Dir) {
 			for _, raw := range declaredCharmNames(f) {
-				n := types.NormalizeCharmName(raw)
+				n := types.Normalize(raw)
 				if _, ok := known[n]; ok {
 					continue // a live read of a real charm
 				}

@@ -81,6 +81,14 @@ func Decode(src Obj) (spells.Descriptor, error) {
 			if err := types.ValidateTargetName(op); err != nil {
 				return spells.Descriptor{}, fmt.Errorf("spell %q op %q: %w", name, op, err)
 			}
+			// Canonicalize the key. The charset above admits '_' and uppercase, but
+			// every request reaching dispatchOp has already been kebab-normalized by
+			// ParseTarget, and dispatch is a plain map hit - so an op authored as
+			// go_build was stored under go_build, looked up as go-build, missed, and
+			// swallowed as a fan-out skip at debug level. Declared and unreachable,
+			// with no error anywhere. Normalizing on the way in is the other half of
+			// the rule ParseTarget already applies on the way out.
+			op = types.Normalize(op)
 			t := spells.Op{Capture: spec.Bool("capture")}
 			if doc, ok := spec.Str("doc"); ok {
 				t.Doc = doc

@@ -16,17 +16,6 @@ import (
 // permissively). A ctx-less exported function is rejected at load (MGS1008).
 const ContextParamAnnotation = `magus\Context`
 
-// TargetNameNormalizer converts raw identifier strings (e.g. from exported
-// function names) to their canonical registered target name. Applied at both
-// registration and lookup so the two can never drift.
-type TargetNameNormalizer interface {
-	NormalizeTargetName(string) string
-}
-
-type kebabTargetNormalizer struct{}
-
-func (kebabTargetNormalizer) NormalizeTargetName(s string) string { return kebabCase(s) }
-
 // kebabCaseSplitWord / kebabCaseSplitNumberLetter mirror the word-boundary
 // regexes samber/lo's KebabCase uses, so kebabCase produces identical output
 // for identifier-like inputs (FooBar->foo-bar, HTTPServer->http-server,
@@ -54,14 +43,25 @@ func kebabCase(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(b.String()), "-"))
 }
 
-// DefaultTargetNameNormalizer normalizes identifiers to kebab-case so that
-// go_build, goBuild, and go-build all resolve to the same target "go-build".
-var DefaultTargetNameNormalizer TargetNameNormalizer = kebabTargetNormalizer{}
+// Normalize canonicalizes any magus entity name - a target, a charm, a spell, a
+// spell op - to kebab-case, so go_build, goBuild and go-build all name the same
+// thing. Applied at BOTH registration and lookup; a name normalized on only one
+// side is a silent miss, not an error.
+//
+// One function rather than the TargetNameNormalizer interface it replaces. That
+// interface had a single implementation, and its injection seam
+// (magus.WithTargetNameNormalizer) had zero callers anywhere in the tree -
+// including tests - so `run.Normalizer` was always nil and the seam only ever
+// installed this same kebab-casing. Meanwhile sixteen call sites skipped the
+// interface and reached for the package-level default directly, which is what an
+// injected normalizer would have had to fight. The indirection bought nothing and
+// hid that spell and op names were not going through it at all.
+func Normalize(name string) string { return kebabCase(name) }
 
 // TargetCI is the one reserved built-in target: the affected-set anchor that
 // `magus affected ci` and `magus affected --plan` key off. It lives in the
 // magusfile (composed via magus.needs), never in a spell. Compare against it
-// only after normalizing the candidate name (see DefaultTargetNameNormalizer).
+// only after normalizing the candidate name (see Normalize).
 const TargetCI = "ci"
 
 // targetNameRe constrains target names to alphanumerics plus '-' and '_'.
@@ -87,16 +87,6 @@ func ValidateCharmName(name string) error {
 		return fmt.Errorf("magus: charm %q: must contain only letters, digits, '-' or '_'", name)
 	}
 	return nil
-}
-
-// NormalizeCharmName canonicalizes a charm name the same way target names are
-// normalized (see DefaultTargetNameNormalizer), so a charm declared by a spell
-// and one typed in a "target:charm" suffix can never drift on casing or
-// separators: write, Write, and WRITE all resolve to the same charm, as do
-// no_cache and no-cache. Applied symmetrically when a charm enters from the CLI
-// suffix (ParseTarget) and when it is matched (HasCharm).
-func NormalizeCharmName(name string) string {
-	return DefaultTargetNameNormalizer.NormalizeTargetName(name)
 }
 
 // Target identifies one unit of work (project x target name).
@@ -151,13 +141,13 @@ func ParseTarget(s string) (Target, error) {
 			if err := ValidateCharmName(g); err != nil {
 				return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 			}
-			charms = append(charms, NormalizeCharmName(g))
+			charms = append(charms, Normalize(g))
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {
 		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 	}
-	target = DefaultTargetNameNormalizer.NormalizeTargetName(target)
+	target = Normalize(target)
 	return Target{Name: target, Charms: charms}, nil
 }
 

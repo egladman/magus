@@ -52,8 +52,7 @@ type run struct {
 	Spell             string   // when set, restricts execution to this spell; unmatched projects are skipped
 	Step              bool     // forces Concurrency=1; StepGate comes from ctx
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
-	Normalizer        types.TargetNameNormalizer
-	NoCache           bool // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
+	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -79,12 +78,6 @@ func WithBaseRef(ref string) RunOption { return func(o *run) { o.BaseRef = ref }
 
 // WithSpellFilter restricts Run to projects that have the named spell.
 func WithSpellFilter(name string) RunOption { return func(o *run) { o.Spell = name } }
-
-// WithTargetNameNormalizer overrides how exported-function identifiers are
-// converted to target names. Defaults to kebab-case via lo.KebabCase.
-func WithTargetNameNormalizer(n types.TargetNameNormalizer) RunOption {
-	return func(o *run) { o.Normalizer = n }
-}
 
 // WithStep enables per-subprocess stepping mode; forces Concurrency=1.
 func WithStep() RunOption { return func(o *run) { o.Step = true } }
@@ -159,7 +152,7 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
 	o.Charms = slices.DeleteFunc(slices.Clone(o.Charms), func(s string) bool {
-		return types.NormalizeCharmName(s) == types.CharmReadWrite
+		return types.Normalize(s) == types.CharmReadWrite
 	})
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
@@ -642,7 +635,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			active[p.Path] = struct{}{}
 			for _, s := range p.ResolvedSpells {
 				for _, c := range s.Charms(st.target) {
-					declaredCharms[types.NormalizeCharmName(c)] = struct{}{}
+					declaredCharms[types.Normalize(c)] = struct{}{}
 				}
 			}
 		}
@@ -715,11 +708,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	ctx = types.WithActiveDispatch(ctx, activeDispatch)
 	ctx = types.WithCharms(ctx, opts.Charms)
-	norm := opts.Normalizer
-	if norm == nil {
-		norm = types.DefaultTargetNameNormalizer
-	}
-	ctx = interp.WithTargetNameNormalizer(ctx, norm)
 	if o, ok := origin.FromContext(ctx); ok {
 		slog.InfoContext(
 			ctx, "[AGENT] build triggered",
