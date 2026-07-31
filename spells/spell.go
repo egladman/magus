@@ -299,7 +299,7 @@ func WithServiceView(fn func(target string) (view *ServiceView, ok bool)) Option
 	return func(s *Spell) { s.serviceView = fn }
 }
 
-func WithSpellDependsOn(fn func(dir string) []string) Option {
+func WithDependsOn(fn func(dir string) []string) Option {
 	return func(s *Spell) { s.dependsOn = fn }
 }
 

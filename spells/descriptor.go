@@ -16,13 +16,15 @@ const (
 	OpTest    = "test"
 )
 
-// The spell value types — PatchOp, Charm, Run, and the resolved Op — live in
-// the neutral types package. PatchOp/Charm/Run are mirrored to Buzz objects by
-// magus-utils types (the Go struct is the single source of truth) and must sit in
-// types so the generator can reflect them without importing this package, which
-// would form an embed/codegen cycle; Op (Go-internal, no Buzz mirror) joins
-// its family there since it embeds Run. They are referenced as types.* throughout —
-// no spell-local aliases.
+// The spell value types - PatchOp, Charm, Command, Service, and the resolved Op -
+// live HERE, in package spells, beside the Descriptor that carries them. They used
+// to sit in types, referenced as types.* throughout, on the theory that magus-utils
+// types needed a neutral package to reflect from without an embed/codegen cycle;
+// the generator reads spells.* directly instead, and the cycle never materialized.
+// (Run is the old name for Command, and has not existed since the op surface
+// collapsed to one kind.)
+//
+// See doc.go for why the move happened and why the dependency runs one way.
 
 // ValidatePatch checks a charm's ops are well-formed: a known op name, a
 // non-root single-rooted JSON Pointer path, and a 'from' pointer for move/copy.

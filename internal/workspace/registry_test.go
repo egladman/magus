@@ -127,7 +127,7 @@ func TestApply_ResolvesSpellsAndUnionsDeps(t *testing.T) {
 	const spellName = "workspace_apply_test_spell"
 	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 		spellName,
-		spells.WithSpellDependsOn(func(string) []string { return []string{"shared/lib"} }),
+		spells.WithDependsOn(func(string) []string { return []string{"shared/lib"} }),
 	))
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 

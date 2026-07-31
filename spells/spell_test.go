@@ -73,7 +73,7 @@ func TestSpellNilInvokerIsNoop(t *testing.T) {
 	assert.Equal(t, InvokeResponse{}, resp)
 }
 
-func TestSpellImplementsSpellDriver(t *testing.T) {
+func TestSpellImplementsDriver(t *testing.T) {
 	require.Implements(t, (*Driver)(nil), NewSpell("x"))
 }
 
@@ -105,7 +105,7 @@ func TestSpellMetadataAccessors(t *testing.T) {
 func TestSpellDependsOn(t *testing.T) {
 	assert.Nil(t, NewSpell("none").DependsOn("/dir"), "a spell with no probe returns nil")
 
-	s := NewSpell("go", WithSpellDependsOn(func(dir string) []string {
+	s := NewSpell("go", WithDependsOn(func(dir string) []string {
 		return []string{dir + "/dep"}
 	}))
 	assert.Equal(t, []string{"/proj/dep"}, s.DependsOn("/proj"))

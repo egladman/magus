@@ -9,7 +9,7 @@ import (
 // TestSpellOpKind covers OpKind's empty-default resolution and the IsService
 // discriminator across the three op shapes (default command, explicit command,
 // service).
-func TestSpellOpKind(t *testing.T) {
+func TestOpKind(t *testing.T) {
 	tests := []struct {
 		name     string
 		op       Op

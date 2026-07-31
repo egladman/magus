@@ -671,10 +671,21 @@ type FileEntry struct {
 }
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
-// count, items} envelope `magus describe ... -o json` emits. Nothing on Describer
-// returns one - its methods hand back the slice, and the caller that is actually
-// serializing wraps it here, so both the CLI and the MCP handler emit the same JSON
-// without either of them owning the shape.
+// count, items} envelope `magus describe ... -o json` emits. The Describer method
+// hands back a plain slice and the caller that is actually serializing wraps it
+// here, so both the CLI and the MCP handler emit the same JSON without either of
+// them owning the shape.
+//
+// Two methods are NOT on this pattern, and it is worth knowing which before adding
+// a third: DescribeProjects and DescribeEvaluatedProjects still return
+// ProjectsOutput / EvaluatedProjectsOutput. Both carry a real Workspace field, so
+// their envelope is not purely derivable the way {constant, len(), items} is, and
+// converting them would mean returning a slice plus an out-of-band workspace root.
+// TargetGraphOutput is a third shape again - it has no Count at all, and it is
+// json.Marshal'd straight onto the wire for the browser graph explorer.
+//
+// So: `Report` means "rebuilt at the render edge from a slice", `Output` means "the
+// method returns this". Do not add a new `Output` without a field that earns it.
 //
 // They are deliberately not what the repository returns. Definition is a package
 // constant and Count is len(items), so carrying them on a domain type meant every
