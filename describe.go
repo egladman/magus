@@ -46,7 +46,7 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 		}
 		entries = append(entries, types.SpellEntry{
 			Name:         p.Name(),
-			Module:       spells.ModulePath(p.Name()),
+			BuzzImport:   spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
 			Outputs:      p.Outputs(),
 			Claims:       p.Claims(),

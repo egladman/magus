@@ -23,20 +23,25 @@ type SpellVersion struct {
 // SpellEntry is the structured view of a single spell.
 type SpellEntry struct {
 	Name string `json:"name"              yaml:"name"`
-	// Module is the literal a magusfile writes to bind this spell's handle -
+	// BuzzImport is the module path a magusfile writes to bind this spell's handle:
 	// "magus/spell/go", for `import "magus/spell/go"`. See spells.ModulePath.
+	//
+	// Named for Buzz because Language below already means something else on this
+	// record - the language the spell ADAPTS (go, typescript). This one is the
+	// language you write the import IN. Unqualified "module" left a reader to guess
+	// which of the two it meant.
 	//
 	// A path, deliberately, and not the handle itself. internal/describe reads spell
 	// imports STATICALLY to build the target graph, so a spell reached any way other
 	// than a literal import would lose its target-uses-spell edge and under-report the
 	// graph silently. Carrying the path keeps discovery dynamic and the import static:
 	// look the spell up, read what to write, then write it.
-	Module  string   `json:"module"            yaml:"module"`
-	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
-	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
-	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
-	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
+	BuzzImport string   `json:"buzz_import"       yaml:"buzz_import"`
+	Sources    []string `json:"sources,omitempty" yaml:"sources,omitempty"`
+	Outputs    []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	Claims     []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
+	Targets    []string `json:"targets,omitempty" yaml:"targets,omitempty"`
+	Opaque     bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
 	// Language is the canonical source language the spell adapts (e.g. "go",
 	// "typescript"), empty for a spell tied to no single language. It tags the spell
 	// node so `magus query language:go` reaches the adapter alongside that language's

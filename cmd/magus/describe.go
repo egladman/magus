@@ -293,6 +293,19 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	fmt.Printf("spells (%d):\n", len(inventory))
 	for _, t := range inventory {
 		fmt.Printf("  %s\n", t.Name)
+		// "adapts", not "language": the record carries two different languages, and
+		// naming them both language is what made this ambiguous. This is the source
+		// language the spell teaches magus to build; the import below is written in
+		// Buzz, whatever that language happens to be.
+		if t.Language != "" {
+			fmt.Printf("    adapts:  %s\n", t.Language)
+		}
+		// Rendered as the whole statement rather than the bare path, so it is
+		// copy-pasteable into a magusfile. It is the ONLY way to reach the spell's
+		// ops: written literally, so the target graph can see the edge.
+		if t.BuzzImport != "" {
+			fmt.Printf("    import:  import %q;  (buzz)\n", t.BuzzImport)
+		}
 		if len(t.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))
 		}

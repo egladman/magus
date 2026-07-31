@@ -19527,7 +19527,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out04dfa8c7",
+        "last_output_ref": "out3d9cadc6",
         "last_run_ok": "true"
       }
     },
@@ -19627,7 +19627,7 @@
       "attrs": {
         "declared_as": "go_build",
         "engine": "buzz",
-        "last_output_ref": "out9fc33ca8",
+        "last_output_ref": "out4fbefd31",
         "last_run_ok": "true"
       }
     },
