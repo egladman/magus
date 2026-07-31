@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2535,
-  "edge_count": 4999,
+  "node_count": 2540,
+  "edge_count": 5010,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -17680,7 +17680,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:572",
+      "source": "magusfile.buzz:730",
       "attrs": {
         "exported": "true"
       }
@@ -17711,7 +17711,7 @@
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:559",
+      "source": "magusfile.buzz:717",
       "attrs": {
         "exported": "true"
       }
@@ -17721,7 +17721,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:564",
+      "source": "magusfile.buzz:722",
       "attrs": {
         "exported": "true"
       }
@@ -17731,7 +17731,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:604",
+      "source": "magusfile.buzz:762",
       "attrs": {
         "exported": "true"
       }
@@ -17741,7 +17741,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:640",
+      "source": "magusfile.buzz:798",
       "attrs": {
         "exported": "true"
       }
@@ -17757,7 +17757,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:623",
+      "source": "magusfile.buzz:781",
       "attrs": {
         "exported": "true"
       }
@@ -17773,11 +17773,18 @@
       }
     },
     {
+      "id": "function:magusfile.buzz:currentVersion",
+      "kind": "function",
+      "label": "currentVersion",
+      "doc": "currentVersion returns a module's highest STABLE released version, or \"\" when it has never had one. Compared on the PARSED major/minor/patch, not the tag text, because string order puts v0.10.0 before v0.9.0.  Prereleases are skipped: per semver.org item 9 a prerelease has LOWER precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not v0.4.0 released and must not become the base the next version is computed from - otherwise cutting rc1 would silently advance everyone's floor.  Build met",
+      "source": "magusfile.buzz:481"
+    },
+    {
       "id": "function:magusfile.buzz:format",
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:601",
+      "source": "magusfile.buzz:759",
       "attrs": {
         "exported": "true"
       }
@@ -17839,6 +17846,13 @@
       "source": "magusfile.buzz:110"
     },
     {
+      "id": "function:magusfile.buzz:isCandidate",
+      "kind": "function",
+      "label": "isCandidate",
+      "doc": "isCandidate reports whether v is one of the three versions nextFor offers, comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the minor candidate. A prerelease of a legal next version is itself legal; that is how you cut an rc without first inventing a version nobody agreed to.",
+      "source": "magusfile.buzz:519"
+    },
+    {
       "id": "function:magusfile.buzz:ld_flags",
       "kind": "function",
       "label": "ld_flags",
@@ -17849,7 +17863,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:587",
+      "source": "magusfile.buzz:745",
       "attrs": {
         "exported": "true"
       }
@@ -17885,6 +17899,13 @@
       }
     },
     {
+      "id": "function:magusfile.buzz:nextFor",
+      "kind": "function",
+      "label": "nextFor",
+      "doc": "nextFor returns the three legal next versions for a module currently at cur. An unreleased module is treated as sitting at 0.0.0, so its candidates fall out of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a special case someone has to remember.",
+      "source": "magusfile.buzz:510"
+    },
+    {
       "id": "function:magusfile.buzz:postflight",
       "kind": "function",
       "label": "postflight",
@@ -17899,7 +17920,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:569",
+      "source": "magusfile.buzz:727",
       "attrs": {
         "exported": "true"
       }
@@ -17909,14 +17930,20 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:698"
+      "source": "magusfile.buzz:856"
+    },
+    {
+      "id": "function:magusfile.buzz:releasableModules",
+      "kind": "function",
+      "label": "releasableModules",
+      "doc": "releasableModules enumerates every independently-versioned module: the root, plus each libs/<name> carrying its own go.mod. Discovered rather than listed, so a new nested module is picked up the moment it gets one.  prefix is what Go requires of a nested module's tags: the root releases as `vX.Y.Z`, a module at libs/foo as `libs/foo/vX.Y.Z`. key is the same string a human types, so what you name is exactly what gets tagged.",
+      "source": "magusfile.buzz:459"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "doc": "release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand:  1. tag each nested module (libs/<name>/vX.Y.Z) - each has to be independently `go get`-able before anything downstream can require it at a real version instead of v0.0.0. 2. rewrite root go.mod's `require .../libs/<name> v0.0.0` lines to the real vX.Y.Z, now that those tags exist to resolve to. 3. tag root vX.Y.Z last - only now does the root tag's own go.mod resolve",
-      "source": "magusfile.buzz:437",
+      "source": "magusfile.buzz:551",
       "attrs": {
         "exported": "true"
       }
@@ -17953,14 +17980,21 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:712"
+      "source": "magusfile.buzz:870"
+    },
+    {
+      "id": "function:magusfile.buzz:rewriteRequire",
+      "kind": "function",
+      "label": "rewriteRequire",
+      "doc": "rewriteRequire points go.mod's require for module at version, preserving the line's indentation. The `replace` directive names the same module and must NOT be touched: it is the local-development path, ignored by every downstream consumer, and rewriting it would break building inside this repo.",
+      "source": "magusfile.buzz:535"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:733",
+      "source": "magusfile.buzz:891",
       "attrs": {
         "exported": "true"
       }
@@ -17990,7 +18024,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:538",
+      "source": "magusfile.buzz:696",
       "attrs": {
         "exported": "true"
       }
@@ -18000,7 +18034,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:529"
+      "source": "magusfile.buzz:687"
     },
     {
       "id": "function:magusfile.buzz:version",
@@ -18013,7 +18047,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:515",
+      "source": "magusfile.buzz:673",
       "attrs": {
         "exported": "true"
       }
@@ -22655,11 +22689,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:623:TODO",
+      "id": "rationale:magusfile.buzz:781:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:623"
+      "source": "magusfile.buzz:781"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",
@@ -22804,7 +22838,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outb101b791",
+        "last_output_ref": "out9ab07e35",
         "last_run_ok": "true"
       }
     },
@@ -23012,12 +23046,11 @@
       "id": "target:.:release",
       "kind": "target",
       "label": "release",
-      "doc": "release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand: 1.",
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out5db925ac",
-        "last_run_ok": "true"
+        "last_output_ref": "out434c5428",
+        "last_run_ok": "false"
       }
     },
     {
@@ -23082,7 +23115,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out63fb1806",
+        "last_output_ref": "out1fa67b18",
         "last_run_ok": "true"
       }
     },
@@ -49611,6 +49644,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:currentVersion",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
@@ -49667,6 +49708,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:isCandidate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:ld_flags",
       "relation": "contains",
       "confidence": "extracted",
@@ -49707,6 +49756,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:nextFor",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:postflight",
       "relation": "contains",
       "confidence": "extracted",
@@ -49724,6 +49781,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:rebuild_console",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:releasableModules",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -49764,6 +49829,14 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:rerender_docs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:rewriteRequire",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -57426,6 +57499,14 @@
       "provenance": "magusfile.buzz"
     },
     {
+      "source": "function:magusfile.buzz:isCandidate",
+      "target": "function:magusfile.buzz:nextFor",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
       "source": "function:magusfile.buzz:ld_flags",
       "target": "function:magusfile.buzz:build_date",
       "relation": "calls",
@@ -57444,6 +57525,46 @@
     {
       "source": "function:magusfile.buzz:ld_flags",
       "target": "function:magusfile.buzz:version",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:release",
+      "target": "function:magusfile.buzz:currentVersion",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:release",
+      "target": "function:magusfile.buzz:isCandidate",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:release",
+      "target": "function:magusfile.buzz:nextFor",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:release",
+      "target": "function:magusfile.buzz:releasableModules",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:release",
+      "target": "function:magusfile.buzz:rewriteRequire",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -60542,12 +60663,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:623:TODO",
+      "source": "rationale:magusfile.buzz:781:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:623"
+      "provenance": "magusfile.buzz:781"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",

@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2535 nodes** and **4999 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2540 nodes** and **5010 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -55,8 +55,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
 | doc | 243 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 426 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 220 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1115 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| file | 220 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1120 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 119 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -81,7 +81,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
-| `release` | release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand: 1. |
+| `release` |  |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `buzz-check` | Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check). |

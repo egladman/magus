@@ -218,7 +218,6 @@
         },
         {
           "name": "release",
-          "doc": "release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand: 1.",
           "charms": [
             "cd"
           ],

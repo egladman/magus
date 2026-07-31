@@ -430,82 +430,240 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
 // the standard pattern for local development inside the same repo - go.mod
 // carries a comment saying so, precisely so nobody "cleans them up" later.
 //
-// Dry run by default: `magus run release -- 0.4.0` only prints the tags and
-// go.mod edits it would make. `magus run release:cd -- 0.4.0` creates the
-// tags and rewrites go.mod for real. Neither ever pushes - a human reviews
-// what got created and pushes the tags deliberately.
-export fun release(ctx: magus\Context, args: [str]) > void {
-    if (args.len() == 0 or args[0] == "") {
-        throw "release: version required, e.g. `magus run release -- 0.4.0` (no leading v)";
-    }
-    var v = args[0];
-    if (v.startsWith("v")) { v = v.sub(1); }
-    semver\parse(v); // raises with a clear message on anything that is not a valid semver
+// Dry run by default, and PER MODULE. `magus run release` with no arguments
+// surveys every module - its current version and the three legal next ones - and
+// releases nothing. Name a module to release it:
+//
+//      magus run release -- magus=0.4.0
+//      magus run release -- libs/gopherbuzz=0.2.0
+//      magus run release:cd -- magus=0.4.0 libs/gopherbuzz=0.2.0
+//
+// A module you do NOT name is not released. That is the point: these modules
+// version INDEPENDENTLY, each on its own cadence, because Go already gives each
+// its own tag namespace. Deriving every tag from one number would chain
+// gopherbuzz's public API to magus's release schedule for no reason.
+//
+// The three candidates are COMPUTED, never chosen. Deciding which one a change
+// deserves is a judgement about what breaks for a consumer; that belongs to the
+// developer. magus supplies the mechanism and stops there.
+//
+// Neither path ever pushes - a human reviews the tags and pushes deliberately.
 
+// releasableModules enumerates every independently-versioned module: the root,
+// plus each libs/<name> carrying its own go.mod. Discovered rather than listed,
+// so a new nested module is picked up the moment it gets one.
+//
+// prefix is what Go requires of a nested module's tags: the root releases as
+// `vX.Y.Z`, a module at libs/foo as `libs/foo/vX.Y.Z`. key is the same string a
+// human types, so what you name is exactly what gets tagged.
+fun releasableModules() > [{str: str}] {
+    var mods = mut [{"key": "magus", "prefix": "", "module": "", "dir": "."}];
+    foreach (gomod in fs\glob("libs/*/go.mod")) {
+        final dir = fs\dirname(gomod);
+        mods.append({"key": dir, "prefix": dir + "/",
+                    "module": "github.com/egladman/magus/" + dir, "dir": dir});
+    }
+    return mods;
+}
+
+// currentVersion returns a module's highest STABLE released version, or "" when
+// it has never had one. Compared on the PARSED major/minor/patch, not the tag
+// text, because string order puts v0.10.0 before v0.9.0.
+//
+// Prereleases are skipped: per semver.org item 9 a prerelease has LOWER
+// precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not
+// v0.4.0 released and must not become the base the next version is computed from
+// - otherwise cutting rc1 would silently advance everyone's floor.
+//
+// Build metadata does NOT disqualify a tag. Item 10 says metadata is ignored when
+// determining precedence, so v1.0.0+ci42 IS v1.0.0; excluding it would re-offer a
+// version already released.
+fun currentVersion(prefix: str) > str {
+    var best = "";
+    var bestMajor = 0 - 1;
+    var bestMinor = 0 - 1;
+    var bestPatch = 0 - 1;
+    foreach (t in vcs\tags(pattern: prefix + "v*")) {
+        // A bare "v*" also matches libs/foo/v1.2.3, so the prefix is checked
+        // exactly - otherwise the root would adopt a nested module's tag.
+        if (t.prefix != prefix) { continue; }
+        if (t.version.original == "") { continue; } // an annotated non-version tag
+        if (t.version.prerelease != "") { continue; } // anticipates a release, is not one
+        final newer = t.version.major > bestMajor
+            or (t.version.major == bestMajor and t.version.minor > bestMinor)
+            or (t.version.major == bestMajor and t.version.minor == bestMinor
+                and t.version.patch > bestPatch);
+        if (newer) {
+            bestMajor = t.version.major;
+            bestMinor = t.version.minor;
+            bestPatch = t.version.patch;
+            best = t.version.original;
+        }
+    }
+    return best;
+}
+
+// nextFor returns the three legal next versions for a module currently at cur.
+// An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
+// of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
+// special case someone has to remember.
+fun nextFor(cur: str) > SemverNext {
+    if (cur == "") { return semver\next("0.0.0"); }
+    return semver\next(cur);
+}
+
+// isCandidate reports whether v is one of the three versions nextFor offers,
+// comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
+// minor candidate. A prerelease of a legal next version is itself legal; that is
+// how you cut an rc without first inventing a version nobody agreed to.
+fun isCandidate(v: str, cur: str) > bool {
+    final want = semver\parse(v);
+    final n = nextFor(cur);
+    foreach (c in [n.patch, n.minor, n.major]) {
+        final cv = semver\parse(c);
+        if (cv.major == want.major and cv.minor == want.minor and cv.patch == want.patch) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// rewriteRequire points go.mod's require for module at version, preserving the
+// line's indentation. The `replace` directive names the same module and must NOT
+// be touched: it is the local-development path, ignored by every downstream
+// consumer, and rewriting it would break building inside this repo.
+fun rewriteRequire(gomod: str, module: str, version: str) > str {
+    var kept = mut [];
+    var found = false;
+    foreach (line in gomod.split("\n")) {
+        final at = line.indexOf(module + " v");
+        if (at != null and line.indexOf("=>") == null) {
+            kept.append(line.sub(0, at) + module + " " + version);
+            found = true;
+        } else {
+            kept.append(line);
+        }
+    }
+    if (!found) { throw "release: go.mod has no require line for " + module; }
+    return kept.join("\n");
+}
+
+export fun release(ctx: magus\Context, args: [str]) > void {
     // `cd` rather than a release-only charm: image_build above already uses it to
     // mean "this is the real delivery path, do the side-effectful thing" (push and
     // sign, there; tag and rewrite go.mod, here). One word for one concept beats a
     // second one that has to be learned separately.
     final deliver = ctx.has_charm("cd");
-    // The dirty-tree refusal guards the ACTUAL tag/write below, not the preview: a
-    // dry run changes nothing, so it stays available while you are still shaping
-    // the commit that will become this release (which is necessarily dirty until
-    // it lands). Only `cd` - the path that creates tags and writes go.mod -
-    // has to see a clean tree.
     final dirty = vcs\isDirty();
-    if (deliver and dirty) {
-        throw "release: tree is dirty; commit or stash before releasing v" + v;
+    final modules = releasableModules();
+
+    // Parse `key=version`. Anything unnamed is surveyed, never released.
+    var wanted = mut {};
+    foreach (a in args) {
+        if (a == "") { continue; }
+        final eq = a.indexOf("=");
+        if (eq == null) {
+            throw "release: expected <module>=<version>, got `" + a
+                + "` - run `magus run release` with no arguments to list the modules";
+        }
+        final key = a.sub(0, eq);
+        var v = a.sub(eq + 1);
+        if (v.startsWith("v")) { v = v.sub(1); }
+        semver\parse(v); // raises with a clear message on anything not valid semver
+        wanted[key] = v;
     }
 
-    final root_tag = "v" + v;
-    if (vcs\tags(pattern: root_tag).len() > 0) {
-        throw "release: tag " + root_tag + " already exists";
+    // Survey ALWAYS, before anything else: it is the whole interface for choosing
+    // a version, and printing it up front means the numbers you act on are the
+    // numbers you just read.
+    foreach (m in modules) {
+        final cur = currentVersion(m["prefix"]);
+        final n = nextFor(cur);
+        var at = "at " + cur;
+        if (cur == "") { at = "unreleased"; }
+        magus\info("release: " + m["key"] + " - " + at
+            + ", next: patch " + n.patch + " | minor " + n.minor + " | major " + n.major);
     }
 
-    // Discover nested modules by their go.mod, rather than a hardcoded name
-    // list, so a new libs/<name> module is picked up the moment it gets one.
-    final nested = mut [];
-    foreach (gomod in fs\glob("libs/*/go.mod")) {
-        final dir = fs\dirname(gomod); // "libs/<name>"
-        final tag = "libs/" + fs\basename(dir) + "/v" + v;
+    if (wanted.keys().len() == 0) {
+        magus\info("release: nothing named, nothing released - e.g. `magus run release -- magus=0.4.0`");
+        return;
+    }
+
+    // Reject an unknown key BEFORE doing anything: a typo must not quietly release
+    // nothing while reporting success.
+    foreach (key in wanted.keys()) {
+        var known = false;
+        foreach (m in modules) {
+            if (m["key"] == key) { known = true; }
+        }
+        if (!known) {
+            throw "release: unknown module `" + key
+                + "` - run `magus run release` with no arguments to list them";
+        }
+    }
+
+    if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
+
+    // Refuse a version that is not one of the three offered. Cutting a release is
+    // tedious precisely because a wrong number is silent - nothing catches a typo
+    // that lands v0.40.0 instead of v0.4.0 until someone tries to depend on it, and
+    // a tag is the one artifact you cannot quietly take back. The candidates are
+    // computed from the current stable release, so the only way to reach a distant
+    // version is to release your way there deliberately.
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null) { continue; }
+        final cur = currentVersion(m["prefix"]);
+        if (!isCandidate(v, cur)) {
+            final n = nextFor(cur);
+            throw "release: " + m["key"] + " v" + v + " is not a legal next version from "
+                + cur + " - choose " + n.patch + ", " + n.minor + " or " + n.major
+                + " (a prerelease or +metadata build of one of those is fine)";
+        }
+    }
+
+    // Refuse an existing tag before creating ANY of them, so a partial release
+    // cannot leave half the modules tagged.
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null) { continue; }
+        final tag = m["prefix"] + "v" + v;
         if (vcs\tags(pattern: tag).len() > 0) {
             throw "release: tag " + tag + " already exists";
         }
-        nested.append({"module": "github.com/egladman/magus/" + dir, "tag": tag});
     }
 
     if (!deliver) {
-        magus\info("release: DRY RUN - pass the cd charm to execute: `magus run release:cd -- " + v + "`");
-        if (dirty) { magus\info("release: NOTE - tree is currently dirty; cd will refuse until it is clean"); }
+        magus\info("release: DRY RUN - add the cd charm to execute");
+        if (dirty) { magus\info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
     }
 
-    // 1. Nested modules first.
-    foreach (n in nested) {
-        magus\info("release: tag " + n["tag"]);
-        if (deliver) { os\exec(vcs\exe(), ["tag", n["tag"]]); }
-    }
-
-    // 2. Root go.mod: v0.0.0 -> the real tag, one nested require at a time.
+    // 1. Nested modules first: the root's go.mod must require a version that
+    // already exists as a tag by the time the root itself is tagged.
     ctx.outputs("go.mod");
-    final gomod_path = "go.mod";
-    var gomod = fs\readFile(gomod_path);
-    foreach (n in nested) {
-        final old = n["module"] + " v0.0.0";
-        final replacement = n["module"] + " v" + v;
-        if (gomod.indexOf(old) == null) {
-            throw "release: go.mod has no require line `" + old + "` to rewrite";
-        }
-        magus\info("release: go.mod  " + old + "  ->  " + replacement);
-        gomod = gomod.replace(old, with: replacement);
+    var gomod = fs\readFile("go.mod");
+    var rewrote = false;
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null or m["module"] == "") { continue; }
+        magus\info("release: tag " + m["prefix"] + "v" + v);
+        if (deliver) { os\exec(vcs\exe(), ["tag", m["prefix"] + "v" + v]); }
+        magus\info("release: go.mod  " + m["module"] + "  ->  v" + v);
+        gomod = rewriteRequire(gomod, m["module"], "v" + v);
+        rewrote = true;
     }
-    if (deliver) { fs\writeFile(gomod_path, gomod); }
+    if (deliver and rewrote) { fs\writeFile("go.mod", gomod); }
 
-    // 3. Root tag last.
-    magus\info("release: tag " + root_tag);
-    if (deliver) { os\exec(vcs\exe(), ["tag", root_tag]); }
+    // 2. Root tag LAST, so it captures the go.mod rewrite above.
+    final rootV = wanted["magus"];
+    if (rootV != null) {
+        magus\info("release: tag v" + rootV);
+        if (deliver) { os\exec(vcs\exe(), ["tag", "v" + rootV]); }
+    }
 
     if (deliver) {
-        magus\info("release: done - nothing was pushed. Push when ready: git push origin " + root_tag);
+        magus\info("release: done - nothing was pushed. Push the tags deliberately when ready.");
     } else {
         magus\info("release: dry run only - nothing was tagged or written");
     }
