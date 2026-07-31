@@ -1,12 +1,12 @@
-// magusfile.buzz for diag, a standalone Go module (github.com/egladman/diag) at
-// libs/diag: the shared diagnostic-code framework both magus and gopherbuzz depend
+// magusfile.buzz for diagnostics, a standalone Go module (github.com/egladman/magus/libs/diagnostics) at
+// libs/diagnostics: the shared diagnostic-code framework both magus and gopherbuzz depend
 // on. Its own module (not part of the magus module) so gopherbuzz - a separate
 // module - can consume it without depending on magus. Set up as its own magus
 // project, scoped to its go.mod.
 //
-//   magus run build libs/diag   compile the package
-//   magus run test libs/diag    run the Go test suite
-//   magus run ci libs/diag      lint, build, and test
+//   magus run build libs/diagnostics   compile the package
+//   magus run test libs/diagnostics    run the Go test suite
+//   magus run ci libs/diagnostics      lint, build, and test
 
 import "magus";
 
@@ -44,7 +44,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty(["MAGUS.md"])) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diag` and commit";
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit";
     }
 }
 

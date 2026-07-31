@@ -80,7 +80,7 @@ func fingerprintShardContent(sh Shard) string {
 			buf = appendField(buf, k)
 			buf = appendField(buf, n.Attrs[k])
 		}
-		h.Write(buf) //nolint:errcheck // hash.Hash never errors
+		_, _ = h.Write(buf) // hash.Hash never errors
 		buf = buf[:0]
 	}
 
@@ -97,11 +97,11 @@ func fingerprintShardContent(sh Shard) string {
 		buf = appendCount(buf, len(score))
 		buf = append(buf, score...)
 		buf = appendField(buf, e.Provenance)
-		h.Write(buf) //nolint:errcheck // hash.Hash never errors
+		_, _ = h.Write(buf) // hash.Hash never errors
 		buf = buf[:0]
 	}
 	if len(buf) > 0 {
-		h.Write(buf) //nolint:errcheck // hash.Hash never errors
+		_, _ = h.Write(buf) // hash.Hash never errors
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

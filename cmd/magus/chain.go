@@ -204,7 +204,7 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 		// Naming what the target DID produce turns a typo into a one-line fix; the
 		// alternative is "no such file", which is also true of a path that was never
 		// an artifact in the first place.
-		var have []string
+		have := make([]string, 0, len(artifacts))
 		for _, a := range artifacts {
 			have = append(have, a.Path)
 		}
@@ -282,20 +282,21 @@ func chainPathFlag(argv []string, verb string) (string, error) {
 	dst, seen := "", false
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
-		switch {
-		case isFlagNamed(a, "path"):
-			if i+1 >= len(argv) {
+		if isFlagNamed(a, "path") {
+			if len(argv) < i+2 {
 				return "", usagef("magus run: %s: --path needs a value", verb)
 			}
 			dst, seen = argv[i+1], true
 			i++
-		case flagValueOf(a, "path") != "":
-			dst, seen = flagValueOf(a, "path"), true
-		default:
-			chainUsage()
-			return "", usagef("magus run: %s: unexpected argument %q (want only --path <dir>; "+
-				"global flags go BEFORE --then)", verb, a)
+			continue
 		}
+		if v := flagValueOf(a, "path"); v != "" {
+			dst, seen = v, true
+			continue
+		}
+		chainUsage()
+		return "", usagef("magus run: %s: unexpected argument %q (want only --path <dir>; "+
+			"global flags go BEFORE --then)", verb, a)
 	}
 	if !seen {
 		chainUsage()

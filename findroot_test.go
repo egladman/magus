@@ -53,7 +53,7 @@ func TestFindRoot(t *testing.T) {
 	// excluding the root run despite touching the same files.
 	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
 		root := t.TempDir()
-		mkTree(t, root, "magus.yaml", "go.mod", "libs/diag/go.mod", "libs/diag/magusfile.buzz")
+		mkTree(t, root, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
 		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
 			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
 		}

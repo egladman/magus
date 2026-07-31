@@ -35,6 +35,13 @@ var Semver = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Record: "SemverVersion"}},
 			Impl:    SemverParse,
 		},
+		{
+			Name:    "next",
+			Doc:     `Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the result of bumping the major, minor, or patch component. Errors on invalid input.`,
+			Args:    []Arg{{Name: "v", Type: TypeString}},
+			Returns: []Ret{{Type: TypeAnyMap, Record: "SemverNext"}},
+			Impl:    SemverNext,
+		},
 	},
 }
 
@@ -65,5 +72,26 @@ func SemverParse(_ context.Context, v string) (types.SemverVersion, error) {
 		Prerelease: sv.Prerelease(),
 		Metadata:   sv.Metadata(),
 		Original:   sv.Original(),
+	}, nil
+}
+
+// SemverNext returns the three candidate next versions after v: bumping
+// major, minor, or patch. Delegates to Masterminds/semver's Inc* methods
+// rather than hand-rolling "+1" arithmetic: per version.go's IncPatch and
+// semver.org spec item 9, a version WITH a prerelease has IncPatch strip the
+// prerelease and KEEP the patch (v1.2.3-rc1 -> v1.2.3, not v1.2.4) - a
+// subtlety naive arithmetic gets wrong and that this delegation gets free.
+func SemverNext(_ context.Context, v string) (types.SemverNext, error) {
+	sv, err := semver.NewVersion(v)
+	if err != nil {
+		return types.SemverNext{}, fmt.Errorf("semver.next: %w", err)
+	}
+	major := sv.IncMajor()
+	minor := sv.IncMinor()
+	patch := sv.IncPatch()
+	return types.SemverNext{
+		Major: "v" + major.String(),
+		Minor: "v" + minor.String(),
+		Patch: "v" + patch.String(),
 	}, nil
 }

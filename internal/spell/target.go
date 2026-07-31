@@ -95,6 +95,15 @@ var HTTPResponseSource string
 //go:embed gen/types/semverversion.buzz
 var SemverVersionSource string
 
+// SemverNextSource is the generated Buzz mirror of types.SemverNext: the
+// {major, minor, patch} candidate-next-version record semver.next returns.
+// No ordering dependency on SemverVersion (its fields are plain strings), but
+// it lives next to it in this file since the two host methods are a pair.
+//
+//go:generate go run ../../cmd/magus-utils types -type SemverNext -out gen/types/semvernext.buzz
+//go:embed gen/types/semvernext.buzz
+var SemverNextSource string
+
 //go:generate go run ../../cmd/magus-utils types -type URL -out gen/types/url.buzz
 //go:embed gen/types/url.buzz
 var URLSource string

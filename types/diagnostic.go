@@ -4,11 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/egladman/magus/libs/diag"
+	"github.com/egladman/magus/libs/diagnostics"
 )
 
 // magus's diagnostic codes are the MGS#### family. The MECHANISM (the Code/Error types, the rendering, the
-// errors.Is matching, the run-time sink) lives in the shared github.com/egladman/magus/libs/diag framework; this file
+// errors.Is matching, the run-time sink) lives in the shared github.com/egladman/magus/libs/diagnostics framework; this file
 // is magus's INSTANTIATION of it - the MGS docs-URL layout, the MGS catalog, and thin re-exports so the
 // ~20 in-tree consumers keep using types.DiagnosticCode / DiagnosticError / DiagnosticErrorf unchanged.
 // gopherbuzz instantiates the same framework separately for its own BZZ#### codes; the two namespaces
@@ -38,25 +38,25 @@ const (
 
 // DiagnosticCode identifies a stable diagnostic (MGS#### code). It aliases the framework's Code type, so
 // every consumer keeps referring to types.DiagnosticCode while the machinery is shared.
-type DiagnosticCode = diag.Code
+type DiagnosticCode = diagnostics.Code
 
 // DiagnosticError is a typed error carrying an MGS code and message (the framework's Error). It implements
 // error, and a DiagnosticCode is itself an errors.Is sentinel, so a caller matches one idiomatically:
 // errors.Is(err, types.ExecDenied).
-type DiagnosticError = diag.Error
+type DiagnosticError = diagnostics.Error
 
 // DiagnosticEvent is one diagnostic fired during a run (the framework's Event).
-type DiagnosticEvent = diag.Event
+type DiagnosticEvent = diagnostics.Event
 
 // DiagnosticSink records diagnostics fired during a run (the framework's Sink).
-type DiagnosticSink = diag.Sink
+type DiagnosticSink = diagnostics.Sink
 
 // ErrDiag is a sentinel for use with errors.Is on DiagnosticError values.
-var ErrDiag = diag.ErrSentinel
+var ErrDiag = diagnostics.ErrSentinel
 
 // mgs is the magus diagnostic domain: it maps an MGS code to its docs page by prefix range. Every magus
 // coded error is minted through it so the docs URL is captured for rendering.
-var mgs = diag.New(func(c DiagnosticCode) string {
+var mgs = diagnostics.New(func(c DiagnosticCode) string {
 	switch {
 	case strings.HasPrefix(string(c), "MGS9"):
 		return diagnosticAuthBase + string(c) + "/"
@@ -183,11 +183,11 @@ func WrapDiagnostic(c DiagnosticCode, cause error, format string, args ...any) *
 // WithDiagnosticSink returns ctx carrying s, so a deep emission site can reach the
 // sink without threading it through every signature.
 func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
-	return diag.WithSink(ctx, s)
+	return diagnostics.WithSink(ctx, s)
 }
 
 // EmitDiagnostic records ev to the sink in ctx, or is a no-op when none is
 // installed (the common CLI path).
 func EmitDiagnostic(ctx context.Context, ev DiagnosticEvent) {
-	diag.Emit(ctx, ev)
+	diagnostics.Emit(ctx, ev)
 }

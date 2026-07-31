@@ -1,4 +1,4 @@
-// Package diag is the shared diagnostic-code framework: the reusable machinery a codebase uses to declare
+// Package diagnostics is the shared diagnostic-code framework: the reusable machinery a codebase uses to declare
 // its OWN stable, documented diagnostic codes and render them as errors that point at a lookup page. It is
 // deliberately code-namespace-AGNOSTIC. It owns the MECHANISM - the Code/Error types, the "[code] msg /
 // see: url" rendering, the errors.Is matching, and the run-time sink plumbing - but never a catalog of
@@ -6,9 +6,9 @@
 // constants; the namespaces are entirely separate, so no code is ever shared across consumers. magus
 // instantiates it for its MGS#### codes; gopherbuzz instantiates it separately for its BZZ#### codes.
 //
-// It is its own module (github.com/egladman/magus/libs/diag, at libs/diag) precisely so both magus and gopherbuzz -
+// It is its own module (github.com/egladman/magus/libs/diagnostics, at libs/diagnostics) precisely so both magus and gopherbuzz -
 // which are separate Go modules - can each depend on it without depending on each other.
-package diag
+package diagnostics
 
 import (
 	"context"

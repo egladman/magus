@@ -5,6 +5,8 @@
 
 export object Tag {
     name: str = "",
+    prefix: str = "",
+    version: SemverVersion = SemverVersion{},
     date: str = "",
     id: str = "",
 }

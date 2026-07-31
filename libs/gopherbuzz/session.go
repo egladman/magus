@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/libs/diag"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -628,7 +628,7 @@ func (s *Session) checkShared(code string) (prog *ast.Program, typeErrs []typeEr
 // typeError; keep the two shapes in sync if either gains a field.
 type Diagnostic struct {
 	Line, Col int
-	Code      diag.Code
+	Code      diagnostics.Code
 	Msg       string
 }
 

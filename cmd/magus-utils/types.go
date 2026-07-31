@@ -33,6 +33,7 @@ var registry = map[string]reflect.Type{
 	"FileInfo":      reflect.TypeOf(types.FileInfo{}),
 	"HttpResponse":  reflect.TypeOf(types.HTTPResponse{}),
 	"SemverVersion": reflect.TypeOf(types.SemverVersion{}),
+	"SemverNext":    reflect.TypeOf(types.SemverNext{}),
 	"URL":           reflect.TypeOf(types.URL{}),
 	"Tag":           reflect.TypeOf(types.Tag{}),
 	// magus.affected and magus.graph, the in-process verbs beside ls.
@@ -87,6 +88,23 @@ func buzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	fmt.Fprintln(&b, "// magus/target module. Edit the Go struct and rerun `go generate`, never this file.")
 	fmt.Fprintln(&b)
 	fmt.Fprintf(&b, "export object %s {\n", name)
+	if err := emitFields(&b, rt); err != nil {
+		return nil, err
+	}
+	fmt.Fprintln(&b, "}")
+	return b.Bytes(), nil
+}
+
+// emitFields writes one Buzz field line per exported field of rt, INLINING the
+// fields of an embedded struct rather than nesting it under the embedded type's
+// name.
+//
+// Inlining is not a style preference: encoding/json promotes an anonymous field's
+// keys to the outer object, so nesting here would make the Buzz mirror and the
+// JSON wire form describe the SAME Go type with two different shapes. A magusfile
+// reading a value that arrived as JSON would find the fields one level shallower
+// than the object it was typechecked against.
+func emitFields(b *bytes.Buffer, rt reflect.Type) error {
 	for i := 0; i < rt.NumField(); i++ {
 		f := rt.Field(i)
 		if !f.IsExported() {
@@ -97,18 +115,36 @@ func buzzMirror(name string, rt reflect.Type) ([]byte, error) {
 		if f.Tag.Get("buzz") == "-" {
 			continue
 		}
+		// An embedded struct with no explicit name promotes its fields. A named
+		// embedded field (`buzz:"x"`) is a deliberate request to nest it, and an
+		// embedded non-struct (e.g. a named string type) has nothing to promote,
+		// so both fall through to the ordinary path.
+		if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("buzz") == "" {
+			if err := emitFields(b, f.Type); err != nil {
+				return err
+			}
+			continue
+		}
 		bt, def, err := buzzType(f.Type)
 		if err != nil {
-			return nil, fmt.Errorf("field %s: %w", f.Name, err)
+			return fmt.Errorf("field %s: %w", f.Name, err)
 		}
-		fmt.Fprintf(&b, "    %s: %s = %s,\n", buzzFieldName(f), bt, def)
+		fmt.Fprintf(b, "    %s: %s = %s,\n", buzzFieldName(f), bt, def)
 	}
-	fmt.Fprintln(&b, "}")
-	return b.Bytes(), nil
+	return nil
 }
 
 // buzzType maps a Go field type to its Buzz type name and zero-value default.
 func buzzType(t reflect.Type) (typeName, zero string, err error) {
+	// Checked ahead of the Kind switch because a Duration IS an Int64: left to the
+	// integer case it would mirror as a bare `int`, handing a magusfile a
+	// nanosecond count with nothing in the type or the value saying so. It crosses
+	// as its own string form ("1.5s") for the same reason time.Time crosses as
+	// RFC3339 - the unit travels WITH the value. A ToMap emitting one must call
+	// d.String(), not d.Nanoseconds().
+	if t == reflect.TypeOf(time.Duration(0)) {
+		return "str", `""`, nil
+	}
 	switch t.Kind() {
 	case reflect.String:
 		return "str", `""`, nil
@@ -116,8 +152,33 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 		return "bool", "false", nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return "int", "0", nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		// Buzz has no unsigned integer, so an unsigned Go field mirrors as `int`.
+		// Safe for every width up to Uint32. A Uint64 above math.MaxInt64 cannot be
+		// represented and would wrap; no mirrored type carries one today, and a
+		// value that large is a count of something no workspace has.
+		return "int", "0", nil
 	case reflect.Float32, reflect.Float64:
 		return "double", "0.0", nil
+	case reflect.Pointer:
+		// A pointer is Go's "optional", so it mirrors as the pointed-to type made
+		// nullable, defaulting to null rather than to that type's zero. Mirroring it
+		// as the bare type would claim a value is always present when nil is exactly
+		// what the pointer exists to express.
+		elem, _, eerr := buzzType(t.Elem())
+		if eerr != nil {
+			return "", "", eerr
+		}
+		return elem + "?", "null", nil
+	case reflect.Array:
+		// A fixed-size array carries no length information across the boundary that
+		// Buzz could enforce, so it mirrors exactly as a slice does. The Go side
+		// keeps the length guarantee; Buzz sees a list.
+		elem, _, eerr := buzzType(t.Elem())
+		if eerr != nil {
+			return "", "", eerr
+		}
+		return "[" + elem + "]", "[]", nil
 	case reflect.Slice:
 		elem, _, eerr := buzzType(t.Elem())
 		if eerr != nil {

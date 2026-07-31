@@ -13,23 +13,23 @@ cannot see.
 VERIFIED against the real published module at the real latest tag
 (`go get github.com/egladman/magus@v0.3.0` from a clean module, no local
 replace): it fails outright. `go.mod` requires
-`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diag` - nested
+`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diagnostics` - nested
 modules with their own `go.mod` - at `v0.0.0`, and no `libs/gopherbuzz/vX.Y.Z`
-or `libs/diag/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
+or `libs/diagnostics/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
 The root module's own `go.mod` resolves them via LOCAL replace directives
 (`replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz`);
 replace directives are not transitive, so a downstream consumer inherits
 none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those nested modules get their own tags, the only working install is:
-clone the repo (or vendor `libs/gopherbuzz` and `libs/diag` from it), and add
+clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag => /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
 ```
 
 Tell the reader this plainly before anything else. A worked example that

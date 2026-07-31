@@ -21,21 +21,21 @@ the other side.
 As of this writing, `go get github.com/egladman/magus` does not resolve on
 its own. The module's `go.mod` requires two nested modules -
 `github.com/egladman/magus/libs/gopherbuzz` and
-`github.com/egladman/magus/libs/diag`, each with its own `go.mod` - and
+`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod` - and
 neither has a tagged release (`libs/gopherbuzz/vX.Y.Z` /
-`libs/diag/vX.Y.Z`) yet. The root repository resolves them with local
+`libs/diagnostics/vX.Y.Z`) yet. The root repository resolves them with local
 `replace` directives, which are not transitive, so a downstream consumer
 inherits none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those get their own tags, clone the repository (or vendor
-`libs/gopherbuzz` and `libs/diag` out of it) and add matching `replace`
+`libs/gopherbuzz` and `libs/diagnostics` out of it) and add matching `replace`
 directives to your own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag => /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
 ```
 
 Everything below assumes that step is done.

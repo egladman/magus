@@ -430,7 +430,8 @@ func Repl(ctx context.Context, sess engine.Session, opts ReplOptions) error {
 
 	for {
 		if ctx.Err() != nil {
-			return nil //nolint:nilerr // ctx cancelled: exit the REPL loop cleanly, not as an error
+			// ctx cancelled: exit the REPL loop cleanly, not as an error.
+			return nil
 		}
 
 		prompt := "> "

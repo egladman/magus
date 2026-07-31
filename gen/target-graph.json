@@ -217,6 +217,18 @@
           "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos)."
         },
         {
+          "name": "release",
+          "doc": "release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand: 1.",
+          "charms": [
+            "cd"
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "watch",
           "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
           "spells": [
@@ -689,8 +701,8 @@
       ]
     },
     {
-      "path": "libs/diag",
-      "name": "libs/diag",
+      "path": "libs/diagnostics",
+      "name": "libs/diagnostics",
       "engine": "buzz",
       "nodes": [
         {

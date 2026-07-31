@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 // Boundary mirrors of the records magus host methods return. Each is the typed
 // value a Go SDK caller gets and the serializable view a magusfile can annotate
 // (`> FileInfo`, `> HttpResponse`, ...) for compile-checked field access. The
@@ -61,6 +63,43 @@ func (v SemverVersion) ToMap() map[string]any {
 		"prerelease": v.Prerelease,
 		"metadata":   v.Metadata,
 		"original":   v.Original,
+	}
+}
+
+// String renders the canonical "vMAJOR.MINOR.PATCH[-PRERELEASE][+METADATA]"
+// form, e.g. "v1.2.3-rc1+build5". This is deliberately NOT Original: Original
+// is the raw text as the user wrote the tag/version string, so it round-trips
+// things String() normalizes away (a leading zero like "v1.02.3", a missing
+// "v", metadata the canonical form still carries). The leading "v" matches how
+// this codebase already writes versions everywhere else - git tags ("v0.3.0"),
+// the linker-stamped build version (-X main.version=v0.1.0), and selfupdate's
+// target version handling.
+func (v SemverVersion) String() string {
+	s := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	if v.Prerelease != "" {
+		s += "-" + v.Prerelease
+	}
+	if v.Metadata != "" {
+		s += "+" + v.Metadata
+	}
+	return s
+}
+
+// SemverNext mirrors semver.next's {major, minor, patch} record: the three
+// candidate next versions after a parsed version (bump major, minor, or
+// patch), each rendered "vX.Y.Z" to match SemverVersion.String()'s convention.
+type SemverNext struct {
+	Major string
+	Minor string
+	Patch string
+}
+
+// ToMap is the Buzz boundary map semver.next returns.
+func (n SemverNext) ToMap() map[string]any {
+	return map[string]any{
+		"major": n.Major,
+		"minor": n.Minor,
+		"patch": n.Patch,
 	}
 }
 

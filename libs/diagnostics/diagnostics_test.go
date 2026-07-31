@@ -1,4 +1,4 @@
-package diag
+package diagnostics
 
 import (
 	"context"

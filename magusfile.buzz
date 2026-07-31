@@ -10,6 +10,7 @@ import "crypto";
 import "serialize";
 import "io";
 import "std";
+import "semver";
 // Value-type mirrors (ExecResult, Commit, etc.) for compile-checked field access.
 import "magus/target";
 
@@ -60,6 +61,10 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": true},
         "release-sign": {"skip_cache": true},
+        // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
+        // order-sensitive side effect, never a cache replay. exclusive: nothing
+        // else should be touching go.mod or the tag namespace while it runs.
+        "release": {"skip_cache": true, "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
         "test": {"skip_cache": true},
     },
@@ -407,6 +412,105 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
     os\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
+}
+
+// release cuts a version across the workspace in the order Go's multi-module
+// convention requires - the part that is easy to get wrong by hand:
+//
+//   1. tag each nested module (libs/<name>/vX.Y.Z) - each has to be
+//      independently `go get`-able before anything downstream can require it
+//      at a real version instead of v0.0.0.
+//   2. rewrite root go.mod's `require .../libs/<name> v0.0.0` lines to the
+//      real vX.Y.Z, now that those tags exist to resolve to.
+//   3. tag root vX.Y.Z last - only now does the root tag's own go.mod
+//      resolve its nested requires to something `go get` can fetch, instead
+//      of the unreleased v0.0.0 that makes `go get github.com/egladman/magus`
+//      fail for everyone outside this repo (see docs/reference/go-sdk.md).
+//
+// go.mod's `replace` directives are left exactly as they are: they are
+// ignored by any downstream consumer (replace is never transitive) and are
+// the standard pattern for local development inside the same repo - go.mod
+// carries a comment saying so, precisely so nobody "cleans them up" later.
+//
+// Dry run by default: `magus run release -- 0.4.0` only prints the tags and
+// go.mod edits it would make. `magus run release:cd -- 0.4.0` creates the
+// tags and rewrites go.mod for real. Neither ever pushes - a human reviews
+// what got created and pushes the tags deliberately.
+export fun release(ctx: magus\Context, args: [str]) > void {
+    if (args.len() == 0 or args[0] == "") {
+        throw "release: version required, e.g. `magus run release -- 0.4.0` (no leading v)";
+    }
+    var v = args[0];
+    if (v.startsWith("v")) { v = v.sub(1); }
+    semver\parse(v); // raises with a clear message on anything that is not a valid semver
+
+    // `cd` rather than a release-only charm: image_build above already uses it to
+    // mean "this is the real delivery path, do the side-effectful thing" (push and
+    // sign, there; tag and rewrite go.mod, here). One word for one concept beats a
+    // second one that has to be learned separately.
+    final deliver = ctx.has_charm("cd");
+    // The dirty-tree refusal guards the ACTUAL tag/write below, not the preview: a
+    // dry run changes nothing, so it stays available while you are still shaping
+    // the commit that will become this release (which is necessarily dirty until
+    // it lands). Only `cd` - the path that creates tags and writes go.mod -
+    // has to see a clean tree.
+    final dirty = vcs\isDirty();
+    if (deliver and dirty) {
+        throw "release: tree is dirty; commit or stash before releasing v" + v;
+    }
+
+    final root_tag = "v" + v;
+    if (vcs\tags(pattern: root_tag).len() > 0) {
+        throw "release: tag " + root_tag + " already exists";
+    }
+
+    // Discover nested modules by their go.mod, rather than a hardcoded name
+    // list, so a new libs/<name> module is picked up the moment it gets one.
+    final nested = mut [];
+    foreach (gomod in fs\glob("libs/*/go.mod")) {
+        final dir = fs\dirname(gomod); // "libs/<name>"
+        final tag = "libs/" + fs\basename(dir) + "/v" + v;
+        if (vcs\tags(pattern: tag).len() > 0) {
+            throw "release: tag " + tag + " already exists";
+        }
+        nested.append({"module": "github.com/egladman/magus/" + dir, "tag": tag});
+    }
+
+    if (!deliver) {
+        magus\info("release: DRY RUN - pass the cd charm to execute: `magus run release:cd -- " + v + "`");
+        if (dirty) { magus\info("release: NOTE - tree is currently dirty; cd will refuse until it is clean"); }
+    }
+
+    // 1. Nested modules first.
+    foreach (n in nested) {
+        magus\info("release: tag " + n["tag"]);
+        if (deliver) { os\exec(vcs\exe(), ["tag", n["tag"]]); }
+    }
+
+    // 2. Root go.mod: v0.0.0 -> the real tag, one nested require at a time.
+    ctx.outputs("go.mod");
+    final gomod_path = "go.mod";
+    var gomod = fs\readFile(gomod_path);
+    foreach (n in nested) {
+        final old = n["module"] + " v0.0.0";
+        final replacement = n["module"] + " v" + v;
+        if (gomod.indexOf(old) == null) {
+            throw "release: go.mod has no require line `" + old + "` to rewrite";
+        }
+        magus\info("release: go.mod  " + old + "  ->  " + replacement);
+        gomod = gomod.replace(old, with: replacement);
+    }
+    if (deliver) { fs\writeFile(gomod_path, gomod); }
+
+    // 3. Root tag last.
+    magus\info("release: tag " + root_tag);
+    if (deliver) { os\exec(vcs\exe(), ["tag", root_tag]); }
+
+    if (deliver) {
+        magus\info("release: done - nothing was pushed. Push when ready: git push origin " + root_tag);
+    } else {
+        magus\info("release: dry run only - nothing was tagged or written");
+    }
 }
 
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.

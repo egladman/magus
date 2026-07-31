@@ -66,8 +66,20 @@ type VCSDriver interface {
 // and message are not, since a lightweight tag has neither. Reach for vcs.exe()
 // for backend-specific tag work.
 type Tag struct {
-	// Name is the tag as a user writes it ("v0.3.0"), without a refs/tags/ prefix.
+	// Name is the tag as a user writes it ("v0.3.0", or "libs/gopherbuzz/v0.1.0"
+	// for a nested-module tag), without a refs/tags/ prefix.
 	Name string
+	// Prefix is everything through the final "/" of a nested-module tag
+	// ("libs/gopherbuzz/" for "libs/gopherbuzz/v0.1.0"); "" for a root tag with
+	// no "/" in its name.
+	Prefix string
+	// Version is Name's version portion (Name with Prefix stripped) parsed as
+	// semver. It is the zero value - test Version.Original == "" - when Name
+	// (or its portion after Prefix) is not a semver-shaped tag at all, or when
+	// parsing it failed: an annotated tag like "checkpoint" or "release-2026"
+	// is a legitimate, non-error case, not a reason to carry a separate
+	// IsSemver bool that could disagree with the zero value it's mirroring.
+	Version SemverVersion
 	// Date is when an annotated tag was created, else when its revision was
 	// recorded. Zero if the VCS reported no timestamp.
 	Date time.Time
@@ -75,14 +87,22 @@ type Tag struct {
 	ID string `buzz:"id"`
 }
 
-// ToMap is the Buzz boundary map vcs.tags entries return: {name, date, id}.
-// date is RFC3339, empty when the VCS reported no timestamp.
+// ToMap is the Buzz boundary map vcs.tags entries return: {name, prefix,
+// version, date, id}. date is RFC3339, empty when the VCS reported no
+// timestamp; version nests SemverVersion.ToMap() (its own zero value when Name
+// did not parse as semver).
 func (t Tag) ToMap() map[string]any {
 	date := ""
 	if !t.Date.IsZero() {
 		date = t.Date.Format(time.RFC3339)
 	}
-	return map[string]any{"name": t.Name, "date": date, "id": t.ID}
+	return map[string]any{
+		"name":    t.Name,
+		"prefix":  t.Prefix,
+		"version": t.Version.ToMap(),
+		"date":    date,
+		"id":      t.ID,
+	}
 }
 
 // Person identifies who authored a revision.

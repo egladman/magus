@@ -143,6 +143,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 		ispell.FileInfoSource,
 		ispell.HTTPResponseSource,
 		ispell.SemverVersionSource,
+		ispell.SemverNextSource,
 		ispell.URLSource,
 		// magus.ls's result. ProjectEntry precedes Projects (Projects.projects is
 		// [ProjectEntry]).

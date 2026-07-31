@@ -37,6 +37,38 @@ func TestCommitToMapZeroDate(t *testing.T) {
 	assert.Equal(t, "", got["date"])
 }
 
+// TestTagToMap covers the Buzz boundary map, including the nested
+// SemverVersion record and the RFC3339 date formatting.
+func TestTagToMap(t *testing.T) {
+	tag := Tag{
+		Name:    "libs/gopherbuzz/v0.1.0",
+		Prefix:  "libs/gopherbuzz/",
+		Version: SemverVersion{Major: 0, Minor: 1, Patch: 0, Original: "0.1.0"},
+		Date:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		ID:      "deadbeef",
+	}
+	want := map[string]any{
+		"name":   "libs/gopherbuzz/v0.1.0",
+		"prefix": "libs/gopherbuzz/",
+		"version": map[string]any{
+			"major": 0, "minor": 1, "patch": 0,
+			"prerelease": "", "metadata": "", "original": "0.1.0",
+		},
+		"date": "2026-01-02T03:04:05Z",
+		"id":   "deadbeef",
+	}
+	assert.Equal(t, want, tag.ToMap())
+}
+
+// A tag whose Name never parsed as semver carries the zero Version - test
+// Version.Original == "" rather than a separate bool, and ToMap must nest
+// that zero value rather than omitting the key.
+func TestTagToMapNonSemver(t *testing.T) {
+	got := Tag{Name: "checkpoint", ID: "x"}.ToMap()
+	assert.Equal(t, SemverVersion{}.ToMap(), got["version"])
+	assert.Equal(t, "", got["prefix"])
+}
+
 func TestVCSErrorSentinels(t *testing.T) {
 	for _, sentinel := range []error{ErrVCSUnsupported, ErrVCSUnknown} {
 		assert.NotNil(t, sentinel)

@@ -103,9 +103,9 @@ func (m *Magus) ServeDaemon(ctx context.Context) error {
 //
 // Deliberately a single name, not a set. The earlier attempt listed go.mod here too,
 // on the theory that it only appears at a repo's top - false in any multi-module repo,
-// including this one (libs/diag/go.mod, libs/gopherbuzz/go.mod). That reintroduced the
-// exact defect it was meant to fix, one level down: running from libs/diag made
-// libs/diag the workspace, so it locked libs/diag/.magus/locks while a root run locked
+// including this one (libs/diagnostics/go.mod, libs/gopherbuzz/go.mod). That reintroduced the
+// exact defect it was meant to fix, one level down: running from libs/diagnostics made
+// libs/diagnostics the workspace, so it locked libs/diagnostics/.magus/locks while a root run locked
 // the root's, and the two stopped excluding each other despite touching the same files.
 const workspaceMarker = "magus.yaml"
 

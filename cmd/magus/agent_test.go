@@ -388,9 +388,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// magus is CWD-relative, so cd-then-magus is how the right command lands
 		// on the wrong project. The project is an argument; only a different
 		// WORKSPACE needs --root.
-		{command: "cd libs/diag && magus run test", context: "CWD-relative"},
-		{command: "magus run test libs/diag"},
-		{command: "cd libs/diag"},
+		{command: "cd libs/diagnostics && magus run test", context: "CWD-relative"},
+		{command: "magus run test libs/diagnostics"},
+		{command: "cd libs/diagnostics"},
 		{command: "grep pattern onefile.txt"},
 		{command: "grep -n x file.go"},
 		{command: "cat x | grep y"},
@@ -535,7 +535,7 @@ func TestGuardAdversarial(t *testing.T) {
 		{"and-and", "make deps && go test ./..."},
 		{"or-or", "make deps || go test ./..."},
 		{"pipe", "go test ./... | tee log"},
-		{"subshell", "(cd libs/diag && go test ./...)"},
+		{"subshell", "(cd libs/diagnostics && go test ./...)"},
 		{"brace block", "{ go test ./...; }"},
 		{"if branch", "if true; then go test ./...; fi"},
 		{"for body", "for d in a b; do go test ./$d; done"},
@@ -564,7 +564,7 @@ func TestGuardAdversarial(t *testing.T) {
 		// Destructive git still denies however it is REACHED - the safety property
 		// the old unanchored regexes existed for, kept by parsing both commands.
 		{"stash after cd", "cd /repo && git stash"},
-		{"stash in a subshell", "(cd libs/diag && git stash)"},
+		{"stash in a subshell", "(cd libs/diagnostics && git stash)"},
 		{"stash push", "git stash push -u"},
 		{"bare stash", "git stash"},
 		{"reset hard", "git reset --hard origin/main"},

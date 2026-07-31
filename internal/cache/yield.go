@@ -177,10 +177,15 @@ func displayProject(p string) string {
 // its own journal and stops.
 func SlowExecutions(journalPath string, minMs int64) map[string]bool {
 	out := map[string]bool{}
-	scanJournal(journalPath, nil, func(project, target, status string, durMs int64) {
+	if err := scanJournal(journalPath, nil, func(project, target, status string, durMs int64) {
 		if (status == "pass" || status == "fail") && durMs >= minMs {
 			out[project+"\x00"+target] = true
 		}
-	})
+	}); err != nil {
+		// Same discard-on-error rule as StalledTargets: a journal that could not be
+		// read whole may have dropped a slow execution, and a partial answer here
+		// would silently narrow which targets get checked for yield.
+		return map[string]bool{}
+	}
 	return out
 }
