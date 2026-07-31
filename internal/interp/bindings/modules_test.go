@@ -120,24 +120,24 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := host.ModulesOutput("") // what `magus describe modules` formats
-	require.NotEmpty(t, core.Modules)
+	core := host.Modules("") // what `magus describe modules` formats
+	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := host.ValueToAny(host.MapsVal(core.Modules)).([]any)
+	got, ok := host.ValueToAny(host.MapsVal(core)).([]any)
 	require.True(t, ok)
-	require.Len(t, got, len(core.Modules))
-	for i, m := range core.Modules {
+	require.Len(t, got, len(core))
+	for i, m := range core {
 		rec := got[i].(map[string]any)
 		assert.Equal(t, m.Name, rec["name"])
 		assert.Equal(t, m.Doc, rec["doc"])
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := host.ModulesOutput("fs")
-	require.Len(t, fs.Modules, 1)
-	require.NotEmpty(t, fs.Modules[0].Methods)
-	assert.NotEmpty(t, fs.Modules[0].Methods[0].Buzz, "each method carries its Buzz signature")
+	fs := host.Modules("fs")
+	require.Len(t, fs, 1)
+	require.NotEmpty(t, fs[0].Methods)
+	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
 }
 
 // TestMagusModulesEndToEnd drives the host methods from a real magusfile, proving

@@ -128,12 +128,12 @@ func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
 
 	out := ws.DescribeTargets()
 
-	require.NotZero(t, out.Count, "DescribeTargets: Count == 0")
-	assert.Equal(t, "ci", out.Targets[0].Name, "DescribeTargets: first entry")
-	assert.Equal(t, "canonical", out.Targets[0].Kind, "DescribeTargets: ci.Kind")
+	require.NotEmpty(t, out, "DescribeTargets: no targets")
+	assert.Equal(t, "ci", out[0].Name, "DescribeTargets: first entry")
+	assert.Equal(t, "canonical", out[0].Kind, "DescribeTargets: ci.Kind")
 
-	byName := make(map[string]types.TargetEntry, len(out.Targets))
-	for _, e := range out.Targets {
+	byName := make(map[string]types.TargetEntry, len(out))
+	for _, e := range out {
 		byName[e.Name] = e
 	}
 	for _, target := range []string{"zzz-target-a", "zzz-target-b"} {
@@ -160,7 +160,7 @@ func TestDescribeTarget_Charms(t *testing.T) {
 	out, err := ws.DescribeTarget(types.Target{Name: "lint"})
 	require.NoError(t, err, "DescribeTarget")
 	var got []string
-	for _, e := range out.Targets {
+	for _, e := range out {
 		if e.Target == "lint" {
 			got = e.Charms
 		}
@@ -237,8 +237,8 @@ func TestDescribeTargets_CustomTargets(t *testing.T) {
 
 	out := ws.DescribeTargets()
 
-	byName := make(map[string]types.TargetEntry, len(out.Targets))
-	for _, e := range out.Targets {
+	byName := make(map[string]types.TargetEntry, len(out))
+	for _, e := range out {
 		byName[e.Name] = e
 	}
 	e, ok := byName[customTarget]
@@ -272,11 +272,10 @@ func TestDescribeTarget_FanOut(t *testing.T) {
 	ws := newWorkspace(t)
 	out, err := ws.DescribeTarget(types.Target{Name: "build"})
 	require.NoError(t, err, "DescribeTarget")
-	assert.NotEmpty(t, out.Definition, "DescribeTarget: Definition is empty")
 	wantProjects := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Equal(t, len(wantProjects), out.Count, "DescribeTarget: Count")
-	byProject := make(map[string]types.EvaluatedTargetEntry, len(out.Targets))
-	for _, e := range out.Targets {
+	assert.Len(t, out, len(wantProjects), "DescribeTarget: one entry per project")
+	byProject := make(map[string]types.EvaluatedTargetEntry, len(out))
+	for _, e := range out {
 		byProject[e.Project] = e
 	}
 	for _, p := range wantProjects {
@@ -292,8 +291,8 @@ func TestDescribeTarget_SingleProject(t *testing.T) {
 	ws := newWorkspace(t)
 	out, err := ws.DescribeTarget(types.Target{Path: "api", Name: "test"})
 	require.NoError(t, err, "DescribeTarget")
-	require.Equal(t, 1, out.Count, "DescribeTarget: Count")
-	e := out.Targets[0]
+	require.Len(t, out, 1, "DescribeTarget: one entry")
+	e := out[0]
 	assert.Equal(t, "api", e.Project, "DescribeTarget: Project")
 	assert.Equal(t, "test", e.Target, "DescribeTarget: Target")
 }
@@ -327,8 +326,8 @@ func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
 
 	out, err := ws.DescribeTarget(types.Target{Name: "my-target"})
 	require.NoError(t, err, "DescribeTarget")
-	require.NotZero(t, out.Count, "DescribeTarget: Count == 0")
-	e := out.Targets[0]
+	require.NotEmpty(t, out, "DescribeTarget: no entries")
+	e := out[0]
 
 	// Spell entry must be present.
 	require.NotEmpty(t, e.Spells, "DescribeTarget: Spells is empty, expected at least one entry")
@@ -405,14 +404,12 @@ func TestDescribeWorkspaces_SingleWorkspace(t *testing.T) {
 	cfg := types.WorkspaceConfig{CacheDir: "/tmp/cache-test", Concurrency: 4}
 	out := ws.DescribeWorkspaces(cfg)
 
-	assert.Equal(t, 1, out.Count, "DescribeWorkspaces: Count")
-	require.Len(t, out.Workspaces, 1, "DescribeWorkspaces: len(Workspaces)")
-	entry := out.Workspaces[0]
+	require.Len(t, out, 1, "DescribeWorkspaces: one entry")
+	entry := out[0]
 	assert.Equal(t, ws.Root(), entry.Root, "Root")
 	assert.Equal(t, cfg.CacheDir, entry.CacheDir, "CacheDir")
 	assert.Equal(t, cfg.Concurrency, entry.Concurrency, "Concurrency")
 	assert.NotZero(t, entry.ProjectCount, "ProjectCount = 0, want > 0")
-	assert.NotEmpty(t, out.Definition, "Definition is empty")
 }
 
 // TestDescribeFiles_Classification covers the roles end to end: a declared
@@ -497,8 +494,8 @@ func TestDescribeTarget_ReportsPerTargetOutputs(t *testing.T) {
 
 	out, err := m.DescribeTarget(types.Target{Name: "generate"})
 	require.NoError(t, err, "DescribeTarget")
-	require.Len(t, out.Targets, 1)
-	assert.Equal(t, []string{"GEN.md"}, out.Targets[0].Outputs,
+	require.Len(t, out, 1)
+	assert.Equal(t, []string{"GEN.md"}, out[0].Outputs,
 		"a per-target ctx.outputs glob belongs in that target's own description")
 }
 

@@ -122,10 +122,10 @@ func cacheImmutable(cfg config.Config) bool {
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.
 func allModuleEntries() []types.ModuleEntry {
-	summary := host.ModulesOutput("")
-	out := make([]types.ModuleEntry, 0, len(summary.Modules))
-	for _, m := range summary.Modules {
-		out = append(out, host.ModulesOutput(m.Name).Modules...)
+	summary := host.Modules("")
+	out := make([]types.ModuleEntry, 0, len(summary))
+	for _, m := range summary {
+		out = append(out, host.Modules(m.Name)...)
 	}
 	return out
 }

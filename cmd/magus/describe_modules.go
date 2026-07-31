@@ -42,8 +42,8 @@ func describeModules(args []string) error {
 	if len(rest) > 0 {
 		name = rest[0]
 	}
-	out := host.ModulesOutput(name)
-	if name != "" && len(out.Modules) == 0 {
+	out := host.Modules(name)
+	if name != "" && len(out) == 0 {
 		mods := std.All()
 		names := make([]string, len(mods)) // module names, sorted for a stable suggestion
 		for i, m := range mods {
@@ -60,9 +60,9 @@ func describeModules(args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.ModuleReport{Definition: types.ModuleDefinition, Count: len(out), Modules: out})
 	case outputName:
-		for _, m := range out.Modules {
+		for _, m := range out {
 			fmt.Println(m.Name)
 		}
 		return nil
@@ -70,9 +70,9 @@ func describeModules(args []string) error {
 
 	// text / wide
 	if name == "" {
-		fmt.Printf("definition: %s\n\n", out.Definition)
-		fmt.Printf("modules (%d):\n", out.Count)
-		for _, m := range out.Modules {
+		fmt.Printf("definition: %s\n\n", types.ModuleDefinition)
+		fmt.Printf("modules (%d):\n", len(out))
+		for _, m := range out {
 			fmt.Printf("  %s\n", m.Name)
 			if m.Doc != "" {
 				fmt.Printf("    %s\n", firstLine(m.Doc))
@@ -83,7 +83,7 @@ func describeModules(args []string) error {
 	}
 
 	// detail (single module)
-	m := out.Modules[0]
+	m := out[0]
 	fmt.Printf("module: %s\n", m.Name)
 	if m.Doc != "" {
 		fmt.Printf("  %s\n", m.Doc)

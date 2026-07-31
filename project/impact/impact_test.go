@@ -17,7 +17,7 @@ type fakeWorkspace struct {
 	types.WorkspaceRepository
 	affected *types.AffectedResult
 	projects map[string]*types.Project
-	targets  types.TargetsOutput
+	targets  []types.TargetEntry
 }
 
 func (f *fakeWorkspace) Affected(context.Context, string) (*types.AffectedResult, error) {
@@ -30,7 +30,7 @@ func (f *fakeWorkspace) AffectedFromPaths(context.Context, []string) (*types.Aff
 
 func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path] }
 
-func (f *fakeWorkspace) DescribeTargets() types.TargetsOutput { return f.targets }
+func (f *fakeWorkspace) DescribeTargets() []types.TargetEntry { return f.targets }
 
 func TestCompute(t *testing.T) {
 	goSpell := spells.NewSpell("go", spells.WithTargets("go-build", "go-test", "go-vet"))
@@ -40,7 +40,7 @@ func TestCompute(t *testing.T) {
 		name     string
 		affected *types.AffectedResult
 		projects map[string]*types.Project
-		targets  types.TargetsOutput
+		targets  []types.TargetEntry
 		want     *Result
 	}{
 		{
@@ -66,12 +66,12 @@ func TestCompute(t *testing.T) {
 				"api": {Path: "api", Spells: []string{"go"}, ResolvedSpells: []*spells.Spell{goSpell}},
 				"web": {Path: "web", Spells: []string{"ts"}, ResolvedSpells: []*spells.Spell{tsSpell}},
 			},
-			targets: types.TargetsOutput{Targets: []types.TargetEntry{
+			targets: []types.TargetEntry{
 				{Name: "ci", Kind: "canonical"},
 				{Name: "test", Kind: "custom", Projects: []string{"api"}},
 				{Name: "build", Kind: "custom", Projects: []string{"api", "web"}},
 				{Name: "go-test", Kind: "spell"}, // spell entries carry no Projects; ignored here
-			}},
+			},
 			want: &Result{
 				Base:             "origin/main",
 				ChangedFileCount: 3,

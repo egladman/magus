@@ -15,11 +15,11 @@ import (
 // with its fields and methods (and per-method Buzz signatures) populated, or an
 // empty Modules slice if the name is unknown. Routing both surfaces through this
 // one function is what guarantees they can't drift.
-func ModulesOutput(name string) types.ModulesOutput {
+func Modules(name string) []types.ModuleEntry {
 	mods := std.All()
 	slices.SortFunc(mods, func(a, b std.Module) int { return strings.Compare(a.Name, b.Name) })
 
-	out := types.ModulesOutput{Definition: types.ModuleDefinition}
+	var out []types.ModuleEntry
 	for _, m := range mods {
 		if name != "" && m.Name != name {
 			continue
@@ -43,8 +43,7 @@ func ModulesOutput(name string) types.ModulesOutput {
 				entry.Methods = append(entry.Methods, me)
 			}
 		}
-		out.Modules = append(out.Modules, entry)
+		out = append(out, entry)
 	}
-	out.Count = len(out.Modules)
 	return out
 }

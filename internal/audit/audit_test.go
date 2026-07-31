@@ -54,14 +54,14 @@ func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedRe
 }
 func (f *fakeWS) DescribeSpells() []types.SpellEntry                    { panic("not used") }
 func (f *fakeWS) DescribeCharms([]string) []types.CharmEntry            { panic("not used") }
-func (f *fakeWS) DescribeTargets() types.TargetsOutput                  { panic("not used") }
+func (f *fakeWS) DescribeTargets() []types.TargetEntry                  { panic("not used") }
 func (f *fakeWS) DescribeGraph(context.Context) types.TargetGraphOutput { panic("not used") }
 func (f *fakeWS) DescribeProjects() types.ProjectsOutput                { panic("not used") }
-func (f *fakeWS) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
+func (f *fakeWS) DescribeWorkspaces(types.WorkspaceConfig) []types.WorkspaceEntry {
 	panic("not used")
 }
 
-func (f *fakeWS) DescribeTarget(types.Target) (types.EvaluatedTargetsOutput, error) {
+func (f *fakeWS) DescribeTarget(types.Target) ([]types.EvaluatedTargetEntry, error) {
 	panic("not used")
 }
 

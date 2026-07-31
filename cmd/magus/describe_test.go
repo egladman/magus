@@ -32,7 +32,6 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 
 	out, err := describeWorkspacesOutput(context.Background(), "")
 	require.NoError(t, err)
-	require.Equal(t, 2, out.Count)
-	require.Len(t, out.Workspaces, 2)
-	assert.NotEqual(t, out.Workspaces[1].Root, out.Workspaces[0].Root, "expected two distinct workspace roots")
+	require.Len(t, out, 2)
+	assert.NotEqual(t, out[1].Root, out[0].Root, "expected two distinct workspace roots")
 }

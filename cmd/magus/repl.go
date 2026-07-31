@@ -81,14 +81,14 @@ func replCandidates(ctx context.Context, cwd string) func() []string {
 		// available - and they are what a bare `magus repl` is mostly for. Each
 		// module contributes its own name plus every `mod.method`, which is the
 		// difference between completing "fs" and completing "fs.writeFile".
-		for _, mod := range host.ModulesOutput("").Modules {
+		for _, mod := range host.Modules("") {
 			cached = append(cached, mod.Name)
-			for _, meth := range host.ModulesOutput(mod.Name).Modules[0].Methods {
+			for _, meth := range host.Modules(mod.Name)[0].Methods {
 				cached = append(cached, mod.Name+"."+meth.Name)
 			}
 		}
 		if m, err := loadMagus(ctx, cwd); err == nil {
-			for _, t := range m.DescribeTargets().Targets {
+			for _, t := range m.DescribeTargets() {
 				cached = append(cached, t.Name)
 			}
 			for _, p := range m.All() {

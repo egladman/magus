@@ -34,7 +34,8 @@ func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 		if name != "" {
 			return describeTargetByName(t.ws, name)
 		}
-		return spells.InvokeResponse{Data: t.ws.DescribeTargets()}, nil
+		targets := t.ws.DescribeTargets()
+		return spells.InvokeResponse{Data: types.TargetReport{Definition: types.TargetDefinition, Count: len(targets), Targets: targets}}, nil
 	case "projects":
 		out := t.ws.DescribeProjects()
 		if name != "" {
@@ -42,7 +43,8 @@ func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 		}
 		return spells.InvokeResponse{Data: out}, nil
 	case "workspaces":
-		return spells.InvokeResponse{Data: t.ws.DescribeWorkspaces(t.cfg)}, nil
+		wss := t.ws.DescribeWorkspaces(t.cfg)
+		return spells.InvokeResponse{Data: types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(wss), Workspaces: wss}}, nil
 	case "mcp_tools":
 		return spells.InvokeResponse{Data: DescribeTools()}, nil
 	case "":
@@ -112,7 +114,7 @@ func describeTargetByName(ws types.Describer, name string) (spells.InvokeRespons
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: types.EvaluatedTargetReport{Definition: types.EvaluatedTargetDefinition, Count: len(out), Targets: out}}, nil
 }
 
 var _ spells.Driver = (*describeKindTool)(nil)

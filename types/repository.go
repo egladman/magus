@@ -54,11 +54,11 @@ type AffectedComputer interface {
 type Describer interface {
 	DescribeSpells() []SpellEntry
 	DescribeCharms(defaults []string) []CharmEntry
-	DescribeTargets() TargetsOutput
+	DescribeTargets() []TargetEntry
 	DescribeGraph(ctx context.Context) TargetGraphOutput
 	DescribeProjects() ProjectsOutput
-	DescribeWorkspaces(cfg WorkspaceConfig) WorkspacesOutput
-	DescribeTarget(t Target) (EvaluatedTargetsOutput, error)
+	DescribeWorkspaces(cfg WorkspaceConfig) []WorkspaceEntry
+	DescribeTarget(t Target) ([]EvaluatedTargetEntry, error)
 	DescribeEvaluatedProjects() EvaluatedProjectsOutput
 	DescribeFiles(paths []string) []FileEntry
 }

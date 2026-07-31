@@ -12,11 +12,10 @@ import (
 // TestBuildModulesOutput_List covers the no-name list view: every module is
 // present with a doc, and methods are NOT expanded (that's the detail view).
 func TestBuildModulesOutput_List(t *testing.T) {
-	out := host.ModulesOutput("")
-	require.NotZero(t, out.Count)
-	assert.Equal(t, len(out.Modules), out.Count)
+	out := host.Modules("")
+	require.NotEmpty(t, out)
 	var sawEnv bool
-	for _, m := range out.Modules {
+	for _, m := range out {
 		if m.Name == "env" {
 			sawEnv = true
 		}
@@ -30,11 +29,11 @@ func TestBuildModulesOutput_List(t *testing.T) {
 // expanded with both engine signatures, and the native-Buzz cross-reference is
 // surfaced for overlap entries (env.get/lookup).
 func TestBuildModulesOutput_Detail(t *testing.T) {
-	out := host.ModulesOutput("env")
-	require.Equal(t, 1, out.Count)
-	require.Equal(t, "env", out.Modules[0].Name)
+	out := host.Modules("env")
+	require.Len(t, out, 1)
+	require.Equal(t, "env", out[0].Name)
 	byName := map[string]struct{ buzz, native string }{}
-	for _, m := range out.Modules[0].Methods {
+	for _, m := range out[0].Methods {
 		byName[m.Name] = struct{ buzz, native string }{m.Buzz, m.BuzzStdlib}
 	}
 	lk, ok := byName["lookup"]
@@ -47,8 +46,8 @@ func TestBuildModulesOutput_Detail(t *testing.T) {
 // TestBuildModulesOutput_Unknown: an unknown name yields an empty result so the
 // command can report it (rather than silently listing all).
 func TestBuildModulesOutput_Unknown(t *testing.T) {
-	out := host.ModulesOutput("definitely-not-a-module")
-	assert.Empty(t, out.Modules)
+	out := host.Modules("definitely-not-a-module")
+	assert.Empty(t, out)
 }
 
 // TestDescribeAlias pins that singular and plural resolve to the same canonical

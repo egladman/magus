@@ -58,21 +58,21 @@ type fakeDescriber struct{ gotTarget types.Target }
 
 func (f *fakeDescriber) DescribeSpells() []types.SpellEntry         { return nil }
 func (f *fakeDescriber) DescribeCharms([]string) []types.CharmEntry { return nil }
-func (f *fakeDescriber) DescribeTargets() types.TargetsOutput       { return types.TargetsOutput{} }
+func (f *fakeDescriber) DescribeTargets() []types.TargetEntry       { return nil }
 func (f *fakeDescriber) DescribeGraph(context.Context) types.TargetGraphOutput {
 	return types.TargetGraphOutput{}
 }
 func (f *fakeDescriber) DescribeProjects() types.ProjectsOutput { return types.ProjectsOutput{} }
-func (f *fakeDescriber) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
-	return types.WorkspacesOutput{}
+func (f *fakeDescriber) DescribeWorkspaces(types.WorkspaceConfig) []types.WorkspaceEntry {
+	return nil
 }
 func (f *fakeDescriber) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 	return types.EvaluatedProjectsOutput{}
 }
 func (f *fakeDescriber) DescribeFiles([]string) []types.FileEntry { return nil }
-func (f *fakeDescriber) DescribeTarget(target types.Target) (types.EvaluatedTargetsOutput, error) {
+func (f *fakeDescriber) DescribeTarget(target types.Target) ([]types.EvaluatedTargetEntry, error) {
 	f.gotTarget = target
-	return types.EvaluatedTargetsOutput{Count: 1}, nil
+	return []types.EvaluatedTargetEntry{{}}, nil
 }
 
 func TestDescribeTargetByName(t *testing.T) {
@@ -82,7 +82,7 @@ func TestDescribeTargetByName(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "build", ws.gotTarget.Name)
 		assert.Empty(t, ws.gotTarget.Path)
-		assert.Equal(t, 1, resp.Data.(types.EvaluatedTargetsOutput).Count)
+		assert.Equal(t, 1, resp.Data.(types.EvaluatedTargetReport).Count)
 	})
 
 	t.Run("name with charms parses the charm suffix", func(t *testing.T) {

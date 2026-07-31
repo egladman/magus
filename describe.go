@@ -139,7 +139,7 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 }
 
 // DescribeTargets enumerates targets known in the workspace.
-func (m *Magus) DescribeTargets() types.TargetsOutput {
+func (m *Magus) DescribeTargets() []types.TargetEntry {
 	type targetInfo struct {
 		spells   []string
 		projects []string
@@ -198,11 +198,7 @@ func (m *Magus) DescribeTargets() types.TargetsOutput {
 		}
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return types.TargetsOutput{
-		Definition: types.TargetDefinition,
-		Count:      len(entries),
-		Targets:    entries,
-	}
+	return entries
 }
 
 // gitRoot returns the nearest ancestor of dir (inclusive) holding a `.git` entry,
@@ -687,7 +683,7 @@ func (m *Magus) DescribeProjects() types.ProjectsOutput {
 // DescribeWorkspaces returns the single-entry view of m's workspace. A *Magus is
 // always exactly one workspace; the CLI's `describe workspaces` merges these
 // across the daemon's declared roots when daemon.workspaces is set.
-func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) types.WorkspacesOutput {
+func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) []types.WorkspaceEntry {
 	entry := types.WorkspaceEntry{
 		Root:         m.ws.Root,
 		VCSBaseRef:   m.ws.VCSOptions.BaseRef,
@@ -695,18 +691,14 @@ func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) types.WorkspacesOu
 		Concurrency:  cfg.Concurrency,
 		ProjectCount: len(m.ws.All()),
 	}
-	return types.WorkspacesOutput{
-		Definition: types.WorkspaceDefinition,
-		Count:      1,
-		Workspaces: []types.WorkspaceEntry{entry},
-	}
+	return []types.WorkspaceEntry{entry}
 }
 
 // DescribeTarget returns the fully-evaluated dispatch plan for t.
-func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, error) {
+func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, error) {
 	expanded, err := m.ExpandPath(t)
 	if err != nil {
-		return types.EvaluatedTargetsOutput{}, err
+		return nil, err
 	}
 
 	entries := make([]types.EvaluatedTargetEntry, 0, len(expanded))
@@ -744,7 +736,7 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 			// omitting the command line without explanation.
 			cmd, args, ok, rerr := s.RenderCommand(et.Name, t.Charms)
 			if rerr != nil {
-				return types.EvaluatedTargetsOutput{}, types.DiagnosticErrorf(types.CharmPatchInvalid,
+				return nil, types.DiagnosticErrorf(types.CharmPatchInvalid,
 					"target %q in project %q: charm(s) %v do not apply to spell %q's command (%v)",
 					et.Name, et.Path, t.Charms, s.Name(), rerr)
 			}
@@ -797,11 +789,7 @@ func (m *Magus) DescribeTarget(t types.Target) (types.EvaluatedTargetsOutput, er
 		entries = append(entries, entry)
 	}
 
-	return types.EvaluatedTargetsOutput{
-		Definition: types.EvaluatedTargetDefinition,
-		Count:      len(entries),
-		Targets:    entries,
-	}, nil
+	return entries, nil
 }
 
 // DescribeEvaluatedProjects returns the fully-evaluated project inventory.

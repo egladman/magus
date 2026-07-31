@@ -248,7 +248,7 @@ func build(ws types.WorkspaceRepository, r *types.AffectedResult) *Result {
 // one surface that attributes them to projects.
 func customTargetsByProject(ws types.WorkspaceRepository) map[string][]string {
 	out := map[string][]string{}
-	for _, t := range ws.DescribeTargets().Targets {
+	for _, t := range ws.DescribeTargets() {
 		if t.Kind != "custom" {
 			continue
 		}

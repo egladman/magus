@@ -82,13 +82,13 @@ func (w *resolveWS) AffectedFromPaths(context.Context, []string) (*types.Affecte
 }
 func (w *resolveWS) DescribeSpells() []types.SpellEntry                    { panic("not used") }
 func (w *resolveWS) DescribeCharms([]string) []types.CharmEntry            { panic("not used") }
-func (w *resolveWS) DescribeTargets() types.TargetsOutput                  { panic("not used") }
+func (w *resolveWS) DescribeTargets() []types.TargetEntry                  { panic("not used") }
 func (w *resolveWS) DescribeGraph(context.Context) types.TargetGraphOutput { panic("not used") }
 func (w *resolveWS) DescribeProjects() types.ProjectsOutput                { panic("not used") }
-func (w *resolveWS) DescribeWorkspaces(types.WorkspaceConfig) types.WorkspacesOutput {
+func (w *resolveWS) DescribeWorkspaces(types.WorkspaceConfig) []types.WorkspaceEntry {
 	panic("not used")
 }
-func (w *resolveWS) DescribeTarget(types.Target) (types.EvaluatedTargetsOutput, error) {
+func (w *resolveWS) DescribeTarget(types.Target) ([]types.EvaluatedTargetEntry, error) {
 	panic("not used")
 }
 func (w *resolveWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput { panic("not used") }

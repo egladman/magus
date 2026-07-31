@@ -107,13 +107,6 @@ type TargetEntry struct {
 	Projects []string `json:"projects,omitempty" yaml:"projects,omitempty"`
 }
 
-// TargetsOutput is the top-level result for "describe targets".
-type TargetsOutput struct {
-	Definition string        `json:"definition" yaml:"definition"`
-	Count      int           `json:"count"      yaml:"count"`
-	Targets    []TargetEntry `json:"targets"    yaml:"targets"`
-}
-
 // TargetGraphDefinition describes "magus describe graph".
 const TargetGraphDefinition = "The target dependency graph is the ctx.needs " +
 	"DAG of a project's magusfile: each node is a target (an exported function), each " +
@@ -541,13 +534,6 @@ func (e ModuleEntry) ToMap() map[string]any {
 	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
 }
 
-// ModulesOutput is the top-level result for "describe modules" / "describe module <name>".
-type ModulesOutput struct {
-	Definition string        `json:"definition" yaml:"definition"`
-	Count      int           `json:"count"      yaml:"count"`
-	Modules    []ModuleEntry `json:"modules"    yaml:"modules"`
-}
-
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
@@ -598,13 +584,6 @@ type EvaluatedTargetEntry struct {
 	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 
-// EvaluatedTargetsOutput is the top-level result for "describe target <ref>".
-type EvaluatedTargetsOutput struct {
-	Definition string                 `json:"definition" yaml:"definition"`
-	Count      int                    `json:"count"      yaml:"count"`
-	Targets    []EvaluatedTargetEntry `json:"targets"    yaml:"targets"`
-}
-
 // EvaluatedProjectEntry is the fully-resolved view of a project.
 type EvaluatedProjectEntry struct {
 	Path           string                `json:"path"                       yaml:"path"`
@@ -638,13 +617,6 @@ type WorkspaceEntry struct {
 	CacheDir     string `json:"cache_dir,omitempty"     yaml:"cache_dir,omitempty"`
 	Concurrency  int    `json:"concurrency,omitempty"   yaml:"concurrency,omitempty"`
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
-}
-
-// WorkspacesOutput is the top-level result for "describe workspaces".
-type WorkspacesOutput struct {
-	Definition string           `json:"definition"  yaml:"definition"`
-	Count      int              `json:"count"       yaml:"count"`
-	Workspaces []WorkspaceEntry `json:"workspaces"  yaml:"workspaces"`
 }
 
 // WorkspaceConfig carries infrastructure details for DescribeWorkspaces
@@ -708,6 +680,34 @@ type CharmReport struct {
 	Definition string       `json:"definition" yaml:"definition"`
 	Count      int          `json:"count"      yaml:"count"`
 	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
+}
+
+// EvaluatedTargetReport is the "describe target <path:target>" envelope.
+type EvaluatedTargetReport struct {
+	Definition string                 `json:"definition" yaml:"definition"`
+	Count      int                    `json:"count"      yaml:"count"`
+	Targets    []EvaluatedTargetEntry `json:"targets"    yaml:"targets"`
+}
+
+// TargetReport is the "describe target[s]" envelope.
+type TargetReport struct {
+	Definition string        `json:"definition" yaml:"definition"`
+	Count      int           `json:"count"      yaml:"count"`
+	Targets    []TargetEntry `json:"targets"    yaml:"targets"`
+}
+
+// WorkspaceReport is the "describe workspace[s]" envelope.
+type WorkspaceReport struct {
+	Definition string           `json:"definition" yaml:"definition"`
+	Count      int              `json:"count"      yaml:"count"`
+	Workspaces []WorkspaceEntry `json:"workspaces" yaml:"workspaces"`
+}
+
+// ModuleReport is the "describe module[s]" envelope.
+type ModuleReport struct {
+	Definition string        `json:"definition" yaml:"definition"`
+	Count      int           `json:"count"      yaml:"count"`
+	Modules    []ModuleEntry `json:"modules"    yaml:"modules"`
 }
 
 // SpellReport is the "describe spell[s]" envelope.

@@ -71,18 +71,18 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// an unknown name. Hand-written (not declarative) because the core uses host,
 	// which std can't import.
 	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return host.MapsVal(host.ModulesOutput("").Modules), nil
+		return host.MapsVal(host.Modules("")), nil
 	}))
 	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := host.ModulesOutput(name)
-		if len(out.Modules) == 0 {
+		out := host.Modules(name)
+		if len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
 		}
-		return host.AnyMapVal(out.Modules[0].ToMap()), nil
+		return host.AnyMapVal(out[0].ToMap()), nil
 	}))
 
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one

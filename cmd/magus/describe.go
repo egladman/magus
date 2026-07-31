@@ -525,22 +525,22 @@ func describeTargets(ctx context.Context, root string) error {
 		return err
 	}
 
-	out := ws.DescribeTargets()
+	targets := ws.DescribeTargets()
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.TargetReport{Definition: types.TargetDefinition, Count: len(targets), Targets: targets})
 	case outputName:
-		for _, t := range out.Targets {
+		for _, t := range targets {
 			fmt.Println(t.Name)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("targets (%d):\n", out.Count)
-	for _, t := range out.Targets {
+	fmt.Printf("definition: %s\n\n", types.TargetDefinition)
+	fmt.Printf("targets (%d):\n", len(targets))
+	for _, t := range targets {
 		switch t.Kind {
 		case "canonical":
 			fmt.Printf("  %s  [canonical — affected/pipeline anchor; composed in the magusfile]\n", t.Name)
@@ -736,18 +736,18 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.EvaluatedTargetReport{Definition: types.EvaluatedTargetDefinition, Count: len(out), Targets: out})
 	case outputName:
-		for _, e := range out.Targets {
+		for _, e := range out {
 			fmt.Printf("%s:%s\n", e.Project, e.Target)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("targets (%d):\n\n", out.Count)
-	for _, e := range out.Targets {
+	fmt.Printf("definition: %s\n\n", types.EvaluatedTargetDefinition)
+	fmt.Printf("targets (%d):\n\n", len(out))
+	for _, e := range out {
 		fmt.Printf("project: %s  target: %s\n", e.Project, e.Target)
 		fmt.Printf("  dir:     %s\n", e.Dir)
 		if len(e.Sources) > 0 {
@@ -873,17 +873,17 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(out), Workspaces: out})
 	case outputName:
-		for _, w := range out.Workspaces {
+		for _, w := range out {
 			fmt.Println(w.Root)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	for _, w := range out.Workspaces {
+	fmt.Printf("definition: %s\n\n", types.WorkspaceDefinition)
+	for _, w := range out {
 		fmt.Printf("workspace: %s\n", w.Root)
 		fmt.Printf("  projects: %d\n", w.ProjectCount)
 		if w.VCSBaseRef != "" {
@@ -902,12 +902,12 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 // describeWorkspacesOutput builds the "describe workspaces" view: the single
 // active workspace by default, or one entry per workspace the daemon is declared
 // to serve (daemon.workspaces / MAGUS_DAEMON_WORKSPACES) when that list is set.
-func describeWorkspacesOutput(ctx context.Context, root string) (types.WorkspacesOutput, error) {
+func describeWorkspacesOutput(ctx context.Context, root string) ([]types.WorkspaceEntry, error) {
 	declared := resolveDeclaredWorkspaces(globalCfg.Daemon.Workspaces, os.Getenv("MAGUS_DAEMON_WORKSPACES"))
 	if len(declared) == 0 {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {
-			return types.WorkspacesOutput{}, err
+			return nil, err
 		}
 		return ws.DescribeWorkspaces(types.WorkspaceConfig{
 			CacheDir:    globalCfg.Cache.Dir,
@@ -919,22 +919,18 @@ func describeWorkspacesOutput(ctx context.Context, root string) (types.Workspace
 	for _, wsRoot := range declared {
 		cfg, err := loadWorkspaceCfg(wsRoot)
 		if err != nil {
-			return types.WorkspacesOutput{}, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
 		w, err := magus.Inspect(ctx, wsRoot, magus.WithLoadedConfig(cfg))
 		if err != nil {
-			return types.WorkspacesOutput{}, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
 		entries = append(entries, w.DescribeWorkspaces(types.WorkspaceConfig{
 			CacheDir:    cfg.Cache.Dir,
 			Concurrency: cfg.Concurrency,
-		}).Workspaces...)
+		})...)
 	}
-	return types.WorkspacesOutput{
-		Definition: types.WorkspaceDefinition,
-		Count:      len(entries),
-		Workspaces: entries,
-	}, nil
+	return entries, nil
 }
 
 func describeMCPTools(args []string) error {
