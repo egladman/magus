@@ -8,6 +8,8 @@ export object Target {
     name: str = "",
     charms: [str] = [],
     files: [str] = [],
+    declared: str = "",
+    declaredCharms: [str] = [],
     skip_cache: bool = false,
     exclusive: bool = false,
     slots: int = 0,

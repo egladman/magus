@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/egladman/magus"
@@ -259,31 +258,18 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 	return before, head[i+1:], true
 }
 
-// parseTargetHinted is ParseTarget plus a one-time nudge toward the canonical
-// spelling. Normalization is deliberately forgiving - go_build, goBuild and
-// go-build all reach go-build - but silently accepting every spelling means an
-// author never learns which one magus will echo back in `describe`, in the graph,
-// or in a cache key. The hint teaches the rule at the moment it applies, then the
-// dedupe in interactive.Emit keeps it from nagging.
+// hintCanonicalSpelling nudges toward the canonical name when the user typed
+// another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
+// this is presentation only - types.ParseTarget stays a pure function and the
+// daemon and MCP paths get the same information without inheriting stderr output.
 //
-// Fires only when the spelling actually differs, so the canonical form - what the
-// docs and every generated index already show - stays silent.
-func parseTargetHinted(raw string) (types.Target, error) {
-	t, err := types.ParseTarget(raw)
-	if err != nil {
-		return t, err
+// Silent on canonical input, and deduped by interactive.Emit, so it teaches once
+// rather than nagging.
+func hintCanonicalSpelling(t types.Target) {
+	if t.Declared != "" {
+		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q - both work, %q is what magus reports", t.Declared, t.Name, t.Name))
 	}
-	// Compare the target and charm halves separately: "Lint:NoCache" differs in
-	// both, and naming only one of them would send the author back for a second
-	// guess at the other.
-	name, charms, _ := strings.Cut(raw, ":")
-	if types.Normalize(name) != name {
-		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q - both work, %q is what magus reports", name, t.Name, t.Name))
+	for _, c := range t.DeclaredCharms {
+		interactive.Emit(os.Stderr, fmt.Sprintf("charm %q is canonically %q", c, types.Normalize(c)))
 	}
-	for _, c := range strings.Split(charms, ",") {
-		if c = strings.TrimSpace(c); c != "" && types.Normalize(c) != c {
-			interactive.Emit(os.Stderr, fmt.Sprintf("charm %q is canonically %q", c, types.Normalize(c)))
-		}
-	}
-	return t, nil
 }

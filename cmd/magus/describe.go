@@ -724,7 +724,8 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		return errSilent{exitCode: 2}
 	}
 
-	t, err := parseTargetHinted(pos[0])
+	t, err := types.ParseTarget(pos[0])
+	hintCanonicalSpelling(t)
 	if err != nil {
 		return err
 	}

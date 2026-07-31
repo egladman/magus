@@ -47,12 +47,27 @@ func TestParseTarget(t *testing.T) {
 	assert.Equal(t, Target{Name: "api", Charms: []string{"build"}}, got)
 }
 
+// Declared records the raw spelling ONLY when normalization rewrote it, so a
+// caller can react to a non-canonical name without the parser printing anything.
 func TestParseTarget_NormalizesName(t *testing.T) {
-	for _, in := range []string{"go-build", "go_build", "goBuild"} {
+	canonical, err := ParseTarget("go-build")
+	require.NoError(t, err)
+	assert.Equal(t, Target{Name: "go-build"}, canonical, "canonical input carries no provenance")
+
+	for _, in := range []string{"go_build", "goBuild"} {
 		got, err := ParseTarget(in)
-		require.NoError(t, err)
-		assert.Equalf(t, Target{Name: "go-build"}, got, "ParseTarget(%q)", in)
+		require.NoErrorf(t, err, "ParseTarget(%q)", in)
+		assert.Equalf(t, Target{Name: "go-build", Declared: in}, got, "ParseTarget(%q)", in)
 	}
+
+	// Charms carry the same provenance, and only the rewritten ones.
+	mixed, err := ParseTarget("lint:rw,NoCache")
+	require.NoError(t, err)
+	assert.Equal(t, Target{
+		Name:           "lint",
+		Charms:         []string{"rw", "no-cache"},
+		DeclaredCharms: []string{"NoCache"},
+	}, mixed, "only the charm that was rewritten is recorded")
 }
 
 func TestParseTarget_Errors(t *testing.T) {

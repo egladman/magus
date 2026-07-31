@@ -108,6 +108,19 @@ type Target struct {
 	Charms []string `json:"charms,omitempty"`                    // execution charms parsed from the "target:charm,..." suffix
 	Files  []string `json:"files,omitempty"`                     // changed files within project; populated by affected expansion
 
+	// Declared and DeclaredCharms are the raw spellings ParseTarget rewrote, empty
+	// when the caller already wrote canonical form. Provenance, not identity: Name
+	// and Charms above are what magus resolves against, and these only record how it
+	// was typed. Same convention as TargetGraphNode.Declared.
+	//
+	// They exist so a caller can react to a non-canonical spelling - the CLI hints
+	// the canonical form - WITHOUT the parser reaching out to print anything. A parse
+	// function that writes to stderr cannot be used by the daemon, the MCP handler,
+	// or a test without dragging that output along; returning the fact instead lets
+	// each caller decide, which is why this is on the value rather than in a wrapper.
+	Declared       string   `json:"declared,omitempty"`
+	DeclaredCharms []string `json:"declared_charms,omitempty"`
+
 	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
 	// serialized into the Buzz object Target. FailOnDrift and RetryOnVolatile are CI-only
 	// hooks set via the Go registration API, excluded from the Buzz object (buzz:"-").
@@ -130,7 +143,7 @@ func ParseTarget(s string) (Target, error) {
 		return Target{}, fmt.Errorf("magus: target string is empty")
 	}
 	target := s
-	var charms []string
+	var charms, declaredCharms []string
 	if i := strings.IndexByte(s, ':'); i >= 0 {
 		target = s[:i]
 		charmPart := s[i+1:]
@@ -141,14 +154,21 @@ func ParseTarget(s string) (Target, error) {
 			if err := ValidateCharmName(g); err != nil {
 				return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 			}
+			if n := Normalize(g); n != g {
+				declaredCharms = append(declaredCharms, g)
+			}
 			charms = append(charms, Normalize(g))
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {
 		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 	}
+	var declared string
+	if n := Normalize(target); n != target {
+		declared = target
+	}
 	target = Normalize(target)
-	return Target{Name: target, Charms: charms}, nil
+	return Target{Name: target, Charms: charms, Declared: declared, DeclaredCharms: declaredCharms}, nil
 }
 
 // ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec

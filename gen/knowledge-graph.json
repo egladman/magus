@@ -19564,7 +19564,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out366b0df8",
+        "last_run_ok": "false"
       }
     },
     {
@@ -19575,7 +19577,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out7a4edd5e",
+        "last_output_ref": "outb297fdce",
         "last_run_ok": "true"
       }
     },
@@ -19675,7 +19677,7 @@
       "attrs": {
         "declared_as": "go_build",
         "engine": "buzz",
-        "last_output_ref": "out4fbefd31",
+        "last_output_ref": "outf5ae7705",
         "last_run_ok": "true"
       }
     },
