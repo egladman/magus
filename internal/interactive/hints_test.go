@@ -52,3 +52,20 @@ func TestEmit_SetHintsEnabledTrue(t *testing.T) {
 	Emit(&buf, "try `magus run` instead")
 	assert.True(t, strings.HasPrefix(buf.String(), "hint: "), "Emit output = %q; want prefix %q", buf.String(), "hint: ")
 }
+
+// TestSuggestNearestIsCaseInsensitive pins the fix for a suggestion that failed
+// exactly where it was most needed. Project paths resolve exactly (they are
+// filesystem paths), so `magus run build API` misses project `api` - and before
+// this, API->api scored three substitutions against a threshold of two, so the
+// user got "unknown project" with no suggestion at all. Case differences are not
+// typos, but the suggestion must still come back in its real casing to be
+// copy-pasteable.
+func TestSuggestNearestIsCaseInsensitive(t *testing.T) {
+	cands := []string{"api", "web/studio", "docs", "console"}
+	assert.Equal(t, "api", SuggestNearest("API", cands), "all-caps must still find api")
+	assert.Equal(t, "api", SuggestNearest("Api", cands))
+	assert.Equal(t, "docs", SuggestNearest("DOCS", cands))
+	assert.Equal(t, "api", SuggestNearest("apo", cands), "ordinary typos still work")
+	assert.Equal(t, "console", SuggestNearest("consle", cands))
+	assert.Empty(t, SuggestNearest("zzzzzz", cands), "nothing close enough stays unsuggested")
+}

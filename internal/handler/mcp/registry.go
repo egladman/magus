@@ -26,7 +26,7 @@ var Registry = []ToolDescriptor{
 		Name:        string(ToolDescribe),
 		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
 		Params: []ParamDescriptor{
-			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, targets, projects, workspaces, mcp_tools."},
+			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools."},
 			{Name: "name", Type: "string", Description: "Optional. Narrow the list to one entity's detail (kinds spells, targets, projects). For targets, a target name optionally followed by a project path (e.g. \"build\", \"lint:rw\", or \"build api\"); omit the project to evaluate every project. For spells, a spell name; for projects, a project path. Unknown name returns the valid values."},
 		},
 	},

@@ -3,6 +3,7 @@ package interactive
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 // hintsEnabled controls actionable hints; it is unrelated to TTY detection.
@@ -26,15 +27,26 @@ func Emit(w io.Writer, msg string) {
 	fmt.Fprintf(w, "hint: %s\n", msg)
 }
 
-// SuggestNearest returns the closest candidate by Levenshtein distance, or "" if nothing is close enough.
+// SuggestNearest returns the closest candidate by Levenshtein distance, or "" if
+// nothing is close enough.
+//
+// Distance is measured case-insensitively, but the candidate is returned in its
+// real casing - a suggestion has to be copy-pasteable. Case counted as edits
+// before, which defeated the suggestion exactly where it was most obviously
+// needed: `magus run build API` misses project `api` (paths resolve exactly, and
+// deliberately, since they are filesystem paths), and API->api is three
+// substitutions against a threshold of two, so the user got a bare "unknown
+// project" with no hint at all. Three characters of different case is not three
+// typos.
 func SuggestNearest(typed string, candidates []string) string {
 	if typed == "" || len(candidates) == 0 {
 		return ""
 	}
+	folded := strings.ToLower(typed)
 	best := ""
 	bestDist := -1
 	for _, c := range candidates {
-		d := levenshtein(typed, c)
+		d := levenshtein(folded, strings.ToLower(c))
 		if bestDist == -1 || d < bestDist {
 			best = c
 			bestDist = d

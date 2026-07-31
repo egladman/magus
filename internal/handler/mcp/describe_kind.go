@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -17,7 +18,7 @@ type describeKindTool struct {
 
 func (t *describeKindTool) Name() string { return "magus_describe" }
 
-func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	kind := paramString(req.Params, "kind", "")
 	// name narrows a list into one entity's detail, mirroring the CLI's trailing
 	// name positional (`magus describe <noun> <name>`). Only spells, targets, and
@@ -45,12 +46,32 @@ func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 	case "workspaces":
 		wss := t.ws.DescribeWorkspaces(t.cfg)
 		return spells.InvokeResponse{Data: types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(wss), Workspaces: wss}}, nil
+	// charms/graph/modules were reachable on the CLI but not here, so an agent
+	// working only over MCP could not discover what charms exist, could not see the
+	// target DAG, and could not introspect the Buzz stdlib at all. The first two were
+	// already on the Describer interface this tool holds; modules needs no workspace
+	// at all, which is why it never went through Describer.
+	case "charms":
+		// nil defaults: WorkspaceConfig does not carry the workspace default_charms set,
+		// so every charm reports Default=false here. The inventory and its declarations
+		// are still complete - only the "applies without a :suffix" marking is absent,
+		// which is a CLI-config fact rather than a workspace one.
+		charms := t.ws.DescribeCharms(nil)
+		return spells.InvokeResponse{Data: types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms}}, nil
+	case "graph":
+		return spells.InvokeResponse{Data: t.ws.DescribeGraph(ctx)}, nil
+	case "modules":
+		mods := host.Modules(name) // name empty = the whole catalog, matching the CLI
+		if name != "" && len(mods) == 0 {
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: no module named %q", name)
+		}
+		return spells.InvokeResponse{Data: types.ModuleReport{Definition: types.ModuleDefinition, Count: len(mods), Modules: mods}}, nil
 	case "mcp_tools":
 		return spells.InvokeResponse{Data: DescribeTools()}, nil
 	case "":
-		return spells.InvokeResponse{}, errors.New("mcp: kind is required (one of: spells, targets, projects, workspaces, mcp_tools)")
+		return spells.InvokeResponse{}, errors.New("mcp: kind is required (one of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools)")
 	default:
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown kind %q (one of: spells, targets, projects, workspaces, mcp_tools)", kind)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown kind %q (one of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools)", kind)
 	}
 }
 

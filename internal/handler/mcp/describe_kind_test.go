@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -100,4 +101,26 @@ func TestDescribeTargetByName(t *testing.T) {
 		assert.Equal(t, "build", ws.gotTarget.Name)
 		assert.Equal(t, "api", ws.gotTarget.Path)
 	})
+}
+
+// TestDescribeKindCoversEveryCLINoun guards the parity gap this closed: charms,
+// graph and modules were reachable on the CLI but not over MCP, so an agent with
+// only MCP could not discover what charms exist, could not see the target DAG, and
+// could not introspect the Buzz stdlib at all. Two of the three were already on the
+// Describer interface the tool holds - the capability was in hand and unswitched.
+func TestDescribeKindCoversEveryCLINoun(t *testing.T) {
+	tool := &describeKindTool{ws: &fakeDescriber{}}
+	for _, kind := range []string{"spells", "charms", "targets", "graph", "projects", "workspaces", "modules", "mcp_tools"} {
+		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"kind": kind}})
+		require.NoErrorf(t, err, "kind %q must be served", kind)
+		assert.NotNilf(t, resp.Data, "kind %q returned no data", kind)
+	}
+
+	_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"kind": "nonsense"}})
+	require.Error(t, err, "an unknown kind must still be an error")
+	// The error lists the valid set; every served kind must appear in it, or an agent
+	// is told a noun does not exist when it does.
+	for _, kind := range []string{"spells", "charms", "targets", "graph", "projects", "workspaces", "modules", "mcp_tools"} {
+		assert.Containsf(t, err.Error(), kind, "the unknown-kind error omits %q", kind)
+	}
 }
