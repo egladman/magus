@@ -95,7 +95,7 @@
           <li><a href="../../concepts/workspace/" title="Workspace and projects">Workspace and projects</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-struct" title="The struct">The struct</a></li><li><a href="#cli-grammar" title="CLI grammar">CLI grammar</a></li><li><a href="#path-resolution-on-the-cli" title="Path resolution on the CLI">Path resolution on the CLI</a><ul><li><a href="#symlinks" title="Symlinks">Symlinks</a></li></ul></li><li><a href="#the-target-name" title="The target name">The target name</a><ul><li><a href="#when-does-a-name-earn-canonical-status" title="When does a name earn canonical status?">When does a name earn canonical status?</a></li></ul></li><li><a href="#name-normalization-casing--delimiters" title="Name normalization (casing &amp; delimiters)">Name normalization (casing &amp; delimiters)</a><ul><li><a href="#the-contract" title="The contract">The contract</a></li><li><a href="#where-it-applies" title="Where it applies">Where it applies</a></li><li><a href="#where-it-deliberately-does-not-apply" title="Where it deliberately does not apply">Where it deliberately does not apply</a></li><li><a href="#worked-example" title="Worked example">Worked example</a></li></ul></li><li><a href="#cli-extension-spell-qualified-targets" title="CLI extension: spell-qualified targets">CLI extension: spell-qualified targets</a></li><li><a href="#what-is-not-part-of-a-targets-identity" title="What is not part of a Target's identity">What is not part of a Target's identity</a></li><li><a href="#lifecycle-parse--expand--run" title="Lifecycle: parse → expand → run">Lifecycle: parse → expand → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#the-struct" title="The struct">The struct</a></li><li><a href="#cli-grammar" title="CLI grammar">CLI grammar</a></li><li><a href="#path-resolution-on-the-cli" title="Path resolution on the CLI">Path resolution on the CLI</a><ul><li><a href="#symlinks" title="Symlinks">Symlinks</a></li></ul></li><li><a href="#the-target-name" title="The target name">The target name</a><ul><li><a href="#when-does-a-name-earn-canonical-status" title="When does a name earn canonical status?">When does a name earn canonical status?</a></li></ul></li><li><a href="#name-normalization-casing--delimiters" title="Name normalization (casing &amp; delimiters)">Name normalization (casing &amp; delimiters)</a><ul><li><a href="#the-contract" title="The contract">The contract</a></li><li><a href="#where-it-applies" title="Where it applies">Where it applies</a></li><li><a href="#spell-op-keys-changed-in-v040" title="Spell op keys changed in v0.4.0">Spell op keys changed in v0.4.0</a></li><li><a href="#where-it-deliberately-does-not-apply" title="Where it deliberately does not apply">Where it deliberately does not apply</a></li><li><a href="#worked-example" title="Worked example">Worked example</a></li></ul></li><li><a href="#cli-extension-spell-qualified-targets" title="CLI extension: spell-qualified targets">CLI extension: spell-qualified targets</a></li><li><a href="#what-is-not-part-of-a-targets-identity" title="What is not part of a Target's identity">What is not part of a Target's identity</a></li><li><a href="#lifecycle-parse--expand--run" title="Lifecycle: parse → expand → run">Lifecycle: parse → expand → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -314,7 +314,7 @@ which port) that forcing one shape on them would be more prescriptive than
 useful.</p>
 <h2 id="name-normalization-casing--delimiters">Name normalization (casing &amp; delimiters)</h2>
 <p>Target names are matched <strong>case- and delimiter-insensitively</strong>. magus normalizes
-every name to canonical kebab-case (<code>types.DefaultTargetNameNormalizer</code>, a small
+every name to canonical kebab-case (<code>types.Normalize</code>, a small
 hand-rolled kebab-caser matching <code>samber/lo</code>'s <code>KebabCase</code> output without the
 dependency) on <strong>both</strong> sides: when a magusfile <em>declares</em> a target and when you
 <em>reference</em> one anywhere magus reads a target name. A target declared as
@@ -424,21 +424,39 @@ scripts, and docs can drift out of sync with whichever one you typed.</li>
 <td>A policy keyed <code>&quot;goBuild&quot;</code> applies to a target declared <code>go_build</code>, and vice versa.</td>
 </tr>
 <tr>
-<td>Charm names (<code>NormalizeCharmName</code>)</td>
+<td>Charm names</td>
 <td><code>target:NoCache</code> and <code>target:no-cache</code> are the same charm.</td>
+</tr>
+<tr>
+<td>Spell op keys (since v0.4.0)</td>
+<td>A spell declaring an op <code>go_build</code> registers it as <code>go-build</code>.</td>
 </tr>
 </tbody>
 </table></figure>
+<p>One function does all of it: <code>types.Normalize</code>. There is no per-kind normalizer
+and no alias table.</p>
+<h3 id="spell-op-keys-changed-in-v040">Spell op keys changed in v0.4.0</h3>
+<p>Op keys are now normalized when the spell is decoded, the same as every other
+name. Before, they were stored exactly as authored while every request arriving
+at the spell had already been normalized - so an op declared <code>go_build</code> was
+stored under <code>go_build</code>, looked up as <code>go-build</code>, and missed. The result was not
+an error: the dispatcher treated it as &quot;this spell does not provide that target&quot;
+and skipped it silently, logging only at debug level. The op was declared and
+reachable by nothing.</p>
+<p>Every built-in spell already wrote kebab-case op keys, so nothing about the
+bundled spells changes. If you author a workspace-local spell with a <code>camelCase</code>
+or <code>snake_case</code> op, it now works instead of silently never running.</p>
 <h3 id="where-it-deliberately-does-not-apply">Where it deliberately does not apply</h3>
 <ul>
-<li><strong>Spell op keys after <code>::</code>.</strong> <code>go::golangci-lint</code> matches the spell's op key
-<strong>verbatim</strong> - no kebab/case normalization. <code>go::lint</code> is a graceful no-op
-(the go spell has no op literally named <code>lint</code>; its linter op is
-<code>golangci-lint</code>), not a normalized match. See
-<a href="#cli-extension-spell-qualified-targets">spell-qualified targets</a>.</li>
-<li><strong>Spell op subscripts in <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>.</strong> <code>ts[&quot;tsc&quot;]</code> is an ordinary map-key lookup
-into the value <code>import &quot;magus/spell/ts&quot;</code> binds; <code>ts[&quot;Tsc&quot;]</code> is simply a
-different (missing) key, not a normalized alias.</li>
+<li><strong>Spell names.</strong> A spell's own name is matched byte-for-byte. A spell named
+<code>Go</code> and one named <code>go</code> are two different spells, not one; the registry will
+hold both.</li>
+<li><strong>Lookups by literal key.</strong> Normalization canonicalizes what gets <em>stored</em>, not
+how a literal subscript is spelled. <code>ts[&quot;tsc&quot;]</code> is an ordinary map-key lookup
+into the value <code>import &quot;magus/spell/ts&quot;</code> binds, so it must name the canonical
+(kebab) key. Likewise <code>go::lint</code> is still a graceful no-op - the go spell's
+linter op is <code>golangci-lint</code>, and that is a different word, not a different
+casing. See <a href="#cli-extension-spell-qualified-targets">spell-qualified targets</a>.</li>
 <li><strong>Project paths.</strong> <code>Path</code> is never normalized; <code>api</code> and <code>Api</code> are different
 (and, in practice, one of them just won't exist).</li>
 </ul>
@@ -558,7 +576,7 @@ Magus.Run(ctx, targets) → executes each target, grouped by Name; charms
 <li><a href="../operations/">operations</a>: the formal Operation definition and the work hierarchy (Spell → Operation → Target).</li>
 <li><a href="../spells/">spells</a>: the operations a target composes, and <a href="../spells/#spells-vs-targets">Spells vs Targets</a>.</li>
 <li><a href="../charms/">charms</a>: the execution modifiers attached after <code>:</code>.</li>
-<li><a href="../engines/">engines</a>: the Buzz engine a magusfile runs on.</li>
+<li><a href="../engines/">engines</a>: the <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> engine a magusfile runs on.</li>
 </ul>
     </article>
     </div>

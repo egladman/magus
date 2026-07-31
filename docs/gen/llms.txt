@@ -38,9 +38,16 @@
 - [Affected](https://eli.gladman.cc/magus/concepts/workspace/affected/index.md): How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.
 - [Documentation conventions](https://eli.gladman.cc/magus/conventions/index.md): How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.
 - [Development](https://eli.gladman.cc/magus/development/index.md): Contributor reference for the magus repository: build and test quickstart, how to contribute, the per-project target catalogs, and the deeper reference docs.
+- [cmd/magus/starter targets](https://eli.gladman.cc/magus/development/cmd-magus-starter/index.md): Target catalog and run-order graph for the cmd/magus/starter project, generated from its magusfile.
+- [console targets](https://eli.gladman.cc/magus/development/console/index.md): Target catalog and run-order graph for the console project, generated from its magusfile.
 - [Contributing](https://eli.gladman.cc/magus/development/contributing/index.md): How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.
+- [docs/guides/integrations/agents targets](https://eli.gladman.cc/magus/development/docs-guides-integrations-agents/index.md): Target catalog and run-order graph for the docs/guides/integrations/agents project, generated from its magusfile.
 - [docs targets](https://eli.gladman.cc/magus/development/docs/index.md): Target catalog and run-order graph for the docs project, generated from its magusfile.
+- [libs/diag targets](https://eli.gladman.cc/magus/development/libs-diag/index.md): Target catalog and run-order graph for the libs/diag project, generated from its magusfile.
+- [libs/gopherbuzz targets](https://eli.gladman.cc/magus/development/libs-gopherbuzz/index.md): Target catalog and run-order graph for the libs/gopherbuzz project, generated from its magusfile.
+- [libs/textsearch targets](https://eli.gladman.cc/magus/development/libs-textsearch/index.md): Target catalog and run-order graph for the libs/textsearch project, generated from its magusfile.
 - [magus targets](https://eli.gladman.cc/magus/development/magus/index.md): Target catalog and run-order graph for the magus project, generated from its magusfile.
+- [proto targets](https://eli.gladman.cc/magus/development/proto/index.md): Target catalog and run-order graph for the proto project, generated from its magusfile.
 - [magus Documentation](https://eli.gladman.cc/magus/documentation/index.md): The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.
 - [Glossary](https://eli.gladman.cc/magus/glossary/index.md): The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console's own terms - each defined in one line with a pointer to the page that covers it in full.
 - [Guides](https://eli.gladman.cc/magus/guides/index.md): Pages in this section.

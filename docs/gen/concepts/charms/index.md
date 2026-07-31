@@ -427,7 +427,7 @@ An active charm that no selected target declares (and isn't a reserved built-in 
 
 Charm names use the target-name charset: letters, digits, `-`, `_` (`types.ValidateCharmName`). By convention they are lowercase and represent **shared vocabulary** across the workspace: define a charm's meaning once and honor it everywhere. A charm useful only with one target is a smell; that is a one-off tool flag (pass it after `--`).
 
-Names are normalized the same way target names are (`types.NormalizeCharmName`, kebab-case), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa; declaration and invocation can't drift on spelling.
+Names are normalized the same way target names are (`types.Normalize`, kebab-case - one function for targets, charms and spell ops alike), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa; declaration and invocation can't drift on spelling.
 
 ## What is not a charm
 

@@ -133,7 +133,7 @@ useful.
 ## Name normalization (casing & delimiters)
 
 Target names are matched **case- and delimiter-insensitively**. magus normalizes
-every name to canonical kebab-case (`types.DefaultTargetNameNormalizer`, a small
+every name to canonical kebab-case (`types.Normalize`, a small
 hand-rolled kebab-caser matching `samber/lo`'s `KebabCase` output without the
 dependency) on **both** sides: when a magusfile _declares_ a target and when you
 _reference_ one anywhere magus reads a target name. A target declared as
@@ -196,18 +196,37 @@ Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` an
 | CLI `magus run` / `magus affected` arguments            | `magus run goBuild` reaches the target declared `go_build`.                                                |
 | `magus\needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
 | The per-target policy map (`magus\project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
-| Charm names (`NormalizeCharmName`)                      | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
+| Charm names                                             | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
+| Spell op keys (since v0.4.0)                            | A spell declaring an op `go_build` registers it as `go-build`.                                              |
+
+One function does all of it: `types.Normalize`. There is no per-kind normalizer
+and no alias table.
+
+### Spell op keys changed in v0.4.0
+
+Op keys are now normalized when the spell is decoded, the same as every other
+name. Before, they were stored exactly as authored while every request arriving
+at the spell had already been normalized - so an op declared `go_build` was
+stored under `go_build`, looked up as `go-build`, and missed. The result was not
+an error: the dispatcher treated it as "this spell does not provide that target"
+and skipped it silently, logging only at debug level. The op was declared and
+reachable by nothing.
+
+Every built-in spell already wrote kebab-case op keys, so nothing about the
+bundled spells changes. If you author a workspace-local spell with a `camelCase`
+or `snake_case` op, it now works instead of silently never running.
 
 ### Where it deliberately does not apply
 
-- **Spell op keys after `::`.** `go::golangci-lint` matches the spell's op key
-  **verbatim** - no kebab/case normalization. `go::lint` is a graceful no-op
-  (the go spell has no op literally named `lint`; its linter op is
-  `golangci-lint`), not a normalized match. See
-  [spell-qualified targets](#cli-extension-spell-qualified-targets).
-- **Spell op subscripts in Buzz.** `ts["tsc"]` is an ordinary map-key lookup
-  into the value `import "magus/spell/ts"` binds; `ts["Tsc"]` is simply a
-  different (missing) key, not a normalized alias.
+- **Spell names.** A spell's own name is matched byte-for-byte. A spell named
+  `Go` and one named `go` are two different spells, not one; the registry will
+  hold both.
+- **Lookups by literal key.** Normalization canonicalizes what gets *stored*, not
+  how a literal subscript is spelled. `ts["tsc"]` is an ordinary map-key lookup
+  into the value `import "magus/spell/ts"` binds, so it must name the canonical
+  (kebab) key. Likewise `go::lint` is still a graceful no-op - the go spell's
+  linter op is `golangci-lint`, and that is a different word, not a different
+  casing. See [spell-qualified targets](#cli-extension-spell-qualified-targets).
 - **Project paths.** `Path` is never normalized; `api` and `Api` are different
   (and, in practice, one of them just won't exist).
 

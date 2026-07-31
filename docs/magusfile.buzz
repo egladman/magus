@@ -1,4 +1,5 @@
 import "magus";
+import "magus/target";
 // Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -193,7 +194,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(content_generate);
     ctx.needs(md_generate);
     ctx.needs(changelog_generate);
-    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT);
+    final site = renderer\site_render(ROOT, DOCS, BLOG, OUT,
+        magus\targets() as target\TargetGraph, magus\graph() as target\Graph);
     generateJsBundles();
     // Written here, not inside site_render(): generateJsBundles() (just above)
     // writes gen/assets/mermaid.js and gen/assets/hljs.js, so the manifest can
@@ -299,5 +301,6 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.
 export fun render(ctx: magus\Context, args: [str]) > void {
 	magus\hint("docs render updates the site only; run `magus run generate:rw docs` before committing generated docs or changing generator inputs");
-    renderer\site_render(ROOT, DOCS, BLOG, OUT);
+    renderer\site_render(ROOT, DOCS, BLOG, OUT,
+        magus\targets() as target\TargetGraph, magus\graph() as target\Graph);
 }

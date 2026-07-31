@@ -78,15 +78,31 @@ func TestValidateTargetName(t *testing.T) {
 	}
 }
 
-// Normalize is the one canonicalizer for every entity kind, so the same three
-// spellings must converge whether they name a target, a charm, a spell or an op.
+// Normalize is the one canonicalizer for every entity kind, so the same spellings
+// must converge whether they name a target, a charm or a spell op.
+//
+// These cases ARE the table published in docs/concepts/targets.md ("Name
+// normalization"). Documented behavior that nothing asserts is documented
+// intent, not documented behavior - if a row here changes, that page is wrong
+// and this test is the thing that says so.
 func TestNormalize(t *testing.T) {
-	assert.Equal(t, "go-build", Normalize("go_build"))
-	assert.Equal(t, "go-build", Normalize("goBuild"))
-	assert.Equal(t, "go-build", Normalize("go-build"))
-	assert.Equal(t, "go-build", Normalize("Go_Build"))
-	assert.Equal(t, "build", Normalize("build"))
-	assert.Equal(t, "image-build-static", Normalize("image_build_static"))
+	for _, c := range []struct{ in, want string }{
+		{"go-build", "go-build"},      // already canonical
+		{"go_build", "go-build"},      // '_' is a delimiter
+		{"goBuild", "go-build"},       // camelCase boundary
+		{"GoBuild", "go-build"},       // PascalCase boundary
+		{"Go_Build", "go-build"},      // both at once
+		{"HTTPServer", "http-server"}, // acronym breaks before its last letter
+		{"build2", "build-2"},         // letter/digit boundary
+		{"go--build", "go-build"},     // delimiter runs collapse
+		{"build", "build"},            // single word untouched
+		{"image_build_static", "image-build-static"},
+		{"no_cache", "no-cache"}, // the charm cases
+		{"NoCache", "no-cache"},
+		{"WRITE", "write"},
+	} {
+		assert.Equalf(t, c.want, Normalize(c.in), "Normalize(%q)", c.in)
+	}
 }
 
 func TestKebabCase(t *testing.T) {

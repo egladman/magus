@@ -76,12 +76,19 @@
       <nav>
         <p class="toc-title">In this section</p>
         <ul class="section-nav">
+          <li><a href="../development/cmd-magus-starter/" title="cmd/magus/starter targets">cmd/magus/starter targets</a></li>
+          <li><a href="../development/console/" title="console targets">console targets</a></li>
           <li><a href="../development/contributing/" title="Contributing">Contributing</a></li>
+          <li><a href="../development/docs-guides-integrations-agents/" title="docs/guides/integrations/agents targets">docs/guides/integrations/agents targets</a></li>
           <li><a href="../development/docs/" title="docs targets">docs targets</a></li>
+          <li><a href="../development/libs-diag/" title="libs/diag targets">libs/diag targets</a></li>
+          <li><a href="../development/libs-gopherbuzz/" title="libs/gopherbuzz targets">libs/gopherbuzz targets</a></li>
+          <li><a href="../development/libs-textsearch/" title="libs/textsearch targets">libs/textsearch targets</a></li>
           <li><a href="../development/magus/" title="magus targets">magus targets</a></li>
+          <li><a href="../development/proto/" title="proto targets">proto targets</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#contributing" title="Contributing">Contributing</a></li><li><a href="#project-graphs" title="Project graphs">Project graphs</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
+        <ul><li><a href="#getting-started" title="Getting started">Getting started</a></li><li><a href="#contributing" title="Contributing">Contributing</a></li><li><a href="#project-graphs" title="Project graphs">Project graphs</a></li><li><a href="#workspace-dependencies" title="Workspace dependencies">Workspace dependencies</a></li><li><a href="#reference" title="Reference">Reference</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -102,9 +109,83 @@ magus run ci</code></pre>
 <h2 id="project-graphs">Project graphs</h2>
 <p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
     <div class="related-grid">
-        <a class="related-card" href="magus/"><span class="related-card-title">magus</span><span class="related-card-desc">target catalog and dependency graph</span></a>
-        <a class="related-card" href="docs/"><span class="related-card-title">docs</span><span class="related-card-desc">target catalog and dependency graph</span></a>
+        <a class="related-card" href="magus/"><span class="related-card-title">magus</span><span class="related-card-desc">27 targets</span></a>
+        <a class="related-card" href="cmd-magus-starter/"><span class="related-card-title">cmd/magus/starter</span><span class="related-card-desc">7 targets</span></a>
+        <a class="related-card" href="console/"><span class="related-card-title">console</span><span class="related-card-desc">5 targets</span></a>
+        <a class="related-card" href="docs/"><span class="related-card-title">docs</span><span class="related-card-desc">15 targets</span></a>
+        <a class="related-card" href="docs-guides-integrations-agents/"><span class="related-card-title">docs/guides/integrations/agents</span><span class="related-card-desc">3 targets</span></a>
+        <a class="related-card" href="libs-diag/"><span class="related-card-title">libs/diag</span><span class="related-card-desc">8 targets</span></a>
+        <a class="related-card" href="libs-gopherbuzz/"><span class="related-card-title">libs/gopherbuzz</span><span class="related-card-desc">10 targets</span></a>
+        <a class="related-card" href="libs-textsearch/"><span class="related-card-title">libs/textsearch</span><span class="related-card-desc">6 targets</span></a>
+        <a class="related-card" href="proto/"><span class="related-card-title">proto</span><span class="related-card-desc">3 targets</span></a>
     </div>
+<h2 id="workspace-dependencies">Workspace dependencies</h2>
+<p>The projects above in dependency order: each row runs after everything it depends on. Blast radius counts the projects a change here can reach, so it is the cost of touching that project.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>project</th>
+<th>depends on</th>
+<th>blast radius</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="libs-gopherbuzz/"><code>libs/gopherbuzz</code></a></td>
+<td>-</td>
+<td>4</td>
+</tr>
+<tr>
+<td><a href="libs-textsearch/"><code>libs/textsearch</code></a></td>
+<td>-</td>
+<td>3</td>
+</tr>
+<tr>
+<td><a href="docs-guides-integrations-agents/"><code>docs/guides/integrations/agents</code></a></td>
+<td>-</td>
+<td>2</td>
+</tr>
+<tr>
+<td><a href="magus/"><code>magus</code></a></td>
+<td><a href="libs-gopherbuzz/"><code>libs/gopherbuzz</code></a></td>
+<td>3</td>
+</tr>
+<tr>
+<td><a href="proto/"><code>proto</code></a></td>
+<td>-</td>
+<td>1</td>
+</tr>
+<tr>
+<td><a href="libs-diag/"><code>libs/diag</code></a></td>
+<td>-</td>
+<td>1</td>
+</tr>
+<tr>
+<td><a href="docs/"><code>docs</code></a></td>
+<td><a href="magus/"><code>magus</code></a>, <a href="docs-guides-integrations-agents/"><code>docs/guides/integrations/agents</code></a>, <a href="libs-gopherbuzz/"><code>libs/gopherbuzz</code></a>, <a href="libs-textsearch/"><code>libs/textsearch</code></a></td>
+<td>1</td>
+</tr>
+<tr>
+<td><a href="console/"><code>console</code></a></td>
+<td><a href="magus/"><code>magus</code></a>, <a href="libs-textsearch/"><code>libs/textsearch</code></a></td>
+<td>1</td>
+</tr>
+<tr>
+<td><a href="cmd-magus-starter/"><code>cmd/magus/starter</code></a></td>
+<td>-</td>
+<td>1</td>
+</tr>
+</tbody>
+</table></figure>
+<div class="mermaid-src"><pre><code class="language-mermaid">graph LR
+    libs-gopherbuzz[&quot;libs/gopherbuzz&quot;] --&gt; magus[&quot;magus&quot;]
+    magus[&quot;magus&quot;] --&gt; docs[&quot;docs&quot;]
+    docs-guides-integrations-agents[&quot;docs/guides/integrations/agents&quot;] --&gt; docs[&quot;docs&quot;]
+    libs-gopherbuzz[&quot;libs/gopherbuzz&quot;] --&gt; docs[&quot;docs&quot;]
+    libs-textsearch[&quot;libs/textsearch&quot;] --&gt; docs[&quot;docs&quot;]
+    magus[&quot;magus&quot;] --&gt; console[&quot;console&quot;]
+    libs-textsearch[&quot;libs/textsearch&quot;] --&gt; console[&quot;console&quot;]
+</code></pre><span class="noscript-inline mermaid-src-caption">Diagram source - renders with JavaScript enabled.</span></div>
 <h2 id="reference">Reference</h2>
 <p>The deeper references a contributor reaches for once the build is running:</p>
 <ul>
