@@ -22,7 +22,16 @@ type SpellVersion struct {
 
 // SpellEntry is the structured view of a single spell.
 type SpellEntry struct {
-	Name    string   `json:"name"              yaml:"name"`
+	Name string `json:"name"              yaml:"name"`
+	// Module is the literal a magusfile writes to bind this spell's handle -
+	// "magus/spell/go", for `import "magus/spell/go"`. See spells.ModulePath.
+	//
+	// A path, deliberately, and not the handle itself. internal/describe reads spell
+	// imports STATICALLY to build the target graph, so a spell reached any way other
+	// than a literal import would lose its target-uses-spell edge and under-report the
+	// graph silently. Carrying the path keeps discovery dynamic and the import static:
+	// look the spell up, read what to write, then write it.
+	Module  string   `json:"module"            yaml:"module"`
 	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
 	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`

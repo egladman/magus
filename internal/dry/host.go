@@ -185,6 +185,18 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return res, nil
 	}))
 
+	// magus.normalize is the REAL normalizer here, not a stub. It is pure computation
+	// over a string - no registry, no IO - so the sandbox can afford the honest answer,
+	// and the docs depend on that: the name-normalization page runs its examples in the
+	// playground, and an example that resolved to "" would teach nothing. Stubbing the
+	// pure functions is what turns a live doc into a decorative one.
+	m.MapSet("normalize", fn("magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+		}
+		return vm.StrValue(types.Normalize(args[0].AsString())), nil
+	}))
+
 	// magus.modules()/magus.module(name) introspect the real host module registry,
 	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
 	// Stub them as empty-but-shaped so a reference and field access (e.g.

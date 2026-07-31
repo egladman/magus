@@ -12,6 +12,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -85,6 +86,22 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		return host.AnyMapVal(out[0].ToMap()), nil
 	}))
 
+	// magus.normalize(name): the canonical form of any magus entity name - a target, a
+	// charm, or a spell op. Exposed because the rule is only knowable by running it:
+	// build2 gains a '-' you did not type, and HTTPServer breaks before its last letter.
+	// The table published in docs/concepts/targets.md is this function's output.
+	//
+	// It returns the canonical NAME, never a spell handle. A handle can only come from
+	// a literal `import`, because internal/describe reads spell imports statically to
+	// build the target graph - anything resolved dynamically would drop the target-uses-spell
+	// edge and silently under-report the graph.
+	magus.MapSet("normalize", directVal(obs, "magus.normalize", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
+		}
+		return host.StrVal(types.Normalize(args[0].AsString())), nil
+	}))
+
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
 	// way to log from a magusfile - there is no separate std log module. Each level
 	// writes into the process slog logger via emitMagusLog.
@@ -130,7 +147,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// its basename.
 	builtins := ispell.Builtins()
 	for name := range builtins {
-		sess.SetSyntheticModule("magus/spell/"+name, buzzSpellObject(name))
+		sess.SetSyntheticModule(spells.ModulePath(name), buzzSpellObject(name))
 	}
 	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
 	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
@@ -141,7 +158,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
 			continue
 		}
-		sess.SetSyntheticModule("magus/spell/"+sp.Name(), buzzSpellObject(sp.Name()))
+		sess.SetSyntheticModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
 	}
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
 	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),

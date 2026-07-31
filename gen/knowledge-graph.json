@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2228,
-  "edge_count": 4953,
+  "edge_count": 4954,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -8104,7 +8104,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:230",
+      "source": "docs/magusfile.buzz:232",
       "attrs": {
         "exported": "true"
       }
@@ -8114,7 +8114,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:290",
+      "source": "docs/magusfile.buzz:292",
       "attrs": {
         "exported": "true"
       }
@@ -8124,7 +8124,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:277",
+      "source": "docs/magusfile.buzz:279",
       "attrs": {
         "exported": "true"
       }
@@ -8134,7 +8134,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo tha",
-      "source": "docs/magusfile.buzz:257",
+      "source": "docs/magusfile.buzz:259",
       "attrs": {
         "exported": "true"
       }
@@ -8144,7 +8144,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:235",
+      "source": "docs/magusfile.buzz:237",
       "attrs": {
         "exported": "true"
       }
@@ -8154,7 +8154,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim. Released sections are generated (like MAGUS.md) and must not be edited by hand. generate calls this; the drift gate catches any manual edit to a released section on the next render.",
-      "source": "docs/magusfile.buzz:129",
+      "source": "docs/magusfile.buzz:130",
       "attrs": {
         "exported": "true"
       }
@@ -8164,7 +8164,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. generate is a DIRECT dep so the site render, the JS bundles it builds, and the drift gate are first-class ci steps (not just reached transitively through the mutating lint/build chain).",
-      "source": "docs/magusfile.buzz:246",
+      "source": "docs/magusfile.buzz:248",
       "attrs": {
         "exported": "true"
       }
@@ -8174,7 +8174,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:145",
+      "source": "docs/magusfile.buzz:146",
       "attrs": {
         "exported": "true"
       }
@@ -8183,7 +8183,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:213",
+      "source": "docs/magusfile.buzz:215",
       "attrs": {
         "exported": "true"
       }
@@ -8193,7 +8193,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the full publication and drift gate. Use render while iterating on docs.",
-      "source": "docs/magusfile.buzz:185",
+      "source": "docs/magusfile.buzz:186",
       "attrs": {
         "exported": "true"
       }
@@ -8203,14 +8203,14 @@
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages - the d3-force graph explorer, the CodeMirror playground editor, and the vendored mermaid/highlight.js libraries. These are pnpm-managed packages (package.json + pnpm-lock.yaml), so they follow the JS convention: `pnpm install --frozen-lockfile` restores the pinned deps (honoring .npmrc's minimum-release-age gate), `pnpm run build` runs the esbuild invocations, which live in package.json \"scripts\" as their single source of truth",
-      "source": "docs/magusfile.buzz:177"
+      "source": "docs/magusfile.buzz:178"
     },
     {
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:218",
+      "source": "docs/magusfile.buzz:220",
       "attrs": {
         "exported": "true"
       }
@@ -8220,7 +8220,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:120",
+      "source": "docs/magusfile.buzz:121",
       "attrs": {
         "exported": "true"
       }
@@ -8229,7 +8229,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:115",
+      "source": "docs/magusfile.buzz:116",
       "attrs": {
         "exported": "true"
       }
@@ -8239,7 +8239,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:300",
+      "source": "docs/magusfile.buzz:302",
       "attrs": {
         "exported": "true"
       }
@@ -8248,7 +8248,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:239",
+      "source": "docs/magusfile.buzz:241",
       "attrs": {
         "exported": "true"
       }
@@ -19527,7 +19527,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out53d7364f",
+        "last_output_ref": "out04dfa8c7",
         "last_run_ok": "true"
       }
     },
@@ -19627,7 +19627,7 @@
       "attrs": {
         "declared_as": "go_build",
         "engine": "buzz",
-        "last_output_ref": "out4c2d32f6",
+        "last_output_ref": "out9fc33ca8",
         "last_run_ok": "true"
       }
     },
@@ -20022,7 +20022,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out1c79c927",
+        "last_run_ok": "false"
       }
     },
     {
@@ -20053,8 +20055,8 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out0c0c76ba",
-        "last_run_ok": "false"
+        "last_output_ref": "out34f5f704",
+        "last_run_ok": "true"
       }
     },
     {
@@ -37106,6 +37108,14 @@
     {
       "source": "file:docs/magusfile.buzz",
       "target": "import:magus/spell/ts",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/magusfile.buzz",
+      "target": "import:magus/target",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,

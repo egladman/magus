@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,6 +46,7 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 		}
 		entries = append(entries, types.SpellEntry{
 			Name:         p.Name(),
+			Module:       spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
 			Outputs:      p.Outputs(),
 			Claims:       p.Claims(),

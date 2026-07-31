@@ -360,3 +360,17 @@ func NewSpell(name string, opts ...Option) *Spell {
 	}
 	return s
 }
+
+// ModulePrefix is the import namespace every spell is reachable under.
+const ModulePrefix = "magus/spell/"
+
+// ModulePath is the literal a magusfile writes to bind this spell's handle:
+// ModulePath("go") is "magus/spell/go", for `import "magus/spell/go"`.
+//
+// Reported as a STRING on the spell descriptor record rather than resolved to a handle.
+// A handle can only come from a literal import, because internal/describe reads
+// spell imports statically to build the target graph - so a dynamically resolved
+// spell would drop the target-uses-spell edge and under-report the graph without
+// failing. Handing back the path keeps discovery dynamic and the import static:
+// you look the spell up, then write the import yourself.
+func ModulePath(name string) string { return ModulePrefix + name }
