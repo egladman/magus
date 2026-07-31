@@ -114,7 +114,6 @@ subcommand run
 subcommand self
 subcommand server
 subcommand status
-subcommand tail
 subcommand version
 subcommand watch
 subcommand where

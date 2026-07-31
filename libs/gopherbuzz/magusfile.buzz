@@ -6,7 +6,6 @@
 //   magus run build libs/gopherbuzz         compile the package
 //   magus run test libs/gopherbuzz          run the Go test suite
 //   magus run ci libs/gopherbuzz            lint, build, and test
-//   magus run pgo-generate libs/gopherbuzz  regenerate the VM's PGO profile
 
 import "magus";
 
@@ -29,8 +28,6 @@ magus\project({
     // Generated catalog; cached so a hit restores it without re-describing.
     "outputs": ["MAGUS.md"],
     "targets": {
-        // Profiles the live VM; a cache hit would replay a stale profile.
-        "pgo-generate": {"skip_cache": true},
         // Drift-gates MAGUS.md via git status: run alone, every time.
         "generate": {"skip_cache": true, "exclusive": true},
         // Fetches over the network and re-checks upstream out every run.
@@ -71,37 +68,6 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go[
 // The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint, build, test);
-}
-
-// Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to
-// the interpreter hot path. The canonical profile lives here; cmd/magus/default.pgo
-// symlinks to it so `go build ./cmd/magus` (-pgo=auto) applies it.
-export fun pgo_generate(ctx: magus\Context, args: [str]) > void {
-    // Interpreter-hot benches; 1s gives enough samples that VM.Exec dominates.
-    final bench = "Fib|LoopSum|LoopEq|MethodCall|FieldAccess|Call|ForeachMap|StringInterp";
-    // Excluded: these call range() without `import "std"` and fail at setup.
-    final skip = "DirectCall|ForeachList";
-    final tmp = "default.pgo.tmp";
-
-    // allow_failure: excluded benches exit non-zero, but only the profile matters.
-    os\exec("go", ["test", "-run=^$",
-        "-bench=" + bench,
-        "-skip=" + skip,
-        "-benchtime=1s", "-cpuprofile=" + tmp, "-o", "/dev/null", "."],
-        "", {"allow_failure": true});
-
-    if (!fs\exists(tmp)) {
-        throw "pgo-generate: no profile produced";
-    }
-    final profile = fs\readFile(tmp);
-    fs\removeAll(tmp);
-    // Commit only a non-empty profile so a failed run can't clobber a good one.
-    if (profile.len() == 0) {
-        throw "pgo-generate: empty profile produced";
-    }
-    fs\writeFile("default.pgo", profile);
-    magus\info("wrote default.pgo ({profile.len()} bytes)");
-    magus\info("verify: benchstat over -pgo=off vs -pgo=./default.pgo (-bench=Call -count=10)");
 }
 
 // upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and

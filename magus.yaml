@@ -6,6 +6,23 @@
 default_charms:
   - rw
 
+sandbox:
+  env:
+    # Every GO* variable reaches a sandboxed child. The Go toolchain is configured
+    # almost entirely through them (GOEXPERIMENT, GOFLAGS, GOOS/GOARCH, GOCACHE,
+    # GOMODCACHE, GOPRIVATE, ...), and a variable that shapes compilation but does
+    # not reach the compiler does not merely get ignored - it splits the build cache.
+    #
+    # That is not hypothetical. mise sets GOEXPERIMENT=jsonv2 for this repo, so a
+    # `go test` run inheriting it and a sandboxed one that did not produced two
+    # differently-fingerprinted builds of the same package in one cache, surfacing
+    # as an unrelated-looking linker error: "fingerprint mismatch:
+    # github.com/egladman/magus has X, import from .../cmd/magus expecting Y". The
+    # prefix is deliberately broad rather than an enumeration - the next GO* knob
+    # someone sets should not have to be discovered this way.
+    passthrough:
+      - "GO*"
+
 cache:
   remote:
     # Trust set for the shared remote cache (wired via magus.cache.remote in the

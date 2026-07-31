@@ -26,7 +26,6 @@ var subcommands = []subcommand{
 	{Name: "run", Short: "run a target for selected projects"},
 	{Name: "x", Short: "interactive shorthand: pick project + target (TTY only)"},
 	{Name: "where", Short: "print the absolute path of a project (fuzzy match)"},
-	{Name: "tail", Short: "stream the most recent cached log for cwd project"},
 	{Name: "affected", Short: "run a target for VCS-diff affected projects"},
 	{Name: "query", Short: "search the knowledge graph and show a node's neighborhood"},
 	{Name: "explain", Short: "show one knowledge-graph node: its edges, provenance, blast radius"},

@@ -866,11 +866,6 @@
           ]
         },
         {
-          "name": "pgo-generate",
-          "declared": "pgo_generate",
-          "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
-        },
-        {
           "name": "conformance",
           "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
           "dependencies": [

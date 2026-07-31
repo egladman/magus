@@ -516,8 +516,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return x(ctx, root, rc, subArgs)
 	case "where":
 		return whereCmd(ctx, root, subArgs)
-	case "tail":
-		return tailCmd(ctx, root, subArgs)
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
 	case "insight":

@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2232,
-  "edge_count": 4975,
+  "node_count": 2230,
+  "edge_count": 4972,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -14045,7 +14045,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/gopherbuzz/magusfile.buzz:68",
+      "source": "libs/gopherbuzz/magusfile.buzz:65",
       "attrs": {
         "exported": "true"
       }
@@ -14055,7 +14055,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/gopherbuzz/magusfile.buzz:72",
+      "source": "libs/gopherbuzz/magusfile.buzz:69",
       "attrs": {
         "exported": "true"
       }
@@ -14065,7 +14065,7 @@
       "kind": "function",
       "label": "conformance",
       "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). Opt-in (not part of `ci`): it needs network access and a foreign clone, which `magus affected ci` should never require. Never vendors upstream's test files into this repo - it fetches a pinned commit into a cache directory outside the tree instead, so a later re-run reuses (fetches, not re-clones) rather than re-downloading whole history.",
-      "source": "libs/gopherbuzz/magusfile.buzz:127",
+      "source": "libs/gopherbuzz/magusfile.buzz:93",
       "attrs": {
         "exported": "true"
       }
@@ -14074,7 +14074,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/gopherbuzz/magusfile.buzz:66",
+      "source": "libs/gopherbuzz/magusfile.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -14084,7 +14084,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty (not a raw git/porcelain shell-out), so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/gopherbuzz/magusfile.buzz:50",
+      "source": "libs/gopherbuzz/magusfile.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -14093,7 +14093,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/gopherbuzz/magusfile.buzz:67",
+      "source": "libs/gopherbuzz/magusfile.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -14103,17 +14103,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/gopherbuzz/magusfile.buzz:62",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:libs/gopherbuzz/magusfile.buzz:pgo_generate",
-      "kind": "function",
-      "label": "pgo_generate",
-      "doc": "Regenerates default.pgo, the Buzz VM's PGO profile. Re-run after material changes to the interpreter hot path. The canonical profile lives here; cmd/magus/default.pgo symlinks to it so `go build ./cmd/magus` (-pgo=auto) applies it.",
-      "source": "libs/gopherbuzz/magusfile.buzz:79",
+      "source": "libs/gopherbuzz/magusfile.buzz:59",
       "attrs": {
         "exported": "true"
       }
@@ -14122,7 +14112,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/gopherbuzz/magusfile.buzz:44",
+      "source": "libs/gopherbuzz/magusfile.buzz:41",
       "attrs": {
         "exported": "true"
       }
@@ -14131,7 +14121,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/gopherbuzz/magusfile.buzz:69",
+      "source": "libs/gopherbuzz/magusfile.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -14141,7 +14131,7 @@
       "kind": "function",
       "label": "upstream_pinned_sha",
       "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -> \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
-      "source": "libs/gopherbuzz/magusfile.buzz:111"
+      "source": "libs/gopherbuzz/magusfile.buzz:77"
     },
     {
       "id": "function:libs/gopherbuzz/std/crypto.buzz:hash",
@@ -19402,7 +19392,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "target_count": "10"
+        "target_count": "9"
       }
     },
     {
@@ -19577,7 +19567,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out51787c6f",
+        "last_output_ref": "out56c60618",
         "last_run_ok": "true"
       }
     },
@@ -19666,7 +19656,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out935c614b",
+        "last_output_ref": "outc1de105c",
         "last_run_ok": "true"
       }
     },
@@ -19842,7 +19832,9 @@
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outdcf476af",
+        "last_run_ok": "false"
       }
     },
     {
@@ -20307,17 +20299,6 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "declared_as": "md_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:libs/gopherbuzz:pgo-generate",
-      "kind": "target",
-      "label": "pgo-generate",
-      "doc": "Regenerates default.pgo, the Buzz VM's PGO profile.",
-      "source": "libs/gopherbuzz",
-      "attrs": {
-        "declared_as": "pgo_generate",
         "engine": "buzz"
       }
     },
@@ -29548,14 +29529,6 @@
     {
       "source": "doc:docs/reference/cli.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/reference/cli.md"
-    },
-    {
-      "source": "doc:docs/reference/cli.md",
-      "target": "doc:docs/reference/manpage/magus-tail.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -45867,14 +45840,6 @@
     },
     {
       "source": "file:libs/gopherbuzz/magusfile.buzz",
-      "target": "function:libs/gopherbuzz/magusfile.buzz:pgo_generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz/magusfile.buzz"
-    },
-    {
-      "source": "file:libs/gopherbuzz/magusfile.buzz",
       "target": "function:libs/gopherbuzz/magusfile.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
@@ -57273,14 +57238,6 @@
     {
       "source": "project:libs/gopherbuzz",
       "target": "target:libs/gopherbuzz:md-generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/gopherbuzz"
-    },
-    {
-      "source": "project:libs/gopherbuzz",
-      "target": "target:libs/gopherbuzz:pgo-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

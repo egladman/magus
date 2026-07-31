@@ -10,7 +10,6 @@ function __magus_subcommands
         run          'run a target for selected projects' \
         x            'interactive shorthand: pick project + target (TTY only)' \
         where        'print the absolute path of a project (fuzzy match)' \
-        tail         'stream the most recent cached log for cwd project' \
         affected     'run a target for VCS-diff affected projects' \
         query        'search the knowledge graph and show a node\'s neighborhood' \
         explain      'show one knowledge-graph node: its edges, provenance, blast radius' \

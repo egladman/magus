@@ -13,7 +13,6 @@ var All = []Command{
 	runCommand,
 	xCommand,
 	whereCommand,
-	tailCommand,
 	affectedCommand,
 	insightCommand,
 	graphCommand,
@@ -154,37 +153,6 @@ that.`,
 		{"Navigate to a project", `cd "$(magus where api)"`},
 		{"Open in editor", `code "$(magus where dash)"`},
 		{"AND-filter: must match both tokens", "magus where api gateway"},
-	},
-}
-
-var tailCommand = Command{
-	Name:        "tail",
-	Short:       "Stream the most recent cached log (interactive only)",
-	Description: "Stream the captured build log of the most recent cache entry for a project, with -f to follow and target selectors like project:test.",
-	Tags:        []string{"cli", "magus tail", "tail", "logs", "cache", "interactive"},
-	Long: `Stream the captured build log of the most recent cache entry for a
-project. The log was written during a cache miss (when the build actually
-ran). Subsequent cache hits replay the same log without re-running the build.
-
-Only -f (follow) requires an interactive terminal. Without it, tail prints the
-last -n lines to stdout and exits, which works in a script or a pipeline.
-
-target follows the canonical path:target form used by magus run:
-  (none)     cwd project, latest run of any target
-  :build     cwd project, latest build run
-  api        api project, latest run of any target
-  api:test   api project, latest test run
-
-Exits non-zero when the project is not found, or when no cache entries
-exist yet (run a build first).`,
-	Usage: "magus tail [-f] [-n <count>] [target]",
-	Examples: []Example{
-		{"Stream last log for cwd project", "magus tail"},
-		{"Follow (stream new output as it arrives)", "magus tail -f"},
-		{"Show last 50 lines", "magus tail -n 50"},
-		{"Show entire log", "magus tail -n 0"},
-		{"Last test run for the api project", "magus tail api:test"},
-		{"Last build run for cwd project", "magus tail :build"},
 	},
 }
 

@@ -304,9 +304,7 @@ No cgo, no external toolchain. Pure-Go deps:
 [`purego`](https://github.com/ebitengine/purego) (`zdef()` FFI) and
 [`golang-asm`](https://github.com/twitchyliquid64/golang-asm) (JIT codegen, amd64).
 
-`default.pgo` is applied automatically by Go 1.21+ when building from this dir;
-regenerate with `magus run pgo-generate gopherbuzz` after hot-path changes (a stale
-profile is neutral). After bumping `BytecodeVersion`, run `go generate` in
+After bumping `BytecodeVersion`, run `go generate` in
 [`../internal/spell`](../internal/spell) to rebuild the embedded spell bytecode.
 
 ## CLI

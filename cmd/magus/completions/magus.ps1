@@ -9,12 +9,11 @@ $__magus_scriptblock = {
     param($wordToComplete, $commandAst, $cursorPosition)
 
     # magus-utils:subcommands:begin
-    $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'tail',
-                   'affected', 'query', 'explain', 'path', 'refs', 'graph',
-                   'insight', 'watch', 'status', 'clean', 'merge-driver', 'doctor',
-                   'config', 'memory', 'server', 'repl', 'buzz', 'completion',
-                   'man', 'init', 'agent', 'vcs', 'self', 'version',
-                   'help'
+    $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'affected',
+                   'query', 'explain', 'path', 'refs', 'graph', 'insight',
+                   'watch', 'status', 'clean', 'merge-driver', 'doctor', 'config',
+                   'memory', 'server', 'repl', 'buzz', 'completion', 'man',
+                   'init', 'agent', 'vcs', 'self', 'version', 'help'
     # magus-utils:subcommands:end
     $describeNouns = 'spell', 'charm', 'target', 'project', 'workspace', 'module', 'mcp-tool'
     $lenses        = 'hotspots', 'affinity', 'ownership', 'trend', 'report'
