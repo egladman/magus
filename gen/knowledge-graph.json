@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2230,
-  "edge_count": 4939,
+  "node_count": 2533,
+  "edge_count": 4997,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -401,13 +401,963 @@
       }
     },
     {
+      "id": "dir:..",
+      "kind": "dir",
+      "label": "..",
+      "source": "..",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../..",
+      "kind": "dir",
+      "label": "../..",
+      "source": "../..",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../..",
+      "kind": "dir",
+      "label": "../../..",
+      "source": "../../..",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../..",
+      "kind": "dir",
+      "label": "../../../..",
+      "source": "../../../..",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../../..",
+      "kind": "dir",
+      "label": "../../../../..",
+      "source": "../../../../..",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library",
+      "kind": "dir",
+      "label": "../../../../../Library",
+      "source": "../../../../../Library",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches",
+      "source": "../../../../../Library/Caches",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build",
+      "source": "../../../../../Library/Caches/go-build",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "105"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/01",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/01",
+      "source": "../../../../../Library/Caches/go-build/01",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/02",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/02",
+      "source": "../../../../../Library/Caches/go-build/02",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/07",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/07",
+      "source": "../../../../../Library/Caches/go-build/07",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/09",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/09",
+      "source": "../../../../../Library/Caches/go-build/09",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/0c",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/0c",
+      "source": "../../../../../Library/Caches/go-build/0c",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/0e",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/0e",
+      "source": "../../../../../Library/Caches/go-build/0e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/0f",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/0f",
+      "source": "../../../../../Library/Caches/go-build/0f",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/12",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/12",
+      "source": "../../../../../Library/Caches/go-build/12",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/13",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/13",
+      "source": "../../../../../Library/Caches/go-build/13",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/18",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/18",
+      "source": "../../../../../Library/Caches/go-build/18",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/1b",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/1b",
+      "source": "../../../../../Library/Caches/go-build/1b",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/1f",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/1f",
+      "source": "../../../../../Library/Caches/go-build/1f",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/20",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/20",
+      "source": "../../../../../Library/Caches/go-build/20",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/21",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/21",
+      "source": "../../../../../Library/Caches/go-build/21",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/24",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/24",
+      "source": "../../../../../Library/Caches/go-build/24",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/27",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/27",
+      "source": "../../../../../Library/Caches/go-build/27",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/28",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/28",
+      "source": "../../../../../Library/Caches/go-build/28",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/2c",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/2c",
+      "source": "../../../../../Library/Caches/go-build/2c",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/2d",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/2d",
+      "source": "../../../../../Library/Caches/go-build/2d",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/2e",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/2e",
+      "source": "../../../../../Library/Caches/go-build/2e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/2f",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/2f",
+      "source": "../../../../../Library/Caches/go-build/2f",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/30",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/30",
+      "source": "../../../../../Library/Caches/go-build/30",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/35",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/35",
+      "source": "../../../../../Library/Caches/go-build/35",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/36",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/36",
+      "source": "../../../../../Library/Caches/go-build/36",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/38",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/38",
+      "source": "../../../../../Library/Caches/go-build/38",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/3f",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/3f",
+      "source": "../../../../../Library/Caches/go-build/3f",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/48",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/48",
+      "source": "../../../../../Library/Caches/go-build/48",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/4c",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/4c",
+      "source": "../../../../../Library/Caches/go-build/4c",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/53",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/53",
+      "source": "../../../../../Library/Caches/go-build/53",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/55",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/55",
+      "source": "../../../../../Library/Caches/go-build/55",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/57",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/57",
+      "source": "../../../../../Library/Caches/go-build/57",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/59",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/59",
+      "source": "../../../../../Library/Caches/go-build/59",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/5a",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/5a",
+      "source": "../../../../../Library/Caches/go-build/5a",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/60",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/60",
+      "source": "../../../../../Library/Caches/go-build/60",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/61",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/61",
+      "source": "../../../../../Library/Caches/go-build/61",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/64",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/64",
+      "source": "../../../../../Library/Caches/go-build/64",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/65",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/65",
+      "source": "../../../../../Library/Caches/go-build/65",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/66",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/66",
+      "source": "../../../../../Library/Caches/go-build/66",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/67",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/67",
+      "source": "../../../../../Library/Caches/go-build/67",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/6a",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/6a",
+      "source": "../../../../../Library/Caches/go-build/6a",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/6d",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/6d",
+      "source": "../../../../../Library/Caches/go-build/6d",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/6e",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/6e",
+      "source": "../../../../../Library/Caches/go-build/6e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/6f",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/6f",
+      "source": "../../../../../Library/Caches/go-build/6f",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/74",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/74",
+      "source": "../../../../../Library/Caches/go-build/74",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/77",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/77",
+      "source": "../../../../../Library/Caches/go-build/77",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/7b",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/7b",
+      "source": "../../../../../Library/Caches/go-build/7b",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/82",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/82",
+      "source": "../../../../../Library/Caches/go-build/82",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/83",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/83",
+      "source": "../../../../../Library/Caches/go-build/83",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/86",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/86",
+      "source": "../../../../../Library/Caches/go-build/86",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/88",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/88",
+      "source": "../../../../../Library/Caches/go-build/88",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/89",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/89",
+      "source": "../../../../../Library/Caches/go-build/89",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/8a",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/8a",
+      "source": "../../../../../Library/Caches/go-build/8a",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/8b",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/8b",
+      "source": "../../../../../Library/Caches/go-build/8b",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/91",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/91",
+      "source": "../../../../../Library/Caches/go-build/91",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/98",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/98",
+      "source": "../../../../../Library/Caches/go-build/98",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/9c",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/9c",
+      "source": "../../../../../Library/Caches/go-build/9c",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/9e",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/9e",
+      "source": "../../../../../Library/Caches/go-build/9e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/a5",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/a5",
+      "source": "../../../../../Library/Caches/go-build/a5",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/a6",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/a6",
+      "source": "../../../../../Library/Caches/go-build/a6",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ae",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ae",
+      "source": "../../../../../Library/Caches/go-build/ae",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/b4",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/b4",
+      "source": "../../../../../Library/Caches/go-build/b4",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/b6",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/b6",
+      "source": "../../../../../Library/Caches/go-build/b6",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ba",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ba",
+      "source": "../../../../../Library/Caches/go-build/ba",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/bb",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/bb",
+      "source": "../../../../../Library/Caches/go-build/bb",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/bc",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/bc",
+      "source": "../../../../../Library/Caches/go-build/bc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/be",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/be",
+      "source": "../../../../../Library/Caches/go-build/be",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/bf",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/bf",
+      "source": "../../../../../Library/Caches/go-build/bf",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c0",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c0",
+      "source": "../../../../../Library/Caches/go-build/c0",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c2",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c2",
+      "source": "../../../../../Library/Caches/go-build/c2",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c3",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c3",
+      "source": "../../../../../Library/Caches/go-build/c3",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c5",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c5",
+      "source": "../../../../../Library/Caches/go-build/c5",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c7",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c7",
+      "source": "../../../../../Library/Caches/go-build/c7",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/c8",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/c8",
+      "source": "../../../../../Library/Caches/go-build/c8",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ca",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ca",
+      "source": "../../../../../Library/Caches/go-build/ca",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/cc",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/cc",
+      "source": "../../../../../Library/Caches/go-build/cc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ce",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ce",
+      "source": "../../../../../Library/Caches/go-build/ce",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/d0",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/d0",
+      "source": "../../../../../Library/Caches/go-build/d0",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/d9",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/d9",
+      "source": "../../../../../Library/Caches/go-build/d9",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/db",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/db",
+      "source": "../../../../../Library/Caches/go-build/db",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/e9",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/e9",
+      "source": "../../../../../Library/Caches/go-build/e9",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/eb",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/eb",
+      "source": "../../../../../Library/Caches/go-build/eb",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ec",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ec",
+      "source": "../../../../../Library/Caches/go-build/ec",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ee",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ee",
+      "source": "../../../../../Library/Caches/go-build/ee",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/ef",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/ef",
+      "source": "../../../../../Library/Caches/go-build/ef",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/f1",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/f1",
+      "source": "../../../../../Library/Caches/go-build/f1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/f6",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/f6",
+      "source": "../../../../../Library/Caches/go-build/f6",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1"
+      }
+    },
+    {
+      "id": "dir:../../../../../Library/Caches/go-build/fb",
+      "kind": "dir",
+      "label": "../../../../../Library/Caches/go-build/fb",
+      "source": "../../../../../Library/Caches/go-build/fb",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3"
+      }
+    },
+    {
       "id": "dir:.agents",
       "kind": "dir",
       "label": ".agents",
       "source": ".agents",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "19",
+        "dir_files": "21",
         "dir_languages": "markdown"
       }
     },
@@ -418,7 +1368,7 @@
       "source": ".agents/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "18",
+        "dir_files": "20",
         "dir_languages": "markdown"
       }
     },
@@ -511,6 +1461,17 @@
       }
     },
     {
+      "id": "dir:.agents/skills/magus-sdk",
+      "kind": "dir",
+      "label": ".agents/skills/magus-sdk",
+      "source": ".agents/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:.agents/skills/magus-vcs",
       "kind": "dir",
       "label": ".agents/skills/magus-vcs",
@@ -528,7 +1489,7 @@
       "source": ".claude",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "21",
+        "dir_files": "23",
         "dir_languages": "markdown"
       }
     },
@@ -539,7 +1500,7 @@
       "source": ".claude/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "20",
+        "dir_files": "22",
         "dir_languages": "markdown"
       }
     },
@@ -632,6 +1593,17 @@
       }
     },
     {
+      "id": "dir:.claude/skills/magus-sdk",
+      "kind": "dir",
+      "label": ".claude/skills/magus-sdk",
+      "source": ".claude/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:.claude/skills/magus-skill-authoring",
       "kind": "dir",
       "label": ".claude/skills/magus-skill-authoring",
@@ -660,7 +1632,7 @@
       "source": ".opencode",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "19",
+        "dir_files": "21",
         "dir_languages": "markdown"
       }
     },
@@ -671,7 +1643,7 @@
       "source": ".opencode/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "18",
+        "dir_files": "20",
         "dir_languages": "markdown"
       }
     },
@@ -764,6 +1736,17 @@
       }
     },
     {
+      "id": "dir:.opencode/skills/magus-sdk",
+      "kind": "dir",
+      "label": ".opencode/skills/magus-sdk",
+      "source": ".opencode/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:.opencode/skills/magus-vcs",
       "kind": "dir",
       "label": ".opencode/skills/magus-vcs",
@@ -781,8 +1764,19 @@
       "source": "benchmarks",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "7",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "8",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:benchmarks/e2e",
+      "kind": "dir",
+      "label": "benchmarks/e2e",
+      "source": "benchmarks/e2e",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -825,8 +1819,8 @@
       "source": "cmd",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "22",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "150",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -841,14 +1835,113 @@
       }
     },
     {
+      "id": "dir:cmd/langservice-manifest",
+      "kind": "dir",
+      "label": "cmd/langservice-manifest",
+      "source": "cmd/langservice-manifest",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
       "id": "dir:cmd/magus",
       "kind": "dir",
       "label": "cmd/magus",
       "source": "cmd/magus",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "20",
-        "dir_languages": "markdown"
+        "dir_files": "123",
+        "dir_languages": "go,markdown"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-configdocs",
+      "kind": "dir",
+      "label": "cmd/magus-configdocs",
+      "source": "cmd/magus-configdocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-docs",
+      "kind": "dir",
+      "label": "cmd/magus-docs",
+      "source": "cmd/magus-docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-examples",
+      "kind": "dir",
+      "label": "cmd/magus-examples",
+      "source": "cmd/magus-examples",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-manpage",
+      "kind": "dir",
+      "label": "cmd/magus-manpage",
+      "source": "cmd/magus-manpage",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-skilldocs",
+      "kind": "dir",
+      "label": "cmd/magus-skilldocs",
+      "source": "cmd/magus-skilldocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-spelldocs",
+      "kind": "dir",
+      "label": "cmd/magus-spelldocs",
+      "source": "cmd/magus-spelldocs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus-utils",
+      "kind": "dir",
+      "label": "cmd/magus-utils",
+      "source": "cmd/magus-utils",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:cmd/magus/gen",
+      "kind": "dir",
+      "label": "cmd/magus/gen",
+      "source": "cmd/magus/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -858,7 +1951,7 @@
       "source": "cmd/magus/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "18",
+        "dir_files": "20",
         "dir_languages": "markdown"
       }
     },
@@ -951,6 +2044,17 @@
       }
     },
     {
+      "id": "dir:cmd/magus/skills/magus-sdk",
+      "kind": "dir",
+      "label": "cmd/magus/skills/magus-sdk",
+      "source": "cmd/magus/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:cmd/magus/skills/magus-vcs",
       "kind": "dir",
       "label": "cmd/magus/skills/magus-vcs",
@@ -959,6 +2063,380 @@
         "dir_commits": "0",
         "dir_files": "1",
         "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:console/src",
+      "kind": "dir",
+      "label": "console/src",
+      "source": "console/src",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "102",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console",
+      "kind": "dir",
+      "label": "console/src/console",
+      "source": "console/src/console",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "77",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/activity",
+      "kind": "dir",
+      "label": "console/src/console/activity",
+      "source": "console/src/console/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/dashboard",
+      "kind": "dir",
+      "label": "console/src/console/dashboard",
+      "source": "console/src/console/dashboard",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "26",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/dashboard/charts",
+      "kind": "dir",
+      "label": "console/src/console/dashboard/charts",
+      "source": "console/src/console/dashboard/charts",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/dashboard/tiles",
+      "kind": "dir",
+      "label": "console/src/console/dashboard/tiles",
+      "source": "console/src/console/dashboard/tiles",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "21",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/graph",
+      "kind": "dir",
+      "label": "console/src/console/graph",
+      "source": "console/src/console/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/logs",
+      "kind": "dir",
+      "label": "console/src/console/logs",
+      "source": "console/src/console/logs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/render",
+      "kind": "dir",
+      "label": "console/src/console/render",
+      "source": "console/src/console/render",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/console/settings",
+      "kind": "dir",
+      "label": "console/src/console/settings",
+      "source": "console/src/console/settings",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "5",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen",
+      "kind": "dir",
+      "label": "console/src/gen",
+      "source": "console/src/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/buf",
+      "kind": "dir",
+      "label": "console/src/gen/buf",
+      "source": "console/src/gen/buf",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/buf/validate",
+      "kind": "dir",
+      "label": "console/src/gen/buf/validate",
+      "source": "console/src/gen/buf/validate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus",
+      "kind": "dir",
+      "label": "console/src/gen/magus",
+      "source": "console/src/gen/magus",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/activity",
+      "kind": "dir",
+      "label": "console/src/gen/magus/activity",
+      "source": "console/src/gen/magus/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/activity/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/activity/v1",
+      "source": "console/src/gen/magus/activity/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/graph",
+      "kind": "dir",
+      "label": "console/src/gen/magus/graph",
+      "source": "console/src/gen/magus/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/graph/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/graph/v1",
+      "source": "console/src/gen/magus/graph/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/job",
+      "kind": "dir",
+      "label": "console/src/gen/magus/job",
+      "source": "console/src/gen/magus/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/job/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/job/v1",
+      "source": "console/src/gen/magus/job/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/memory",
+      "kind": "dir",
+      "label": "console/src/gen/magus/memory",
+      "source": "console/src/gen/magus/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/memory/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/memory/v1",
+      "source": "console/src/gen/magus/memory/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/metrics",
+      "kind": "dir",
+      "label": "console/src/gen/magus/metrics",
+      "source": "console/src/gen/magus/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/metrics/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/metrics/v1",
+      "source": "console/src/gen/magus/metrics/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/query",
+      "kind": "dir",
+      "label": "console/src/gen/magus/query",
+      "source": "console/src/gen/magus/query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/query/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/query/v1",
+      "source": "console/src/gen/magus/query/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/status",
+      "kind": "dir",
+      "label": "console/src/gen/magus/status",
+      "source": "console/src/gen/magus/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/status/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/status/v1",
+      "source": "console/src/gen/magus/status/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/token",
+      "kind": "dir",
+      "label": "console/src/gen/magus/token",
+      "source": "console/src/gen/magus/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/token/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/token/v1",
+      "source": "console/src/gen/magus/token/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/viewer",
+      "kind": "dir",
+      "label": "console/src/gen/magus/viewer",
+      "source": "console/src/gen/magus/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/gen/magus/viewer/v1",
+      "kind": "dir",
+      "label": "console/src/gen/magus/viewer/v1",
+      "source": "console/src/gen/magus/viewer/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/lib",
+      "kind": "dir",
+      "label": "console/src/lib",
+      "source": "console/src/lib",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:console/src/ui",
+      "kind": "dir",
+      "label": "console/src/ui",
+      "source": "console/src/ui",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "typescript"
       }
     },
     {
@@ -1100,7 +2578,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "124",
+        "dir_files": "126",
         "dir_languages": "markdown"
       }
     },
@@ -1232,7 +2710,7 @@
       "source": "docs/reference/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "10",
+        "dir_files": "11",
         "dir_languages": "markdown"
       }
     },
@@ -1248,6 +2726,314 @@
       }
     },
     {
+      "id": "dir:docs/src",
+      "kind": "dir",
+      "label": "docs/src",
+      "source": "docs/src",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "39",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen",
+      "kind": "dir",
+      "label": "docs/src/gen",
+      "source": "docs/src/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/buf",
+      "kind": "dir",
+      "label": "docs/src/gen/buf",
+      "source": "docs/src/gen/buf",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/buf/validate",
+      "kind": "dir",
+      "label": "docs/src/gen/buf/validate",
+      "source": "docs/src/gen/buf/validate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus",
+      "kind": "dir",
+      "label": "docs/src/gen/magus",
+      "source": "docs/src/gen/magus",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/activity",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/activity",
+      "source": "docs/src/gen/magus/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/activity/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/activity/v1",
+      "source": "docs/src/gen/magus/activity/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/graph",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/graph",
+      "source": "docs/src/gen/magus/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/graph/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/graph/v1",
+      "source": "docs/src/gen/magus/graph/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/job",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/job",
+      "source": "docs/src/gen/magus/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/job/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/job/v1",
+      "source": "docs/src/gen/magus/job/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/memory",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/memory",
+      "source": "docs/src/gen/magus/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/memory/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/memory/v1",
+      "source": "docs/src/gen/magus/memory/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/metrics",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/metrics",
+      "source": "docs/src/gen/magus/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/metrics/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/metrics/v1",
+      "source": "docs/src/gen/magus/metrics/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/query",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/query",
+      "source": "docs/src/gen/magus/query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/query/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/query/v1",
+      "source": "docs/src/gen/magus/query/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/status",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/status",
+      "source": "docs/src/gen/magus/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/status/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/status/v1",
+      "source": "docs/src/gen/magus/status/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/token",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/token",
+      "source": "docs/src/gen/magus/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/token/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/token/v1",
+      "source": "docs/src/gen/magus/token/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/viewer",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/viewer",
+      "source": "docs/src/gen/magus/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/gen/magus/viewer/v1",
+      "kind": "dir",
+      "label": "docs/src/gen/magus/viewer/v1",
+      "source": "docs/src/gen/magus/viewer/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/lib",
+      "kind": "dir",
+      "label": "docs/src/lib",
+      "source": "docs/src/lib",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/site",
+      "kind": "dir",
+      "label": "docs/src/site",
+      "source": "docs/src/site",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/types",
+      "kind": "dir",
+      "label": "docs/src/types",
+      "source": "docs/src/types",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/ui",
+      "kind": "dir",
+      "label": "docs/src/ui",
+      "source": "docs/src/ui",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:docs/src/vendor",
+      "kind": "dir",
+      "label": "docs/src/vendor",
+      "source": "docs/src/vendor",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "typescript"
+      }
+    },
+    {
       "id": "dir:docs/tour",
       "kind": "dir",
       "label": "docs/tour",
@@ -1259,14 +3045,377 @@
       }
     },
     {
+      "id": "dir:host",
+      "kind": "dir",
+      "label": "host",
+      "source": "host",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "34",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:host/gen",
+      "kind": "dir",
+      "label": "host/gen",
+      "source": "host/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "23",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:host/registry",
+      "kind": "dir",
+      "label": "host/registry",
+      "source": "host/registry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
       "id": "dir:internal",
       "kind": "dir",
       "label": "internal",
       "source": "internal",
       "attrs": {
         "dir_commits": "0",
+        "dir_files": "576",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:internal/agent",
+      "kind": "dir",
+      "label": "internal/agent",
+      "source": "internal/agent",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/audit",
+      "kind": "dir",
+      "label": "internal/audit",
+      "source": "internal/audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/auth",
+      "kind": "dir",
+      "label": "internal/auth",
+      "source": "internal/auth",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/cache",
+      "kind": "dir",
+      "label": "internal/cache",
+      "source": "internal/cache",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "60",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/cache/reflink",
+      "kind": "dir",
+      "label": "internal/cache/reflink",
+      "source": "internal/cache/reflink",
+      "attrs": {
+        "dir_commits": "0",
         "dir_files": "3",
-        "dir_languages": "buzz,markdown"
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci",
+      "kind": "dir",
+      "label": "internal/ci",
+      "source": "internal/ci",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/annotate",
+      "kind": "dir",
+      "label": "internal/ci/annotate",
+      "source": "internal/ci/annotate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/forecast",
+      "kind": "dir",
+      "label": "internal/ci/forecast",
+      "source": "internal/ci/forecast",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ci/volatility",
+      "kind": "dir",
+      "label": "internal/ci/volatility",
+      "source": "internal/ci/volatility",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/codec",
+      "kind": "dir",
+      "label": "internal/codec",
+      "source": "internal/codec",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config",
+      "kind": "dir",
+      "label": "internal/config",
+      "source": "internal/config",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config/gen",
+      "kind": "dir",
+      "label": "internal/config/gen",
+      "source": "internal/config/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/config/generate",
+      "kind": "dir",
+      "label": "internal/config/generate",
+      "source": "internal/config/generate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/daemon",
+      "kind": "dir",
+      "label": "internal/daemon",
+      "source": "internal/daemon",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/describe",
+      "kind": "dir",
+      "label": "internal/describe",
+      "source": "internal/describe",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/docs",
+      "kind": "dir",
+      "label": "internal/docs",
+      "source": "internal/docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/doctor",
+      "kind": "dir",
+      "label": "internal/doctor",
+      "source": "internal/doctor",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry",
+      "kind": "dir",
+      "label": "internal/dry",
+      "source": "internal/dry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry/gen",
+      "kind": "dir",
+      "label": "internal/dry/gen",
+      "source": "internal/dry/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/dry/gen/mocks",
+      "kind": "dir",
+      "label": "internal/dry/gen/mocks",
+      "source": "internal/dry/gen/mocks",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file",
+      "kind": "dir",
+      "label": "internal/file",
+      "source": "internal/file",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "18",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file/diff",
+      "kind": "dir",
+      "label": "internal/file/diff",
+      "source": "internal/file/diff",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/file/watch",
+      "kind": "dir",
+      "label": "internal/file/watch",
+      "source": "internal/file/watch",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate",
+      "kind": "dir",
+      "label": "internal/generate",
+      "source": "internal/generate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate/emit",
+      "kind": "dir",
+      "label": "internal/generate/emit",
+      "source": "internal/generate/emit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/generate/godecl",
+      "kind": "dir",
+      "label": "internal/generate/godecl",
+      "source": "internal/generate/godecl",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph",
+      "kind": "dir",
+      "label": "internal/graph",
+      "source": "internal/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "57",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/dependency",
+      "kind": "dir",
+      "label": "internal/graph/dependency",
+      "source": "internal/graph/dependency",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "12",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/knowledge",
+      "kind": "dir",
+      "label": "internal/graph/knowledge",
+      "source": "internal/graph/knowledge",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "43",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/graph/url",
+      "kind": "dir",
+      "label": "internal/graph/url",
+      "source": "internal/graph/url",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1276,8 +3425,514 @@
       "source": "internal/handler",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_files": "79",
+        "dir_languages": "go,markdown"
+      }
+    },
+    {
+      "id": "dir:internal/handler/activity",
+      "kind": "dir",
+      "label": "internal/handler/activity",
+      "source": "internal/handler/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/graph",
+      "kind": "dir",
+      "label": "internal/handler/graph",
+      "source": "internal/handler/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/job",
+      "kind": "dir",
+      "label": "internal/handler/job",
+      "source": "internal/handler/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/mcp",
+      "kind": "dir",
+      "label": "internal/handler/mcp",
+      "source": "internal/handler/mcp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "38",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/mcp/origin",
+      "kind": "dir",
+      "label": "internal/handler/mcp/origin",
+      "source": "internal/handler/mcp/origin",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/memory",
+      "kind": "dir",
+      "label": "internal/handler/memory",
+      "source": "internal/handler/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/metrics",
+      "kind": "dir",
+      "label": "internal/handler/metrics",
+      "source": "internal/handler/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/status",
+      "kind": "dir",
+      "label": "internal/handler/status",
+      "source": "internal/handler/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "9",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/token",
+      "kind": "dir",
+      "label": "internal/handler/token",
+      "source": "internal/handler/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/trailrpc",
+      "kind": "dir",
+      "label": "internal/handler/trailrpc",
+      "source": "internal/handler/trailrpc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/handler/viewer",
+      "kind": "dir",
+      "label": "internal/handler/viewer",
+      "source": "internal/handler/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/httpx",
+      "kind": "dir",
+      "label": "internal/httpx",
+      "source": "internal/httpx",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive",
+      "kind": "dir",
+      "label": "internal/interactive",
+      "source": "internal/interactive",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive/clihint",
+      "kind": "dir",
+      "label": "internal/interactive/clihint",
+      "source": "internal/interactive/clihint",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interactive/tty",
+      "kind": "dir",
+      "label": "internal/interactive/tty",
+      "source": "internal/interactive/tty",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp",
+      "kind": "dir",
+      "label": "internal/interp",
+      "source": "internal/interp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "53",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/bindings",
+      "kind": "dir",
+      "label": "internal/interp/bindings",
+      "source": "internal/interp/bindings",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "28",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/engine",
+      "kind": "dir",
+      "label": "internal/interp/engine",
+      "source": "internal/interp/engine",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/interp/engine/buzz",
+      "kind": "dir",
+      "label": "internal/interp/engine/buzz",
+      "source": "internal/interp/engine/buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "5",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/jobs",
+      "kind": "dir",
+      "label": "internal/jobs",
+      "source": "internal/jobs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/journal",
+      "kind": "dir",
+      "label": "internal/journal",
+      "source": "internal/journal",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/langservice",
+      "kind": "dir",
+      "label": "internal/langservice",
+      "source": "internal/langservice",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/maintenance",
+      "kind": "dir",
+      "label": "internal/maintenance",
+      "source": "internal/maintenance",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/manpage",
+      "kind": "dir",
+      "label": "internal/manpage",
+      "source": "internal/manpage",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "12",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/memory",
+      "kind": "dir",
+      "label": "internal/memory",
+      "source": "internal/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/observability",
+      "kind": "dir",
+      "label": "internal/observability",
+      "source": "internal/observability",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/observability/otlp",
+      "kind": "dir",
+      "label": "internal/observability/otlp",
+      "source": "internal/observability/otlp",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "7",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/playground",
+      "kind": "dir",
+      "label": "internal/playground",
+      "source": "internal/playground",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc",
+      "kind": "dir",
+      "label": "internal/proc",
+      "source": "internal/proc",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "23",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc/endpoint",
+      "kind": "dir",
+      "label": "internal/proc/endpoint",
+      "source": "internal/proc/endpoint",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/proc/run",
+      "kind": "dir",
+      "label": "internal/proc/run",
+      "source": "internal/proc/run",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/race",
+      "kind": "dir",
+      "label": "internal/race",
+      "source": "internal/race",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "10",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/render",
+      "kind": "dir",
+      "label": "internal/render",
+      "source": "internal/render",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "14",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/render/md",
+      "kind": "dir",
+      "label": "internal/render/md",
+      "source": "internal/render/md",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/report",
+      "kind": "dir",
+      "label": "internal/report",
+      "source": "internal/report",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/retry",
+      "kind": "dir",
+      "label": "internal/retry",
+      "source": "internal/retry",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox",
+      "kind": "dir",
+      "label": "internal/sandbox",
+      "source": "internal/sandbox",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "18",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/apply",
+      "kind": "dir",
+      "label": "internal/sandbox/apply",
+      "source": "internal/sandbox/apply",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/env",
+      "kind": "dir",
+      "label": "internal/sandbox/env",
+      "source": "internal/sandbox/env",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/sandbox/filesystem",
+      "kind": "dir",
+      "label": "internal/sandbox/filesystem",
+      "source": "internal/sandbox/filesystem",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/selfupdate",
+      "kind": "dir",
+      "label": "internal/selfupdate",
+      "source": "internal/selfupdate",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service",
+      "kind": "dir",
+      "label": "internal/service",
+      "source": "internal/service",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "27",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service/console",
+      "kind": "dir",
+      "label": "internal/service/console",
+      "source": "internal/service/console",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "15",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/service/identity",
+      "kind": "dir",
+      "label": "internal/service/identity",
+      "source": "internal/service/identity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/serviceaudit",
+      "kind": "dir",
+      "label": "internal/serviceaudit",
+      "source": "internal/serviceaudit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/share",
+      "kind": "dir",
+      "label": "internal/share",
+      "source": "internal/share",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1287,8 +3942,63 @@
       "source": "internal/spell",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "1",
-        "dir_languages": "buzz"
+        "dir_files": "13",
+        "dir_languages": "buzz,go"
+      }
+    },
+    {
+      "id": "dir:internal/symbols",
+      "kind": "dir",
+      "label": "internal/symbols",
+      "source": "internal/symbols",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "5",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/trail",
+      "kind": "dir",
+      "label": "internal/trail",
+      "source": "internal/trail",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/ward",
+      "kind": "dir",
+      "label": "internal/ward",
+      "source": "internal/ward",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "4",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:internal/workspace",
+      "kind": "dir",
+      "label": "internal/workspace",
+      "source": "internal/workspace",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "6",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/ast",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/ast",
+      "source": "libs/gopherbuzz/ast",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "3",
+        "dir_languages": "go"
       }
     },
     {
@@ -1311,6 +4021,28 @@
         "dir_commits": "0",
         "dir_files": "1",
         "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/cmd",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/cmd",
+      "source": "libs/gopherbuzz/cmd",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/cmd/buzz",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/cmd/buzz",
+      "source": "libs/gopherbuzz/cmd/buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
       }
     },
     {
@@ -1342,8 +4074,8 @@
       "source": "libs/gopherbuzz/examples",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "61",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "62",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -1419,8 +4151,30 @@
       "source": "libs/gopherbuzz/examples/ffi-c",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "2",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "3",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/internal",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/internal",
+      "source": "libs/gopherbuzz/internal",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/internal/codec",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/internal/codec",
+      "source": "libs/gopherbuzz/internal/codec",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1430,8 +4184,382 @@
       "source": "libs/gopherbuzz/std",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "6",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "25",
+        "dir_languages": "buzz,go,markdown"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/token",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/token",
+      "source": "libs/gopherbuzz/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/types",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/types",
+      "source": "libs/gopherbuzz/types",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/gopherbuzz/vm",
+      "kind": "dir",
+      "label": "libs/gopherbuzz/vm",
+      "source": "libs/gopherbuzz/vm",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "30",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:libs/textsearch/src",
+      "kind": "dir",
+      "label": "libs/textsearch/src",
+      "source": "libs/textsearch/src",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "typescript"
+      }
+    },
+    {
+      "id": "dir:project",
+      "kind": "dir",
+      "label": "project",
+      "source": "project",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:project/impact",
+      "kind": "dir",
+      "label": "project/impact",
+      "source": "project/impact",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen",
+      "kind": "dir",
+      "label": "proto/gen",
+      "source": "proto/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "16",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go",
+      "kind": "dir",
+      "label": "proto/gen/go",
+      "source": "proto/gen/go",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "16",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus",
+      "kind": "dir",
+      "label": "proto/gen/go/magus",
+      "source": "proto/gen/go/magus",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "16",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity",
+      "source": "proto/gen/go/magus/activity",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity/v1",
+      "source": "proto/gen/go/magus/activity/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/activity/v1/activityv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/activity/v1/activityv1connect",
+      "source": "proto/gen/go/magus/activity/v1/activityv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/graph",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/graph",
+      "source": "proto/gen/go/magus/graph",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/graph/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/graph/v1",
+      "source": "proto/gen/go/magus/graph/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job",
+      "source": "proto/gen/go/magus/job",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job/v1",
+      "source": "proto/gen/go/magus/job/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/job/v1/jobv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/job/v1/jobv1connect",
+      "source": "proto/gen/go/magus/job/v1/jobv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory",
+      "source": "proto/gen/go/magus/memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory/v1",
+      "source": "proto/gen/go/magus/memory/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/memory/v1/memoryv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/memory/v1/memoryv1connect",
+      "source": "proto/gen/go/magus/memory/v1/memoryv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics",
+      "source": "proto/gen/go/magus/metrics",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics/v1",
+      "source": "proto/gen/go/magus/metrics/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "source": "proto/gen/go/magus/metrics/v1/metricsv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/query",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/query",
+      "source": "proto/gen/go/magus/query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/query/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/query/v1",
+      "source": "proto/gen/go/magus/query/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status",
+      "source": "proto/gen/go/magus/status",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status/v1",
+      "source": "proto/gen/go/magus/status/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/status/v1/statusv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/status/v1/statusv1connect",
+      "source": "proto/gen/go/magus/status/v1/statusv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token",
+      "source": "proto/gen/go/magus/token",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token/v1",
+      "source": "proto/gen/go/magus/token/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/token/v1/tokenv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/token/v1/tokenv1connect",
+      "source": "proto/gen/go/magus/token/v1/tokenv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer",
+      "source": "proto/gen/go/magus/viewer",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer/v1",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer/v1",
+      "source": "proto/gen/go/magus/viewer/v1",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "2",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "kind": "dir",
+      "label": "proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "source": "proto/gen/go/magus/viewer/v1/viewerv1connect",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1441,8 +4569,30 @@
       "source": "schema",
       "attrs": {
         "dir_commits": "0",
+        "dir_files": "8",
+        "dir_languages": "go,markdown"
+      }
+    },
+    {
+      "id": "dir:schema/fieldtype",
+      "kind": "dir",
+      "label": "schema/fieldtype",
+      "source": "schema/fieldtype",
+      "attrs": {
+        "dir_commits": "0",
         "dir_files": "1",
-        "dir_languages": "markdown"
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:schema/gen",
+      "kind": "dir",
+      "label": "schema/gen",
+      "source": "schema/gen",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "go"
       }
     },
     {
@@ -1452,8 +4602,8 @@
       "source": "spells",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "61",
-        "dir_languages": "buzz"
+        "dir_files": "69",
+        "dir_languages": "buzz,go"
       }
     },
     {
@@ -1760,8 +4910,8 @@
       "source": "std",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "41",
-        "dir_languages": "buzz,markdown"
+        "dir_files": "84",
+        "dir_languages": "buzz,go,markdown"
       }
     },
     {
@@ -1828,6 +4978,28 @@
         "dir_commits": "0",
         "dir_files": "2",
         "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:types",
+      "kind": "dir",
+      "label": "types",
+      "source": "types",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "44",
+        "dir_languages": "go"
+      }
+    },
+    {
+      "id": "dir:vcs",
+      "kind": "dir",
+      "label": "vcs",
+      "source": "vcs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "11",
+        "dir_languages": "go"
       }
     },
     {
@@ -1898,6 +5070,15 @@
       "kind": "doc",
       "label": ".agents/skills/magus-run/SKILL.md",
       "source": ".agents/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.agents/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": ".agents/skills/magus-sdk/SKILL.md",
+      "source": ".agents/skills/magus-sdk/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -1979,6 +5160,15 @@
       "kind": "doc",
       "label": ".claude/skills/magus-run/SKILL.md",
       "source": ".claude/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.claude/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": ".claude/skills/magus-sdk/SKILL.md",
+      "source": ".claude/skills/magus-sdk/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -2069,6 +5259,15 @@
       "kind": "doc",
       "label": ".opencode/skills/magus-run/SKILL.md",
       "source": ".opencode/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:.opencode/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": ".opencode/skills/magus-sdk/SKILL.md",
+      "source": ".opencode/skills/magus-sdk/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -2260,6 +5459,15 @@
       "kind": "doc",
       "label": "cmd/magus/skills/magus-run/SKILL.md",
       "source": "cmd/magus/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": "cmd/magus/skills/magus-sdk/SKILL.md",
+      "source": "cmd/magus/skills/magus-sdk/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -3948,6 +7156,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/go-sdk.md",
+      "kind": "doc",
+      "label": "docs/reference/go-sdk.md",
+      "source": "docs/reference/go-sdk.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "go,sdk,library,api,embedding,import,package,reference",
+        "title": "The Go SDK"
+      }
+    },
+    {
       "id": "doc:docs/reference/logging.md",
       "kind": "doc",
       "label": "docs/reference/logging.md",
@@ -4293,6 +7513,18 @@
         "section": "reference",
         "tags": "agents,skills,magus-run",
         "title": "magus-run"
+      }
+    },
+    {
+      "id": "doc:docs/reference/skills/magus-sdk.md",
+      "kind": "doc",
+      "label": "docs/reference/skills/magus-sdk.md",
+      "source": "docs/reference/skills/magus-sdk.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "agents,skills,magus-sdk",
+        "title": "magus-sdk"
       }
     },
     {
@@ -19552,9 +22784,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
-        "engine": "buzz",
-        "last_output_ref": "out366b0df8",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19564,9 +22794,7 @@
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outa4d59b3c",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19598,9 +22826,7 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out6ac3e815",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19654,7 +22880,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outc1de105c",
+        "last_output_ref": "out45fd9bf9",
         "last_run_ok": "true"
       }
     },
@@ -19666,9 +22892,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "go_build",
-        "engine": "buzz",
-        "last_output_ref": "out4fa8d10d",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19711,9 +22935,7 @@
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out39698f29",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19820,9 +23042,7 @@
       "source": ".",
       "attrs": {
         "declared_as": "spells_generate",
-        "engine": "buzz",
-        "last_output_ref": "out9d154633",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19832,9 +23052,7 @@
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outdcf476af",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -19881,7 +23099,9 @@
       "label": "generate",
       "source": "cmd/magus/starter",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "oute8f0ffa0",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19918,9 +23138,7 @@
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out6067d3d7",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19930,9 +23148,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outb90982dc",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19942,9 +23158,7 @@
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
       "source": "console",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out7a26e2f7",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -19973,9 +23187,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outbc872421",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -20047,9 +23259,7 @@
       "source": "docs",
       "attrs": {
         "declared_as": "buzz_test",
-        "engine": "buzz",
-        "last_output_ref": "out76c564a2",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20070,9 +23280,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out1c79c927",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -20083,9 +23291,7 @@
       "source": "docs",
       "attrs": {
         "declared_as": "content_generate",
-        "engine": "buzz",
-        "last_output_ref": "out62afbc07",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20105,7 +23311,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out34f5f704",
+        "last_output_ref": "out93dc8606",
         "last_run_ok": "true"
       }
     },
@@ -20146,9 +23352,7 @@
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out9d448007",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20176,9 +23380,7 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outf477437b",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -20197,7 +23399,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out478af7c7",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20255,8 +23459,8 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outadad619a",
-        "last_run_ok": "false"
+        "last_output_ref": "outd0c9da74",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20285,7 +23489,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out7478dc1f",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20294,9 +23500,7 @@
       "label": "lint",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out98f48364",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20325,9 +23529,7 @@
       "label": "test",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out9e11db12",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20337,9 +23539,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out5ed2cfbd",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20349,7 +23549,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outf2b70e17",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20398,9 +23600,7 @@
       "label": "ci",
       "source": "proto",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out58db0210",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20410,7 +23610,9 @@
       "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
       "source": "proto",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out1a4f7120",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20722,6 +23924,14 @@
     },
     {
       "source": "dir:.agents/skills",
+      "target": "dir:.agents/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-sdk"
+    },
+    {
+      "source": "dir:.agents/skills",
       "target": "dir:.agents/skills/magus-vcs",
       "relation": "contains",
       "confidence": "extracted",
@@ -20791,6 +24001,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".agents/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:.agents/skills/magus-sdk",
+      "target": "doc:.agents/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".agents/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "dir:.agents/skills/magus-vcs",
@@ -20874,6 +24092,14 @@
     },
     {
       "source": "dir:.claude/skills",
+      "target": "dir:.claude/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".claude/skills/magus-sdk"
+    },
+    {
+      "source": "dir:.claude/skills",
       "target": "dir:.claude/skills/magus-skill-authoring",
       "relation": "contains",
       "confidence": "extracted",
@@ -20951,6 +24177,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:.claude/skills/magus-sdk",
+      "target": "doc:.claude/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".claude/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "dir:.claude/skills/magus-skill-authoring",
@@ -21042,6 +24276,14 @@
     },
     {
       "source": "dir:.opencode/skills",
+      "target": "dir:.opencode/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".opencode/skills/magus-sdk"
+    },
+    {
+      "source": "dir:.opencode/skills",
       "target": "dir:.opencode/skills/magus-vcs",
       "relation": "contains",
       "confidence": "extracted",
@@ -21111,6 +24353,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".opencode/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:.opencode/skills/magus-sdk",
+      "target": "doc:.opencode/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".opencode/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "dir:.opencode/skills/magus-vcs",
@@ -21298,6 +24548,14 @@
     },
     {
       "source": "dir:cmd/magus/skills",
+      "target": "dir:cmd/magus/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-sdk"
+    },
+    {
+      "source": "dir:cmd/magus/skills",
       "target": "dir:cmd/magus/skills/magus-vcs",
       "relation": "contains",
       "confidence": "extracted",
@@ -21367,6 +24625,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:cmd/magus/skills/magus-sdk",
+      "target": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "dir:cmd/magus/skills/magus-vcs",
@@ -22103,6 +25369,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/faq.md"
+    },
+    {
+      "source": "dir:docs/reference",
+      "target": "doc:docs/reference/go-sdk.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/go-sdk.md"
     },
     {
       "source": "dir:docs/reference",
@@ -23015,6 +26289,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/skills/magus-run.md"
+    },
+    {
+      "source": "dir:docs/reference/skills",
+      "target": "doc:docs/reference/skills/magus-sdk.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-sdk.md"
     },
     {
       "source": "dir:docs/reference/skills",
@@ -25121,6 +28403,22 @@
       "provenance": ".agents/skills/magus-run/SKILL.md"
     },
     {
+      "source": "doc:.agents/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".agents/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:.agents/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".agents/skills/magus-sdk/SKILL.md"
+    },
+    {
       "source": "doc:.claude/skills/magus-architecture/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
@@ -25249,6 +28547,22 @@
       "provenance": ".claude/skills/magus-run/SKILL.md"
     },
     {
+      "source": "doc:.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".claude/skills/magus-sdk/SKILL.md"
+    },
+    {
       "source": "doc:.opencode/skills/magus-architecture/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
@@ -25375,6 +28689,22 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": ".opencode/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:.opencode/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".opencode/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:.opencode/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".opencode/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "doc:CHANGELOG.md",
@@ -25847,6 +29177,22 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "cmd/magus/skills/magus-sdk/SKILL.md"
     },
     {
       "source": "doc:docs/concepts/cache.md",
@@ -31193,6 +34539,30 @@
       "provenance": "docs/reference/faq.md"
     },
     {
+      "source": "doc:docs/reference/go-sdk.md",
+      "target": "doc:docs/reference/cli.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/go-sdk.md"
+    },
+    {
+      "source": "doc:docs/reference/go-sdk.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/go-sdk.md"
+    },
+    {
+      "source": "doc:docs/reference/go-sdk.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/go-sdk.md"
+    },
+    {
       "source": "doc:docs/reference/logging.md",
       "target": "doc:docs/concepts/cache/output-refs.md",
       "relation": "references",
@@ -34026,6 +37396,14 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-sdk.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-vcs.md",
       "relation": "references",
       "confidence": "extracted",
@@ -34223,6 +37601,30 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/skills/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-sdk.md",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-sdk.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-sdk.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/skills/magus-sdk.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-sdk.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/skills/magus-sdk.md"
     },
     {
       "source": "doc:docs/reference/skills/magus-vcs.md",
@@ -57646,12 +61048,188 @@
       "score": 1
     },
     {
-      "source": "target:.:build",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/archive.go",
+      "relation": "produces",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "runtime"
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/charm.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/crypto.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/encoding.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/env.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/fmt.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/fs.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/http.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/json.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/magus.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/markdown.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/os.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/path.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/platform.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/semver.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/strings.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/template.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/time.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/toml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/uuid.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/vcs.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/xml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:bindings-generate",
+      "target": "file:host/gen/yaml.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
     },
     {
       "source": "target:.:build",
@@ -57729,6 +61307,38 @@
       "source": "target:.:ci",
       "target": "target:.:test",
       "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:cmd/magus/gen/bind.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:cmd/magus/gen/config_flags.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:internal/config/gen/env.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:config-generate",
+      "target": "file:schema/gen/fields.go",
+      "relation": "produces",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."
@@ -57950,6 +61560,14 @@
       "provenance": "."
     },
     {
+      "source": "target:.:mocks-generate",
+      "target": "file:internal/dry/gen/mocks/spell_catalog.go",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
       "source": "target:.:release-build",
       "target": "op:go:go-build",
       "relation": "uses",
@@ -58039,6 +61657,14 @@
     },
     {
       "source": "target:.:skills-generate",
+      "target": "dir:.agents/skills/magus-sdk",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
       "target": "dir:.agents/skills/magus-vcs",
       "relation": "produces",
       "confidence": "extracted",
@@ -58112,6 +61738,14 @@
     {
       "source": "target:.:skills-generate",
       "target": "dir:.claude/skills/magus-run",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
+      "target": "dir:.claude/skills/magus-sdk",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -58207,6 +61841,14 @@
     },
     {
       "source": "target:.:skills-generate",
+      "target": "dir:.opencode/skills/magus-sdk",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
       "target": "dir:.opencode/skills/magus-vcs",
       "relation": "produces",
       "confidence": "extracted",
@@ -58279,6 +61921,14 @@
     },
     {
       "source": "target:.:skills-generate",
+      "target": "doc:.agents/skills/magus-sdk/SKILL.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
       "target": "doc:.agents/skills/magus-vcs/SKILL.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -58344,6 +61994,14 @@
     {
       "source": "target:.:skills-generate",
       "target": "doc:.claude/skills/magus-run/SKILL.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
+      "target": "doc:.claude/skills/magus-sdk/SKILL.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -58424,6 +62082,14 @@
     {
       "source": "target:.:skills-generate",
       "target": "doc:.opencode/skills/magus-run/SKILL.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:skills-generate",
+      "target": "doc:.opencode/skills/magus-sdk/SKILL.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -59263,6 +62929,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/skills/magus-sdk.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-vcs.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -59348,14 +63022,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
-    },
-    {
-      "source": "target:docs:render",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
     },
     {
       "source": "target:docs:test",

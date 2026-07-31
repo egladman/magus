@@ -101,10 +101,14 @@ concepts/spells/buzz/
 concepts/spells/cosign/
 concepts/spells/docker/
 concepts/spells/go/
+concepts/spells/markdown/
 concepts/spells/md/
 concepts/spells/py/
+concepts/spells/python/
 concepts/spells/rs/
+concepts/spells/rust/
 concepts/spells/ts/
+concepts/spells/typescript/
 concepts/targets/
 concepts/targets/ci/
 concepts/telemetry/
@@ -317,6 +321,7 @@ reference/config/
 reference/console/
 reference/diagnostics/
 reference/faq/
+reference/go-sdk/
 reference/logging/
 reference/manpage/
 reference/manpage/magus-affected/
@@ -348,6 +353,7 @@ reference/skills/magus-docs/
 reference/skills/magus-memory/
 reference/skills/magus-query/
 reference/skills/magus-run/
+reference/skills/magus-sdk/
 reference/skills/magus-vcs/
 remote-cache/
 sandbox/

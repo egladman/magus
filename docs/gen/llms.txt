@@ -161,6 +161,7 @@
 - [Console API](https://eli.gladman.cc/magus/reference/console/index.md): Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.
 - [Diagnostics](https://eli.gladman.cc/magus/reference/diagnostics/index.md): Every magus error is a pointable coded diagnostic (MGSxxxx) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than a machine to parse - the "is this my problem?" tax, absorbed by the tool.
 - [FAQ](https://eli.gladman.cc/magus/reference/faq/index.md): Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.
+- [The Go SDK](https://eli.gladman.cc/magus/reference/go-sdk/index.md): Use magus as a Go library instead of the CLI - Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet.
 - [Logging and verbosity](https://eli.gladman.cc/magus/reference/logging/index.md): What each verbosity level actually prints, when to reach for one over another, and what ends up in your logs that you may not want to paste into a bug report.
 - [Manpage](https://eli.gladman.cc/magus/reference/manpage/index.md): Pages in this section.
 - [magus affected](https://eli.gladman.cc/magus/reference/manpage/magus-affected/index.md): Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.
@@ -191,4 +192,5 @@
 - [magus-memory](https://eli.gladman.cc/magus/reference/skills/magus-memory/index.md): Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions.
 - [magus-query](https://eli.gladman.cc/magus/reference/skills/magus-query/index.md): Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).
 - [magus-run](https://eli.gladman.cc/magus/reference/skills/magus-run/index.md): Run builds, tests, lints, and codegen through magus targets.
+- [magus-sdk](https://eli.gladman.cc/magus/reference/skills/magus-sdk/index.md): Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them.
 - [magus-vcs](https://eli.gladman.cc/magus/reference/skills/magus-vcs/index.md): Safe git operations in a magus workspace (any repo with magusfile.buzz at the root).

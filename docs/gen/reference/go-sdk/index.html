@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>The Go SDK - magus</title>
+  <meta name="description" content="Use magus as a Go library instead of the CLI - Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/go-sdk/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="The Go SDK - magus">
+  <meta property="og:description" content="Use magus as a Go library instead of the CLI - Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/go-sdk/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../ui-panels.css">
+  <script src="../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
+    <div class="container">
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../index.html" class="contrast"><picture><source srcset="../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../index.html">Home</a></li>
+        <li><a href="../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../blog/">Blog</a></li>
+        <li><a href="../../guides/download/">Download</a></li>
+        <li><a href="../../tour/">Tour</a></li>
+        <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../index.html">Home</a></li><li><a href="../../documentation/">Documentation</a></li><li><a href="../../reference/">Reference</a></li><li aria-current="page">The Go SDK</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/go-sdk.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../reference/buzz/" title="magus stdlib">magus stdlib</a></li>
+          <li><a href="../../reference/cli/" title="The CLI in practice">The CLI in practice</a></li>
+          <li><a href="../../reference/codes/" title="Codes">Codes</a></li>
+          <li><a href="../../reference/config/" title="magus.yaml configuration">magus.yaml configuration</a></li>
+          <li><a href="../../reference/console/" title="Console API">Console API</a></li>
+          <li><a href="../../reference/diagnostics/" title="Diagnostics">Diagnostics</a></li>
+          <li><a href="../../reference/faq/" title="FAQ">FAQ</a></li>
+          <li><a href="../../reference/go-sdk/" aria-current="page" title="The Go SDK">The Go SDK</a></li>
+          <li><a href="../../reference/logging/" title="Logging and verbosity">Logging and verbosity</a></li>
+          <li><a href="../../reference/manpage/" title="Manpage">Manpage</a></li>
+          <li><a href="../../reference/skills/" title="Agent skills">Agent skills</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#before-you-go-get-it" title="Before you go get it">Before you go get it</a></li><li><a href="#open-vs-inspect" title="Open vs Inspect">Open vs Inspect</a></li><li><a href="#a-minimal-working-example" title="A minimal working example">A minimal working example</a></li><li><a href="#the-interface-hierarchy-depend-on-the-narrowest-role" title="The interface hierarchy: depend on the narrowest role">The interface hierarchy: depend on the narrowest role</a></li><li><a href="#the-list--evaluate--classify-axis" title="The List / Evaluate / Classify axis">The List / Evaluate / Classify axis</a></li><li><a href="#ctx-and-cancellation" title="ctx and cancellation">ctx and cancellation</a></li><li><a href="#what-this-sdk-does-not-give-you" title="What this SDK does not give you">What this SDK does not give you</a></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
+    <article>
+<h1 id="the-go-sdk">The Go SDK</h1>
+<p>This page is for a Go developer who wants to call magus from their own
+program - <code>import &quot;github.com/egladman/magus&quot;</code> - rather than shelling out to
+the <code>magus</code> binary. If you have never <a class="code-xref" href="../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <code>magus</code> and do not care to, this is
+the page for you; the <a href="../cli/">CLI reference</a> describes the same domain from
+the other side.</p>
+<h2 id="before-you-go-get-it">Before you <code>go get</code> it</h2>
+<div class="admonition admonition-warning"><p class="admonition-title">Warning<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
+<p><code>go get github.com/egladman/magus</code> does not resolve on its own, at any
+tagged <a class="code-xref" href="../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>. Read this section before filing that as your own bug.</p>
+</div>
+<p>As of this writing, <code>go get github.com/egladman/magus</code> does not resolve on
+its own. The <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>'s <code>go.mod</code> requires two nested modules -
+<code>github.com/egladman/magus/libs/gopherbuzz</code> and
+<code>github.com/egladman/magus/libs/diag</code>, each with its own <code>go.mod</code> - and
+neither has a tagged release (<code>libs/gopherbuzz/vX.Y.Z</code> /
+<code>libs/diag/vX.Y.Z</code>) yet. The root repository resolves them with local
+<code>replace</code> directives, which are not transitive, so a downstream consumer
+inherits none of that and hits <code>unknown revision libs/gopherbuzz/v0.0.0</code>.</p>
+<p>Until those get their own tags, clone the repository (or vendor
+<code>libs/gopherbuzz</code> and <code>libs/diag</code> out of it) and add matching <code>replace</code>
+directives to your own <code>go.mod</code>:</p>
+<pre><code>require github.com/egladman/magus v0.3.0
+
+replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
+replace github.com/egladman/magus/libs/diag =&gt; /path/to/magus/libs/diag
+</code></pre>
+<p>Everything below assumes that step is done.</p>
+<h2 id="open-vs-inspect">Open vs Inspect</h2>
+<p>Two constructors discover a <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> and return a handle to it. Both walk
+up from a root directory, load <code>magus.yaml</code>, discover projects, and evaluate
+each <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> the same way; the only difference is whether a
+content-addressed <a class="glossary-term" href="../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> gets built.</p>
+<pre><code class="language-go">ctx := context.Background()
+
+// Inspect: read-only, no cache. Use this for introspection - listing,
+// describing, classifying files - and nothing else.
+ws, err := magus.Inspect(ctx, &quot;/path/to/workspace&quot;)
+
+// Open: builds an on-disk cache and returns the concrete *magus.Magus,
+// which adds Run. Use this when you intend to execute targets.
+m, err := magus.Open(ctx, &quot;/path/to/workspace&quot;)
+</code></pre>
+<p><code>Inspect</code> returns <code>types.WorkspaceRepository</code>, an interface - a signal that
+an introspection-only caller should keep coding against the interface rather
+than assume a concrete type. <code>Open</code> returns <code>*magus.Magus</code>, which also
+satisfies <code>types.WorkspaceRepository</code> and additionally has <code>Run</code>.</p>
+<p><code>magus.FindRoot(dir)</code> walks up from <code>dir</code> (empty means the current
+directory) to locate the workspace root, the same walk the CLI performs
+before either constructor runs.</p>
+<h2 id="a-minimal-working-example">A minimal working example</h2>
+<pre><code class="language-go">package main
+
+import (
+	&quot;context&quot;
+	&quot;fmt&quot;
+	&quot;log&quot;
+
+	magus &quot;github.com/egladman/magus&quot;
+)
+
+func main() {
+	ctx := context.Background()
+	ws, err := magus.Inspect(ctx, &quot;/path/to/workspace&quot;)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(&quot;workspace root:&quot;, ws.Root())
+	for _, p := range ws.All() {
+		fmt.Printf(&quot;project %s (spell=%q, resolved spells=%d)\n&quot;, p.Path, p.Spell, len(p.ResolvedSpells))
+	}
+}
+</code></pre>
+<p>Against a workspace whose only project is a bare <code>magusfile.buzz</code> declaring
+one <code>export fun build</code>, this prints:</p>
+<pre><code>workspace root: /path/to/workspace
+project . (spell=&quot;&quot;, resolved spells=0)
+</code></pre>
+<p><code>resolved spells=0</code> is not a bug in the example - see
+<a href="#what-this-sdk-does-not-give-you">what this SDK does not give you</a> before
+you go looking for why <code>build</code> never runs.</p>
+<h2 id="the-interface-hierarchy-depend-on-the-narrowest-role">The interface hierarchy: depend on the narrowest role</h2>
+<p><code>types.WorkspaceRepository</code> - what <code>Open</code> and <code>Inspect</code> both satisfy - is an
+embedding of four smaller interfaces, and <code>types/repository.go</code> states the
+house rule outright: prefer the narrowest one your code actually uses.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Methods</th>
+<th>Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>WorkspaceReader</code></td>
+<td><code>Root</code>, <code>All</code>, <code>Get</code>, <code><a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">Graph</a></code>, <code>VCSOptions</code>, <code><a class="code-xref" href="../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">Where</a></code></td>
+<td>what projects exist, and the project dependency graph</td>
+</tr>
+<tr>
+<td><code>TargetExpander</code></td>
+<td><code>ExpandPath</code>, <code>ExpandCwd</code>, <code>ExpandAffected</code></td>
+<td>which concrete <code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>:target</code> pairs a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> pattern names</td>
+</tr>
+<tr>
+<td><code>AffectedComputer</code></td>
+<td><code><a class="code-xref" href="../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">Affected</a></code>, <code>AffectedFromPaths</code></td>
+<td>which projects a VCS changeset touches</td>
+</tr>
+<tr>
+<td><code>Inspector</code></td>
+<td><code>List*</code>, <code>Evaluate*</code>, <code>ClassifyFiles</code>, <code>TargetGraph</code>, <code>Workspace</code></td>
+<td>see the axis below</td>
+</tr>
+</tbody>
+</table></figure>
+<p>A function that only reads project facts should take <code>types.WorkspaceReader</code>,
+not the full repository:</p>
+<pre><code class="language-go">func printProjectCount(r types.WorkspaceReader) {
+	fmt.Println(&quot;project count:&quot;, len(r.All()))
+}
+
+// Both a read-only Inspect result and an Open'd *magus.Magus satisfy this.
+printProjectCount(ws)
+</code></pre>
+<p>Widening a parameter to <code>types.WorkspaceRepository</code> because that happens to
+be what you have on hand forces every future caller - including a test - to
+construct or stub the whole repository just to satisfy a signature that only
+calls <code>Root()</code> and <code>All()</code>.</p>
+<h2 id="the-list--evaluate--classify-axis">The List / Evaluate / Classify axis</h2>
+<p>This is the organizing idea of the <code>Inspector</code> interface. <code>List*</code> enumerates
+a declaration - cheap, no resolution. <code>Evaluate*</code> resolves one - spells
+bound, claims applied, charms patched in - and costs more. <code>ClassifyFiles</code>
+and <code>TargetGraph</code> are their own verbs because neither is a natural fit for
+either half.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Reads</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ListProjects</code></td>
+<td>declared project facts, project-relative globs</td>
+<td>cheap</td>
+</tr>
+<tr>
+<td><code>ListTargets</code></td>
+<td>target name to <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>/project vocabulary</td>
+<td>cheap</td>
+</tr>
+<tr>
+<td><code>ListCharms</code></td>
+<td>inverse <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> index across every project</td>
+<td>the most expensive <code>Inspector</code> method</td>
+</tr>
+<tr>
+<td><code>EvaluateProjects</code></td>
+<td>resolved spells, workspace-rooted globs</td>
+<td>resolves every project</td>
+</tr>
+<tr>
+<td><code>EvaluateTarget(ctx, t)</code></td>
+<td>the full dispatch plan for one <code>path:target</code></td>
+<td>resolves one target</td>
+</tr>
+<tr>
+<td><code>ClassifyFiles(ctx, paths)</code></td>
+<td>which project owns/declares each path</td>
+<td>pure glob lookup, cheap even over a whole dirty tree</td>
+</tr>
+<tr>
+<td><code>TargetGraph(ctx)</code></td>
+<td>the <code>ctx.needs</code> DAG, read statically from magusfile source</td>
+<td>never executes a target body</td>
+</tr>
+</tbody>
+</table></figure>
+<pre><code class="language-go">declared, err := ws.ListProjects(ctx)     // fast: what's declared
+resolved, err := ws.EvaluateProjects(ctx) // slower: what it resolves to
+classified, err := ws.ClassifyFiles(ctx, []string{&quot;magusfile.buzz&quot;})
+graph, err := ws.TargetGraph(ctx)
+for _, proj := range graph.Projects {
+	for _, n := range proj.Nodes {
+		fmt.Printf(&quot;target %s/%s depends on %v\n&quot;, proj.Path, n.Name, n.Dependencies)
+	}
+}
+</code></pre>
+<p>One naming trap on this axis: <code>ProjectEntry.Sources</code> (from <code>ListProjects</code>)
+and <code>EvaluatedProject.Sources</code> (from <code>EvaluateProjects</code>) are the same field
+name carrying different representations - declared, project-relative globs
+in the first case, resolved and workspace-rooted (joined against the project
+path, magusfile globs folded in) in the second. Reading one where you meant
+the other silently feeds every glob-matching call the wrong pattern.</p>
+<p>Two graphs are also easy to conflate: <code>WorkspaceReader.Graph()</code> returns the
+PROJECT dependency graph (project depends on project, from <code>depends_on</code>);
+<code>Inspector.TargetGraph()</code> returns the TARGET graph (target depends on
+target, from <code>ctx.needs</code>), within and across projects. A caller doing
+scheduling or impact analysis typically holds both.</p>
+<h2 id="ctx-and-cancellation">ctx and cancellation</h2>
+<p>Every <code>Inspector</code> method takes <code>ctx</code> first and returns <code>error</code> last,
+including the read-only <code>List*</code> calls. A cancelled walk returns an error
+rather than a truncated result - a partial count is indistinguishable from a
+workspace that genuinely has that many projects, so magus treats a
+cancellation as failure, not as &quot;here is what I got so far&quot;:</p>
+<pre><code class="language-go">cctx, cancel := context.WithCancel(ctx)
+cancel()
+_, err := ws.ListProjects(cctx)
+errors.Is(err, context.Canceled) // true
+</code></pre>
+<p>The returned error wraps <code>ctx.Err()</code> directly, so both
+<code>errors.Is(err, context.Canceled)</code> and
+<code>errors.Is(err, context.DeadlineExceeded)</code> hold as expected. Never treat an
+empty or short <code>List*</code>/<code>Evaluate*</code> result as &quot;the workspace has nothing&quot;
+without checking the error first.</p>
+<h2 id="what-this-sdk-does-not-give-you">What this SDK does not give you</h2>
+<div class="admonition admonition-important"><p class="admonition-title">Important<a class="convention-hint" href="../../conventions/#admonitions" data-kind="convention" data-def="Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent per type" aria-label="What is this? Admonitions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></p>
+<p>A magusfile's custom targets are visible but not runnable through this
+SDK. Read this before you build anything that depends on dispatching one.</p>
+</div>
+<p><strong><a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> magusfile evaluation is not reachable from outside this module.</strong>
+Evaluating a <code>magusfile.buzz</code> - running <code>magus.project(...)</code>, discovering
+<code>export fun</code> targets, binding spells - requires the Buzz interpreter <a class="glossary-term" href="../../glossary/#engine" data-def="The interpreter a magusfile runs on; magus embeds the Buzz engine.">engine</a>
+to be linked in, and that link only happens through two <code>internal/</code> packages
+(<code>internal/interp/engine/buzz</code>, <code>internal/interp/bindings</code>) that only
+<code>cmd/magus</code>, built inside this repository, blank-imports. <code>internal/</code>
+packages are unreachable from any other module's import graph, so a program
+that imports <code>github.com/egladman/magus</code> as a dependency can discover
+projects and read a magusfile's static target graph
+(<code>Inspector.TargetGraph</code>, which parses source without executing it), but it
+cannot make magus dispatch a target that magusfile declares - <code>ListTargets</code>
+will not list it, no spell gets attached, and attempting to run it is a
+silent no-op rather than an error. There is currently no exported way to
+even ask &quot;is magusfile evaluation available in this process&quot; - you have to
+know this limitation going in.</p>
+<p>The escape hatch: build the workspace programmatically instead of authoring
+a magusfile, using the exported wire API in the root package -
+<code>WithRegisteredSpell</code>, <code>WithTarget</code>, <code>WithClaim</code>, and friends, composed via
+a <code>WorkspaceRegistry</code> passed to <code>Open</code>/<code>Inspect</code> as an <code>Option</code>. Built-in
+spells (<code>go</code>, <code>ts</code>, <code>rust</code>, ...) decode from embedded bytecode through
+<code>internal/spell</code>, which the exported wrapper functions can reach on your
+behalf even though you cannot import that package directly. This path gets
+you real spell execution without a magusfile; it does not get you
+arbitrary Buzz-authored targets.</p>
+<p><strong>Nothing else in this doc is a workaround for that gap.</strong> If your workspace
+model is &quot;a set of projects bound to built-in spells, described in Go,&quot; the
+SDK covers you end to end. If it depends on a hand-authored magusfile's
+custom targets, only the CLI (or a program that vendors and links the
+interpreter packages the way <code>cmd/magus</code> does, which requires being inside
+this module) can run it today.</p>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../faq/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">FAQ</span></a>
+      <a class="page-nav-next" href="../logging/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Logging and verbosity</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
+        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../reference/skills/magus-query/"><span class="related-card-title">magus-query</span><span class="related-card-desc">Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../search/?q=tag%3A%22sdk%22">sdk</a><a class="tag" href="../../search/?q=tag%3A%22library%22">library</a><a class="tag" href="../../search/?q=tag%3A%22api%22">api</a><a class="tag" href="../../search/?q=tag%3A%22embedding%22">embedding</a><a class="tag" href="../../search/?q=tag%3A%22import%22">import</a><a class="tag" href="../../search/?q=tag%3A%22package%22">package</a><a class="tag" href="../../search/?q=tag%3A%22reference%22">reference</a></div>
+    
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../concepts/workspace/">workspace</a>.</p>
+<h3 id="magusfile">Magusfile</h3>
+<p>The <code>magusfile.buzz</code> that declares a project's targets (as <code>export fun</code>s) and
+binds its spells. See <a href="../../concepts/targets/">targets</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../concepts/targets/">targets</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../../concepts/spells/">spells</a>.</p>
+<h3 id="charm">Charm</h3>
+<p>An execution modifier attached with <code>:</code> (<code>lint:rw</code>) that changes <em>how</em> a target
+runs, not <em>which</em> one; the built-in <code>rw</code> flips a check-only target to mutate in
+place, and <code>ci</code> always strips it. See <a href="../../concepts/charms/">charms</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../../reference/buzz/">the module reference</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../../concepts/engines/">engines</a>.</p>
+<h3 id="engine">Engine</h3>
+<p>The interpreter a magusfile runs on; magus embeds the Buzz engine. See
+<a href="../../concepts/engines/">engines</a>.</p>
+<h3 id="cache">Cache</h3>
+<p>The content-addressed store magus consults before running a target, so unchanged
+work is skipped. See <a href="../../concepts/cache/">cache</a>.</p>
+<h3 id="affected">Affected</h3>
+<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
+only over them. See <a href="../../guides/affected/">affected</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../concepts/targets/#the-target-name">targets</a>.</p>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../reference/buzz/">module reference</a>, the
+<a href="../../concepts/spells/">spell reference</a>, the <a href="../../reference/manpage/magus/">man pages</a>, and the
+<a href="../../reference/config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../search/">Search</a> &middot; <a href="../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../console/">Console</a> &middot; <a href="../../playground/">Playground</a> &middot; <a href="../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../main.js"></script>
+</body>
+</html>
