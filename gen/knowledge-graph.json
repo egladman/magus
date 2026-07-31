@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2230,
-  "edge_count": 4932,
+  "edge_count": 4939,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -19565,7 +19565,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outab003e4e",
+        "last_output_ref": "outd5f82c14",
         "last_run_ok": "true"
       }
     },
@@ -19711,7 +19711,9 @@
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out39698f29",
+        "last_run_ok": "false"
       }
     },
     {
@@ -25380,8 +25382,24 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS6001",
       "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "CHANGELOG.md"
@@ -25400,6 +25418,46 @@
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
       "provenance": "CHANGELOG.md"
     },
     {

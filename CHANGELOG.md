@@ -11,20 +11,77 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Removed
 
+- Breaking: `magus tail` is gone. It streamed the most recent cached log for the
+  project in the current directory - a view `magus query output <ref>` already gives
+  from the reference every run prints. A whole subcommand, flag surface, and man page
+  for a narrower path to the same bytes. Its retired URL is listed in
+  `docs/retired.urls.lock`; no successor page, because the capability did not move.
+- Breaking (library callers): `magus.WithTargetNameNormalizer` and the
+  `types.TargetNameNormalizer` interface are gone, along with
+  `types.DefaultTargetNameNormalizer` and `types.NormalizeCharmName`. The interface had
+  exactly one implementation and the option had zero callers anywhere in the tree,
+  including tests, so `run.Normalizer` was always nil and the seam only ever installed
+  the same kebab-casing sixteen other call sites reached for directly. Use
+  `types.Normalize` for every entity name - target, charm, or spell op.
+- The bundled PGO profile (`libs/gopherbuzz/default.pgo`, the `cmd/magus/default.pgo`
+  symlink, and the `pgo-generate` target) is gone. A profile that has to be regenerated
+  by hand after hot-path changes is stale more often than not, and it made `go build`
+  and `go test` disagree about how the same package was compiled.
 - The `assume_interactive` config key (`MAGUS_ASSUME_INTERACTIVE`,
   `--assume-interactive`) is gone. It existed to lift the TTY gate on `magus tail` and
   `magus x`, and did not earn its place on either. For `x` it never reached a working
   state: past the outer gate the picker hit its own TTY check and failed anyway, so the
-  escape hatch only moved the error later. For `tail` it was a workaround for a gate
-  that was too broad, now narrowed instead (see Changed). Nothing replaces it; if you
-  set it in `magus.yaml` it is now inert.
+  escape hatch only moved the error later. For `tail` it was a workaround for a gate that was
+  too broad, and `magus tail` has since been removed outright (see above). Nothing
+  replaces it; if you set it in `magus.yaml` it is now inert.
 
 ### Changed
 
-- `magus tail` only requires an interactive terminal for `-f`. Without it, tail prints
-  the last `-n` lines to stdout and exits, which works in a script, a CI step, or an
-  agent - the whole command used to be gated on `isatty`, which made the useful half
-  unreachable for every non-human caller.
+- Breaking: built-in spells are named for what they adapt. `ts` is now `typescript`,
+  `rs` is `rust`, `py` is `python`, `md` is `markdown`. `go` is unchanged - Go's name is
+  Go. Update `import "magus/spell/<name>"` and the `spells:` list in `magus\project`;
+  the handle an import binds changes with it, so `ts["tsc"]` becomes
+  `typescript["tsc"]`. Op names are untouched (`cargo-build`, `pytest`, `markdownlint`
+  already named their real tool). An unknown import still suggests the right spell, and
+  the alias table now holds only genuine synonyms - `javascript`, `js`, `node`,
+  `nodejs`, `cargo`, `python3` - rather than apologising for abbreviations.
+- Breaking: spell op names are normalized when the spell is decoded. Op keys are
+  validated against a charset that admits `_` and uppercase, but every request arriving
+  at dispatch has already been kebab-normalized, and dispatch is a map lookup - so an op
+  authored `go_build` was stored under `go_build`, looked up as `go-build`, missed, and
+  swallowed as a fan-out skip at debug level. Declared, and reachable by nothing. Every
+  built-in already used kebab keys, so bundled spells are unaffected; a workspace-local
+  spell with a `camelCase` or `snake_case` op now works instead of silently never
+  running.
+- Breaking (library callers): the `types.Describer` methods return slices instead of a
+  `{definition, count, items}` envelope. `DescribeSpells`, `DescribeCharms`,
+  `DescribeTargets`, `DescribeFiles`, `DescribeWorkspaces` and `DescribeTarget` now hand
+  back `[]SpellEntry`, `[]CharmEntry`, `[]TargetEntry`, `[]FileEntry`,
+  `[]WorkspaceEntry` and `[]EvaluatedTargetEntry`. `Definition` was a package constant
+  and `Count` was `len()`, so every call site that filtered had to reassign `Count` by
+  hand - a denormalization one forgotten line shipped as a wrong count. The JSON shape
+  of `magus describe ... -o json` is unchanged; the envelope is rebuilt at the render
+  edge. `DescribeProjects` and `DescribeEvaluatedProjects` keep a struct, because both
+  carry a real `Workspace` field. `host.ModulesOutput` is now `host.Modules`.
+- `magus describe spell` reports how to reach a spell and what it adapts: an `import`
+  line you can paste (`import "magus/spell/go";`) and the source language it adapts.
+  `SpellEntry` carries the import path as `buzz_import` in `-o json`. It is a path, not
+  a handle: spell imports are read statically to build the target graph, so a spell
+  reached any other way would lose its edge without failing.
+- `magus describe` over MCP serves every noun the CLI does. `charms`, `graph` and
+  `modules` were CLI-only, so an agent could not discover what charms exist, could not
+  see the target graph, and could not introspect the Buzz stdlib at all.
+- A non-canonical target or charm spelling now prints a one-time hint naming the
+  canonical form (`magus run goBuild` -> `target "goBuild" is canonically "go-build"`).
+  Silent when you already wrote the canonical form.
+- Suggestions are case-insensitive. `magus run build API` missed project `api` and got
+  no suggestion at all, because `API` -> `api` scored three edits against a threshold of
+  two. Project paths still resolve exactly - they are filesystem paths.
+- The sandbox passes every `GO*` variable through (`sandbox.env.passthrough: ["GO*"]` in
+  this repo's `magus.yaml`). A variable that shapes compilation but does not reach the
+  compiler does not get ignored, it splits the build cache: `GOEXPERIMENT` reaching one
+  `go` invocation and not another produced a linker `fingerprint mismatch` that looked
+  unrelated to anything.
 - Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
   fingerprints are now computed by streaming fields into SHA256 rather than by hashing
   marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
@@ -42,6 +99,13 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- `magus\normalize(name)` canonicalizes any entity name from a magusfile - the same
+  function targets, charms and spell ops resolve through. It is also live in the browser
+  playground, so [the name-normalization docs](https://eli.gladman.cc/magus/concepts/targets/)
+  run their examples rather than asserting the rule.
+- The playground says when a `test "..." {}` block was not run. Buzz test bodies execute
+  only under `magus buzz -t`, so evaluating one in the playground was a silent no-op: a
+  deliberately failing assertion looked exactly like a passing one.
 - Agent skill version 19. `magus-architecture` now surveys for what is too THIN to
   justify a boundary, not only what is too big. Every existing lens (god nodes,
   hotspots, affinity, ownership) detects something central, hot, or heavily coupled;
@@ -173,6 +237,23 @@ target ...:a,b` before a run. Disjoint edits never trip it.
 
 ### Fixed
 
+- `magus.Open(ctx, root)` works again for library callers. The literal-argument rule
+  over `ctx.inputs`/`outputs`/`updates` was scoped on a per-target `skip_cache` policy,
+  but policies are only populated once the interpreter has evaluated `magus\project()` -
+  which a bare library caller never does. So every target read as cacheable and a
+  magusfile the CLI loads fine was rejected. The rule now splits by declaration kind:
+  footprint declarations stay a hard error, execution overrides (`ctx.withEnv`,
+  `ctx.withCwd`) do not.
+- `magus run --dry-run <target>:<charm>` takes the same charm branches as the real run.
+  The tracer normalized the target half of a `target:charm` reference but not the
+  charms, and compared `has_charm` raw - so `lint:no_cache` traced un-charmed while the
+  real `lint:no_cache` ran charmed. The tracer's whole premise is fidelity to the run it
+  predicts.
+- The docs site no longer walks into a nested `node_modules`. Generated directories were
+  skipped only as exact children of the docs root, so once a sub-project under `docs/`
+  had its dependencies installed, the render began emitting every dependency's
+  `README.md` as a page - an unbounded render that also wrote into a descendant project
+  (MGS3001).
 - Forwarding to a daemon of a different build no longer warns. A version/protocol
   mismatch means the daemon is alive but will not adopt a mismatched client, so the
   command now falls back to local execution quietly (a debug line, not a `[warn]
