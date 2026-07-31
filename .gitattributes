@@ -4,6 +4,7 @@
 .claude/skills/** merge=magus linguist-generated
 .opencode/skills/** merge=magus linguist-generated
 MAGUS.md merge=magus linguist-generated
+assets/coverage.svg merge=magus linguist-generated
 cmd/magus/completions/* merge=magus linguist-generated
 cmd/magus/gen/*.go merge=magus linguist-generated
 dist/* merge=magus linguist-generated

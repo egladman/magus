@@ -17690,7 +17690,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:465",
+      "source": "magusfile.buzz:470",
       "attrs": {
         "exported": "true"
       }
@@ -17721,7 +17721,7 @@
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:452",
+      "source": "magusfile.buzz:457",
       "attrs": {
         "exported": "true"
       }
@@ -17731,7 +17731,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:457",
+      "source": "magusfile.buzz:462",
       "attrs": {
         "exported": "true"
       }
@@ -17741,7 +17741,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:497",
+      "source": "magusfile.buzz:502",
       "attrs": {
         "exported": "true"
       }
@@ -17751,7 +17751,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:533",
+      "source": "magusfile.buzz:538",
       "attrs": {
         "exported": "true"
       }
@@ -17767,7 +17767,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:516",
+      "source": "magusfile.buzz:521",
       "attrs": {
         "exported": "true"
       }
@@ -17787,7 +17787,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:494",
+      "source": "magusfile.buzz:499",
       "attrs": {
         "exported": "true"
       }
@@ -17859,7 +17859,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:480",
+      "source": "magusfile.buzz:485",
       "attrs": {
         "exported": "true"
       }
@@ -17909,7 +17909,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:462",
+      "source": "magusfile.buzz:467",
       "attrs": {
         "exported": "true"
       }
@@ -17919,7 +17919,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:591"
+      "source": "magusfile.buzz:596"
     },
     {
       "id": "function:magusfile.buzz:release_build",
@@ -17953,14 +17953,14 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:605"
+      "source": "magusfile.buzz:610"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:626",
+      "source": "magusfile.buzz:631",
       "attrs": {
         "exported": "true"
       }
@@ -22646,11 +22646,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:516:TODO",
+      "id": "rationale:magusfile.buzz:521:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:516"
+      "source": "magusfile.buzz:521"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",
@@ -22826,7 +22826,9 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "oute3034c10",
+        "last_run_ok": "false"
       }
     },
     {
@@ -23052,7 +23054,9 @@
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out3e16eb39",
+        "last_run_ok": "true"
       }
     },
     {
@@ -60496,12 +60500,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:516:TODO",
+      "source": "rationale:magusfile.buzz:521:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:516"
+      "provenance": "magusfile.buzz:521"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",

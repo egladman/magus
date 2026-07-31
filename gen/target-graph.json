@@ -254,6 +254,11 @@
               ]
             }
           ],
+          "outputs": [
+            {
+              "glob": "assets/coverage.svg"
+            }
+          ],
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
