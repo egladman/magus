@@ -77,16 +77,6 @@ const CharmDefinition = "A charm is a named, shared execution modifier applied a
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
 	"never which target or project runs. See docs/charms.md."
 
-// CharmsOutput is the payload of "magus describe charm[s]": the inverse charm
-// index, every charm name known in the workspace paired with the declarations that
-// give it meaning. It is the transpose of EvaluatedTargetsOutput's per-target charm
-// list (one charm, every target that declares it).
-type CharmsOutput struct {
-	Definition string       `json:"definition" yaml:"definition"`
-	Count      int          `json:"count"      yaml:"count"`
-	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
-}
-
 // CharmEntry is one charm in the inverse index: its name, whether it is a reserved
 // built-in or a workspace default, its built-in doc (empty for a spell-defined
 // charm), and every target that declares a patch for it.

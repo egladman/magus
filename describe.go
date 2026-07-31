@@ -72,7 +72,7 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 // workspace default_charms set, so the report can mark which charms apply to every
 // run without a :suffix. It is the transpose of DescribeTarget: one charm and
 // every target that declares it.
-func (m *Magus) DescribeCharms(defaults []string) types.CharmsOutput {
+func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 	defaultSet := map[string]struct{}{}
 	for _, c := range defaults {
 		defaultSet[types.NormalizeCharmName(c)] = struct{}{}
@@ -139,11 +139,7 @@ func (m *Magus) DescribeCharms(defaults []string) types.CharmsOutput {
 	slices.SortFunc(entries, func(a, b types.CharmEntry) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return types.CharmsOutput{
-		Definition: types.CharmDefinition,
-		Count:      len(entries),
-		Charms:     entries,
-	}
+	return entries
 }
 
 // DescribeTargets enumerates targets known in the workspace.

@@ -60,7 +60,7 @@ func TestDescribeProjectByPath(t *testing.T) {
 type fakeDescriber struct{ gotTarget types.Target }
 
 func (f *fakeDescriber) DescribeSpells() types.SpellsOutput         { return types.SpellsOutput{} }
-func (f *fakeDescriber) DescribeCharms([]string) types.CharmsOutput { return types.CharmsOutput{} }
+func (f *fakeDescriber) DescribeCharms([]string) []types.CharmEntry { return nil }
 func (f *fakeDescriber) DescribeTargets() types.TargetsOutput       { return types.TargetsOutput{} }
 func (f *fakeDescriber) DescribeGraph(context.Context) types.TargetGraphOutput {
 	return types.TargetGraphOutput{}

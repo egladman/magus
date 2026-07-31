@@ -53,7 +53,7 @@ type AffectedComputer interface {
 // Describer returns the structured inventory behind `magus describe`.
 type Describer interface {
 	DescribeSpells() SpellsOutput
-	DescribeCharms(defaults []string) CharmsOutput
+	DescribeCharms(defaults []string) []CharmEntry
 	DescribeTargets() TargetsOutput
 	DescribeGraph(ctx context.Context) TargetGraphOutput
 	DescribeProjects() ProjectsOutput

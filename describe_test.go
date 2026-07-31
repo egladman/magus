@@ -184,11 +184,10 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	out := ws.DescribeCharms([]string{"write"})
-	assert.NotEmpty(t, out.Definition, "DescribeCharms: Definition is empty")
+	charms := ws.DescribeCharms([]string{"write"})
 
-	byName := make(map[string]types.CharmEntry, len(out.Charms))
-	for _, c := range out.Charms {
+	byName := make(map[string]types.CharmEntry, len(charms))
+	for _, c := range charms {
 		byName[c.Name] = c
 	}
 
@@ -217,9 +216,9 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 	assert.False(t, byName["debug"].Default, "DescribeCharms: debug should not be default")
 
 	// Entries are sorted by name.
-	for i := 1; i < len(out.Charms); i++ {
-		assert.LessOrEqualf(t, out.Charms[i-1].Name, out.Charms[i].Name,
-			"DescribeCharms: not sorted at [%d]=%q,[%d]=%q", i-1, out.Charms[i-1].Name, i, out.Charms[i].Name)
+	for i := 1; i < len(charms); i++ {
+		assert.LessOrEqualf(t, charms[i-1].Name, charms[i].Name,
+			"DescribeCharms: not sorted at [%d]=%q,[%d]=%q", i-1, charms[i-1].Name, i, charms[i].Name)
 	}
 }
 

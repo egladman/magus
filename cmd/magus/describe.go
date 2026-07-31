@@ -403,32 +403,40 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	out := ws.DescribeCharms(globalCfg.DefaultCharms)
+	charms := ws.DescribeCharms(globalCfg.DefaultCharms)
 	detail := len(pos) > 0
 	if detail {
 		name := types.NormalizeCharmName(pos[0])
-		names := namesOf(out.Charms, func(c types.CharmEntry) string { return c.Name })
-		out.Charms = filterByName(out.Charms, name, func(c types.CharmEntry) string { return c.Name })
-		out.Count = len(out.Charms)
-		if out.Count == 0 {
+		names := namesOf(charms, func(c types.CharmEntry) string { return c.Name })
+		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
+		if len(charms) == 0 {
 			return unknownEntity("charm", pos[0], names)
 		}
 	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		// The {definition, count, items} envelope is a RENDERING shape, built here
+		// rather than returned by DescribeCharms: definition is a constant and count
+		// is len(charms), so carrying them on the domain type meant re-deriving Count
+		// by hand after every filter - a denormalization one forgotten line ships as
+		// a wrong count.
+		return emitFormatted(opts, struct {
+			Definition string             `json:"definition" yaml:"definition"`
+			Count      int                `json:"count"      yaml:"count"`
+			Charms     []types.CharmEntry `json:"charms"     yaml:"charms"`
+		}{types.CharmDefinition, len(charms), charms})
 	case outputName:
-		for _, c := range out.Charms {
+		for _, c := range charms {
 			fmt.Println(c.Name)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("charms (%d):\n", out.Count)
-	for _, c := range out.Charms {
+	fmt.Printf("definition: %s\n\n", types.CharmDefinition)
+	fmt.Printf("charms (%d):\n", len(charms))
+	for _, c := range charms {
 		tags := make([]string, 0, 2)
 		if c.Builtin {
 			tags = append(tags, "built-in")
