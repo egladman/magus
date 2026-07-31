@@ -49,6 +49,12 @@ export fun mgs_getLanguage() > str { return "typescript"; }
 // .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
 export fun mgs_listIgnoreDirs() > [str] { return ["node_modules"]; }
 
+// mgs_listManifests names the file that carries this project's OWN version - not
+// the toolchain's (that's mgs_getVersionCommand) and not a cache input (package.json
+// is separately listed in mgs_listRequiredGlobs above, because it also feeds the
+// cache key). A node project has exactly one candidate.
+export fun mgs_listManifests() > [str] { return ["package.json"]; }
+
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes
 // into lint, not this spell). --write and --reporter=github verified against

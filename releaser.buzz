@@ -14,23 +14,67 @@
 // Everything here COMPUTES; nothing decides. Choosing which of the three candidate
 // versions a change deserves is a judgement about what breaks for a consumer, and
 // that belongs to a human. See the `release` target for the policy that uses these.
-import "fs";
 import "vcs";
 import "semver";
 
-// releasableModules enumerates every independently-versioned module: the root,
-// plus each libs/<name> carrying its own go.mod. Discovered rather than listed,
-// so a new nested module is picked up the moment it gets one.
+// releasableModules enumerates every independently-versioned project: one whose
+// resolved spells declare a manifest (spells.Spell.Manifests, the language's
+// go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually
+// present in its directory - types.ProjectEntry.Manifests, read by the caller via
+// magus\ls() and passed in as projects, already did the "does the candidate file
+// exist" filesystem check. Taking the inventory as a parameter rather than calling
+// magus\ls() itself keeps this module doing what its header promises - COMPUTING,
+// not reading the workspace - and releaser.buzz has no reason to import "magus"
+// only to hand every entry straight to a foreach.
 //
-// prefix is what Go requires of a nested module's tags: the root releases as
-// `vX.Y.Z`, a module at libs/foo as `libs/foo/vX.Y.Z`. key is the same string a
-// human types, so what you name is exactly what gets tagged.
-export fun releasableModules() > [{str: str}] {
-    var mods = mut [{"key": "magus", "prefix": "", "module": "", "dir": "."}];
-    foreach (gomod in fs\glob("libs/*/go.mod")) {
-        final dir = fs\dirname(gomod);
-        mods.append({"key": dir, "prefix": dir + "/",
-                    "module": "github.com/egladman/magus/" + dir, "dir": dir});
+// Declaration beats inference here because inference already guessed wrong
+// twice. A `libs/` location rule missed every independently-versioned project
+// OUTSIDE libs/ (console, docs each ship their own package.json) - being visible
+// and unreleased is a fact a human can act on, being invisible is not. npm's
+// "private" flag was tried next and is wrong for a different reason: private is a
+// PUBLISH flag (don't push to a registry), not a version flag - a private
+// package.json still carries a real version that can drift out of sync with the
+// rest of the workspace, so filtering on it silently dropped projects that DO
+// version, they just don't publish. This target reports what CARRIES A VERSION;
+// the human still decides what to actually release.
+//
+// key/prefix mirror what Go requires of a nested module's tags, and work just as
+// well for the others: the root releases as `vX.Y.Z`, a project at libs/foo as
+// `libs/foo/vX.Y.Z`. key is the same string a human types, so what you name is
+// exactly what gets tagged.
+//
+// gomodule is the Go module path when the RESOLVED manifest (manifests[0], the
+// first candidate present - see spells.Spell.Manifests's ordering contract) is
+// go.mod, "" otherwise. It decides whether releasing a project also has to
+// repoint the root's go.mod - a non-Go project is tag-only, because nothing in
+// go.mod requires it.
+export fun releasableModules(projects: [any]) > [{str: str}] {
+    // projects is [any], not [ProjectEntry]: releaser.buzz imports no "magus" (see
+    // header), so it has no way to name that type, and reads each entry by bracket
+    // key instead of dot field the way this file's own {str: str} records already do.
+    var mods = mut [];
+    foreach (p in projects) {
+        final manifests = p["manifests"];
+        if (manifests.len() == 0) { continue; } // no manifest present: not independently versioned
+        final path = "" + p["path"];
+        final isRoot = path == ".";
+        final manifest = manifests[0]; // first-existing-file-wins
+        var gomodule = "";
+        // The root's own go.mod is never repointed to itself; gomodule only
+        // matters for a NESTED module the root's go.mod can require.
+        if (manifest == "go.mod" and !isRoot) {
+            gomodule = "github.com/egladman/magus/" + path;
+        }
+        var key = path;
+        var prefix = path + "/";
+        var root = "";
+        if (isRoot) {
+            key = "magus";
+            prefix = "";
+            root = "yes";
+        }
+        mods.append({"key": key, "prefix": prefix, "gomodule": gomodule,
+                     "dir": path, "root": root});
     }
     return mods;
 }

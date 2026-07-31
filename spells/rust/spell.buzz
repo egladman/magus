@@ -19,6 +19,12 @@ export fun mgs_getLanguage() > str { return "rust"; }
 // input-hashing walk. Dot-dirs are skipped structurally, so only target belongs here.
 export fun mgs_listIgnoreDirs() > [str] { return ["target"]; }
 
+// mgs_listManifests names the file that carries this project's OWN version - not
+// the toolchain's (that's mgs_getVersionCommand) and not a cache input (Cargo.toml
+// is separately listed in mgs_listRequiredGlobs above, because it also feeds the
+// cache key). A cargo crate has exactly one candidate.
+export fun mgs_listManifests() > [str] { return ["Cargo.toml"]; }
+
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
 fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }

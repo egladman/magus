@@ -31,6 +31,12 @@ export fun mgs_getLanguage() > str { return "go"; }
 
 export fun mgs_listIgnoreDirs() > [str] { return ["vendor"]; }
 
+// mgs_listManifests names the file that carries this project's OWN version - not
+// the toolchain's (that's mgs_getVersionCommand) and not a cache input (go.mod is
+// separately listed in mgs_listRequiredGlobs above, because it also feeds the
+// cache key). A Go module has exactly one candidate.
+export fun mgs_listManifests() > [str] { return ["go.mod"]; }
+
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
 fun goGenerate(target: Target) > Command { return Command{bin = "go", args = ["generate", "./..."]}; }

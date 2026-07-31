@@ -273,6 +273,51 @@ func TestListProjects_Inventory(t *testing.T) {
 	}
 }
 
+// TestListProjects_Manifests covers projectManifests, the resolution behind
+// ProjectEntry.Manifests: a spell's declared candidates (spells.Spell.Manifests)
+// are filtered down to the ones that exist in the project's directory, in
+// declared order - so the first-existing-file-wins rule holds even when an
+// earlier-declared candidate is absent - and a project whose spell's candidates
+// are all absent reports no manifest at all.
+func TestListProjects_Manifests(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const hasSpell, noneSpell = "zzz-manifest-has", "zzz-manifest-none"
+	project.DefaultSpellRegistry().RegisterSpell(
+		spells.NewSpell(hasSpell, spells.WithManifests("pyproject.toml", "setup.py", "setup.cfg")))
+	project.DefaultSpellRegistry().RegisterSpell(
+		spells.NewSpell(noneSpell, spells.WithManifests("Cargo.toml")))
+	t.Cleanup(func() {
+		project.DefaultSpellRegistry().UnregisterSpell(hasSpell)
+		project.DefaultSpellRegistry().UnregisterSpell(noneSpell)
+	})
+
+	root := t.TempDir()
+	for _, rel := range []string{"magusfile.buzz", "has/magusfile.buzz", "none/magusfile.buzz"} {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+	// "has" carries setup.py, NOT pyproject.toml (the first-declared candidate) -
+	// Manifests must report the first EXISTING candidate, not the first declared one.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "has", "setup.py"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+	reg.RegisterProject("has", WithSpell(hasSpell))
+	reg.RegisterProject("none", WithSpell(noneSpell))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
+	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
+	for _, e := range out.Projects {
+		byPath[e.Path] = e
+	}
+	assert.Equal(t, []string{"setup.py"}, byPath["has"].Manifests, `ListProjects: "has".Manifests`)
+	assert.Empty(t, byPath["none"].Manifests, `ListProjects: "none".Manifests`)
+}
+
 func TestEvaluateTarget_FanOut(t *testing.T) {
 	t.Parallel()
 	// A bare target ":build" should fan out to every project.

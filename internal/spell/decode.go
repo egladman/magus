@@ -52,6 +52,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		Name:        name,
 		Claims:      src.Strs("claims"),
 		IgnoreDirs:  src.Strs("ignore_dirs"),
+		Manifests:   src.Strs("manifests"),
 		VersionCmd:  src.Strs("version_cmd"),
 		VersionCmds: decodeVersionCmds(src),
 		Language:    language,

@@ -463,7 +463,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     // second one that has to be learned separately.
     final deliver = ctx.has_charm("cd");
     final dirty = vcs\isDirty();
-    final modules = releaser\releasableModules();
+    final modules = releaser\releasableModules(magus\ls().projects);
 
     // Parse `key=version`. Anything unnamed is surveyed, never released.
     var wanted = mut {};
@@ -554,12 +554,16 @@ export fun release(ctx: magus\Context, args: [str]) > void {
     var rewrote = false;
     foreach (m in modules) {
         final v = wanted[m["key"]];
-        if (v == null or m["module"] == "") { continue; }
+        if (v == null or m["root"] != "") { continue; }
         magus\info("release: tag " + m["prefix"] + "v" + v);
         if (deliver) { os\exec(vcs\exe(), ["tag", m["prefix"] + "v" + v]); }
-        magus\info("release: go.mod  " + m["module"] + "  ->  v" + v);
-        gomod = releaser\rewriteRequire(gomod, m["module"], "v" + v);
-        rewrote = true;
+        // Only a Go module is required by the root's go.mod; a library in another
+        // language is tag-only, so there is nothing to repoint.
+        if (m["gomodule"] != "") {
+            magus\info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
+            gomod = releaser\rewriteRequire(gomod, m["gomodule"], "v" + v);
+            rewrote = true;
+        }
     }
     if (deliver and rewrote) { fs\writeFile("go.mod", gomod); }
 

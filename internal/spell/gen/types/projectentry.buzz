@@ -15,4 +15,5 @@ export object ProjectEntry {
     outputs: [str] = [],
     dependsOn: [str] = [],
     exclusive: bool = false,
+    manifests: [str] = [],
 }

@@ -468,6 +468,13 @@ type ProjectEntry struct {
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
+	// Manifests lists this project's spells' version-manifest candidates
+	// (spells.Spell.Manifests), filtered to the ones that actually exist in Dir and
+	// kept in declared order - so element 0, when present, is "the" manifest under
+	// the first-existing-file-wins rule. A project with no manifest-declaring spell,
+	// or none of whose candidates exist, has an empty list: it carries no version of
+	// its own.
+	Manifests []string `json:"manifests,omitempty" yaml:"manifests,omitempty"`
 }
 
 // BuzzObject is the Buzz boundary map for one project (magus.ls's entries).
@@ -482,6 +489,7 @@ func (p ProjectEntry) BuzzObject() BuzzObject {
 		"outputs":   p.Outputs,
 		"dependsOn": p.DependsOn,
 		"exclusive": p.Exclusive,
+		"manifests": p.Manifests,
 	}
 }
 

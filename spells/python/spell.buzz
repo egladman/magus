@@ -21,6 +21,14 @@ export fun mgs_getLanguage() > str { return "python"; }
 // dot-dirs skipped structurally, so only __pycache__ belongs here.
 export fun mgs_listIgnoreDirs() > [str] { return ["__pycache__"]; }
 
+// mgs_listManifests names the file that carries this project's OWN version - not
+// the toolchain's (that's mgs_getVersionCommand) and not a cache input (these three
+// are separately listed in mgs_listRequiredGlobs above, because they also feed the
+// cache key). Python genuinely has alternatives, unlike the other built-ins: a
+// pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so
+// this is ORDERED and the first candidate present in a project directory wins.
+export fun mgs_listManifests() > [str] { return ["pyproject.toml", "setup.py", "setup.cfg"]; }
+
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
 fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }

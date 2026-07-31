@@ -100,6 +100,17 @@ func TestSpellMetadataAccessors(t *testing.T) {
 	assert.Equal(t, []string{"cmd/**"}, s.DeclarationDirGlobs())
 }
 
+// TestSpellManifests covers WithManifests/Manifests: absent on a spell that
+// declares none, and returned in declared order (the first-existing-file-wins
+// contract lives in the caller that checks the filesystem, not here) for one
+// that does - Python's genuine multi-candidate case, ordered.
+func TestSpellManifests(t *testing.T) {
+	assert.Nil(t, NewSpell("docker").Manifests(), "a spell with no manifest declares nil")
+
+	s := NewSpell("python", WithManifests("pyproject.toml", "setup.py", "setup.cfg"))
+	assert.Equal(t, []string{"pyproject.toml", "setup.py", "setup.cfg"}, s.Manifests())
+}
+
 // TestSpellDependsOn covers the in-workspace dependency probe: nil probe returns
 // nil, a set probe is called with the project dir and its result surfaced.
 func TestSpellDependsOn(t *testing.T) {

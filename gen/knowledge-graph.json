@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2541,
-  "edge_count": 5010,
+  "node_count": 2545,
+  "edge_count": 5013,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -17689,7 +17689,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:638",
+      "source": "magusfile.buzz:642",
       "attrs": {
         "exported": "true"
       }
@@ -17720,7 +17720,7 @@
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:625",
+      "source": "magusfile.buzz:629",
       "attrs": {
         "exported": "true"
       }
@@ -17730,7 +17730,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:630",
+      "source": "magusfile.buzz:634",
       "attrs": {
         "exported": "true"
       }
@@ -17740,7 +17740,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:670",
+      "source": "magusfile.buzz:674",
       "attrs": {
         "exported": "true"
       }
@@ -17750,7 +17750,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:706",
+      "source": "magusfile.buzz:710",
       "attrs": {
         "exported": "true"
       }
@@ -17766,7 +17766,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:689",
+      "source": "magusfile.buzz:693",
       "attrs": {
         "exported": "true"
       }
@@ -17786,7 +17786,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:667",
+      "source": "magusfile.buzz:671",
       "attrs": {
         "exported": "true"
       }
@@ -17858,7 +17858,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:653",
+      "source": "magusfile.buzz:657",
       "attrs": {
         "exported": "true"
       }
@@ -17908,7 +17908,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:635",
+      "source": "magusfile.buzz:639",
       "attrs": {
         "exported": "true"
       }
@@ -17918,7 +17918,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:764"
+      "source": "magusfile.buzz:768"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -17961,14 +17961,14 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:778"
+      "source": "magusfile.buzz:782"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:799",
+      "source": "magusfile.buzz:803",
       "attrs": {
         "exported": "true"
       }
@@ -17998,7 +17998,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:604",
+      "source": "magusfile.buzz:608",
       "attrs": {
         "exported": "true"
       }
@@ -18008,7 +18008,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:595"
+      "source": "magusfile.buzz:599"
     },
     {
       "id": "function:magusfile.buzz:version",
@@ -18021,7 +18021,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:581",
+      "source": "magusfile.buzz:585",
       "attrs": {
         "exported": "true"
       }
@@ -18059,7 +18059,7 @@
       "kind": "function",
       "label": "currentVersion",
       "doc": "currentVersion returns a module's highest STABLE released version, or \"\" when it has never had one. Compared on the PARSED major/minor/patch, not the tag text, because string order puts v0.10.0 before v0.9.0.  Prereleases are skipped: per semver.org item 9 a prerelease has LOWER precedence than the version it anticipates, so v0.4.0-rc1 is emphatically not v0.4.0 released and must not become the base the next version is computed from - otherwise cutting rc1 would silently advance everyone's floor.  Build met",
-      "source": "releaser.buzz:50",
+      "source": "releaser.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -18069,7 +18069,7 @@
       "kind": "function",
       "label": "isCandidate",
       "doc": "isCandidate reports whether v is one of the three versions nextFor offers, comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the minor candidate. A prerelease of a legal next version is itself legal; that is how you cut an rc without first inventing a version nobody agreed to.",
-      "source": "releaser.buzz:88",
+      "source": "releaser.buzz:132",
       "attrs": {
         "exported": "true"
       }
@@ -18079,7 +18079,7 @@
       "kind": "function",
       "label": "nextFor",
       "doc": "nextFor returns the three legal next versions for a module currently at cur. An unreleased module is treated as sitting at 0.0.0, so its candidates fall out of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a special case someone has to remember.",
-      "source": "releaser.buzz:79",
+      "source": "releaser.buzz:123",
       "attrs": {
         "exported": "true"
       }
@@ -18088,8 +18088,8 @@
       "id": "function:releaser.buzz:releasableModules",
       "kind": "function",
       "label": "releasableModules",
-      "doc": "releasableModules enumerates every independently-versioned module: the root, plus each libs/<name> carrying its own go.mod. Discovered rather than listed, so a new nested module is picked up the moment it gets one.  prefix is what Go requires of a nested module's tags: the root releases as `vX.Y.Z`, a module at libs/foo as `libs/foo/vX.Y.Z`. key is the same string a human types, so what you name is exactly what gets tagged.",
-      "source": "releaser.buzz:28",
+      "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\ls() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\ls() itself keeps this module doing wh",
+      "source": "releaser.buzz:51",
       "attrs": {
         "exported": "true"
       }
@@ -18099,7 +18099,7 @@
       "kind": "function",
       "label": "rewriteRequire",
       "doc": "rewriteRequire points go.mod's require for module at version, preserving the line's indentation. The `replace` directive names the same module and must NOT be touched: it is the local-development path, ignored by every downstream consumer, and rewriting it would break building inside this repo.",
-      "source": "releaser.buzz:104",
+      "source": "releaser.buzz:148",
       "attrs": {
         "exported": "true"
       }
@@ -19172,62 +19172,62 @@
       "id": "function:spells/golang/spell.buzz:goBuild",
       "kind": "function",
       "label": "goBuild",
-      "source": "spells/golang/spell.buzz:34"
+      "source": "spells/golang/spell.buzz:40"
     },
     {
       "id": "function:spells/golang/spell.buzz:goClean",
       "kind": "function",
       "label": "goClean",
-      "source": "spells/golang/spell.buzz:35"
+      "source": "spells/golang/spell.buzz:41"
     },
     {
       "id": "function:spells/golang/spell.buzz:goFmt",
       "kind": "function",
       "label": "goFmt",
-      "source": "spells/golang/spell.buzz:39"
+      "source": "spells/golang/spell.buzz:45"
     },
     {
       "id": "function:spells/golang/spell.buzz:goGenerate",
       "kind": "function",
       "label": "goGenerate",
-      "source": "spells/golang/spell.buzz:36"
+      "source": "spells/golang/spell.buzz:42"
     },
     {
       "id": "function:spells/golang/spell.buzz:goModTidy",
       "kind": "function",
       "label": "goModTidy",
-      "source": "spells/golang/spell.buzz:64"
+      "source": "spells/golang/spell.buzz:70"
     },
     {
       "id": "function:spells/golang/spell.buzz:goRun",
       "kind": "function",
       "label": "goRun",
-      "source": "spells/golang/spell.buzz:37"
+      "source": "spells/golang/spell.buzz:43"
     },
     {
       "id": "function:spells/golang/spell.buzz:goTest",
       "kind": "function",
       "label": "goTest",
-      "source": "spells/golang/spell.buzz:58"
+      "source": "spells/golang/spell.buzz:64"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVet",
       "kind": "function",
       "label": "goVet",
-      "source": "spells/golang/spell.buzz:70"
+      "source": "spells/golang/spell.buzz:76"
     },
     {
       "id": "function:spells/golang/spell.buzz:goVulncheck",
       "kind": "function",
       "label": "goVulncheck",
-      "source": "spells/golang/spell.buzz:71"
+      "source": "spells/golang/spell.buzz:77"
     },
     {
       "id": "function:spells/golang/spell.buzz:golangCILint",
       "kind": "function",
       "label": "golangCILint",
       "doc": "Invoked directly rather than through `go tool`: golangci-lint generates no code, so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned in go.mod. `go tool golangci-lint` also required the binary in the module's tool block, and a workspace that had not put it there got \"no such tool\" - the op could not run at all. On PATH it is pinned by whatever the workspace uses (mise, asdf, a system package), and the spell's version probe records which.",
-      "source": "spells/golang/spell.buzz:51"
+      "source": "spells/golang/spell.buzz:57"
     },
     {
       "id": "function:spells/golang/spell.buzz:mgs_getLanguage",
@@ -19276,6 +19276,16 @@
       }
     },
     {
+      "id": "function:spells/golang/spell.buzz:mgs_listManifests",
+      "kind": "function",
+      "label": "mgs_listManifests",
+      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionCommand) and not a cache input (go.mod is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A Go module has exactly one candidate.",
+      "source": "spells/golang/spell.buzz:38",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/golang/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
@@ -19289,7 +19299,7 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:76",
+      "source": "spells/golang/spell.buzz:82",
       "attrs": {
         "exported": "true"
       }
@@ -19298,7 +19308,7 @@
       "id": "function:spells/golang/spell.buzz:scipGo",
       "kind": "function",
       "label": "scipGo",
-      "source": "spells/golang/spell.buzz:72"
+      "source": "spells/golang/spell.buzz:78"
     },
     {
       "id": "function:spells/markdown/spell.buzz:markdownlint",
@@ -19393,6 +19403,16 @@
       }
     },
     {
+      "id": "function:spells/python/spell.buzz:mgs_listManifests",
+      "kind": "function",
+      "label": "mgs_listManifests",
+      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionCommand) and not a cache input (these three are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). Python genuinely has alternatives, unlike the other built-ins: a pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so this is ORDERED and the first candidate present in a project directory wins.",
+      "source": "spells/python/spell.buzz:30",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/python/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
@@ -19405,7 +19425,7 @@
       "id": "function:spells/python/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/python/spell.buzz:56",
+      "source": "spells/python/spell.buzz:64",
       "attrs": {
         "exported": "true"
       }
@@ -19414,69 +19434,69 @@
       "id": "function:spells/python/spell.buzz:pytest",
       "kind": "function",
       "label": "pytest",
-      "source": "spells/python/spell.buzz:28"
+      "source": "spells/python/spell.buzz:36"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffCheck",
       "kind": "function",
       "label": "ruffCheck",
-      "source": "spells/python/spell.buzz:33"
+      "source": "spells/python/spell.buzz:41"
     },
     {
       "id": "function:spells/python/spell.buzz:ruffFormat",
       "kind": "function",
       "label": "ruffFormat",
-      "source": "spells/python/spell.buzz:41"
+      "source": "spells/python/spell.buzz:49"
     },
     {
       "id": "function:spells/python/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. Run through sh so the env var expands.",
-      "source": "spells/python/spell.buzz:52"
+      "source": "spells/python/spell.buzz:60"
     },
     {
       "id": "function:spells/python/spell.buzz:uvBuild",
       "kind": "function",
       "label": "uvBuild",
       "doc": "build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs, so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.",
-      "source": "spells/python/spell.buzz:26"
+      "source": "spells/python/spell.buzz:34"
     },
     {
       "id": "function:spells/python/spell.buzz:uvClean",
       "kind": "function",
       "label": "uvClean",
-      "source": "spells/python/spell.buzz:27"
+      "source": "spells/python/spell.buzz:35"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoBuild",
       "kind": "function",
       "label": "cargoBuild",
-      "source": "spells/rust/spell.buzz:22"
+      "source": "spells/rust/spell.buzz:28"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClean",
       "kind": "function",
       "label": "cargoClean",
-      "source": "spells/rust/spell.buzz:23"
+      "source": "spells/rust/spell.buzz:29"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoClippy",
       "kind": "function",
       "label": "cargoClippy",
-      "source": "spells/rust/spell.buzz:24"
+      "source": "spells/rust/spell.buzz:30"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoFmt",
       "kind": "function",
       "label": "cargoFmt",
-      "source": "spells/rust/spell.buzz:25"
+      "source": "spells/rust/spell.buzz:31"
     },
     {
       "id": "function:spells/rust/spell.buzz:cargoTest",
       "kind": "function",
       "label": "cargoTest",
-      "source": "spells/rust/spell.buzz:35"
+      "source": "spells/rust/spell.buzz:41"
     },
     {
       "id": "function:spells/rust/spell.buzz:mgs_getLanguage",
@@ -19517,6 +19537,16 @@
       }
     },
     {
+      "id": "function:spells/rust/spell.buzz:mgs_listManifests",
+      "kind": "function",
+      "label": "mgs_listManifests",
+      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionCommand) and not a cache input (Cargo.toml is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A cargo crate has exactly one candidate.",
+      "source": "spells/rust/spell.buzz:26",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/rust/spell.buzz:mgs_listRequiredGlobs",
       "kind": "function",
       "label": "mgs_listRequiredGlobs",
@@ -19529,7 +19559,7 @@
       "id": "function:spells/rust/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/rust/spell.buzz:44",
+      "source": "spells/rust/spell.buzz:50",
       "attrs": {
         "exported": "true"
       }
@@ -19539,35 +19569,35 @@
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. Run through sh so the env var expands.",
-      "source": "spells/rust/spell.buzz:40"
+      "source": "spells/rust/spell.buzz:46"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeCheck",
       "kind": "function",
       "label": "biomeCheck",
       "doc": "biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).",
-      "source": "spells/typescript/spell.buzz:56"
+      "source": "spells/typescript/spell.buzz:62"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeFormat",
       "kind": "function",
       "label": "biomeFormat",
       "doc": "biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.",
-      "source": "spells/typescript/spell.buzz:67"
+      "source": "spells/typescript/spell.buzz:73"
     },
     {
       "id": "function:spells/typescript/spell.buzz:devServer",
       "kind": "function",
       "label": "devServer",
       "doc": "dev-server runs the project's package.json \"dev\" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.",
-      "source": "spells/typescript/spell.buzz:110"
+      "source": "spells/typescript/spell.buzz:116"
     },
     {
       "id": "function:spells/typescript/spell.buzz:eslint",
       "kind": "function",
       "label": "eslint",
       "doc": "eslint has no built-in \"github\" formatter (unlike ruff's --output-format=github); \"unix\" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.",
-      "source": "spells/typescript/spell.buzz:76"
+      "source": "spells/typescript/spell.buzz:82"
     },
     {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
@@ -19626,6 +19656,16 @@
       }
     },
     {
+      "id": "function:spells/typescript/spell.buzz:mgs_listManifests",
+      "kind": "function",
+      "label": "mgs_listManifests",
+      "doc": "mgs_listManifests names the file that carries this project's OWN version - not the toolchain's (that's mgs_getVersionCommand) and not a cache input (package.json is separately listed in mgs_listRequiredGlobs above, because it also feeds the cache key). A node project has exactly one candidate.",
+      "source": "spells/typescript/spell.buzz:56",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/typescript/spell.buzz:mgs_listProvidedGlobs",
       "kind": "function",
       "label": "mgs_listProvidedGlobs",
@@ -19649,7 +19689,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:124",
+      "source": "spells/typescript/spell.buzz:130",
       "attrs": {
         "exported": "true"
       }
@@ -19659,46 +19699,46 @@
       "kind": "function",
       "label": "preflight",
       "doc": "preflight is a no-op marker op (no command).",
-      "source": "spells/typescript/spell.buzz:84"
+      "source": "spells/typescript/spell.buzz:90"
     },
     {
       "id": "function:spells/typescript/spell.buzz:prettier",
       "kind": "function",
       "label": "prettier",
-      "source": "spells/typescript/spell.buzz:85"
+      "source": "spells/typescript/spell.buzz:91"
     },
     {
       "id": "function:spells/typescript/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. Run through sh so the env var expands.",
-      "source": "spells/typescript/spell.buzz:118"
+      "source": "spells/typescript/spell.buzz:124"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
       "kind": "function",
       "label": "tsc",
-      "source": "spells/typescript/spell.buzz:91"
+      "source": "spells/typescript/spell.buzz:97"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscBuild",
       "kind": "function",
       "label": "tscBuild",
       "doc": "tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.",
-      "source": "spells/typescript/spell.buzz:95"
+      "source": "spells/typescript/spell.buzz:101"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscClean",
       "kind": "function",
       "label": "tscClean",
       "doc": "tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.",
-      "source": "spells/typescript/spell.buzz:98"
+      "source": "spells/typescript/spell.buzz:104"
     },
     {
       "id": "function:spells/typescript/spell.buzz:vitest",
       "kind": "function",
       "label": "vitest",
-      "source": "spells/typescript/spell.buzz:99"
+      "source": "spells/typescript/spell.buzz:105"
     },
     {
       "id": "import:archive",
@@ -22713,11 +22753,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:689:TODO",
+      "id": "rationale:magusfile.buzz:693:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:689"
+      "source": "magusfile.buzz:693"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",
@@ -22862,7 +22902,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out9b68d280",
+        "last_output_ref": "out2eccea7f",
         "last_run_ok": "true"
       }
     },
@@ -22951,7 +22991,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out39a0ee5f",
+        "last_output_ref": "out2a3cad3a",
         "last_run_ok": "true"
       }
     },
@@ -23009,7 +23049,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out83584780",
+        "last_output_ref": "out5e114033",
         "last_run_ok": "false"
       }
     },
@@ -23073,7 +23113,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outc27d4370",
+        "last_output_ref": "outa322c366",
         "last_run_ok": "true"
       }
     },
@@ -23139,7 +23179,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "oute0e0a0d3",
+        "last_output_ref": "oute7677b4a",
         "last_run_ok": "true"
       }
     },
@@ -50116,14 +50156,6 @@
     },
     {
       "source": "file:releaser.buzz",
-      "target": "import:fs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "releaser.buzz"
-    },
-    {
-      "source": "file:releaser.buzz",
       "target": "import:semver",
       "relation": "imports",
       "confidence": "inferred",
@@ -52220,6 +52252,14 @@
     },
     {
       "source": "file:spells/golang/spell.buzz",
+      "target": "function:spells/golang/spell.buzz:mgs_listManifests",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/spell.buzz"
+    },
+    {
+      "source": "file:spells/golang/spell.buzz",
       "target": "function:spells/golang/spell.buzz:mgs_listRequiredGlobs",
       "relation": "contains",
       "confidence": "extracted",
@@ -52357,6 +52397,14 @@
     {
       "source": "file:spells/python/spell.buzz",
       "target": "function:spells/python/spell.buzz:mgs_listIgnoreDirs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/python/spell.buzz"
+    },
+    {
+      "source": "file:spells/python/spell.buzz",
+      "target": "function:spells/python/spell.buzz:mgs_listManifests",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52516,6 +52564,14 @@
     },
     {
       "source": "file:spells/rust/spell.buzz",
+      "target": "function:spells/rust/spell.buzz:mgs_listManifests",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/rust/spell.buzz"
+    },
+    {
+      "source": "file:spells/rust/spell.buzz",
       "target": "function:spells/rust/spell.buzz:mgs_listRequiredGlobs",
       "relation": "contains",
       "confidence": "extracted",
@@ -52629,6 +52685,14 @@
     {
       "source": "file:spells/typescript/spell.buzz",
       "target": "function:spells/typescript/spell.buzz:mgs_listIgnoreDirs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/typescript/spell.buzz"
+    },
+    {
+      "source": "file:spells/typescript/spell.buzz",
+      "target": "function:spells/typescript/spell.buzz:mgs_listManifests",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -60687,12 +60751,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:689:TODO",
+      "source": "rationale:magusfile.buzz:693:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:689"
+      "provenance": "magusfile.buzz:693"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",

@@ -713,7 +713,33 @@ func projectEntry(p *types.Project) types.ProjectEntry {
 		Outputs:   p.Outputs,
 		DependsOn: p.DependsOn,
 		Exclusive: p.Exclusive,
+		Manifests: projectManifests(p),
 	}
+}
+
+// projectManifests resolves p's spells' declared manifest candidates
+// (spells.Spell.Manifests) down to the ones that actually exist in p.Dir, in
+// declared order - a magusfile reading ProjectEntry.Manifests gets the file that
+// carries this project's version without walking the filesystem itself: the spell
+// already knows the candidate names for its ecosystem, only existence is a
+// per-project fact only the workspace can check. A project bound to more than one
+// manifest-declaring spell concatenates each spell's filtered list in spell order;
+// ordinary workspaces bind at most one language spell per project, so this is
+// almost always zero or one entry.
+func projectManifests(p *types.Project) []string {
+	var out []string
+	for _, name := range p.Spells {
+		sp, ok := project.DefaultSpellRegistry().Lookup(name)
+		if !ok {
+			continue
+		}
+		for _, f := range sp.Manifests() {
+			if _, err := os.Stat(filepath.Join(p.Dir, f)); err == nil {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }
 
 // ListProjects returns the project inventory of the workspace.

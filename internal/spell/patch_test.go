@@ -250,6 +250,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
 		Language:    "go",
 		IgnoreDirs:  []string{"vendor"},
+		Manifests:   []string{"go.mod"},
 		Ops: map[string]spells.Op{
 			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -302,6 +303,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmd: []string{"python3", "--version"},
 		Language:   "python",
 		IgnoreDirs: []string{"__pycache__"},
+		Manifests:  []string{"pyproject.toml", "setup.py", "setup.cfg"},
 		Ops: map[string]spells.Op{
 			"uv-build": {Command: spells.Command{Bin: "uv", Args: []string{"build"}}},
 			"uv-clean": {Command: spells.Command{Bin: "uv", Args: []string{"clean"}}},
@@ -325,6 +327,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmd: []string{"rustc", "--version"},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
+		Manifests:  []string{"Cargo.toml"},
 		Ops: map[string]spells.Op{
 			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
@@ -345,6 +348,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
 		IgnoreDirs: []string{"node_modules"},
+		Manifests:  []string{"package.json"},
 		Ops: map[string]spells.Op{
 			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
