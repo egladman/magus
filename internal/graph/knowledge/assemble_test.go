@@ -41,9 +41,9 @@ func sampleInputs() Inputs {
 				},
 			},
 		},
-		Spells: types.SpellsOutput{Spells: []types.SpellEntry{
+		Spells: []types.SpellEntry{
 			{Name: "go", Targets: []string{"go-build", "go-test"}, TargetDocs: map[string]string{"go-build": "Compile."}},
-		}},
+		},
 		Modules: []types.ModuleEntry{{
 			Name:    "vcs",
 			Doc:     "Version control.",
@@ -325,9 +325,9 @@ func TestRuntimeOutputRefMergesOntoTarget(t *testing.T) {
 // is reached via target->op->tool, not a per-target command node.
 func TestAssembleOpTools(t *testing.T) {
 	in := sampleInputs()
-	in.Spells.Spells[0].Language = "go" // the "go" spell declares a language
-	in.Spells.Spells[0].Targets = []string{"go-build", "go-test", "noop"}
-	in.Spells.Spells[0].OpCommands = map[string][]string{
+	in.Spells[0].Language = "go" // the "go" spell declares a language
+	in.Spells[0].Targets = []string{"go-build", "go-test", "noop"}
+	in.Spells[0].OpCommands = map[string][]string{
 		"go-build": {"/usr/bin/go", "build", "./..."},
 		"go-test":  {"go", "test", "./..."}, // same tool -> shared tool node
 		// "noop" has no entry: a function-op, no static argv, no tool edge.

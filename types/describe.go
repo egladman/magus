@@ -65,13 +65,6 @@ type SpellEntry struct {
 	OpCommands map[string][]string `json:"op_commands,omitempty" yaml:"op_commands,omitempty"`
 }
 
-// SpellsOutput is the top-level result for "describe spells".
-type SpellsOutput struct {
-	Definition string       `json:"definition" yaml:"definition"`
-	Count      int          `json:"count"      yaml:"count"`
-	Spells     []SpellEntry `json:"spells"     yaml:"spells"`
-}
-
 // CharmDefinition is the human-readable description of a charm shown by "magus describe charms".
 const CharmDefinition = "A charm is a named, shared execution modifier applied as an " +
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
@@ -715,4 +708,11 @@ type CharmReport struct {
 	Definition string       `json:"definition" yaml:"definition"`
 	Count      int          `json:"count"      yaml:"count"`
 	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
+}
+
+// SpellReport is the "describe spell[s]" envelope.
+type SpellReport struct {
+	Definition string       `json:"definition" yaml:"definition"`
+	Count      int          `json:"count"      yaml:"count"`
+	Spells     []SpellEntry `json:"spells"     yaml:"spells"`
 }

@@ -59,7 +59,7 @@ func TestResolveByKind(t *testing.T) {
 // incoming op->tool and spell->tool uses edges (everything that runs the program).
 func TestQueryAndExplainTool(t *testing.T) {
 	in := sampleInputs()
-	in.Spells.Spells[0].OpCommands = map[string][]string{
+	in.Spells[0].OpCommands = map[string][]string{
 		"go-build": {"go", "build", "./..."},
 	}
 	g := mergeAll(AssembleShards(in))

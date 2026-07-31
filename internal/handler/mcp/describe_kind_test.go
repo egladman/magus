@@ -10,15 +10,12 @@ import (
 )
 
 func TestDescribeSpellByName(t *testing.T) {
-	out := types.SpellsOutput{
-		Count:  2,
-		Spells: []types.SpellEntry{{Name: "go"}, {Name: "typescript"}},
-	}
+	out := []types.SpellEntry{{Name: "go"}, {Name: "typescript"}}
 
 	t.Run("hit narrows to one entry", func(t *testing.T) {
 		resp, err := describeSpellByName(out, "go")
 		require.NoError(t, err)
-		got := resp.Data.(types.SpellsOutput)
+		got := resp.Data.(types.SpellReport)
 		assert.Equal(t, 1, got.Count)
 		require.Len(t, got.Spells, 1)
 		assert.Equal(t, "go", got.Spells[0].Name)
@@ -59,7 +56,7 @@ func TestDescribeProjectByPath(t *testing.T) {
 // how a name param was parsed; every other Describer method is an unused stub.
 type fakeDescriber struct{ gotTarget types.Target }
 
-func (f *fakeDescriber) DescribeSpells() types.SpellsOutput         { return types.SpellsOutput{} }
+func (f *fakeDescriber) DescribeSpells() []types.SpellEntry         { return nil }
 func (f *fakeDescriber) DescribeCharms([]string) []types.CharmEntry { return nil }
 func (f *fakeDescriber) DescribeTargets() types.TargetsOutput       { return types.TargetsOutput{} }
 func (f *fakeDescriber) DescribeGraph(context.Context) types.TargetGraphOutput {

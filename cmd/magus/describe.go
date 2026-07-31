@@ -260,12 +260,11 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	out := ws.DescribeSpells()
+	inventory := ws.DescribeSpells()
 	if len(pos) > 0 {
-		names := namesOf(out.Spells, func(s types.SpellEntry) string { return s.Name })
-		out.Spells = filterByName(out.Spells, pos[0], func(s types.SpellEntry) string { return s.Name })
-		out.Count = len(out.Spells)
-		if out.Count == 0 {
+		names := namesOf(inventory, func(s types.SpellEntry) string { return s.Name })
+		inventory = filterByName(inventory, pos[0], func(s types.SpellEntry) string { return s.Name })
+		if len(inventory) == 0 {
 			return unknownEntity("spell", pos[0], names)
 		}
 	}
@@ -274,25 +273,25 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	// -o json is the caller that needs this most, and a flag that silently does nothing
 	// for the machine-readable formats is worse than no flag.
 	if withVersions {
-		for i := range out.Spells {
-			out.Spells[i].Versions = probeSpellVersions(ctx, out.Spells[i].Name, root)
+		for i := range inventory {
+			inventory[i].Versions = probeSpellVersions(ctx, inventory[i].Name, root)
 		}
 	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		return emitFormatted(opts, types.SpellReport{Definition: types.SpellDefinition, Count: len(inventory), Spells: inventory})
 	case outputName:
-		for _, t := range out.Spells {
+		for _, t := range inventory {
 			fmt.Println(t.Name)
 		}
 		return nil
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", out.Definition)
-	fmt.Printf("spells (%d):\n", out.Count)
-	for _, t := range out.Spells {
+	fmt.Printf("definition: %s\n\n", types.SpellDefinition)
+	fmt.Printf("spells (%d):\n", len(inventory))
+	for _, t := range inventory {
 		fmt.Printf("  %s\n", t.Name)
 		if len(t.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))

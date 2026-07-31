@@ -52,12 +52,12 @@ fun thing() > void {}
 	return root
 }
 
-func benchSpells() types.SpellsOutput {
-	out := types.SpellsOutput{Spells: make([]types.SpellEntry, 20)}
-	for i := range out.Spells {
-		out.Spells[i] = types.SpellEntry{Name: fmt.Sprintf("spell%02d", i)}
+func benchSpells() []types.SpellEntry {
+	out := make([]types.SpellEntry, 20)
+	for i := range out {
+		out[i] = types.SpellEntry{Name: fmt.Sprintf("spell%02d", i)}
 	}
-	out.Spells[0].Name = "go"
+	out[0].Name = "go"
 	return out
 }
 

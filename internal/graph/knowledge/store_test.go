@@ -27,7 +27,7 @@ func buildFixture(t *testing.T) (cacheDir string, in Inputs) {
 			{Path: "pkg/a", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
 			{Path: "pkg/b", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},
 		}},
-		Spells:      types.SpellsOutput{Spells: []types.SpellEntry{{Name: "go", Targets: []string{"go-build"}}}},
+		Spells:      []types.SpellEntry{{Name: "go", Targets: []string{"go-build"}}},
 		Diagnostics: []types.DiagnosticCode{types.SandboxPolicyMismatch},
 	}
 	return cacheDir, in

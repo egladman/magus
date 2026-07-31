@@ -58,7 +58,7 @@ func syntheticInputs(nProjects, targetsPerProject int) Inputs {
 
 	return Inputs{
 		Graph:       types.TargetGraphOutput{Projects: projects},
-		Spells:      types.SpellsOutput{Spells: spells},
+		Spells:      spells,
 		Modules:     modules,
 		Diagnostics: types.AllDiagnosticCodes(),
 	}

@@ -377,7 +377,7 @@ type symbolIngestInputs struct {
 	root     string
 	cacheDir string
 	projects types.ProjectsOutput
-	spells   types.SpellsOutput
+	spells   []types.SpellEntry
 	log      *slog.Logger
 }
 
@@ -391,7 +391,7 @@ type symbolIngestInputs struct {
 // non-standard. The result is sorted by project for deterministic ingestion.
 func symbolIndexDeclarations(in symbolIngestInputs) []resolvedSymbolIndex {
 	capable := map[string]bool{}
-	for _, sp := range in.spells.Spells {
+	for _, sp := range in.spells {
 		if slices.Contains(sp.Targets, symbols.IndexOp) {
 			capable[sp.Name] = true
 		}

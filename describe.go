@@ -20,7 +20,7 @@ import (
 )
 
 // DescribeSpells returns the catalog of registered spells, sorted by name.
-func (*Magus) DescribeSpells() types.SpellsOutput {
+func (*Magus) DescribeSpells() []types.SpellEntry {
 	all := project.DefaultSpellRegistry().All()
 	entries := make([]types.SpellEntry, 0, len(all))
 	for _, p := range all {
@@ -59,11 +59,7 @@ func (*Magus) DescribeSpells() types.SpellsOutput {
 	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return types.SpellsOutput{
-		Definition: types.SpellDefinition,
-		Count:      len(entries),
-		Spells:     entries,
-	}
+	return entries
 }
 
 // DescribeCharms builds the inverse charm index: every charm name a target in the

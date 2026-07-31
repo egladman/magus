@@ -32,15 +32,15 @@ var (
 // backtick-wrapped spell names) are INFERRED; markdown links to other scanned docs
 // are references. Extracted edges win over inferred on dedup, so a code page's own
 // path edge is not weakened by the same code appearing in its body.
-func assembleDocs(root string, spells types.SpellsOutput, projects []types.TargetGraphProject) Shard {
+func assembleDocs(root string, spells []types.SpellEntry, projects []types.TargetGraphProject) Shard {
 	s := Shard{Name: DocsShardName}
 	files := findDocFiles(root)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
 		scanned[f] = true
 	}
-	spellNames := make([]string, 0, len(spells.Spells))
-	for _, sp := range spells.Spells {
+	spellNames := make([]string, 0, len(spells))
+	for _, sp := range spells {
 		spellNames = append(spellNames, sp.Name)
 	}
 	slices.Sort(spellNames)

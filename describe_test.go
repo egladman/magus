@@ -100,20 +100,18 @@ func TestDescribeSpells_ShapeAndOrder(t *testing.T) {
 	ws := newWorkspace(t)
 	out := ws.DescribeSpells()
 
-	assert.NotEmpty(t, out.Definition, "DescribeSpells: Definition is empty")
-	assert.NotZero(t, out.Count, "DescribeSpells: Count == 0, expected at least the test spell")
-	assert.Len(t, out.Spells, out.Count, "DescribeSpells: len(Spells) != Count")
+	require.NotEmpty(t, out, "DescribeSpells: expected at least the test spell")
 
 	// Entries must be sorted by name.
-	for i := 1; i < len(out.Spells); i++ {
-		assert.LessOrEqualf(t, out.Spells[i-1].Name, out.Spells[i].Name,
+	for i := 1; i < len(out); i++ {
+		assert.LessOrEqualf(t, out[i-1].Name, out[i].Name,
 			"DescribeSpells: Spells not sorted at [%d]=%q, [%d]=%q",
-			i-1, out.Spells[i-1].Name, i, out.Spells[i].Name)
+			i-1, out[i-1].Name, i, out[i].Name)
 	}
 
 	// The test spell must appear (zzz-* sorts last).
-	require.NotEmpty(t, out.Spells)
-	assert.Equal(t, name, out.Spells[len(out.Spells)-1].Name,
+	require.NotEmpty(t, out)
+	assert.Equal(t, name, out[len(out)-1].Name,
 		"DescribeSpells: expected test spell as last entry (zzz-prefix sorts last)")
 }
 

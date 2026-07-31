@@ -27,7 +27,7 @@ const RegistryShardName = "@registry"
 // host, or spell packages itself.
 type Inputs struct {
 	Graph       types.TargetGraphOutput // DescribeGraph(): projects, targets, deps, charms, spell ops
-	Spells      types.SpellsOutput      // DescribeSpells(): spell + op nodes
+	Spells      []types.SpellEntry      // DescribeSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
 	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
 	// Root is the absolute workspace root, used by the docs and buzz-source
@@ -265,7 +265,7 @@ func assembleRegistry(in Inputs) Shard {
 
 	toolSeen := map[string]bool{}      // tool nodes minted once per registry shard
 	spellToolSeen := map[string]bool{} // spell->tool edges deduped per (spell, tool)
-	for _, sp := range in.Spells.Spells {
+	for _, sp := range in.Spells {
 		sID := spellID(sp.Name)
 		spellAttrs := map[string]string{}
 		if sp.Language != "" {

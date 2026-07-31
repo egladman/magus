@@ -29,7 +29,7 @@ func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 		if name != "" {
 			return describeSpellByName(out, name)
 		}
-		return spells.InvokeResponse{Data: out}, nil
+		return spells.InvokeResponse{Data: spellReport(out)}, nil
 	case "targets":
 		if name != "" {
 			return describeTargetByName(t.ws, name)
@@ -52,20 +52,25 @@ func (t *describeKindTool) Invoke(_ context.Context, req spells.InvokeRequest) (
 	}
 }
 
+// spellReport wraps the inventory in the wire envelope. Count is derived here, at
+// the one place that serializes, rather than carried on the inventory itself - the
+// narrowing below used to have to remember to set it.
+func spellReport(entries []types.SpellEntry) types.SpellReport {
+	return types.SpellReport{Definition: types.SpellDefinition, Count: len(entries), Spells: entries}
+}
+
 // describeSpellByName narrows the spell inventory to the single spell named name,
-// returning a SpellsOutput of one so the wire shape matches the unfiltered list.
-// An unknown name is a clear error naming every valid spell, so the agent can
-// correct without a second list call.
-func describeSpellByName(out types.SpellsOutput, name string) (spells.InvokeResponse, error) {
-	for _, s := range out.Spells {
+// returning a report of one so the wire shape matches the unfiltered list. An
+// unknown name is a clear error naming every valid spell, so the agent can correct
+// without a second list call.
+func describeSpellByName(entries []types.SpellEntry, name string) (spells.InvokeResponse, error) {
+	for _, s := range entries {
 		if s.Name == name {
-			out.Spells = []types.SpellEntry{s}
-			out.Count = 1
-			return spells.InvokeResponse{Data: out}, nil
+			return spells.InvokeResponse{Data: spellReport([]types.SpellEntry{s})}, nil
 		}
 	}
-	names := make([]string, len(out.Spells))
-	for i, s := range out.Spells {
+	names := make([]string, len(entries))
+	for i, s := range entries {
 		names[i] = s.Name
 	}
 	return spells.InvokeResponse{}, fmt.Errorf("mcp: no spell named %q (valid: %s)", name, strings.Join(names, ", "))
