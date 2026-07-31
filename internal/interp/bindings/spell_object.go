@@ -127,15 +127,6 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.E
 // Charms are deliberately NOT readable here. They are run-level - what makes "what did
 // this run do" answerable from the invocation alone - and a per-op override would move
 // that reasoning from global to local.
-// optsHint renders ", {...}" when the call already passed an options table, so the
-// error shows the author their own call with ctx inserted rather than a generic form.
-func optsHint(args []vm.Value) string {
-	if len(args) > 0 && args[0].IsMap() {
-		return ", {...}"
-	}
-	return ""
-}
-
 func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
 	if idx >= len(args) || !args[idx].IsMap() {
 		return opts, 0

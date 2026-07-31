@@ -19577,7 +19577,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outb297fdce",
+        "last_output_ref": "out51787c6f",
         "last_run_ok": "true"
       }
     },
@@ -19610,7 +19610,9 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out84f476ad",
+        "last_run_ok": "false"
       }
     },
     {
@@ -19677,7 +19679,7 @@
       "attrs": {
         "declared_as": "go_build",
         "engine": "buzz",
-        "last_output_ref": "outf5ae7705",
+        "last_output_ref": "out4fa8d10d",
         "last_run_ok": "true"
       }
     },
@@ -19979,7 +19981,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out727b29d4",
+        "last_run_ok": "false"
       }
     },
     {
@@ -20175,8 +20179,8 @@
       "source": "libs/diag",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outbbffae52",
-        "last_run_ok": "false"
+        "last_output_ref": "out5663dfd2",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20253,7 +20257,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out02a52e45",
+        "last_output_ref": "out07c9b466",
         "last_run_ok": "true"
       }
     },
@@ -20342,7 +20346,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outb58c4a96",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20402,7 +20408,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out25c52547",
+        "last_output_ref": "out56fb857c",
         "last_run_ok": "true"
       }
     },

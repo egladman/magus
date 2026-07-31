@@ -2,7 +2,6 @@ package cache
 
 import (
 	"bufio"
-	"bytes"
 	"os"
 	"strings"
 )
@@ -42,35 +41,6 @@ func extractNotices(path string) []string {
 		}
 	}
 	return out
-}
-
-// tailLines returns the last n lines of data and the count of lines omitted before them.
-// n <= 0 returns all of data with zero omitted.
-func tailLines(data []byte, n int) (tail []byte, omitted int) {
-	if n <= 0 {
-		return data, 0
-	}
-	lines := bytes.Count(data, []byte{'\n'})
-	if !bytes.HasSuffix(data, []byte{'\n'}) && len(data) > 0 {
-		lines++ // trailing partial line
-	}
-	if lines <= n {
-		return data, 0
-	}
-	// Walk back from the end past n newline-terminated lines.
-	cut := len(data)
-	if bytes.HasSuffix(data, []byte{'\n'}) {
-		cut-- // ignore the final newline so it isn't counted as a line boundary
-	}
-	for seen := 0; cut > 0; cut-- {
-		if data[cut-1] == '\n' {
-			seen++
-			if seen == n {
-				break
-			}
-		}
-	}
-	return data[cut:], lines - n
 }
 
 // failureExcerpt selects a compact set of diagnostic windows from a captured log.
