@@ -57,21 +57,27 @@ func TestDescribeProjectByPath(t *testing.T) {
 // how a name param was parsed; every other Describer method is an unused stub.
 type fakeDescriber struct{ gotTarget types.Target }
 
-func (f *fakeDescriber) DescribeSpells() []types.SpellEntry         { return nil }
-func (f *fakeDescriber) DescribeCharms([]string) []types.CharmEntry { return nil }
-func (f *fakeDescriber) DescribeTargets() []types.TargetEntry       { return nil }
-func (f *fakeDescriber) DescribeGraph(context.Context) types.TargetGraphOutput {
-	return types.TargetGraphOutput{}
+func (f *fakeDescriber) DescribeSpells(context.Context) ([]types.SpellEntry, error) { return nil, nil }
+func (f *fakeDescriber) DescribeCharms(context.Context, []string) ([]types.CharmEntry, error) {
+	return nil, nil
 }
-func (f *fakeDescriber) DescribeProjects() types.ProjectsOutput { return types.ProjectsOutput{} }
-func (f *fakeDescriber) DescribeWorkspaces(types.WorkspaceConfig) []types.WorkspaceEntry {
-	return nil
+func (f *fakeDescriber) DescribeTargets(context.Context) ([]types.TargetEntry, error) { return nil, nil }
+func (f *fakeDescriber) DescribeGraph(context.Context) (types.TargetGraphOutput, error) {
+	return types.TargetGraphOutput{}, nil
 }
-func (f *fakeDescriber) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
-	return types.EvaluatedProjectsOutput{}
+func (f *fakeDescriber) DescribeProjects(context.Context) (types.ProjectsOutput, error) {
+	return types.ProjectsOutput{}, nil
 }
-func (f *fakeDescriber) DescribeFiles([]string) []types.FileEntry { return nil }
-func (f *fakeDescriber) DescribeTarget(target types.Target) ([]types.EvaluatedTargetEntry, error) {
+func (f *fakeDescriber) DescribeWorkspaces(context.Context, types.WorkspaceConfig) ([]types.WorkspaceEntry, error) {
+	return nil, nil
+}
+func (f *fakeDescriber) DescribeEvaluatedProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
+	return types.EvaluatedProjectsOutput{}, nil
+}
+func (f *fakeDescriber) DescribeFiles(context.Context, []string) ([]types.FileEntry, error) {
+	return nil, nil
+}
+func (f *fakeDescriber) DescribeTarget(ctx context.Context, target types.Target) ([]types.EvaluatedTargetEntry, error) {
 	f.gotTarget = target
 	return []types.EvaluatedTargetEntry{{}}, nil
 }
@@ -79,7 +85,7 @@ func (f *fakeDescriber) DescribeTarget(target types.Target) ([]types.EvaluatedTa
 func TestDescribeTargetByName(t *testing.T) {
 	t.Run("name only leaves the project unscoped", func(t *testing.T) {
 		ws := &fakeDescriber{}
-		resp, err := describeTargetByName(ws, "build")
+		resp, err := describeTargetByName(context.Background(), ws, "build")
 		require.NoError(t, err)
 		assert.Equal(t, "build", ws.gotTarget.Name)
 		assert.Empty(t, ws.gotTarget.Path)
@@ -88,7 +94,7 @@ func TestDescribeTargetByName(t *testing.T) {
 
 	t.Run("name with charms parses the charm suffix", func(t *testing.T) {
 		ws := &fakeDescriber{}
-		_, err := describeTargetByName(ws, "lint:rw")
+		_, err := describeTargetByName(context.Background(), ws, "lint:rw")
 		require.NoError(t, err)
 		assert.Equal(t, "lint", ws.gotTarget.Name)
 		assert.Equal(t, []string{"rw"}, ws.gotTarget.Charms)
@@ -96,7 +102,7 @@ func TestDescribeTargetByName(t *testing.T) {
 
 	t.Run("trailing project token scopes the plan", func(t *testing.T) {
 		ws := &fakeDescriber{}
-		_, err := describeTargetByName(ws, "build api")
+		_, err := describeTargetByName(context.Background(), ws, "build api")
 		require.NoError(t, err)
 		assert.Equal(t, "build", ws.gotTarget.Name)
 		assert.Equal(t, "api", ws.gotTarget.Path)

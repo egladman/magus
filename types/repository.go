@@ -52,15 +52,15 @@ type AffectedComputer interface {
 
 // Describer returns the structured inventory behind `magus describe`.
 type Describer interface {
-	DescribeSpells() []SpellEntry
-	DescribeCharms(defaults []string) []CharmEntry
-	DescribeTargets() []TargetEntry
-	DescribeGraph(ctx context.Context) TargetGraphOutput
-	DescribeProjects() ProjectsOutput
-	DescribeWorkspaces(cfg WorkspaceConfig) []WorkspaceEntry
-	DescribeTarget(t Target) ([]EvaluatedTargetEntry, error)
-	DescribeEvaluatedProjects() EvaluatedProjectsOutput
-	DescribeFiles(paths []string) []FileEntry
+	DescribeSpells(ctx context.Context) ([]SpellEntry, error)
+	DescribeCharms(ctx context.Context, defaults []string) ([]CharmEntry, error)
+	DescribeTargets(ctx context.Context) ([]TargetEntry, error)
+	DescribeGraph(ctx context.Context) (TargetGraphOutput, error)
+	DescribeProjects(ctx context.Context) (ProjectsOutput, error)
+	DescribeWorkspaces(ctx context.Context, cfg WorkspaceConfig) ([]WorkspaceEntry, error)
+	DescribeTarget(ctx context.Context, t Target) ([]EvaluatedTargetEntry, error)
+	DescribeEvaluatedProjects(ctx context.Context) (EvaluatedProjectsOutput, error)
+	DescribeFiles(ctx context.Context, paths []string) ([]FileEntry, error)
 }
 
 // WorkspaceRepository is the full domain interface for a discovered workspace.

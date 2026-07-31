@@ -130,7 +130,10 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	out := ws.DescribeGraph(ctx)
+	out, err := ws.DescribeGraph(ctx)
+	if err != nil {
+		return err
+	}
 
 	// A trailing list of project paths scopes the graph to those projects; the
 	// cross-project edge pass in the renderer drops edges to projects left out.
@@ -260,7 +263,10 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	inventory := ws.DescribeSpells()
+	inventory, err := ws.DescribeSpells(ctx)
+	if err != nil {
+		return err
+	}
 	if len(pos) > 0 {
 		names := namesOf(inventory, func(s types.SpellEntry) string { return s.Name })
 		inventory = filterByName(inventory, pos[0], func(s types.SpellEntry) string { return s.Name })
@@ -415,7 +421,10 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	charms := ws.DescribeCharms(globalCfg.DefaultCharms)
+	charms, err := ws.DescribeCharms(ctx, globalCfg.DefaultCharms)
+	if err != nil {
+		return err
+	}
 	detail := len(pos) > 0
 	if detail {
 		name := types.Normalize(pos[0])
@@ -538,7 +547,10 @@ func describeTargets(ctx context.Context, root string) error {
 		return err
 	}
 
-	targets := ws.DescribeTargets()
+	targets, err := ws.DescribeTargets(ctx)
+	if err != nil {
+		return err
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -597,7 +609,10 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	}
 
 	if evaluated {
-		out := ws.DescribeEvaluatedProjects()
+		out, err := ws.DescribeEvaluatedProjects(ctx)
+		if err != nil {
+			return err
+		}
 		if len(pos) > 0 {
 			names := namesOf(out.Projects, func(p types.EvaluatedProjectEntry) string { return p.Path })
 			out.Projects = filterByName(out.Projects, pos[0], func(p types.EvaluatedProjectEntry) string { return p.Path })
@@ -669,7 +684,10 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	out := ws.DescribeProjects()
+	out, err := ws.DescribeProjects(ctx)
+	if err != nil {
+		return err
+	}
 	if len(pos) > 0 {
 		names := namesOf(out.Projects, func(p types.ProjectEntry) string { return p.Path })
 		out.Projects = filterByName(out.Projects, pos[0], func(p types.ProjectEntry) string { return p.Path })
@@ -743,7 +761,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		return err
 	}
 
-	out, err := ws.DescribeTarget(t)
+	out, err := ws.DescribeTarget(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -923,10 +941,10 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, err
 		}
-		return ws.DescribeWorkspaces(types.WorkspaceConfig{
+		return ws.DescribeWorkspaces(ctx, types.WorkspaceConfig{
 			CacheDir:    globalCfg.Cache.Dir,
 			Concurrency: globalCfg.Concurrency,
-		}), nil
+		})
 	}
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
@@ -939,10 +957,14 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
-		entries = append(entries, w.DescribeWorkspaces(types.WorkspaceConfig{
+		wsEntries, err := w.DescribeWorkspaces(ctx, types.WorkspaceConfig{
 			CacheDir:    cfg.Cache.Dir,
 			Concurrency: cfg.Concurrency,
-		})...)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+		}
+		entries = append(entries, wsEntries...)
 	}
 	return entries, nil
 }
@@ -1039,7 +1061,10 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	files := ws.DescribeFiles(pos)
+	files, err := ws.DescribeFiles(ctx, pos)
+	if err != nil {
+		return err
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

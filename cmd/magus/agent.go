@@ -388,8 +388,10 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	if err != nil || ws == nil {
 		return ""
 	}
-	files := ws.DescribeFiles([]string{path})
-	if len(files) != 1 || files[0].Role != "output" {
+	// A cancelled ctx folds into the same silent-on-uncertainty contract as the
+	// error above: this advisory has no error path of its own.
+	files, err := ws.DescribeFiles(ctx, []string{path})
+	if err != nil || len(files) != 1 || files[0].Role != "output" {
 		return ""
 	}
 	f := files[0]

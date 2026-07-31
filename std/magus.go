@@ -187,7 +187,7 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	if ws == nil {
 		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
 	}
-	return ws.DescribeProjects(), nil
+	return ws.DescribeProjects(ctx)
 }
 
 // MagusTargets returns every project's target graph in-process. It is the typed
@@ -199,7 +199,7 @@ func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 	if ws == nil {
 		return types.TargetGraphOutput{}, errors.New("magus.targets: no workspace on the context (magus.targets is callable from a magusfile target, not a bare script)")
 	}
-	return ws.DescribeGraph(ctx), nil
+	return ws.DescribeGraph(ctx)
 }
 
 // MagusAffected computes the affected project set in-process. See MagusLs for why

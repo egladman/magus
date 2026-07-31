@@ -26,25 +26,37 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	name := strings.TrimSpace(paramString(req.Params, "name", ""))
 	switch kind {
 	case "spells":
-		out := t.ws.DescribeSpells()
+		out, err := t.ws.DescribeSpells(ctx)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
 		if name != "" {
 			return describeSpellByName(out, name)
 		}
 		return spells.InvokeResponse{Data: spellReport(out)}, nil
 	case "targets":
 		if name != "" {
-			return describeTargetByName(t.ws, name)
+			return describeTargetByName(ctx, t.ws, name)
 		}
-		targets := t.ws.DescribeTargets()
+		targets, err := t.ws.DescribeTargets(ctx)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
 		return spells.InvokeResponse{Data: types.TargetReport{Definition: types.TargetDefinition, Count: len(targets), Targets: targets}}, nil
 	case "projects":
-		out := t.ws.DescribeProjects()
+		out, err := t.ws.DescribeProjects(ctx)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
 		if name != "" {
 			return describeProjectByPath(out, name)
 		}
 		return spells.InvokeResponse{Data: out}, nil
 	case "workspaces":
-		wss := t.ws.DescribeWorkspaces(t.cfg)
+		wss, err := t.ws.DescribeWorkspaces(ctx, t.cfg)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
 		return spells.InvokeResponse{Data: types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(wss), Workspaces: wss}}, nil
 	// charms/graph/modules were reachable on the CLI but not here, so an agent
 	// working only over MCP could not discover what charms exist, could not see the
@@ -56,10 +68,17 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		// so every charm reports Default=false here. The inventory and its declarations
 		// are still complete - only the "applies without a :suffix" marking is absent,
 		// which is a CLI-config fact rather than a workspace one.
-		charms := t.ws.DescribeCharms(nil)
+		charms, err := t.ws.DescribeCharms(ctx, nil)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
 		return spells.InvokeResponse{Data: types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms}}, nil
 	case "graph":
-		return spells.InvokeResponse{Data: t.ws.DescribeGraph(ctx)}, nil
+		out, err := t.ws.DescribeGraph(ctx)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
+		return spells.InvokeResponse{Data: out}, nil
 	case "modules":
 		mods := host.Modules(name) // name empty = the whole catalog, matching the CLI
 		if name != "" && len(mods) == 0 {
@@ -122,7 +141,7 @@ func describeProjectByPath(out types.ProjectsOutput, path string) (spells.Invoke
 // with charms, e.g. "lint:rw") and an optional whitespace-separated second token
 // scopes it to one project; without it every project is evaluated. An unknown
 // project surfaces as DescribeTarget's own error.
-func describeTargetByName(ws types.Describer, name string) (spells.InvokeResponse, error) {
+func describeTargetByName(ctx context.Context, ws types.Describer, name string) (spells.InvokeResponse, error) {
 	fields := strings.Fields(name)
 	target, err := types.ParseTarget(fields[0])
 	if err != nil {
@@ -131,7 +150,7 @@ func describeTargetByName(ws types.Describer, name string) (spells.InvokeRespons
 	if len(fields) > 1 {
 		target.Path = fields[1]
 	}
-	out, err := ws.DescribeTarget(target)
+	out, err := ws.DescribeTarget(ctx, target)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -149,13 +168,16 @@ type describeFileTool struct {
 
 func (t *describeFileTool) Name() string { return ToolDescribeFile.String() }
 
-func (t *describeFileTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	raw := paramString(req.Params, "paths", "")
 	paths := strings.Fields(raw)
 	if len(paths) == 0 {
 		return spells.InvokeResponse{}, errors.New("mcp: paths is required (one or more workspace-relative paths, space-separated)")
 	}
-	files := t.ws.DescribeFiles(paths)
+	files, err := t.ws.DescribeFiles(ctx, paths)
+	if err != nil {
+		return spells.InvokeResponse{}, err
+	}
 	return spells.InvokeResponse{Data: types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files}}, nil
 }
 

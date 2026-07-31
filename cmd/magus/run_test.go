@@ -80,19 +80,33 @@ func (w *resolveWS) Affected(context.Context, string) (*types.AffectedResult, er
 func (w *resolveWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (w *resolveWS) DescribeSpells() []types.SpellEntry                    { panic("not used") }
-func (w *resolveWS) DescribeCharms([]string) []types.CharmEntry            { panic("not used") }
-func (w *resolveWS) DescribeTargets() []types.TargetEntry                  { panic("not used") }
-func (w *resolveWS) DescribeGraph(context.Context) types.TargetGraphOutput { panic("not used") }
-func (w *resolveWS) DescribeProjects() types.ProjectsOutput                { panic("not used") }
-func (w *resolveWS) DescribeWorkspaces(types.WorkspaceConfig) []types.WorkspaceEntry {
+func (w *resolveWS) DescribeSpells(context.Context) ([]types.SpellEntry, error) {
 	panic("not used")
 }
-func (w *resolveWS) DescribeTarget(types.Target) ([]types.EvaluatedTargetEntry, error) {
+func (w *resolveWS) DescribeCharms(context.Context, []string) ([]types.CharmEntry, error) {
 	panic("not used")
 }
-func (w *resolveWS) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput { panic("not used") }
-func (w *resolveWS) DescribeFiles([]string) []types.FileEntry                 { panic("not used") }
+func (w *resolveWS) DescribeTargets(context.Context) ([]types.TargetEntry, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeGraph(context.Context) (types.TargetGraphOutput, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeProjects(context.Context) (types.ProjectsOutput, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeWorkspaces(context.Context, types.WorkspaceConfig) ([]types.WorkspaceEntry, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeTarget(context.Context, types.Target) ([]types.EvaluatedTargetEntry, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeEvaluatedProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
+	panic("not used")
+}
+func (w *resolveWS) DescribeFiles(context.Context, []string) ([]types.FileEntry, error) {
+	panic("not used")
+}
 
 // TestResolveTargetsCwdScope proves resolveTargets keys the cwd-scope on the explicit
 // cwd argument (the client's, for an adopted run) rather than the process's os.Getwd.

@@ -185,7 +185,7 @@ func Compute(ctx context.Context, ws types.WorkspaceRepository, base string) (*R
 	if err != nil {
 		return nil, err
 	}
-	return build(ws, r), nil
+	return build(ctx, ws, r)
 }
 
 // ComputeFromPaths derives the impact report from an explicit changed-path set
@@ -196,12 +196,13 @@ func ComputeFromPaths(ctx context.Context, ws types.WorkspaceRepository, paths [
 	if err != nil {
 		return nil, err
 	}
-	return build(ws, r), nil
+	return build(ctx, ws, r)
 }
 
 // build turns a raw AffectedResult into the enriched, formatter-ready report. It is
-// pure: no I/O, deterministic ordering.
-func build(ws types.WorkspaceRepository, r *types.AffectedResult) *Result {
+// pure aside from the DescribeTargets read (customTargetsByProject): no I/O of its
+// own, deterministic ordering.
+func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedResult) (*Result, error) {
 	changed := slices.Clone(r.Changed)
 	slices.Sort(changed)
 
@@ -215,7 +216,10 @@ func build(ws types.WorkspaceRepository, r *types.AffectedResult) *Result {
 	// A project can host a custom (export fun) target that no spell contributes; those
 	// live on the workspace target inventory keyed by project, not on the project's
 	// resolved spells. Pull them once so per-project enrichment sees the full vocabulary.
-	customByProject := customTargetsByProject(ws)
+	customByProject, err := customTargetsByProject(ctx, ws)
+	if err != nil {
+		return nil, err
+	}
 
 	res := &Result{
 		Base:             r.Base,
@@ -239,16 +243,20 @@ func build(ws types.WorkspaceRepository, r *types.AffectedResult) *Result {
 		}
 		res.AffectedProjects = append(res.AffectedProjects, ap)
 	}
-	return res
+	return res, nil
 }
 
 // customTargetsByProject inverts the workspace target inventory into a
 // project-path -> custom-target-names map. Custom targets are magusfile export funs
 // (e.g. build, test, lint, ci here) that no spell contributes; DescribeTargets is the
 // one surface that attributes them to projects.
-func customTargetsByProject(ws types.WorkspaceRepository) map[string][]string {
+func customTargetsByProject(ctx context.Context, ws types.WorkspaceRepository) (map[string][]string, error) {
+	targets, err := ws.DescribeTargets(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := map[string][]string{}
-	for _, t := range ws.DescribeTargets() {
+	for _, t := range targets {
 		if t.Kind != "custom" {
 			continue
 		}
@@ -256,7 +264,7 @@ func customTargetsByProject(ws types.WorkspaceRepository) map[string][]string {
 			out[p] = append(out[p], t.Name)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // projectTargets returns the sorted, deduplicated target vocabulary a project

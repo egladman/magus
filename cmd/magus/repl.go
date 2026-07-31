@@ -88,8 +88,13 @@ func replCandidates(ctx context.Context, cwd string) func() []string {
 			}
 		}
 		if m, err := loadMagus(ctx, cwd); err == nil {
-			for _, t := range m.DescribeTargets() {
-				cached = append(cached, t.Name)
+			// Best-effort completion candidates: this closure has no error path of its
+			// own (it feeds a completer, not a command), so a cancelled ctx here just
+			// means fewer candidates offered, not a failed Tab press.
+			if targets, err := m.DescribeTargets(ctx); err == nil {
+				for _, t := range targets {
+					cached = append(cached, t.Name)
+				}
 			}
 			for _, p := range m.All() {
 				cached = append(cached, p.Path)

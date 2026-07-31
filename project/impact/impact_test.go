@@ -30,7 +30,9 @@ func (f *fakeWorkspace) AffectedFromPaths(context.Context, []string) (*types.Aff
 
 func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path] }
 
-func (f *fakeWorkspace) DescribeTargets() []types.TargetEntry { return f.targets }
+func (f *fakeWorkspace) DescribeTargets(context.Context) ([]types.TargetEntry, error) {
+	return f.targets, nil
+}
 
 func TestCompute(t *testing.T) {
 	goSpell := spells.NewSpell("go", spells.WithTargets("go-build", "go-test", "go-vet"))

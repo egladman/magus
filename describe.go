@@ -20,11 +20,25 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// describeCancelled reports a Describe walk cut short by ctx, naming how far it got.
+// Returning it (rather than the truncated value alone) is the entire reason these
+// methods take a ctx: a partial inventory reporting Count: 3 is indistinguishable
+// from a workspace that genuinely has three projects, so the cancellation has to
+// travel as an error or it is a silent wrong answer. Wraps ctx.Err(), so
+// errors.Is(err, context.Canceled) and errors.Is(err, context.DeadlineExceeded)
+// both hold for the caller.
+func describeCancelled(ctx context.Context, walk string, done, total int) error {
+	return fmt.Errorf("describe %s: cancelled after %d of %d: %w", walk, done, total, ctx.Err())
+}
+
 // DescribeSpells returns the catalog of registered spells, sorted by name.
-func (*Magus) DescribeSpells() []types.SpellEntry {
+func (*Magus) DescribeSpells(ctx context.Context) ([]types.SpellEntry, error) {
 	all := project.DefaultSpellRegistry().All()
 	entries := make([]types.SpellEntry, 0, len(all))
-	for _, p := range all {
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "spells", i, len(all))
+		}
 		var docs map[string]string
 		var opCommands map[string][]string
 		for _, t := range p.Targets() {
@@ -61,7 +75,7 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
 // DescribeCharms builds the inverse charm index: every charm name a target in the
@@ -69,8 +83,10 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 // each the project/target/spell declarations that give it a patch. defaults is the
 // workspace default_charms set, so the report can mark which charms apply to every
 // run without a :suffix. It is the transpose of DescribeTarget: one charm and
-// every target that declares it.
-func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
+// every target that declares it. ctx bounds the walk so a large workspace's
+// introspection stays cancellable - this is the most expensive Describe method
+// (ExplainCommand per charm, per target, per spell, across every project).
+func (m *Magus) DescribeCharms(ctx context.Context, defaults []string) ([]types.CharmEntry, error) {
 	defaultSet := map[string]struct{}{}
 	for _, c := range defaults {
 		defaultSet[types.Normalize(c)] = struct{}{}
@@ -101,7 +117,11 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 		ensure(name)
 	}
 
-	for _, p := range m.ws.All() {
+	projects := m.ws.All()
+	for i, p := range projects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "charms", i, len(projects))
+		}
 		for _, s := range p.ResolvedSpells {
 			for _, target := range s.Targets() {
 				for _, c := range s.Charms(target) {
@@ -137,11 +157,12 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 	slices.SortFunc(entries, func(a, b types.CharmEntry) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
-// DescribeTargets enumerates targets known in the workspace.
-func (m *Magus) DescribeTargets() []types.TargetEntry {
+// DescribeTargets enumerates targets known in the workspace. ctx bounds each of
+// its three walks so a large workspace's introspection stays cancellable.
+func (m *Magus) DescribeTargets(ctx context.Context) ([]types.TargetEntry, error) {
 	type targetInfo struct {
 		spells   []string
 		projects []string
@@ -152,7 +173,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 	byName[types.TargetCI] = &targetInfo{kind: "canonical"}
 
 	spellInUse := map[string]bool{}
-	for _, p := range m.ws.All() {
+	usageProjects := m.ws.All()
+	for i, p := range usageProjects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (spell usage)", i, len(usageProjects))
+		}
 		for _, bp := range p.Spells {
 			spellInUse[bp] = true
 		}
@@ -160,7 +185,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 			spellInUse[p.Spell] = true
 		}
 	}
-	for _, spell := range project.DefaultSpellRegistry().All() {
+	registrySpells := project.DefaultSpellRegistry().All()
+	for i, spell := range registrySpells {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (spell registry)", i, len(registrySpells))
+		}
 		if !spellInUse[spell.Name()] {
 			continue
 		}
@@ -172,7 +201,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 		}
 	}
 
-	for _, p := range m.ws.All() {
+	policyProjects := m.ws.All()
+	for i, p := range policyProjects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (target policies)", i, len(policyProjects))
+		}
 		for target := range p.TargetPolicies {
 			if _, ok := byName[target]; !ok {
 				byName[target] = &targetInfo{kind: "custom"}
@@ -200,7 +233,7 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 		}
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
 // gitRoot returns the nearest ancestor of dir (inclusive) holding a `.git` entry,
@@ -574,12 +607,13 @@ func concatSource(src *interp.Source) string {
 // introspection never runs a target body. Buzz magusfiles are supported; a project on
 // any other engine yields an engine-tagged entry with no nodes until that extractor
 // lands. ctx bounds the walk so a large workspace's introspection stays cancellable.
-func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
+func (m *Magus) DescribeGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	out := types.TargetGraphOutput{Definition: types.TargetGraphDefinition}
 	repoRoot := gitRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading
-	for _, p := range m.ws.All() {
+	projects := m.ws.All()
+	for i, p := range projects {
 		if ctx.Err() != nil {
-			break
+			return types.TargetGraphOutput{}, describeCancelled(ctx, "graph", i, len(projects))
 		}
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
@@ -610,7 +644,7 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			out.Projects = append(out.Projects, entry)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // resolveNodeRefs rewrites each node's cross-project dependency paths and its
@@ -658,10 +692,13 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 }
 
 // DescribeProjects returns the project inventory of the workspace.
-func (m *Magus) DescribeProjects() types.ProjectsOutput {
+func (m *Magus) DescribeProjects(ctx context.Context) (types.ProjectsOutput, error) {
 	all := m.ws.All()
 	entries := make([]types.ProjectEntry, 0, len(all))
-	for _, p := range all {
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return types.ProjectsOutput{}, describeCancelled(ctx, "projects", i, len(all))
+		}
 		entries = append(entries, types.ProjectEntry{
 			Path:      p.Path,
 			Name:      p.Name,
@@ -679,13 +716,19 @@ func (m *Magus) DescribeProjects() types.ProjectsOutput {
 		Workspace:  m.ws.Root,
 		Count:      len(entries),
 		Projects:   entries,
-	}
+	}, nil
 }
 
 // DescribeWorkspaces returns the single-entry view of m's workspace. A *Magus is
 // always exactly one workspace; the CLI's `describe workspaces` merges these
 // across the daemon's declared roots when daemon.workspaces is set.
-func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) []types.WorkspaceEntry {
+func (m *Magus) DescribeWorkspaces(ctx context.Context, cfg types.WorkspaceConfig) ([]types.WorkspaceEntry, error) {
+	// No per-project walk here (only a length read), so there is nothing to name a
+	// done/total against; describeCancelled reads awkwardly with both pinned at 0,
+	// so this wraps ctx.Err() directly instead of going through the helper.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("describe workspaces: %w", err)
+	}
 	entry := types.WorkspaceEntry{
 		Root:         m.ws.Root,
 		VCSBaseRef:   m.ws.VCSOptions.BaseRef,
@@ -693,18 +736,27 @@ func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) []types.WorkspaceE
 		Concurrency:  cfg.Concurrency,
 		ProjectCount: len(m.ws.All()),
 	}
-	return []types.WorkspaceEntry{entry}
+	return []types.WorkspaceEntry{entry}, nil
 }
 
-// DescribeTarget returns the fully-evaluated dispatch plan for t.
-func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, error) {
+// DescribeTarget returns the fully-evaluated dispatch plan for t. Like every other
+// Describe method, a cancelled ctx is reported as an error rather than truncating
+// the plan silently: a partial dispatch plan is exactly the misleading result
+// describeCancelled exists to prevent.
+func (m *Magus) DescribeTarget(ctx context.Context, t types.Target) ([]types.EvaluatedTargetEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	expanded, err := m.ExpandPath(t)
 	if err != nil {
 		return nil, err
 	}
 
 	entries := make([]types.EvaluatedTargetEntry, 0, len(expanded))
-	for _, et := range expanded {
+	for i, et := range expanded {
+		if err := ctx.Err(); err != nil {
+			return nil, describeCancelled(ctx, "target", i, len(expanded))
+		}
 		p := m.Get(et.Path)
 		if p == nil {
 			continue
@@ -794,11 +846,15 @@ func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, er
 	return entries, nil
 }
 
-// DescribeEvaluatedProjects returns the fully-evaluated project inventory.
-func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
+// DescribeEvaluatedProjects returns the fully-evaluated project inventory. ctx
+// bounds the walk so a large workspace's introspection stays cancellable.
+func (m *Magus) DescribeEvaluatedProjects(ctx context.Context) (types.EvaluatedProjectsOutput, error) {
 	all := m.ws.All()
 	entries := make([]types.EvaluatedProjectEntry, 0, len(all))
-	for _, p := range all {
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return types.EvaluatedProjectsOutput{}, describeCancelled(ctx, "evaluated projects", i, len(all))
+		}
 		step := m.baseStep(p)
 
 		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
@@ -832,7 +888,7 @@ func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 		Workspace:  m.ws.Root,
 		Count:      len(entries),
 		Projects:   entries,
-	}
+	}, nil
 }
 
 func appendUniq(s []string, v string) []string {
@@ -849,8 +905,9 @@ func appendUniq(s []string, v string) []string {
 // feeds the cache), plus directory containment for ownership. It is pure
 // declaration lookup - no target evaluation, no VCS - so it is cheap enough to
 // run over a whole dirty tree. An absolute path is re-rooted onto the workspace;
-// a path outside it (or matching nothing) reports as unclaimed.
-func (m *Magus) DescribeFiles(paths []string) []types.FileEntry {
+// a path outside it (or matching nothing) reports as unclaimed. ctx bounds the
+// walk so classifying a large path list stays cancellable.
+func (m *Magus) DescribeFiles(ctx context.Context, paths []string) ([]types.FileEntry, error) {
 	all := m.ws.All()
 	// Longest project path first, so nested projects claim ownership before ".".
 	owners := slices.Clone(all)
@@ -862,10 +919,13 @@ func (m *Magus) DescribeFiles(paths []string) []types.FileEntry {
 	})
 
 	entries := make([]types.FileEntry, 0, len(paths))
-	for _, raw := range paths {
+	for i, raw := range paths {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "files", i, len(paths))
+		}
 		entries = append(entries, m.describeFile(raw, all, owners))
 	}
-	return entries
+	return entries, nil
 }
 
 func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {

@@ -143,9 +143,18 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, c
 		log = slog.Default()
 	}
 	cacheDir := resolveCacheDir(root, cfg)
-	spells := ws.DescribeSpells()
-	graph := ws.DescribeGraph(ctx)
-	projects := ws.DescribeProjects()
+	spells, err := ws.DescribeSpells(ctx)
+	if err != nil {
+		return nil, err
+	}
+	graph, err := ws.DescribeGraph(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projects, err := ws.DescribeProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// The @vcs shard is produced by an expensive git-history scan. Fingerprint its inputs
 	// (HEAD + window) and, when unchanged, SKIP the scan entirely: Sync reuses the shard
