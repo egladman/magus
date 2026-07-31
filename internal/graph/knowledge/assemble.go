@@ -12,7 +12,7 @@ import (
 )
 
 // Assembly is composition, not analysis: it maps machinery magus already owns
-// (the static magusfile extraction behind DescribeGraph, the spell/module/
+// (the static magusfile extraction behind TargetGraph, the spell/module/
 // diagnostic registries) onto knowledge nodes and edges. No execution, no LLM.
 // Every Phase 1 edge is EXTRACTED with score 1.0.
 
@@ -26,8 +26,8 @@ const RegistryShardName = "@registry"
 // internal/graph/knowledge depends only on types - it never reaches into the registry,
 // host, or spell packages itself.
 type Inputs struct {
-	Graph       types.TargetGraphOutput // DescribeGraph(): projects, targets, deps, charms, spell ops
-	Spells      []types.SpellEntry      // DescribeSpells(): spell + op nodes
+	Graph       types.TargetGraphOutput // TargetGraph(): projects, targets, deps, charms, spell ops
+	Spells      []types.SpellEntry      // ListSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
 	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
 	// Root is the absolute workspace root, used by the docs and buzz-source
@@ -85,7 +85,7 @@ type Shard struct {
 
 // AssembleShards builds every shard from the gathered inputs: the registry shard
 // plus one per project in the graph. Order is registry first, then projects in
-// their DescribeGraph order.
+// their TargetGraph order.
 func AssembleShards(in Inputs) []Shard {
 	shards := make([]Shard, 0, len(in.Graph.Projects)+3)
 	shards = append(shards, assembleRegistry(in))

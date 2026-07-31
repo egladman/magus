@@ -101,7 +101,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 
 	// One classification call for every path: the same declared-glob answer
 	// `magus describe file` gives, so the two can never disagree.
-	files, err := ws.DescribeFiles(ctx, paths)
+	files, err := ws.ClassifyFiles(ctx, paths)
 	if err != nil {
 		return err
 	}

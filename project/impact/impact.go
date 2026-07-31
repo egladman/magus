@@ -200,7 +200,7 @@ func ComputeFromPaths(ctx context.Context, ws types.WorkspaceRepository, paths [
 }
 
 // build turns a raw AffectedResult into the enriched, formatter-ready report. It is
-// pure aside from the DescribeTargets read (customTargetsByProject): no I/O of its
+// pure aside from the ListTargets read (customTargetsByProject): no I/O of its
 // own, deterministic ordering.
 func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedResult) (*Result, error) {
 	changed := slices.Clone(r.Changed)
@@ -248,10 +248,10 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 
 // customTargetsByProject inverts the workspace target inventory into a
 // project-path -> custom-target-names map. Custom targets are magusfile export funs
-// (e.g. build, test, lint, ci here) that no spell contributes; DescribeTargets is the
+// (e.g. build, test, lint, ci here) that no spell contributes; ListTargets is the
 // one surface that attributes them to projects.
 func customTargetsByProject(ctx context.Context, ws types.WorkspaceRepository) (map[string][]string, error) {
-	targets, err := ws.DescribeTargets(ctx)
+	targets, err := ws.ListTargets(ctx)
 	if err != nil {
 		return nil, err
 	}

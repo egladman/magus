@@ -78,7 +78,7 @@ func WithKnowledgeGraphFn(fn func(ctx context.Context, withSymbols bool) (*knowl
 	return func(s *Service) { s.knowledgeGraphFn = fn }
 }
 
-// WithDescribeGraphFn replaces Magus.DescribeGraph. Tests pass a canned target graph.
+// WithDescribeGraphFn replaces Magus.TargetGraph. Tests pass a canned target graph.
 func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 	return func(s *Service) { s.describeGraphFn = fn }
 }
@@ -287,13 +287,13 @@ func (s *Service) knowledgeGraph(ctx context.Context, withSymbols bool) (*knowle
 }
 
 // TargetGraph returns the describe-graph view (targets flavor). The error return
-// reports a cancelled ctx cutting the underlying DescribeGraph walk short, keeping
-// the seam uniform with Graph.
+// reports a cancelled ctx cutting the underlying Magus.TargetGraph walk short,
+// keeping the seam uniform with Graph.
 func (s *Service) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	if s.describeGraphFn != nil {
 		return s.describeGraphFn(), nil
 	}
-	return s.magus.DescribeGraph(ctx)
+	return s.magus.TargetGraph(ctx)
 }
 
 // projectSkeleton reduces a TargetGraphOutput to only project nodes and project->project

@@ -177,7 +177,7 @@ var typedMagusSubcommands = map[string]bool{
 // runMagus: a process spawn, a second workspace discovery and load, a JSON encode, and a
 // Buzz-side parse - to answer a question this process already has the answer to. A read
 // that mutates nothing has no reason to pay that, and the domain method it needs is
-// already typed (types.WorkspaceRepository.DescribeProjects).
+// already typed (types.WorkspaceRepository.ListProjects).
 //
 // The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
 // present for every magusfile target. A caller outside that path (a bare Buzz script
@@ -187,19 +187,19 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	if ws == nil {
 		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
 	}
-	return ws.DescribeProjects(ctx)
+	return ws.ListProjects(ctx)
 }
 
 // MagusTargets returns every project's target graph in-process. It is the typed
 // counterpart to `magus describe graph`: a caller that wants the target inventory no
-// longer has to shell out and parse the markdown that command renders. DescribeGraph
+// longer has to shell out and parse the markdown that command renders. TargetGraph
 // reads the magusfile statically, so this is side-effect free.
 func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return types.TargetGraphOutput{}, errors.New("magus.targets: no workspace on the context (magus.targets is callable from a magusfile target, not a bare script)")
 	}
-	return ws.DescribeGraph(ctx)
+	return ws.TargetGraph(ctx)
 }
 
 // MagusAffected computes the affected project set in-process. See MagusLs for why

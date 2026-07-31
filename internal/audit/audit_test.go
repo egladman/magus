@@ -52,30 +52,29 @@ func (f *fakeWS) Affected(context.Context, string) (*types.AffectedResult, error
 func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeSpells(context.Context) ([]types.SpellEntry, error) { panic("not used") }
-func (f *fakeWS) DescribeCharms(context.Context, []string) ([]types.CharmEntry, error) {
+func (f *fakeWS) ListCharms(context.Context) ([]types.Charm, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeTargets(context.Context) ([]types.TargetEntry, error) { panic("not used") }
-func (f *fakeWS) DescribeGraph(context.Context) (types.TargetGraphOutput, error) {
+func (f *fakeWS) ListTargets(context.Context) ([]types.TargetEntry, error) { panic("not used") }
+func (f *fakeWS) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeProjects(context.Context) (types.ProjectsOutput, error) {
+func (f *fakeWS) ListProjects(context.Context) (types.ProjectsOutput, error) {
 	panic("not used")
 }
-func (f *fakeWS) DescribeWorkspaces(context.Context, types.WorkspaceConfig) ([]types.WorkspaceEntry, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) DescribeTarget(context.Context, types.Target) ([]types.EvaluatedTargetEntry, error) {
+func (f *fakeWS) Workspace(context.Context, types.WorkspaceConfig) (types.WorkspaceEntry, error) {
 	panic("not used")
 }
 
-func (f *fakeWS) DescribeEvaluatedProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
+func (f *fakeWS) EvaluateTarget(context.Context, types.Target) ([]types.EvaluatedTarget, error) {
 	panic("not used")
 }
 
-func (f *fakeWS) DescribeFiles(context.Context, []string) ([]types.FileEntry, error) {
+func (f *fakeWS) EvaluateProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
+	panic("not used")
+}
+
+func (f *fakeWS) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
 	panic("not used")
 }
 

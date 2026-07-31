@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
 type describeKindTool struct {
-	ws  types.Describer
+	ws  types.Inspector
 	cfg types.WorkspaceConfig
 }
 
@@ -26,7 +27,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	name := strings.TrimSpace(paramString(req.Params, "name", ""))
 	switch kind {
 	case "spells":
-		out, err := t.ws.DescribeSpells(ctx)
+		out, err := magus.ListSpells(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -38,13 +39,13 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		if name != "" {
 			return describeTargetByName(ctx, t.ws, name)
 		}
-		targets, err := t.ws.DescribeTargets(ctx)
+		targets, err := t.ws.ListTargets(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
 		return spells.InvokeResponse{Data: types.TargetReport{Definition: types.TargetDefinition, Count: len(targets), Targets: targets}}, nil
 	case "projects":
-		out, err := t.ws.DescribeProjects(ctx)
+		out, err := t.ws.ListProjects(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -53,28 +54,29 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		}
 		return spells.InvokeResponse{Data: out}, nil
 	case "workspaces":
-		wss, err := t.ws.DescribeWorkspaces(ctx, t.cfg)
+		ws, err := t.ws.Workspace(ctx, t.cfg)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
+		wss := []types.WorkspaceEntry{ws}
 		return spells.InvokeResponse{Data: types.WorkspaceReport{Definition: types.WorkspaceDefinition, Count: len(wss), Workspaces: wss}}, nil
 	// charms/graph/modules were reachable on the CLI but not here, so an agent
 	// working only over MCP could not discover what charms exist, could not see the
 	// target DAG, and could not introspect the Buzz stdlib at all. The first two were
-	// already on the Describer interface this tool holds; modules needs no workspace
-	// at all, which is why it never went through Describer.
+	// already on the Inspector interface this tool holds; modules needs no workspace
+	// at all, which is why it never went through Inspector.
 	case "charms":
-		// nil defaults: WorkspaceConfig does not carry the workspace default_charms set,
-		// so every charm reports Default=false here. The inventory and its declarations
-		// are still complete - only the "applies without a :suffix" marking is absent,
-		// which is a CLI-config fact rather than a workspace one.
-		charms, err := t.ws.DescribeCharms(ctx, nil)
+		// ListCharms reads the workspace's own default_charms set (m.cfg.DefaultCharms)
+		// off the receiver, so - unlike the old DescribeCharms(ctx, nil) this replaced -
+		// the "applies without a :suffix" marking is populated here too, not just on
+		// the CLI path.
+		charms, err := t.ws.ListCharms(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
 		return spells.InvokeResponse{Data: types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms}}, nil
 	case "graph":
-		out, err := t.ws.DescribeGraph(ctx)
+		out, err := t.ws.TargetGraph(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -140,8 +142,8 @@ func describeProjectByPath(out types.ProjectsOutput, path string) (spells.Invoke
 // the CLI `magus describe target <name> [project]`: name is the target (optionally
 // with charms, e.g. "lint:rw") and an optional whitespace-separated second token
 // scopes it to one project; without it every project is evaluated. An unknown
-// project surfaces as DescribeTarget's own error.
-func describeTargetByName(ctx context.Context, ws types.Describer, name string) (spells.InvokeResponse, error) {
+// project surfaces as EvaluateTarget's own error.
+func describeTargetByName(ctx context.Context, ws types.Inspector, name string) (spells.InvokeResponse, error) {
 	fields := strings.Fields(name)
 	target, err := types.ParseTarget(fields[0])
 	if err != nil {
@@ -150,7 +152,7 @@ func describeTargetByName(ctx context.Context, ws types.Describer, name string) 
 	if len(fields) > 1 {
 		target.Path = fields[1]
 	}
-	out, err := ws.DescribeTarget(ctx, target)
+	out, err := ws.EvaluateTarget(ctx, target)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
@@ -163,7 +165,7 @@ var _ spells.Driver = (*describeKindTool)(nil)
 // output globs - the read half of generated-file hygiene. Lives here with the
 // other describe tool: one file per feature, and this is describe's file noun.
 type describeFileTool struct {
-	ws types.Describer
+	ws types.Inspector
 }
 
 func (t *describeFileTool) Name() string { return ToolDescribeFile.String() }
@@ -174,7 +176,7 @@ func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	if len(paths) == 0 {
 		return spells.InvokeResponse{}, errors.New("mcp: paths is required (one or more workspace-relative paths, space-separated)")
 	}
-	files, err := t.ws.DescribeFiles(ctx, paths)
+	files, err := t.ws.ClassifyFiles(ctx, paths)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -36,8 +37,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 	ws, err := Inspect(context.Background(), root)
 	require.NoError(t, err, "Inspect")
-	graph, err := ws.DescribeGraph(context.Background())
-	require.NoError(t, err, "DescribeGraph")
+	graph, err := ws.TargetGraph(context.Background())
+	require.NoError(t, err, "TargetGraph")
 	var web *types.TargetGraphProject
 	for i, p := range graph.Projects {
 		if p.Path == "web" {
@@ -92,33 +93,32 @@ func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository 
 	return ws
 }
 
-func TestDescribeSpells_ShapeAndOrder(t *testing.T) {
+func TestListSpells_ShapeAndOrder(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const name = "zzz-describe-spells-test"
 	spell := spells.NewSpell(name, spells.WithTargets("build", "test"))
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
 
-	ws := newWorkspace(t)
-	out, err := ws.DescribeSpells(context.Background())
-	require.NoError(t, err, "DescribeSpells")
+	out, err := ListSpells(context.Background())
+	require.NoError(t, err, "ListSpells")
 
-	require.NotEmpty(t, out, "DescribeSpells: expected at least the test spell")
+	require.NotEmpty(t, out, "ListSpells: expected at least the test spell")
 
 	// Entries must be sorted by name.
 	for i := 1; i < len(out); i++ {
 		assert.LessOrEqualf(t, out[i-1].Name, out[i].Name,
-			"DescribeSpells: Spells not sorted at [%d]=%q, [%d]=%q",
+			"ListSpells: Spells not sorted at [%d]=%q, [%d]=%q",
 			i-1, out[i-1].Name, i, out[i].Name)
 	}
 
 	// The test spell must appear (zzz-* sorts last).
 	require.NotEmpty(t, out)
 	assert.Equal(t, name, out[len(out)-1].Name,
-		"DescribeSpells: expected test spell as last entry (zzz-prefix sorts last)")
+		"ListSpells: expected test spell as last entry (zzz-prefix sorts last)")
 }
 
-func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
+func TestListTargets_CanonicalCIFirst(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-targets-spell"
 	spell := spells.NewSpell(spellName, spells.WithTargets("zzz-target-a", "zzz-target-b"))
@@ -129,12 +129,12 @@ func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	out, err := ws.DescribeTargets(context.Background())
-	require.NoError(t, err, "DescribeTargets")
+	out, err := ws.ListTargets(context.Background())
+	require.NoError(t, err, "ListTargets")
 
-	require.NotEmpty(t, out, "DescribeTargets: no targets")
-	assert.Equal(t, "ci", out[0].Name, "DescribeTargets: first entry")
-	assert.Equal(t, "canonical", out[0].Kind, "DescribeTargets: ci.Kind")
+	require.NotEmpty(t, out, "ListTargets: no targets")
+	assert.Equal(t, "ci", out[0].Name, "ListTargets: first entry")
+	assert.Equal(t, "canonical", out[0].Kind, "ListTargets: ci.Kind")
 
 	byName := make(map[string]types.TargetEntry, len(out))
 	for _, e := range out {
@@ -142,13 +142,13 @@ func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
 	}
 	for _, target := range []string{"zzz-target-a", "zzz-target-b"} {
 		e, ok := byName[target]
-		require.Truef(t, ok, "DescribeTargets: expected spell target %q in output", target)
-		assert.Equalf(t, "spell", e.Kind, "DescribeTargets: %q.Kind", target)
-		assert.Containsf(t, e.Spells, spellName, "DescribeTargets: %q.Spells", target)
+		require.Truef(t, ok, "ListTargets: expected spell target %q in output", target)
+		assert.Equalf(t, "spell", e.Kind, "ListTargets: %q.Kind", target)
+		assert.Containsf(t, e.Spells, spellName, "ListTargets: %q.Spells", target)
 	}
 }
 
-func TestDescribeTarget_Charms(t *testing.T) {
+func TestEvaluateTarget_Charms(t *testing.T) {
 	const spellName = "zzz-charm-spell"
 	s := spells.NewSpell(spellName,
 		spells.WithTargets("lint"),
@@ -161,18 +161,18 @@ func TestDescribeTarget_Charms(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	out, err := ws.DescribeTarget(context.Background(), types.Target{Name: "lint"})
-	require.NoError(t, err, "DescribeTarget")
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "lint"})
+	require.NoError(t, err, "EvaluateTarget")
 	var got []string
 	for _, e := range out {
 		if e.Target == "lint" {
 			got = e.Charms
 		}
 	}
-	assert.Equal(t, []string{"debug", "write"}, got, "DescribeTarget(lint).Charms (sorted union across spells)")
+	assert.Equal(t, []string{"debug", "write"}, got, "EvaluateTarget(lint).Charms (sorted union across spells)")
 }
 
-func TestDescribeCharms_InverseIndex(t *testing.T) {
+func TestListCharms_InverseIndex(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-describe-charms-spell"
 	s := spells.NewSpell(spellName,
@@ -184,12 +184,12 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
-	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg), WithLoadedConfig(config.Config{DefaultCharms: []string{"write"}}))
 
-	charms, err := ws.DescribeCharms(context.Background(), []string{"write"})
-	require.NoError(t, err, "DescribeCharms")
+	charms, err := ws.ListCharms(context.Background())
+	require.NoError(t, err, "ListCharms")
 
-	byName := make(map[string]types.CharmEntry, len(charms))
+	byName := make(map[string]types.Charm, len(charms))
 	for _, c := range charms {
 		byName[c.Name] = c
 	}
@@ -197,17 +197,17 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 	// Reserved built-ins always appear, documented, even where nothing declares them.
 	for _, name := range types.ReservedCharms() {
 		e, ok := byName[name]
-		require.Truef(t, ok, "DescribeCharms: reserved charm %q missing", name)
-		assert.Truef(t, e.Builtin, "DescribeCharms: %q.Builtin", name)
-		assert.NotEmptyf(t, e.Doc, "DescribeCharms: %q.Doc", name)
+		require.Truef(t, ok, "ListCharms: reserved charm %q missing", name)
+		assert.Truef(t, e.Builtin, "ListCharms: %q.Builtin", name)
+		assert.NotEmptyf(t, e.Doc, "ListCharms: %q.Doc", name)
 	}
 
 	// A spell-declared charm is indexed back to the target that declares it.
 	for _, name := range []string{"write", "debug"} {
 		e, ok := byName[name]
-		require.Truef(t, ok, "DescribeCharms: declared charm %q missing", name)
-		assert.Falsef(t, e.Builtin, "DescribeCharms: %q.Builtin should be false", name)
-		require.Lenf(t, e.Declarations, 1, "DescribeCharms: %q declarations", name)
+		require.Truef(t, ok, "ListCharms: declared charm %q missing", name)
+		assert.Falsef(t, e.Builtin, "ListCharms: %q.Builtin should be false", name)
+		require.Lenf(t, e.Declarations, 1, "ListCharms: %q declarations", name)
 		d := e.Declarations[0]
 		assert.Equal(t, ".", d.Project, "declaration project")
 		assert.Equal(t, "lint", d.Target, "declaration target")
@@ -215,17 +215,17 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 	}
 
 	// The workspace default is flagged; a non-default charm is not.
-	assert.True(t, byName["write"].Default, "DescribeCharms: write should be marked default")
-	assert.False(t, byName["debug"].Default, "DescribeCharms: debug should not be default")
+	assert.True(t, byName["write"].Default, "ListCharms: write should be marked default")
+	assert.False(t, byName["debug"].Default, "ListCharms: debug should not be default")
 
 	// Entries are sorted by name.
 	for i := 1; i < len(charms); i++ {
 		assert.LessOrEqualf(t, charms[i-1].Name, charms[i].Name,
-			"DescribeCharms: not sorted at [%d]=%q,[%d]=%q", i-1, charms[i-1].Name, i, charms[i].Name)
+			"ListCharms: not sorted at [%d]=%q,[%d]=%q", i-1, charms[i-1].Name, i, charms[i].Name)
 	}
 }
 
-// TestDescribeTargets_CustomTargets exercises this package's own test build,
+// TestListTargets_CustomTargets exercises this package's own test build,
 // which deliberately does not link the Buzz interpreter (see doc.go and
 // register_test.go) — so validateTargetPolicies (A4) cannot see this project's
 // magusfile at all and its "policy names an unknown target" enforcement does not
@@ -233,85 +233,85 @@ func TestDescribeCharms_InverseIndex(t *testing.T) {
 // of that check, exercised through a real magusfile via the linked interpreter,
 // lives in cmd/magus (which blank-imports interp/bindings): see
 // TestInspect_TargetPolicyNamingUnknownTarget in cmd/magus/project_options_test.go.
-func TestDescribeTargets_CustomTargets(t *testing.T) {
+func TestListTargets_CustomTargets(t *testing.T) {
 	t.Parallel()
 	const customTarget = "zzz-custom-target"
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithTarget(customTarget))
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	out, err := ws.DescribeTargets(context.Background())
-	require.NoError(t, err, "DescribeTargets")
+	out, err := ws.ListTargets(context.Background())
+	require.NoError(t, err, "ListTargets")
 
 	byName := make(map[string]types.TargetEntry, len(out))
 	for _, e := range out {
 		byName[e.Name] = e
 	}
 	e, ok := byName[customTarget]
-	require.Truef(t, ok, "DescribeTargets: custom target %q not found in output", customTarget)
-	assert.Equal(t, "custom", e.Kind, "DescribeTargets: Kind")
-	assert.Contains(t, e.Projects, ".", "DescribeTargets: Projects")
+	require.Truef(t, ok, "ListTargets: custom target %q not found in output", customTarget)
+	assert.Equal(t, "custom", e.Kind, "ListTargets: Kind")
+	assert.Contains(t, e.Projects, ".", "ListTargets: Projects")
 }
 
-func TestDescribeProjects_Inventory(t *testing.T) {
+func TestListProjects_Inventory(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
-	out, err := ws.DescribeProjects(context.Background())
-	require.NoError(t, err, "DescribeProjects")
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
 
-	assert.NotEmpty(t, out.Definition, "DescribeProjects: Definition is empty")
+	assert.NotEmpty(t, out.Definition, "ListProjects: Definition is empty")
 	wantPaths := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Equal(t, len(wantPaths), out.Count, "DescribeProjects: Count")
-	assert.Equal(t, ws.Root(), out.Workspace, "DescribeProjects: Workspace")
+	assert.Equal(t, len(wantPaths), out.Count, "ListProjects: Count")
+	assert.Equal(t, ws.Root(), out.Workspace, "ListProjects: Workspace")
 	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
 	for _, e := range out.Projects {
 		byPath[e.Path] = e
 	}
 	for _, p := range wantPaths {
 		_, ok := byPath[p]
-		assert.Truef(t, ok, "DescribeProjects: project %q missing from output", p)
+		assert.Truef(t, ok, "ListProjects: project %q missing from output", p)
 	}
 }
 
-func TestDescribeTarget_FanOut(t *testing.T) {
+func TestEvaluateTarget_FanOut(t *testing.T) {
 	t.Parallel()
 	// A bare target ":build" should fan out to every project.
 	ws := newWorkspace(t)
-	out, err := ws.DescribeTarget(context.Background(), types.Target{Name: "build"})
-	require.NoError(t, err, "DescribeTarget")
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "build"})
+	require.NoError(t, err, "EvaluateTarget")
 	wantProjects := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Len(t, out, len(wantProjects), "DescribeTarget: one entry per project")
-	byProject := make(map[string]types.EvaluatedTargetEntry, len(out))
+	assert.Len(t, out, len(wantProjects), "EvaluateTarget: one entry per project")
+	byProject := make(map[string]types.EvaluatedTarget, len(out))
 	for _, e := range out {
 		byProject[e.Project] = e
 	}
 	for _, p := range wantProjects {
 		e, ok := byProject[p]
-		require.Truef(t, ok, "DescribeTarget: project %q missing from output", p)
-		assert.Equalf(t, "build", e.Target, "DescribeTarget: project %q target", p)
-		assert.NotEmptyf(t, e.Dir, "DescribeTarget: project %q Dir is empty", p)
+		require.Truef(t, ok, "EvaluateTarget: project %q missing from output", p)
+		assert.Equalf(t, "build", e.Target, "EvaluateTarget: project %q target", p)
+		assert.NotEmptyf(t, e.Dir, "EvaluateTarget: project %q Dir is empty", p)
 	}
 }
 
-func TestDescribeTarget_SingleProject(t *testing.T) {
+func TestEvaluateTarget_SingleProject(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
-	out, err := ws.DescribeTarget(context.Background(), types.Target{Path: "api", Name: "test"})
-	require.NoError(t, err, "DescribeTarget")
-	require.Len(t, out, 1, "DescribeTarget: one entry")
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Path: "api", Name: "test"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, out, 1, "EvaluateTarget: one entry")
 	e := out[0]
-	assert.Equal(t, "api", e.Project, "DescribeTarget: Project")
-	assert.Equal(t, "test", e.Target, "DescribeTarget: Target")
+	assert.Equal(t, "api", e.Project, "EvaluateTarget: Project")
+	assert.Equal(t, "test", e.Target, "EvaluateTarget: Target")
 }
 
-func TestDescribeTarget_UnknownProject(t *testing.T) {
+func TestEvaluateTarget_UnknownProject(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
-	_, err := ws.DescribeTarget(context.Background(), types.Target{Path: "does-not-exist", Name: "build"})
-	assert.Error(t, err, "DescribeTarget: expected error for unknown project")
+	_, err := ws.EvaluateTarget(context.Background(), types.Target{Path: "does-not-exist", Name: "build"})
+	assert.Error(t, err, "EvaluateTarget: expected error for unknown project")
 }
 
-func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
+func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-dt-spell"
 	spell := spells.NewSpell(
@@ -331,44 +331,44 @@ func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
 	)
 	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	out, err := ws.DescribeTarget(context.Background(), types.Target{Name: "my-target"})
-	require.NoError(t, err, "DescribeTarget")
-	require.NotEmpty(t, out, "DescribeTarget: no entries")
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "my-target"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.NotEmpty(t, out, "EvaluateTarget: no entries")
 	e := out[0]
 
 	// Spell entry must be present.
-	require.NotEmpty(t, e.Spells, "DescribeTarget: Spells is empty, expected at least one entry")
-	assert.Equal(t, spellName, e.Spells[0].Name, "DescribeTarget: Spells[0].Name")
+	require.NotEmpty(t, e.Spells, "EvaluateTarget: Spells is empty, expected at least one entry")
+	assert.Equal(t, spellName, e.Spells[0].Name, "EvaluateTarget: Spells[0].Name")
 
 	// EffectiveClaims must be non-empty (spell declared claims).
-	assert.NotEmpty(t, e.Spells[0].EffectiveClaims, "DescribeTarget: Spells[0].EffectiveClaims is empty, expected \"**/*.zzz\"")
+	assert.NotEmpty(t, e.Spells[0].EffectiveClaims, "EvaluateTarget: Spells[0].EffectiveClaims is empty, expected \"**/*.zzz\"")
 
 	// Policy must be present with the volatility-retry flag set.
-	require.NotNil(t, e.Policy, "DescribeTarget: Policy is nil, want TrackVolatile=true")
-	assert.True(t, e.Policy.RetryOnVolatile, "DescribeTarget: Policy.RetryOnVolatile = false, want true")
+	require.NotNil(t, e.Policy, "EvaluateTarget: Policy is nil, want TrackVolatile=true")
+	assert.True(t, e.Policy.RetryOnVolatile, "EvaluateTarget: Policy.RetryOnVolatile = false, want true")
 }
 
-func TestDescribeEvaluatedProjects_Shape(t *testing.T) {
+func TestEvaluateProjects_Shape(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
-	out, err := ws.DescribeEvaluatedProjects(context.Background())
-	require.NoError(t, err, "DescribeEvaluatedProjects")
+	out, err := ws.EvaluateProjects(context.Background())
+	require.NoError(t, err, "EvaluateProjects")
 
-	assert.NotEmpty(t, out.Definition, "DescribeEvaluatedProjects: Definition is empty")
+	assert.NotEmpty(t, out.Definition, "EvaluateProjects: Definition is empty")
 	wantPaths := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Equal(t, len(wantPaths), out.Count, "DescribeEvaluatedProjects: Count")
-	assert.Equal(t, ws.Root(), out.Workspace, "DescribeEvaluatedProjects: Workspace")
-	byPath := make(map[string]types.EvaluatedProjectEntry, len(out.Projects))
+	assert.Equal(t, len(wantPaths), out.Count, "EvaluateProjects: Count")
+	assert.Equal(t, ws.Root(), out.Workspace, "EvaluateProjects: Workspace")
+	byPath := make(map[string]types.EvaluatedProject, len(out.Projects))
 	for _, e := range out.Projects {
 		byPath[e.Path] = e
 	}
 	for _, p := range wantPaths {
 		_, ok := byPath[p]
-		assert.Truef(t, ok, "DescribeEvaluatedProjects: project %q missing from output", p)
+		assert.Truef(t, ok, "EvaluateProjects: project %q missing from output", p)
 	}
 }
 
-func TestDescribeEvaluatedProjects_WorkspaceRootedSources(t *testing.T) {
+func TestEvaluateProjects_WorkspaceRootedSources(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-ep-spell"
 	spell := spells.NewSpell(spellName, spells.WithSources("**/*.ep"))
@@ -388,45 +388,43 @@ func TestDescribeEvaluatedProjects_WorkspaceRootedSources(t *testing.T) {
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Inspect")
 
-	out, err := ws.DescribeEvaluatedProjects(context.Background())
-	require.NoError(t, err, "DescribeEvaluatedProjects")
+	out, err := ws.EvaluateProjects(context.Background())
+	require.NoError(t, err, "EvaluateProjects")
 
-	var apiEntry *types.EvaluatedProjectEntry
+	var apiEntry *types.EvaluatedProject
 	for i := range out.Projects {
 		if out.Projects[i].Path == "api" {
 			apiEntry = &out.Projects[i]
 			break
 		}
 	}
-	require.NotNil(t, apiEntry, "DescribeEvaluatedProjects: \"api\" project missing from output")
+	require.NotNil(t, apiEntry, "EvaluateProjects: \"api\" project missing from output")
 
 	// Sources must be workspace-rooted ("api/**/*.ep"), not project-relative.
 	assert.NotContains(t, apiEntry.Sources, "**/*.ep",
-		"DescribeEvaluatedProjects: Sources contains project-relative glob, want workspace-rooted \"api/**/*.ep\"")
+		"EvaluateProjects: Sources contains project-relative glob, want workspace-rooted \"api/**/*.ep\"")
 	assert.Contains(t, apiEntry.Sources, "api/**/*.ep",
-		"DescribeEvaluatedProjects: expected \"api/**/*.ep\" in Sources")
+		"EvaluateProjects: expected \"api/**/*.ep\" in Sources")
 }
 
-func TestDescribeWorkspaces_SingleWorkspace(t *testing.T) {
+func TestWorkspace_SingleWorkspace(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
 	cfg := types.WorkspaceConfig{CacheDir: "/tmp/cache-test", Concurrency: 4}
-	out, err := ws.DescribeWorkspaces(context.Background(), cfg)
-	require.NoError(t, err, "DescribeWorkspaces")
+	entry, err := ws.Workspace(context.Background(), cfg)
+	require.NoError(t, err, "Workspace")
 
-	require.Len(t, out, 1, "DescribeWorkspaces: one entry")
-	entry := out[0]
 	assert.Equal(t, ws.Root(), entry.Root, "Root")
 	assert.Equal(t, cfg.CacheDir, entry.CacheDir, "CacheDir")
 	assert.Equal(t, cfg.Concurrency, entry.Concurrency, "Concurrency")
 	assert.NotZero(t, entry.ProjectCount, "ProjectCount = 0, want > 0")
 }
 
-// TestDescribeFiles_Classification covers the roles end to end: a declared
+// TestClassifyFiles_Classification covers the roles end to end: a declared
 // output, a declared source, an unclaimed path, and nested-project ownership.
 // Globs come from registered spells, the same channel real projects declare
 // them through.
-func TestDescribeFiles_Classification(t *testing.T) {
+func TestClassifyFiles_Classification(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
 	const rootSpell, webSpell = "zzz-df-root", "zzz-df-web"
 	project.DefaultSpellRegistry().RegisterSpell(
@@ -450,8 +448,8 @@ func TestDescribeFiles_Classification(t *testing.T) {
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Inspect")
 
-	out, err := ws.DescribeFiles(context.Background(), []string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz"})
-	require.NoError(t, err, "DescribeFiles")
+	out, err := ws.ClassifyFiles(context.Background(), []string{"GEN.md", "docs/guide.md", "web/dist/app.js", "web/app.ts", "scratch.tmp", "./web/magusfile.buzz"})
+	require.NoError(t, err, "ClassifyFiles")
 	require.Len(t, out, 6)
 	byPath := map[string]types.FileEntry{}
 	for _, f := range out {
@@ -485,8 +483,8 @@ func TestDescribeFiles_Classification(t *testing.T) {
 	assert.Equal(t, "source", byPath["web/magusfile.buzz"].Role)
 }
 
-// TestDescribeMethods_HonorCancelledContext pins that a context cancelled BEFORE a
-// Describe* method's outer walk begins is REPORTED, not silently swallowed: the
+// TestInspectorMethods_HonorCancelledContext pins that a context cancelled BEFORE
+// an Inspector method's outer walk begins is REPORTED, not silently swallowed: the
 // method returns a non-nil error satisfying errors.Is(err, context.Canceled)
 // together with the zero value of its result type. A truncated-but-returned result
 // (e.g. Count: 3 out of 50 projects) is indistinguishable from a genuinely small
@@ -494,7 +492,7 @@ func TestDescribeFiles_Classification(t *testing.T) {
 // cancelled case here asserts BOTH halves: the error, and that nothing rides along
 // with it. Table-driven over all nine methods.
 //
-// DescribeCharms and DescribeTargets build one unconditional entry (the reserved
+// ListCharms and ListTargets build one unconditional entry (the reserved
 // charms; the canonical "ci" target) before their per-project walk starts, so their
 // cases use a dedicated spell+target fixture: the live control proves the per-project
 // walk actually ran (the fixture's charm/target is present), which the cancelled case
@@ -503,7 +501,7 @@ func TestDescribeFiles_Classification(t *testing.T) {
 // Each case also runs the same call against a live context as a positive control:
 // without it, a method broken to unconditionally error would pass the cancelled case
 // for the wrong reason.
-func TestDescribeMethods_HonorCancelledContext(t *testing.T) {
+func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
 	cancelledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -511,7 +509,7 @@ func TestDescribeMethods_HonorCancelledContext(t *testing.T) {
 
 	ws := newWorkspace(t)
 
-	// DescribeCharms/DescribeTargets need a project that actually USES a declared
+	// ListCharms/ListTargets need a project that actually USES a declared
 	// spell, or their per-project walk contributes nothing even when it runs to
 	// completion - making the live case pass by coincidence rather than because the
 	// walk executed.
@@ -528,7 +526,7 @@ func TestDescribeMethods_HonorCancelledContext(t *testing.T) {
 	reg.RegisterProject(".", WithSpell(spellName))
 	spellWs := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
 
-	hasCharm := func(entries []types.CharmEntry, name string) bool {
+	hasCharm := func(entries []types.Charm, name string) bool {
 		for _, e := range entries {
 			if e.Name == name {
 				return true
@@ -551,133 +549,133 @@ func TestDescribeMethods_HonorCancelledContext(t *testing.T) {
 		live      func(t *testing.T)
 	}{
 		{
-			name: "DescribeSpells",
+			name: "ListSpells",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeSpells(cancelledCtx)
-				require.Error(t, err, "DescribeSpells")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeSpells error")
-				assert.Nil(t, out, "DescribeSpells entries")
+				out, err := ListSpells(cancelledCtx)
+				require.Error(t, err, "ListSpells")
+				assert.ErrorIs(t, err, context.Canceled, "ListSpells error")
+				assert.Nil(t, out, "ListSpells entries")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeSpells(liveCtx)
-				require.NoError(t, err, "DescribeSpells")
+				out, err := ListSpells(liveCtx)
+				require.NoError(t, err, "ListSpells")
 				assert.NotEmpty(t, out)
 			},
 		},
 		{
-			name: "DescribeCharms",
+			name: "ListCharms",
 			cancelled: func(t *testing.T) {
-				out, err := spellWs.DescribeCharms(cancelledCtx, nil)
-				require.Error(t, err, "DescribeCharms")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeCharms error")
-				assert.Nil(t, out, "DescribeCharms entries")
+				out, err := spellWs.ListCharms(cancelledCtx)
+				require.Error(t, err, "ListCharms")
+				assert.ErrorIs(t, err, context.Canceled, "ListCharms error")
+				assert.Nil(t, out, "ListCharms entries")
 			},
 			live: func(t *testing.T) {
-				out, err := spellWs.DescribeCharms(liveCtx, nil)
-				require.NoError(t, err, "DescribeCharms")
+				out, err := spellWs.ListCharms(liveCtx)
+				require.NoError(t, err, "ListCharms")
 				assert.True(t, hasCharm(out, customCharm), "declared charm missing from a live walk")
 			},
 		},
 		{
-			name: "DescribeTargets",
+			name: "ListTargets",
 			cancelled: func(t *testing.T) {
-				out, err := spellWs.DescribeTargets(cancelledCtx)
-				require.Error(t, err, "DescribeTargets")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeTargets error")
-				assert.Nil(t, out, "DescribeTargets entries")
+				out, err := spellWs.ListTargets(cancelledCtx)
+				require.Error(t, err, "ListTargets")
+				assert.ErrorIs(t, err, context.Canceled, "ListTargets error")
+				assert.Nil(t, out, "ListTargets entries")
 			},
 			live: func(t *testing.T) {
-				out, err := spellWs.DescribeTargets(liveCtx)
-				require.NoError(t, err, "DescribeTargets")
+				out, err := spellWs.ListTargets(liveCtx)
+				require.NoError(t, err, "ListTargets")
 				assert.True(t, hasTarget(out, customTarget), "custom target missing from a live walk")
 			},
 		},
 		{
-			name: "DescribeProjects",
+			name: "ListProjects",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeProjects(cancelledCtx)
-				require.Error(t, err, "DescribeProjects")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeProjects error")
-				assert.Zero(t, out, "DescribeProjects result")
+				out, err := ws.ListProjects(cancelledCtx)
+				require.Error(t, err, "ListProjects")
+				assert.ErrorIs(t, err, context.Canceled, "ListProjects error")
+				assert.Zero(t, out, "ListProjects result")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeProjects(liveCtx)
-				require.NoError(t, err, "DescribeProjects")
+				out, err := ws.ListProjects(liveCtx)
+				require.NoError(t, err, "ListProjects")
 				assert.NotEmpty(t, out.Projects, "Projects")
 				assert.NotZero(t, out.Count, "Count")
 			},
 		},
 		{
-			name: "DescribeEvaluatedProjects",
+			name: "EvaluateProjects",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeEvaluatedProjects(cancelledCtx)
-				require.Error(t, err, "DescribeEvaluatedProjects")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeEvaluatedProjects error")
-				assert.Zero(t, out, "DescribeEvaluatedProjects result")
+				out, err := ws.EvaluateProjects(cancelledCtx)
+				require.Error(t, err, "EvaluateProjects")
+				assert.ErrorIs(t, err, context.Canceled, "EvaluateProjects error")
+				assert.Zero(t, out, "EvaluateProjects result")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeEvaluatedProjects(liveCtx)
-				require.NoError(t, err, "DescribeEvaluatedProjects")
+				out, err := ws.EvaluateProjects(liveCtx)
+				require.NoError(t, err, "EvaluateProjects")
 				assert.NotEmpty(t, out.Projects, "Projects")
 				assert.NotZero(t, out.Count, "Count")
 			},
 		},
 		{
-			name: "DescribeFiles",
+			name: "ClassifyFiles",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeFiles(cancelledCtx, []string{"magusfile.buzz", "api/magusfile.buzz"})
-				require.Error(t, err, "DescribeFiles")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeFiles error")
-				assert.Nil(t, out, "DescribeFiles entries")
+				out, err := ws.ClassifyFiles(cancelledCtx, []string{"magusfile.buzz", "api/magusfile.buzz"})
+				require.Error(t, err, "ClassifyFiles")
+				assert.ErrorIs(t, err, context.Canceled, "ClassifyFiles error")
+				assert.Nil(t, out, "ClassifyFiles entries")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeFiles(liveCtx, []string{"magusfile.buzz", "api/magusfile.buzz"})
-				require.NoError(t, err, "DescribeFiles")
+				out, err := ws.ClassifyFiles(liveCtx, []string{"magusfile.buzz", "api/magusfile.buzz"})
+				require.NoError(t, err, "ClassifyFiles")
 				assert.Len(t, out, 2)
 			},
 		},
 		{
-			name: "DescribeGraph",
+			name: "TargetGraph",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeGraph(cancelledCtx)
-				require.Error(t, err, "DescribeGraph")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeGraph error")
-				assert.Zero(t, out, "DescribeGraph result")
+				out, err := ws.TargetGraph(cancelledCtx)
+				require.Error(t, err, "TargetGraph")
+				assert.ErrorIs(t, err, context.Canceled, "TargetGraph error")
+				assert.Zero(t, out, "TargetGraph result")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeGraph(liveCtx)
-				require.NoError(t, err, "DescribeGraph")
+				out, err := ws.TargetGraph(liveCtx)
+				require.NoError(t, err, "TargetGraph")
 				assert.NotEmpty(t, out.Projects)
 			},
 		},
 		{
-			name: "DescribeTarget",
+			name: "EvaluateTarget",
 			cancelled: func(t *testing.T) {
-				out, err := ws.DescribeTarget(cancelledCtx, types.Target{Name: "build"})
-				require.Error(t, err, "DescribeTarget")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeTarget error")
-				assert.Nil(t, out, "DescribeTarget entries")
+				out, err := ws.EvaluateTarget(cancelledCtx, types.Target{Name: "build"})
+				require.Error(t, err, "EvaluateTarget")
+				assert.ErrorIs(t, err, context.Canceled, "EvaluateTarget error")
+				assert.Nil(t, out, "EvaluateTarget entries")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.DescribeTarget(liveCtx, types.Target{Name: "build"})
-				require.NoError(t, err, "DescribeTarget")
+				out, err := ws.EvaluateTarget(liveCtx, types.Target{Name: "build"})
+				require.NoError(t, err, "EvaluateTarget")
 				assert.NotEmpty(t, out)
 			},
 		},
 		{
-			name: "DescribeWorkspaces",
+			name: "Workspace",
 			cancelled: func(t *testing.T) {
 				cfg := types.WorkspaceConfig{CacheDir: "/tmp/cache-test", Concurrency: 4}
-				out, err := ws.DescribeWorkspaces(cancelledCtx, cfg)
-				require.Error(t, err, "DescribeWorkspaces")
-				assert.ErrorIs(t, err, context.Canceled, "DescribeWorkspaces error")
-				assert.Nil(t, out, "DescribeWorkspaces entries")
+				out, err := ws.Workspace(cancelledCtx, cfg)
+				require.Error(t, err, "Workspace")
+				assert.ErrorIs(t, err, context.Canceled, "Workspace error")
+				assert.Zero(t, out, "Workspace entry")
 			},
 			live: func(t *testing.T) {
 				cfg := types.WorkspaceConfig{CacheDir: "/tmp/cache-test", Concurrency: 4}
-				out, err := ws.DescribeWorkspaces(liveCtx, cfg)
-				require.NoError(t, err, "DescribeWorkspaces")
-				assert.Len(t, out, 1)
+				out, err := ws.Workspace(liveCtx, cfg)
+				require.NoError(t, err, "Workspace")
+				assert.NotZero(t, out.ProjectCount)
 			},
 		},
 	}
@@ -690,12 +688,12 @@ func TestDescribeMethods_HonorCancelledContext(t *testing.T) {
 	}
 }
 
-// TestDescribeTarget_ReportsPerTargetOutputs pins that a target's description
+// TestEvaluateTarget_ReportsPerTargetOutputs pins that a target's description
 // carries the target's OWN declared outputs. It read the project-wide globs
 // before, so a target whose outputs come from ctx.outputs described itself as
 // producing nothing - the described plan disagreed with what the cache keys and
 // snapshots, which is the one thing this command exists to show.
-func TestDescribeTarget_ReportsPerTargetOutputs(t *testing.T) {
+func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -708,20 +706,20 @@ func TestDescribeTarget_ReportsPerTargetOutputs(t *testing.T) {
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	out, err := m.DescribeTarget(context.Background(), types.Target{Name: "generate"})
-	require.NoError(t, err, "DescribeTarget")
+	out, err := m.EvaluateTarget(context.Background(), types.Target{Name: "generate"})
+	require.NoError(t, err, "EvaluateTarget")
 	require.Len(t, out, 1)
 	assert.Equal(t, []string{"GEN.md"}, out[0].Outputs,
 		"a per-target ctx.outputs glob belongs in that target's own description")
 }
 
-// TestDescribeFiles_PerTargetOutputs pins the classification against the whole
+// TestClassifyFiles_PerTargetOutputs pins the classification against the whole
 // declared set, not the project-wide globs alone. A file declared only by a
 // per-target ctx.outputs is generated by every other consumer's reckoning (clean
 // removes it, the merge driver regenerates it), so reporting it as a source told
 // an agent it was safe to hand-edit the one file it must never hand-edit. This
 // repo's own root MAGUS.md is declared exactly this way.
-func TestDescribeFiles_PerTargetOutputs(t *testing.T) {
+func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -734,8 +732,8 @@ func TestDescribeFiles_PerTargetOutputs(t *testing.T) {
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	out, err := m.DescribeFiles(context.Background(), []string{"GEN.md"})
-	require.NoError(t, err, "DescribeFiles")
+	out, err := m.ClassifyFiles(context.Background(), []string{"GEN.md"})
+	require.NoError(t, err, "ClassifyFiles")
 	require.Len(t, out, 1)
 	assert.Equal(t, types.FileEntry{
 		Path:     "GEN.md",

@@ -407,7 +407,7 @@ func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target s
 	// own; a cancelled ctx here just drops the graph-derived entries from the
 	// predicate (the spell-derived ones added below still make it usable), rather
 	// than failing a caller that never signed up to handle this.
-	if graph, err := m.DescribeGraph(ctx); err == nil {
+	if graph, err := m.TargetGraph(ctx); err == nil {
 		for _, p := range graph.Projects {
 			for _, n := range p.Nodes {
 				add(p.Path, n.Name)
@@ -562,7 +562,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		for i, a := range artifacts {
 			paths[i] = a.Path
 		}
-		roles, err := m.DescribeFiles(ctx, paths)
+		roles, err := m.ClassifyFiles(ctx, paths)
 		if err != nil {
 			return err
 		}

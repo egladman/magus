@@ -3,6 +3,14 @@ package types
 import "github.com/egladman/magus/spells"
 
 // Describe-output types and the concept definitions printed by "magus describe".
+//
+// Naming rule for this file: a type carries the `Entry` suffix (CharmEntry -> now
+// Charm is the exception that PROVES it; see below) only when a bare name of that
+// type already exists and would collide - ProjectEntry (types.Project),
+// TargetEntry (types.Target), WorkspaceEntry (types.Workspace), SpellEntry
+// (spells.Spell), FileEntry (types.File is reserved for a future promoted path
+// type). Where no such collision exists, the bare name wins: Charm,
+// EvaluatedProject, EvaluatedTarget, EvaluatedSpell.
 
 // SpellDefinition is the human-readable description of a spell shown by "magus describe spells".
 const SpellDefinition = "A spell is a language/runtime adapter that " +
@@ -84,10 +92,10 @@ const CharmDefinition = "A charm is a named, shared execution modifier applied a
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
 	"never which target or project runs. See docs/charms.md."
 
-// CharmEntry is one charm in the inverse index: its name, whether it is a reserved
+// Charm is one charm in the inverse index: its name, whether it is a reserved
 // built-in or a workspace default, its built-in doc (empty for a spell-defined
 // charm), and every target that declares a patch for it.
-type CharmEntry struct {
+type Charm struct {
 	Name         string             `json:"name"                   yaml:"name"`
 	Builtin      bool               `json:"builtin,omitempty"      yaml:"builtin,omitempty"`
 	Default      bool               `json:"default,omitempty"      yaml:"default,omitempty"`
@@ -440,10 +448,17 @@ type ProjectEntry struct {
 	// human label has to prefer it over the directory basename - without it,
 	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
 	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
-	Name      string   `json:"name,omitempty"      yaml:"name,omitempty"`
-	Dir       string   `json:"dir"                 yaml:"dir"`
-	Spell     string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
-	Spells    []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
+	Name   string   `json:"name,omitempty"      yaml:"name,omitempty"`
+	Dir    string   `json:"dir"                 yaml:"dir"`
+	Spell  string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
+	Spells []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
+	// Sources and Outputs are the DECLARED globs, project-relative (as written in
+	// the magusfile/spell). EvaluatedProject populates these same fields (via its
+	// embedded ProjectEntry) with the RESOLVED, workspace-rooted globs instead
+	// (joined against the project path, plus the magusfile's own globs folded into
+	// Sources) - the same name, a different representation, because the evaluated
+	// view answers "what does the cache key actually see" rather than "what was
+	// written".
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
@@ -555,8 +570,8 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"target-specific sources and effective claims after weight/add/remove resolution), " +
 	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
-// EvaluatedSpellEntry is one spell's contribution to an evaluated target.
-type EvaluatedSpellEntry struct {
+// EvaluatedSpell is one spell's contribution to an evaluated target.
+type EvaluatedSpell struct {
 	Name            string   `json:"name"                        yaml:"name"`
 	TargetSources   []string `json:"target_sources,omitempty"    yaml:"target_sources,omitempty"`
 	EffectiveClaims []string `json:"effective_claims,omitempty"  yaml:"effective_claims,omitempty"`
@@ -584,38 +599,77 @@ type EvaluatedSpellEntry struct {
 	Service *spells.ServiceView `json:"service,omitempty" yaml:"service,omitempty"`
 }
 
-// EvaluatedTargetEntry is the fully-resolved view of a single path:target pair.
-type EvaluatedTargetEntry struct {
-	Project   string                `json:"project"             yaml:"project"`
-	Target    string                `json:"target"              yaml:"target"`
-	Dir       string                `json:"dir"                 yaml:"dir"`
-	Sources   []string              `json:"sources,omitempty"    yaml:"sources,omitempty"`
-	Outputs   []string              `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
-	DependsOn []string              `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	Charms    []string              `json:"charms,omitempty"     yaml:"charms,omitempty"`
-	Spells    []EvaluatedSpellEntry `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
-	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
+// EvaluatedTarget is the fully-resolved view of a single path:target pair.
+type EvaluatedTarget struct {
+	Project   string           `json:"project"             yaml:"project"`
+	Target    string           `json:"target"              yaml:"target"`
+	Dir       string           `json:"dir"                 yaml:"dir"`
+	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
+	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
+	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`
+	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
+	Exclusive bool             `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 
-// EvaluatedProjectEntry is the fully-resolved view of a project.
-type EvaluatedProjectEntry struct {
-	Path           string                `json:"path"                       yaml:"path"`
-	Dir            string                `json:"dir"                        yaml:"dir"`
-	Sources        []string              `json:"sources,omitempty"          yaml:"sources,omitempty"`
-	Outputs        []string              `json:"outputs,omitempty"          yaml:"outputs,omitempty"`
-	DependsOn      []string              `json:"depends_on,omitempty"       yaml:"depends_on,omitempty"`
-	Spells         []EvaluatedSpellEntry `json:"spells,omitempty"           yaml:"spells,omitempty"`
-	TargetPolicies map[string]Target     `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
-	Exclusive      bool                  `json:"exclusive,omitempty"        yaml:"exclusive,omitempty"`
+// EvaluatedProject is the fully-resolved view of a project: every ProjectEntry
+// fact (Name and Spell included - embedding rather than restating them makes
+// "evaluated = declared + resolution" a compile-time fact) plus the resolution
+// fields resolving it adds. ResolvedSpells is deliberately not named Spells: that
+// name means DECLARED spell names on ProjectEntry.Spells and would mean RESOLVED
+// spell steps here - one field name for two different facts.
+//
+// The embedded ProjectEntry's Sources/Outputs are populated with the RESOLVED,
+// workspace-rooted globs (see the field comment on ProjectEntry.Sources), not the
+// declared project-relative ones ListProjects reports - the one deliberate
+// exception to "same values ListProjects builds" for the rest of the embed.
+type EvaluatedProject struct {
+	ProjectEntry
+	ResolvedSpells []EvaluatedSpell  `json:"resolved_spells,omitempty" yaml:"resolved_spells,omitempty"`
+	TargetPolicies map[string]Target `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
+}
+
+// ToMap is the Buzz boundary map for one evaluated project. Written explicitly
+// rather than left to the ToMap ProjectEntry promotes: an embedded ProjectEntry's
+// ToMap is promoted onto EvaluatedProject too, which would satisfy host.Mapper
+// (host/helpers.go) while emitting only the declared half and silently dropping
+// ResolvedSpells/TargetPolicies. EvaluatedProject is not on the Buzz mirror
+// allowlist and no std/ host method returns it today, so nothing calls this yet -
+// it exists to keep that latent trap from going live if one ever does. Neither
+// EvaluatedSpell nor Target (whose zero value serves double duty as a per-target
+// policy - see Target's identity-fields comment) has its own ToMap, so their
+// fields are read directly rather than through a promoted-in-the-same-way call.
+func (p EvaluatedProject) ToMap() map[string]any {
+	m := p.ProjectEntry.ToMap()
+	spells := make([]any, len(p.ResolvedSpells))
+	for i, s := range p.ResolvedSpells {
+		spells[i] = map[string]any{
+			"name":            s.Name,
+			"targetSources":   buzzList(s.TargetSources),
+			"effectiveClaims": buzzList(s.EffectiveClaims),
+			"claimWeight":     s.ClaimWeight,
+		}
+	}
+	policies := make(map[string]any, len(p.TargetPolicies))
+	for name, t := range p.TargetPolicies {
+		policies[name] = map[string]any{
+			"skipCache": t.SkipCache,
+			"exclusive": t.Exclusive,
+			"slots":     t.Slots,
+		}
+	}
+	m["resolvedSpells"] = spells
+	m["targetPolicies"] = policies
+	return m
 }
 
 // EvaluatedProjectsOutput is the top-level result for "describe projects --evaluated".
 type EvaluatedProjectsOutput struct {
-	Definition string                  `json:"definition" yaml:"definition"`
-	Workspace  string                  `json:"workspace"  yaml:"workspace"`
-	Count      int                     `json:"count"      yaml:"count"`
-	Projects   []EvaluatedProjectEntry `json:"projects"   yaml:"projects"`
+	Definition string             `json:"definition" yaml:"definition"`
+	Workspace  string             `json:"workspace"  yaml:"workspace"`
+	Count      int                `json:"count"      yaml:"count"`
+	Projects   []EvaluatedProject `json:"projects"   yaml:"projects"`
 }
 
 // WorkspaceDefinition is the human-readable description of a workspace shown by "magus describe workspaces".
@@ -633,7 +687,7 @@ type WorkspaceEntry struct {
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
 }
 
-// WorkspaceConfig carries infrastructure details for DescribeWorkspaces
+// WorkspaceConfig carries infrastructure details for Inspector.Workspace
 // that are not part of the WorkspaceRepository interface (cache path,
 // concurrency).
 type WorkspaceConfig struct {
@@ -671,13 +725,13 @@ type FileEntry struct {
 }
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
-// count, items} envelope `magus describe ... -o json` emits. The Describer method
+// count, items} envelope `magus describe ... -o json` emits. The Inspector method
 // hands back a plain slice and the caller that is actually serializing wraps it
 // here, so both the CLI and the MCP handler emit the same JSON without either of
 // them owning the shape.
 //
 // Two methods are NOT on this pattern, and it is worth knowing which before adding
-// a third: DescribeProjects and DescribeEvaluatedProjects still return
+// a third: ListProjects and EvaluateProjects still return
 // ProjectsOutput / EvaluatedProjectsOutput. Both carry a real Workspace field, so
 // their envelope is not purely derivable the way {constant, len(), items} is, and
 // converting them would mean returning a slice plus an out-of-band workspace root.
@@ -702,16 +756,16 @@ type FileReport struct {
 
 // CharmReport is the "describe charm[s]" envelope.
 type CharmReport struct {
-	Definition string       `json:"definition" yaml:"definition"`
-	Count      int          `json:"count"      yaml:"count"`
-	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
+	Definition string  `json:"definition" yaml:"definition"`
+	Count      int     `json:"count"      yaml:"count"`
+	Charms     []Charm `json:"charms"     yaml:"charms"`
 }
 
 // EvaluatedTargetReport is the "describe target <path:target>" envelope.
 type EvaluatedTargetReport struct {
-	Definition string                 `json:"definition" yaml:"definition"`
-	Count      int                    `json:"count"      yaml:"count"`
-	Targets    []EvaluatedTargetEntry `json:"targets"    yaml:"targets"`
+	Definition string            `json:"definition" yaml:"definition"`
+	Count      int               `json:"count"      yaml:"count"`
+	Targets    []EvaluatedTarget `json:"targets"    yaml:"targets"`
 }
 
 // TargetReport is the "describe target[s]" envelope.

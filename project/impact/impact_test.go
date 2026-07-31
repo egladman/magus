@@ -11,7 +11,7 @@ import (
 )
 
 // fakeWorkspace implements just the types.WorkspaceRepository surface the impact
-// engine touches (Affected, AffectedFromPaths, Get, DescribeTargets). Embedding the
+// engine touches (Affected, AffectedFromPaths, Get, ListTargets). Embedding the
 // interface leaves every other method nil - the engine never calls them.
 type fakeWorkspace struct {
 	types.WorkspaceRepository
@@ -30,7 +30,7 @@ func (f *fakeWorkspace) AffectedFromPaths(context.Context, []string) (*types.Aff
 
 func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path] }
 
-func (f *fakeWorkspace) DescribeTargets(context.Context) ([]types.TargetEntry, error) {
+func (f *fakeWorkspace) ListTargets(context.Context) ([]types.TargetEntry, error) {
 	return f.targets, nil
 }
 

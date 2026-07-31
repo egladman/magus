@@ -182,7 +182,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	if err != nil {
 		return err
 	}
-	out, err := ws.DescribeGraph(ctx)
+	out, err := ws.TargetGraph(ctx)
 	if err != nil {
 		return err
 	}

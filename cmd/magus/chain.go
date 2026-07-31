@@ -311,7 +311,7 @@ func artifactRoles(ctx context.Context, m *magus.Magus, artifacts []magus.Target
 	for i, a := range artifacts {
 		paths[i] = a.Path
 	}
-	roles, err := m.DescribeFiles(ctx, paths)
+	roles, err := m.ClassifyFiles(ctx, paths)
 	if err != nil {
 		return nil, err
 	}

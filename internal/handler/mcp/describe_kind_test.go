@@ -53,33 +53,32 @@ func TestDescribeProjectByPath(t *testing.T) {
 	})
 }
 
-// fakeDescriber records the Target passed to DescribeTarget so a test can assert
-// how a name param was parsed; every other Describer method is an unused stub.
+// fakeDescriber records the Target passed to EvaluateTarget so a test can assert
+// how a name param was parsed; every other Inspector method is an unused stub.
 type fakeDescriber struct{ gotTarget types.Target }
 
-func (f *fakeDescriber) DescribeSpells(context.Context) ([]types.SpellEntry, error) { return nil, nil }
-func (f *fakeDescriber) DescribeCharms(context.Context, []string) ([]types.CharmEntry, error) {
+func (f *fakeDescriber) ListCharms(context.Context) ([]types.Charm, error) {
 	return nil, nil
 }
-func (f *fakeDescriber) DescribeTargets(context.Context) ([]types.TargetEntry, error) { return nil, nil }
-func (f *fakeDescriber) DescribeGraph(context.Context) (types.TargetGraphOutput, error) {
+func (f *fakeDescriber) ListTargets(context.Context) ([]types.TargetEntry, error) { return nil, nil }
+func (f *fakeDescriber) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	return types.TargetGraphOutput{}, nil
 }
-func (f *fakeDescriber) DescribeProjects(context.Context) (types.ProjectsOutput, error) {
+func (f *fakeDescriber) ListProjects(context.Context) (types.ProjectsOutput, error) {
 	return types.ProjectsOutput{}, nil
 }
-func (f *fakeDescriber) DescribeWorkspaces(context.Context, types.WorkspaceConfig) ([]types.WorkspaceEntry, error) {
-	return nil, nil
+func (f *fakeDescriber) Workspace(context.Context, types.WorkspaceConfig) (types.WorkspaceEntry, error) {
+	return types.WorkspaceEntry{}, nil
 }
-func (f *fakeDescriber) DescribeEvaluatedProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
+func (f *fakeDescriber) EvaluateProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
 	return types.EvaluatedProjectsOutput{}, nil
 }
-func (f *fakeDescriber) DescribeFiles(context.Context, []string) ([]types.FileEntry, error) {
+func (f *fakeDescriber) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
 	return nil, nil
 }
-func (f *fakeDescriber) DescribeTarget(ctx context.Context, target types.Target) ([]types.EvaluatedTargetEntry, error) {
+func (f *fakeDescriber) EvaluateTarget(ctx context.Context, target types.Target) ([]types.EvaluatedTarget, error) {
 	f.gotTarget = target
-	return []types.EvaluatedTargetEntry{{}}, nil
+	return []types.EvaluatedTarget{{}}, nil
 }
 
 func TestDescribeTargetByName(t *testing.T) {
@@ -113,7 +112,7 @@ func TestDescribeTargetByName(t *testing.T) {
 // graph and modules were reachable on the CLI but not over MCP, so an agent with
 // only MCP could not discover what charms exist, could not see the target DAG, and
 // could not introspect the Buzz stdlib at all. Two of the three were already on the
-// Describer interface the tool holds - the capability was in hand and unswitched.
+// Inspector interface the tool holds - the capability was in hand and unswitched.
 func TestDescribeKindCoversEveryCLINoun(t *testing.T) {
 	tool := &describeKindTool{ws: &fakeDescriber{}}
 	for _, kind := range []string{"spells", "charms", "targets", "graph", "projects", "workspaces", "modules", "mcp_tools"} {

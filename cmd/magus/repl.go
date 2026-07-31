@@ -91,7 +91,7 @@ func replCandidates(ctx context.Context, cwd string) func() []string {
 			// Best-effort completion candidates: this closure has no error path of its
 			// own (it feeds a completer, not a command), so a cancelled ctx here just
 			// means fewer candidates offered, not a failed Tab press.
-			if targets, err := m.DescribeTargets(ctx); err == nil {
+			if targets, err := m.ListTargets(ctx); err == nil {
 				for _, t := range targets {
 					cached = append(cached, t.Name)
 				}

@@ -15,7 +15,7 @@ import (
 // TestInspect_TargetPolicyNamingUnknownTarget exercises the A4 fix end to end,
 // through a real magusfile evaluated by the linked Buzz interpreter (cmd/magus
 // blank-imports internal/interp/bindings via packs_interp.go, unlike the bare
-// library's own test suite - see TestDescribeTargets_CustomTargets in the root
+// library's own test suite - see TestListTargets_CustomTargets in the root
 // package). A per-target policy naming a target the project declares nowhere
 // (neither a custom export fun nor a spell op) must fail Inspect with an
 // actionable error instead of silently producing a phantom target.
