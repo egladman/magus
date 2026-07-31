@@ -306,15 +306,19 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						extra = append(extra, r)
 					}
 				}
-				// A skip_cache target has no cache key, so there is no stale hit to
-				// prevent and the literal-argument rule has nothing to protect. Enforcing
-				// it there made a genuinely dynamic target (release-build derives GOOS,
-				// GOARCH and a cgo toolchain from its arguments and the environment)
-				// inexpressible: the value cannot be a literal, and moving it back to an
-				// options table is rejected too. The rule exists for the key, so it ends
-				// where the key does.
-				if n.DynamicIO && !p.TargetPolicies[n.Name].SkipCache {
-					return fmt.Errorf("%s: target %q: ctx.inputs/outputs/updates/withEnv/withCwd take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final e = ctx.withEnv(...); e.withCwd(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+				// Unconditional: the footprint half of the ctx surface is a no-op at run
+				// time, so a computed argument is unreadable rather than merely unread and
+				// the target would cache against a footprint narrower than what it touches.
+				// Scoping this on p.TargetPolicies[...].SkipCache looks equivalent and is
+				// not - policies are only populated when the interpreter evaluates
+				// magus.project(), so on a bare library caller's magus.Open every target
+				// reads as cacheable and a magusfile the CLI loads fine is rejected. The
+				// expressiveness this used to cost (release-build derives GOOS, GOARCH and a
+				// cgo toolchain from its arguments and the environment) is bought back in
+				// describe.flagDynamic, which splits those execution overrides off as
+				// DynamicExec instead.
+				if n.DynamicIO {
+					return fmt.Errorf("%s: target %q: ctx.inputs/outputs/updates/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.inputs(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's

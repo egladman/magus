@@ -237,6 +237,25 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 	assert.Contains(t, err.Error(), "build", "error should name the offending target")
 }
 
+// TestComputedExecOverrideLoadsForALibraryCaller is the negative control for the test
+// above, and the regression guard for a bug only a library caller saw: the same
+// rejection scoped on a per-target skip_cache policy passes on the CLI path (where
+// magus.project() has been evaluated and policies are loaded) and fails everywhere else,
+// because an unevaluated project reads as cacheable. A computed ctx.withEnv is the shape
+// that tripped it - it must load, with or without the interpreter linked in.
+func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
+	root := t.TempDir()
+	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
+    final env = mut {"GOOS": "linux"};
+    go["go-build"](ctx.withEnv(env), {});
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+
+	_, err := Open(context.Background(), root)
+	assert.NoError(t, err, "a computed ctx.withEnv must not be a load error")
+}
+
 func TestDiagCollectorCollects(t *testing.T) {
 	d := &diagCollector{} // nil report writer: Record must still collect
 	d.Record(types.DiagnosticEvent{Unit: "a:build", Code: types.ExecDenied})

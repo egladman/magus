@@ -152,16 +152,15 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// Per-target cache footprint: ctx.inputs(...) / ctx.outputs(...).
 					// Every argument must be a string literal; a non-literal one is not
 					// collected, so len(globs) < len(args) means the call had a computed
-					// argument - flag DynamicIO so the load path can reject it (a computed
-					// glob is invisible to this static read).
+					// argument - flag it so the load path can decide (a computed glob is
+					// invisible to this static read).
 					// A declaration member called on something OTHER than the target's ctx - an
 					// aliased derivation (final e = ctx.withEnv(...); e.withCwd(..)), or a context
-					// parameter named something other than ctx - is invisible to this static read.
-					// Dropping it silently under-declares the cache key, so it is rejected at load
-					// exactly as a computed glob is.
+					// parameter named something other than ctx - is invisible to this static read
+					// in exactly the same way, and is flagged the same way.
 					if me, isMember := e.Callee.(*ast.MemberExpr); isMember && !me.Namespaced &&
 						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
-						node.DynamicIO = true
+						flagDynamic(&node, me.Name)
 					}
 					if kind, globs, ok := ioCall(e); ok {
 						// Record the callee (ctx.inputs) position so UnreachedIO knows this
@@ -170,7 +169,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// recognized counts every argument the static read could attribute:
 						// a string literal, or (for inputs) a <alias>.file("lit") cross ref.
 						// recognized < len(args) means a computed argument slipped through -
-						// flag DynamicIO so the load path rejects it.
+						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
 						case "inputs":
@@ -222,7 +221,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									// ctx.withEnv("K=V"): ioCall already counted the bare
 									// literal, so without this the call looked fully
 									// attributed and contributed nothing to the key.
-									node.DynamicIO = true
+									node.DynamicExec = true
 									continue
 								}
 								recognized++
@@ -230,7 +229,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									ekl, kok := ekn.(*ast.StringLit)
 									evl, vok := m.Values[j].(*ast.StringLit)
 									if !kok || !vok {
-										node.DynamicIO = true
+										node.DynamicExec = true
 										continue
 									}
 									node.ExecOverrides = appendUniq(node.ExecOverrides, "env:"+ekl.Val+"="+evl.Val)
@@ -254,7 +253,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							}
 						}
 						if recognized < len(e.Args) {
-							node.DynamicIO = true
+							flagDynamic(&node, kind)
 						}
 					}
 					// Dotted spell op: handle.op(...), where handle is an imported spell.
@@ -371,6 +370,36 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
 	"inputs": true, "outputs": true, "updates": true, "envInputs": true, "withEnv": true, "withCwd": true,
+}
+
+// ctxExecNames is the execution half of ctxDeclNames: the members that steer HOW an op
+// runs rather than WHAT the target reads and writes.
+var ctxExecNames = map[string]bool{"withEnv": true, "withCwd": true}
+
+// flagDynamic records that a declaration named `kind` carried something the static read
+// could not attribute, split by which half of the surface it belongs to. The two halves
+// earn different treatment, and no condition over runtime policy can tell them apart -
+// policy is only loaded on the CLI path, so scoping on it made a bare library caller's
+// magus.Open reject a magusfile the CLI accepts.
+//
+// A footprint declaration (inputs/outputs/updates/envInputs) is a cache-correctness
+// statement with no runtime counterpart: it is a no-op when the body runs, so a computed
+// argument is not merely unread, it is unreadable, and the target caches against a
+// footprint narrower than what it touches. That is a stale hit, and it stays a hard load
+// error.
+//
+// An execution override (withEnv/withCwd) does take effect at run time whether or not the
+// static read could see it, so a computed one under-declares the key without changing
+// what the op does. That is worth less than the expressiveness it costs: a genuinely
+// derived environment (release-build computes GOOS, GOARCH and a cgo toolchain from its
+// arguments and the process env) cannot be written as a literal at all, so rejecting it
+// makes the target inexpressible rather than making it honest.
+func flagDynamic(node *types.TargetGraphNode, kind string) {
+	if ctxExecNames[kind] {
+		node.DynamicExec = true
+		return
+	}
+	node.DynamicIO = true
 }
 
 // ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED

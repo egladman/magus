@@ -170,7 +170,41 @@ func TestInputsOutputsDynamic(t *testing.T) {
 `)
 	build, _ := nodeByName(g, "build")
 	assert.True(t, build.DynamicIO, "a computed magus.inputs argument must flag DynamicIO")
+	assert.False(t, build.DynamicExec, "a footprint declaration is not an execution override")
 	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, build.Inputs, "literal args are still collected")
+}
+
+// TestExecOverrideDynamic pins the other half of the split: a computed ctx.withEnv /
+// ctx.withCwd sets DynamicExec, NOT DynamicIO, so the load path lets it through. The two
+// flags have to stay apart because the load path cannot tell the cases apart any other
+// way - see describe.flagDynamic.
+func TestExecOverrideDynamic(t *testing.T) {
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    final env = mut {"GOOS": "linux"};
+    final dir = "sub";
+    go["go-build"](ctx.withEnv(env), {});
+    go["go-test"](ctx.withCwd(dir), {});
+}
+`)
+	build, _ := nodeByName(g, "build")
+	assert.True(t, build.DynamicExec, "a computed ctx.withEnv/withCwd argument must flag DynamicExec")
+	assert.False(t, build.DynamicIO, "an execution override must not trip the footprint rejection")
+	assert.Empty(t, build.ExecOverrides, "a computed override contributes nothing to the key")
+}
+
+// TestExecOverrideAliasedIsDynamicExec covers the other route into the flag: a
+// declaration member reached through an alias rather than the target's own ctx is
+// invisible to the static read, and classifies by the member's name exactly as a computed
+// argument does.
+func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
+	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
+    final e = ctx.withEnv({"K": "V"});
+    go["go-build"](e.withCwd("sub"), {});
+}
+`)
+	build, _ := nodeByName(g, "build")
+	assert.True(t, build.DynamicExec, "an aliased withCwd must flag DynamicExec")
+	assert.False(t, build.DynamicIO, "an aliased execution override is not a footprint error")
 }
 
 // TestUnreachedIO pins orphan detection: a ctx.inputs/outputs reached from a target

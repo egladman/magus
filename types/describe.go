@@ -197,11 +197,17 @@ type TargetGraphNode struct {
 	// env is genuinely derived from the environment stay cacheable instead of having to
 	// opt out of the cache entirely.
 	EnvAllow []string `json:"env_allow,omitempty" yaml:"env_allow,omitempty"`
-	// DynamicIO is set when a ctx.inputs/outputs call carries a non-literal
-	// argument. A computed glob is invisible to this static read, so the load path
-	// rejects it loudly rather than silently caching an under-declared footprint.
+	// DynamicIO is set when a ctx.inputs/outputs/updates/envInputs call carries a
+	// non-literal argument. A computed glob is invisible to this static read, so the load
+	// path rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
 	DynamicIO bool `json:"-" yaml:"-" buzz:"-"`
+	// DynamicExec is the execution-side counterpart: a ctx.withEnv / ctx.withCwd whose
+	// argument is not a literal. It is NOT a load error - the override still takes effect
+	// at run time, and a genuinely derived environment cannot be written literally - so it
+	// only records that ExecOverrides is an incomplete view of what the target will run
+	// with. Not serialized, same as DynamicIO.
+	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
 }
 
 // buzzList is the Buzz boundary form of an optional []string: never nil.
