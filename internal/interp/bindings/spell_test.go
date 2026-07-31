@@ -376,17 +376,18 @@ magus.project(".", {"spells": [parity]});`)
 // no-suggestion floor.
 func TestSuggestSpellName(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"typescript", "ts"},
-		{"javascript", "ts"},
-		{"js", "ts"},
-		{"python", "py"},
-		{"rust", "rs"},
-		{"markdown", "md"},
-		{"golang", "go"},
-		{"TypeScript", "ts"}, // alias lookup is case-insensitive
-		{"dcoker", "docker"}, // edit distance
-		{"cosgin", "cosign"}, // edit distance
-		{"zzzzzzzzzz", ""},   // nothing within threshold
+		// Real synonyms. The former rows here - python->py, rust->rs, markdown->md,
+		// golang->go - are gone: each spell now IS the name a user reaches for, so
+		// those imports resolve outright and never reach a suggestion.
+		{"javascript", "typescript"},
+		{"js", "typescript"},
+		{"node", "typescript"},
+		{"cargo", "rust"},
+		{"python3", "python"},
+		{"JavaScript", "typescript"}, // alias lookup is case-insensitive
+		{"dcoker", "docker"},         // edit distance
+		{"cosgin", "cosign"},         // edit distance
+		{"zzzzzzzzzz", ""},           // nothing within threshold
 	}
 	for _, c := range cases {
 		assert.Equalf(t, c.want, suggestSpellName(c.in), "suggestSpellName(%q)", c.in)
@@ -397,15 +398,18 @@ func TestSuggestSpellName(t *testing.T) {
 // and an unknown handle yields a did-you-mean naming the right one.
 func TestCheckSpellImports(t *testing.T) {
 	require.NoError(t, checkSpellImports(nil))
-	require.NoError(t, checkSpellImports([]string{"go", "ts", "md", "magusfile"}),
+	require.NoError(t, checkSpellImports([]string{"go", "typescript", "markdown", "magusfile"}),
 		"built-in and host-registered handles must pass")
 
-	err := checkSpellImports([]string{"go", "typescript"})
+	// javascript is a real SYNONYM for the typescript spell, not an abbreviation of
+	// it - the abbreviation aliases went away when spells took the names users
+	// already reach for.
+	err := checkSpellImports([]string{"go", "javascript"})
 	require.Error(t, err)
 	msg := err.Error()
-	assert.Contains(t, msg, `"typescript"`)
-	assert.Contains(t, msg, `did you mean "ts"`)
-	assert.Contains(t, msg, `import "magus/spell/ts"`)
+	assert.Contains(t, msg, `"javascript"`)
+	assert.Contains(t, msg, `did you mean "typescript"`)
+	assert.Contains(t, msg, `import "magus/spell/typescript"`)
 }
 
 // TestSpellImportSuggestionOnParse is the end-to-end path: a magusfile importing a
@@ -415,13 +419,13 @@ func TestSpellImportSuggestionOnParse(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "magus/spell/typescript";
-magus.project({"spells": [typescript]});
+import "magus/spell/javascript";
+magus.project({"spells": [javascript]});
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `did you mean "ts"`)
+	assert.Contains(t, err.Error(), `did you mean "typescript"`)
 	assert.Contains(t, err.Error(), "magusfile.buzz", "error must name the offending file")
 }
 
@@ -435,14 +439,14 @@ func TestSpellImportCaughtWithTopLevelControlFlow(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
-import "magus/spell/typescript";
+import "magus/spell/javascript";
 if (1 > 0) {}
-magus.project({"spells": [typescript]});
+magus.project({"spells": [javascript]});
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	err := parseMagusfile(t, dir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `did you mean "ts"`,
+	assert.Contains(t, err.Error(), `did you mean "typescript"`,
 		"a top-level statement must not make the check silently skip")
 }
 

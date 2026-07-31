@@ -1,0 +1,9 @@
+// prettier checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    typescript["prettier"](ctx);
+}

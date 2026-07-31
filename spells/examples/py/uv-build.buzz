@@ -1,9 +1,0 @@
-// Wire uv-build into a build target: magus run build forks uv build.
-import "magus";
-import "magus/spell/py";
-
-magus\project({ "spells": [py] });
-
-export fun build(ctx: magus\Context, args: [str]) > void {
-    py["uv-build"](ctx);
-}

@@ -31,14 +31,14 @@ import "render" as renderer;
 // the dependency graph; informational) and does not run in this project's ci, which uses
 // the custom targets below; it just makes the project's TypeScript browsable as symbols.
 import "magus/spell/magusfile";
-import "magus/spell/ts";
+import "magus/spell/typescript";
 // go is imported for its go-run op only (content-generate/changelog-generate drive
 // repo-root Go tools through it), NOT added to the project spells list below: docs is
 // not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
 import "magus/spell/go";
 
 magus\project({
-    "spells": [magusfile, ts],
+    "spells": [magusfile, typescript],
     "depends_on": [".."],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,

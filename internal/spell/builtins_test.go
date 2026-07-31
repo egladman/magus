@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -91,26 +92,26 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		}},
 		{"go", "go-mod-tidy", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 		// py
-		{"py", "pytest", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		{"py", "ruff-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-		{"py", "ruff-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
-		{"py", "ruff-format", "rw", []spells.PatchOp{{Op: "remove", Path: "/3"}}},
+		{"python", "pytest", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		{"python", "ruff-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+		{"python", "ruff-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
+		{"python", "ruff-format", "rw", []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 		// ts
-		{"ts", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
-		{"ts", "vitest", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
-		{"ts", "eslint", "rw", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
-		{"ts", "eslint", "gha", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
-		{"ts", "biome-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
-		{"ts", "biome-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
-		{"ts", "biome-format", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+		{"typescript", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
+		{"typescript", "vitest", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+		{"typescript", "eslint", "rw", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
+		{"typescript", "eslint", "gha", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
+		{"typescript", "biome-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+		{"typescript", "biome-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
+		{"typescript", "biome-format", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 		// md
-		{"md", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
+		{"markdown", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf
 		{"buf", "buf-lint", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 		{"buf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 		// rs — compound charm (two drops): the constructor concat must still yield
 		// remove /2 then remove /1, in that order.
-		{"rs", "cargo-fmt", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
+		{"rust", "cargo-fmt", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 	}
 
 	for _, c := range cases {
@@ -125,12 +126,32 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 // claims, so editing a .mts/.cts/.mjs/.cjs file or bumping a yarn/bun lockfile
 // marks the project affected instead of silently missing it.
 func TestTSRequiredGlobsSupersetOfClaimed(t *testing.T) {
-	ts, ok := Builtins()["ts"]
+	ts, ok := Builtins()["typescript"]
 	require.True(t, ok, "ts spell missing")
 
 	for _, want := range []string{
 		"**/*.mts", "**/*.cts", "**/*.mjs", "**/*.cjs", "yarn.lock", "bun.lockb", "tsconfig*.json",
 	} {
 		assert.Containsf(t, ts.Needs, want, "ts required globs missing %q", want)
+	}
+}
+
+// TestBuiltinTargetNamesAreCanonical guards a hole the decode-time normalization
+// does not cover. Op keys authored in Buzz are canonicalized by Decode, but
+// spells.WithTargets takes whatever a Go caller hands it - and it cannot call
+// types.Normalize, because types imports spells and the reverse would cycle.
+//
+// A non-canonical name here is not a style problem: every request reaching
+// dispatchOp has been kebab-normalized by ParseTarget, and dispatch is a map hit,
+// so a target registered as "goBuild" is looked up as "go-build", missed, and
+// swallowed as a fan-out skip at debug level. Declared, and reachable by nothing.
+// Failing here is how that stays impossible rather than merely unlikely.
+func TestBuiltinTargetNamesAreCanonical(t *testing.T) {
+	for name, d := range Builtins() {
+		assert.Equalf(t, types.Normalize(name), name, "spell %q is not canonically named", name)
+		for _, op := range d.OpNames() {
+			assert.Equalf(t, types.Normalize(op), op,
+				"spell %q op %q is not canonical - it would be unreachable by any request", name, op)
+		}
 	}
 }

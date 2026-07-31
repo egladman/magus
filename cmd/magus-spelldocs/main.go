@@ -53,28 +53,28 @@ var spellMeta = map[string]spellInfo{
 		intro:       "The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`) subcommand directly, with no shell. Lint and vulnerability scanning run as `go tool` invocations so they resolve from the module's tool block rather than PATH.",
 		tags:        []string{"go", "golang", "build", "test", "lint"},
 	},
-	"rs": {
+	"rust": {
 		dir: "rust", language: "Rust",
 		description: "Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.",
-		intro:       "The `rs` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly; `cargo-build` builds in release mode and `cargo-clippy` denies warnings, matching a CI-gating default.",
+		intro:       "The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly; `cargo-build` builds in release mode and `cargo-clippy` denies warnings, matching a CI-gating default.",
 		tags:        []string{"rust", "cargo", "build", "test"},
 	},
-	"ts": {
+	"typescript": {
 		dir: "typescript", language: "TypeScript",
 		description: "TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.",
-		intro:       "The `ts` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). It is an opaque spell: `preflight` composes the individual checks into one target.",
+		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). It is an opaque spell: `preflight` composes the individual checks into one target.",
 		tags:        []string{"typescript", "node", "eslint", "vitest"},
 	},
-	"py": {
+	"python": {
 		dir: "python", language: "Python",
 		description: "Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.",
-		intro:       "The `py` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), and formatting run as `uv run` subcommands so they resolve from the project's locked environment.",
+		intro:       "The `python` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), and formatting run as `uv run` subcommands so they resolve from the project's locked environment.",
 		tags:        []string{"python", "uv", "pytest", "ruff"},
 	},
-	"md": {
+	"markdown": {
 		dir: "markdown", language: "Markdown",
 		description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose.",
-		intro:       "The `md` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
+		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
 		tags:        []string{"markdown", "docs", "prettier", "lint"},
 	},
 	"docker": {

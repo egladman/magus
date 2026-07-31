@@ -282,8 +282,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"md": {
-		Name:   "md",
+	"markdown": {
+		Name:   "markdown",
 		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
 		Ops: map[string]spells.Op{
@@ -296,8 +296,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 		},
 	},
-	"py": {
-		Name:       "py",
+	"python": {
+		Name:       "python",
 		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
 		VersionCmd: []string{"python3", "--version"},
 		Language:   "python",
@@ -319,8 +319,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"rs": {
-		Name:       "rs",
+	"rust": {
+		Name:       "rust",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
 		Language:   "rust",
@@ -336,8 +336,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip":       {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
-	"ts": {
-		Name:       "ts",
+	"typescript": {
+		Name:       "typescript",
 		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		Provides:   []string{"dist/**"},

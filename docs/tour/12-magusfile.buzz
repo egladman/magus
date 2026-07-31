@@ -12,7 +12,7 @@
 import "magus";                 // project registration, targets, dependency edges
 import "magus/spell/buf";       // protobuf toolchain: buf-generate, buf-lint, buf-format
 import "magus/spell/go";        // Go toolchain: go-build, go-test, go-vet, go-fmt, ...
-import "magus/spell/ts";        // TypeScript toolchain: tsc, eslint, prettier, vitest
+import "magus/spell/typescript";        // TypeScript toolchain: tsc, eslint, prettier, vitest
 import "magus/spell/docker";    // container image: docker-build, hadolint
 
 final VERSION: str = "1.4.0";
@@ -35,7 +35,7 @@ final LINT_SLOTS: int = 4;
 // declared inputs and replays outputs when they are unchanged), which is the whole
 // point, so we do NOT opt targets out of it here.
 magus\project({
-    "spells": [buf, go, ts, docker],
+    "spells": [buf, go, typescript, docker],
     "outputs": ["gen/**", "bin/**"],
     "targets": {
         "js-lint": {"slots": LINT_SLOTS},
@@ -100,7 +100,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
     buf["buf-format"](ctx);
     go["go-fmt"](ctx);
-    ts["prettier"](ctx);
+    typescript["prettier"](ctx);
 }
 
 // Linting is a `*-lint` set too, one target per toolchain, so `lint` can glob
@@ -120,7 +120,7 @@ export fun go_lint(ctx: magus\Context, args: [str]) > void {
 }
 export fun js_lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    ts["eslint"](ctx, {"args": ["--concurrency=" + LINT_SLOTS]});
+    typescript["eslint"](ctx, {"args": ["--concurrency=" + LINT_SLOTS]});
 }
 
 // The umbrella `lint` fans out across the whole family with one pattern.
@@ -132,14 +132,14 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["go-build"](ctx, {"args": ["-ldflags", ldflags(VERSION), "-o", "bin/api", "./cmd/api"]});
-    ts["tsc"](ctx);
+    typescript["tsc"](ctx);
 }
 
 // Run both suites.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["go-test"](ctx);
-    ts["vitest"](ctx);
+    typescript["vitest"](ctx);
 }
 
 // The conventional anchor `magus affected ci` keys off. It declares no work of

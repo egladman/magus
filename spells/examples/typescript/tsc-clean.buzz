@@ -1,0 +1,10 @@
+// tsc-clean removes tsc-build's declared outputs and its incremental
+// .tsbuildinfo cache (pnpm exec tsc --build --clean).
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun clean(ctx: magus\Context, args: [str]) > void {
+    typescript["tsc-clean"](ctx);
+}

@@ -1,0 +1,9 @@
+// preflight composes the tsc/eslint/prettier/vitest checks into one opaque target.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {
+    typescript["preflight"](ctx);
+}

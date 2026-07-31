@@ -1,0 +1,9 @@
+// Wire cargo-clean into a clean target: magus run clean forks cargo clean.
+import "magus";
+import "magus/spell/rust";
+
+magus\project({ "spells": [rust] });
+
+export fun clean(ctx: magus\Context, args: [str]) > void {
+    rust["cargo-clean"](ctx);
+}

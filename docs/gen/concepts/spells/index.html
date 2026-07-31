@@ -83,10 +83,14 @@
           <li><a href="../../concepts/spells/cosign/" title="cosign spell">cosign spell</a></li>
           <li><a href="../../concepts/spells/docker/" title="docker spell">docker spell</a></li>
           <li><a href="../../concepts/spells/go/" title="go spell">go spell</a></li>
+          <li><a href="../../concepts/spells/markdown/" title="markdown spell">markdown spell</a></li>
           <li><a href="../../concepts/spells/md/" title="md spell">md spell</a></li>
           <li><a href="../../concepts/spells/py/" title="py spell">py spell</a></li>
+          <li><a href="../../concepts/spells/python/" title="python spell">python spell</a></li>
           <li><a href="../../concepts/spells/rs/" title="rs spell">rs spell</a></li>
+          <li><a href="../../concepts/spells/rust/" title="rust spell">rust spell</a></li>
           <li><a href="../../concepts/spells/ts/" title="ts spell">ts spell</a></li>
+          <li><a href="../../concepts/spells/typescript/" title="typescript spell">typescript spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#built-in-spells" title="Built-in spells">Built-in spells</a></li><li><a href="#spells-vs-targets" title="Spells vs Targets">Spells vs Targets</a><ul><li><a href="#when-to-use-which" title="When to use which">When to use which</a></li></ul></li><li><a href="#what-a-spell-provides" title="What a spell provides">What a spell provides</a><ul><li><a href="#an-operation-is-a-command-or-a-service" title="An operation is a command or a service">An operation is a command or a service</a></li></ul></li><li><a href="#binding-a-spell-to-a-project" title="Binding a spell to a project">Binding a spell to a project</a><ul><li><a href="#built-in" title="Built-in">Built-in</a></li><li><a href="#file-spell" title="File spell">File spell</a></li></ul></li><li><a href="#composing-spells" title="Composing spells">Composing spells</a></li><li><a href="#naming-operations" title="Naming operations">Naming operations</a><ul><li><a href="#explicitness-over-magic-why-gogo-fmt-stutters" title="Explicitness over magic (why go::go-fmt stutters)">Explicitness over magic (why go::go-fmt stutters)</a></li></ul></li><li><a href="#authoring-a-custom-spell" title="Authoring a custom spell">Authoring a custom spell</a></li><li><a href="#what-magus-bounds-and-what-it-does-not" title="What magus bounds, and what it does not">What magus bounds, and what it does not</a><ul><li><a href="#what-magus-does-not-restrict" title="What magus does not restrict">What magus does not restrict</a></li><li><a href="#what-magus-bounds" title="What magus bounds">What magus bounds</a></li><li><a href="#the-runaway-guard" title="The runaway guard">The runaway guard</a></li><li><a href="#a-gap-worth-knowing" title="A gap worth knowing">A gap worth knowing</a></li></ul></li><li><a href="#lifecycle-bind--contribute--compose--run" title="Lifecycle: bind → contribute → compose → run">Lifecycle: bind → contribute → compose → run</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#worked-examples-in-this-repo" title="Worked examples in this repo">Worked examples in this repo</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -151,25 +155,25 @@
 <td>Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.</td>
 </tr>
 <tr>
-<td><a href="md/"><code>md</code></a></td>
+<td><a href="markdown/"><code>markdown</code></a></td>
 <td>Markdown</td>
 <td>3</td>
 <td>Markdown docs spell: markdownlint and prettier for linting and formatting prose.</td>
 </tr>
 <tr>
-<td><a href="py/"><code>py</code></a></td>
+<td><a href="python/"><code>python</code></a></td>
 <td>Python</td>
 <td>6</td>
 <td>Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.</td>
 </tr>
 <tr>
-<td><a href="rs/"><code>rs</code></a></td>
+<td><a href="rust/"><code>rust</code></a></td>
 <td>Rust</td>
 <td>6</td>
 <td>Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.</td>
 </tr>
 <tr>
-<td><a href="ts/"><code>ts</code></a></td>
+<td><a href="typescript/"><code>typescript</code></a></td>
 <td>TypeScript</td>
 <td>11</td>
 <td>TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.</td>

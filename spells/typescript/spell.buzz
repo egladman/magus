@@ -14,7 +14,7 @@ import "magus/target";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 
-export fun mgs_getName() > str { return "ts"; }
+export fun mgs_getName() > str { return "typescript"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below

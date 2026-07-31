@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2228 nodes** and **4954 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2232 nodes** and **4975 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -46,14 +46,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 84 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
-| spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
+| spell | 12 | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 14 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
 | charm | 5 | `magus query kind:charm` | `rw`, `gha`, `static` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 159 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 234 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| doc | 238 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 130 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 220 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
 | function | 1114 | `magus query kind:function` | `sel`, `sendObject`, `send` |

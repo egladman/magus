@@ -1,0 +1,11 @@
+// tsc is static analysis, so it composes into the canonical `lint` target
+// (alongside eslint) rather than a bespoke `typecheck` target. `magus run lint`
+// forks `pnpm exec tsc`.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    typescript["tsc"](ctx);
+}

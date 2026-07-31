@@ -1,0 +1,9 @@
+// eslint lints the project through the package manager (pnpm exec eslint).
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    typescript["eslint"](ctx);
+}

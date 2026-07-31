@@ -320,7 +320,7 @@
               ]
             },
             {
-              "spell": "md",
+              "spell": "markdown",
               "ops": [
                 "markdownlint"
               ]

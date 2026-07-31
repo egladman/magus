@@ -397,23 +397,22 @@ func registerLocalSpell(m spells.Descriptor) {
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
-// commonSpellAliases maps the language or tool name a user is likely to type to
-// the abbreviated handle the spell actually registers under. Built-in handles are
-// deliberately short (TypeScript is ts, Python py, Rust rs, Markdown md), so
-// `import "magus/spell/typescript"` is a natural first guess; this turns that slip
-// into a precise suggestion.
+// commonSpellAliases maps a name a user might reach for to the spell that actually
+// serves it. Every entry is now a genuine SYNONYM, not an abbreviation: spells are
+// named for the thing they adapt (typescript, rust, python, markdown, go), so the
+// language name is the real name and needs no translation.
+//
+// The abbreviations this used to carry - typescript->ts, rust->rs, python->py,
+// markdown->md, golang->go - are gone with the rename that made them unnecessary.
+// A table existing to convert what users naturally type into what something was
+// actually called is a report about the name, not a feature.
 var commonSpellAliases = map[string]string{
-	"typescript": "ts",
-	"javascript": "ts",
-	"js":         "ts",
-	"node":       "ts",
-	"nodejs":     "ts",
-	"python":     "py",
-	"python3":    "py",
-	"rust":       "rs",
-	"cargo":      "rs",
-	"markdown":   "md",
-	"golang":     "go",
+	"javascript": "typescript",
+	"js":         "typescript",
+	"node":       "typescript",
+	"nodejs":     "typescript",
+	"python3":    "python",
+	"cargo":      "rust",
 }
 
 // checkSpellImports validates the handles a magusfile imports via
@@ -449,7 +448,7 @@ func unknownSpellMessage(name string) string {
 	if s := suggestSpellName(name); s != "" {
 		fmt.Fprintf(&b, "; did you mean %q (import \"magus/spell/%s\")", s, s)
 	}
-	fmt.Fprintf(&b, "\nbuilt-in handles are abbreviated: %s", strings.Join(builtinSpellHandles(), ", "))
+	fmt.Fprintf(&b, "\nbuilt-in spells: %s", strings.Join(builtinSpellHandles(), ", "))
 	return b.String()
 }
 

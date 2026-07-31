@@ -83,10 +83,14 @@
           <li><a href="../../../concepts/spells/cosign/" title="cosign spell">cosign spell</a></li>
           <li><a href="../../../concepts/spells/docker/" title="docker spell">docker spell</a></li>
           <li><a href="../../../concepts/spells/go/" title="go spell">go spell</a></li>
+          <li><a href="../../../concepts/spells/markdown/" title="markdown spell">markdown spell</a></li>
           <li><a href="../../../concepts/spells/md/" title="md spell">md spell</a></li>
           <li><a href="../../../concepts/spells/py/" title="py spell">py spell</a></li>
+          <li><a href="../../../concepts/spells/python/" title="python spell">python spell</a></li>
           <li><a href="../../../concepts/spells/rs/" title="rs spell">rs spell</a></li>
+          <li><a href="../../../concepts/spells/rust/" title="rust spell">rust spell</a></li>
           <li><a href="../../../concepts/spells/ts/" aria-current="page" title="ts spell">ts spell</a></li>
+          <li><a href="../../../concepts/spells/typescript/" title="typescript spell">typescript spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#biome-check" title="biome-check">biome-check</a><ul><li><a href="#gha" title="gha">gha</a></li><li><a href="#rw" title="rw">rw</a></li><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#biome-format" title="biome-format">biome-format</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#dev-server" title="dev-server">dev-server</a><ul><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#eslint" title="eslint">eslint</a><ul><li><a href="#gha-1" title="gha">gha</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#preflight" title="preflight">preflight</a><ul><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#prettier" title="prettier">prettier</a><ul><li><a href="#rw-3" title="rw">rw</a></li><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li><li><a href="#tsc" title="tsc">tsc</a><ul><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#tsc-build" title="tsc-build">tsc-build</a><ul><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#tsc-clean" title="tsc-clean">tsc-clean</a><ul><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#vitest" title="vitest">vitest</a><ul><li><a href="#gha-2" title="gha">gha</a></li><li><a href="#example-9" title="Example">Example</a></li></ul></li></ul>
@@ -384,16 +388,17 @@ export fun test(ctx: magus\Context, args: [str]) &gt; void {
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../rs/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">rs spell</span></a>
+      <a class="page-nav-prev" href="../rust/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">rust spell</span></a>
+      <a class="page-nav-next" href="../typescript/"><span class="page-nav-dir">Next</span><span class="page-nav-title">typescript spell</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../concepts/spells/typescript/"><span class="related-card-title">typescript spell</span><span class="related-card-desc">TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../../concepts/dependencies/"><span class="related-card-title">Dependencies</span><span class="related-card-desc">The two dependency mechanisms in magus - magus\needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.</span></a>
     </div>
   </section>
   <div class="page-provenance container">

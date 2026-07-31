@@ -1,0 +1,11 @@
+// biome-format checks formatting through Biome (pnpm exec biome format); the
+// rw charm (magus run format:rw) applies --write. The spell's alternative to
+// prettier - the magusfile picks one, not both.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    typescript["biome-format"](ctx);
+}

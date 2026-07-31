@@ -1,9 +1,0 @@
-// cargo-build compiles in release mode: magus run build forks cargo build --release.
-import "magus";
-import "magus/spell/rs";
-
-magus\project({ "spells": [rs] });
-
-export fun build(ctx: magus\Context, args: [str]) > void {
-    rs["cargo-build"](ctx);
-}

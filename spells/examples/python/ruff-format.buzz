@@ -1,0 +1,9 @@
+// ruff-format checks formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/python";
+
+magus\project({ "spells": [python] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    python["ruff-format"](ctx);
+}

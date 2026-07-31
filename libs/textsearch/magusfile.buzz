@@ -29,10 +29,10 @@ import "vcs";
 // tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns the dependency graph;
 // informational) and does not run in ci, which uses the custom targets below.
 import "magus/spell/magusfile";
-import "magus/spell/ts";
+import "magus/spell/typescript";
 
 magus\project({
-    "spells": [magusfile, ts],
+    "spells": [magusfile, typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +
     // pnpm-lock.yaml, where the dev-gate deps are pinned), and the tsconfig/biome configs

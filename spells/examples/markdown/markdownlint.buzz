@@ -1,0 +1,9 @@
+// markdownlint enforces Markdown style across the docs.
+import "magus";
+import "magus/spell/markdown";
+
+magus\project({ "spells": [markdown] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    markdown["markdownlint"](ctx);
+}

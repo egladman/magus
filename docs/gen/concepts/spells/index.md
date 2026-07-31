@@ -24,10 +24,10 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`cosign`](spells/cosign.md) | - | 3 | Cosign spell: keyless sign, attest, and verify for container artifacts. |
 | [`docker`](spells/docker.md) | Docker | 4 | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting. |
 | [`go`](spells/go.md) | Go | 11 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
-| [`md`](spells/md.md) | Markdown | 3 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
-| [`py`](spells/py.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
-| [`rs`](spells/rs.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
-| [`ts`](spells/ts.md) | TypeScript | 11 | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
+| [`markdown`](spells/markdown.md) | Markdown | 3 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
+| [`python`](spells/python.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
+| [`rust`](spells/rust.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
+| [`typescript`](spells/typescript.md) | TypeScript | 11 | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager. |
 <!-- END SPELL LIST -->
 
 ## Spells vs Targets

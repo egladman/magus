@@ -1,0 +1,9 @@
+// prettier checks Markdown formatting; the rw charm (magus run format:rw) rewrites in place.
+import "magus";
+import "magus/spell/markdown";
+
+magus\project({ "spells": [markdown] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    markdown["prettier"](ctx);
+}

@@ -2,7 +2,7 @@ import "magus/target";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 
-export fun mgs_getName() > str { return "py"; }
+export fun mgs_getName() > str { return "python"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
     return ["**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt",

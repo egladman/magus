@@ -18,7 +18,7 @@ import "magus/spell/go";
 import "magus/spell/docker";
 import "magus/spell/cosign";
 import "magus/spell/buzz";
-import "magus/spell/md";
+import "magus/spell/markdown";
 import "magus/spell/bash";
 
 import "badge" as badge;
@@ -47,7 +47,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [magusfile, go, buzz, md, bash],
+    "spells": [magusfile, go, buzz, markdown, bash],
     "targets": {
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -484,7 +484,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     os\withEnv({"GOEXPERIMENT": "jsonv2"}, fun() > void {
         os\exec("go", ["tool", "-modfile=go.tool.mod", "govulncheck", "./..."]);
     });
-    md.markdownlint(ctx);
+    markdown.markdownlint(ctx);
     bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):

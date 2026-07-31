@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2228,
-  "edge_count": 4954,
+  "node_count": 2232,
+  "edge_count": 4975,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -968,7 +968,7 @@
       "source": "docs/concepts",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "36",
+        "dir_files": "40",
         "dir_languages": "markdown"
       }
     },
@@ -1001,7 +1001,7 @@
       "source": "docs/concepts/spells",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "10",
+        "dir_files": "14",
         "dir_languages": "markdown"
       }
     },
@@ -1611,10 +1611,10 @@
       }
     },
     {
-      "id": "dir:spells/examples/md",
+      "id": "dir:spells/examples/markdown",
       "kind": "dir",
-      "label": "spells/examples/md",
-      "source": "spells/examples/md",
+      "label": "spells/examples/markdown",
+      "source": "spells/examples/markdown",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "2",
@@ -1622,10 +1622,10 @@
       }
     },
     {
-      "id": "dir:spells/examples/py",
+      "id": "dir:spells/examples/python",
       "kind": "dir",
-      "label": "spells/examples/py",
-      "source": "spells/examples/py",
+      "label": "spells/examples/python",
+      "source": "spells/examples/python",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "5",
@@ -1633,10 +1633,10 @@
       }
     },
     {
-      "id": "dir:spells/examples/rs",
+      "id": "dir:spells/examples/rust",
       "kind": "dir",
-      "label": "spells/examples/rs",
-      "source": "spells/examples/rs",
+      "label": "spells/examples/rust",
+      "source": "spells/examples/rust",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "5",
@@ -1644,10 +1644,10 @@
       }
     },
     {
-      "id": "dir:spells/examples/ts",
+      "id": "dir:spells/examples/typescript",
       "kind": "dir",
-      "label": "spells/examples/ts",
-      "source": "spells/examples/ts",
+      "label": "spells/examples/typescript",
+      "source": "spells/examples/typescript",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "10",
@@ -2523,6 +2523,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/spells/markdown.md",
+      "kind": "doc",
+      "label": "docs/concepts/spells/markdown.md",
+      "source": "docs/concepts/spells/markdown.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "markdown,spell,docs,prettier,lint,tools",
+        "title": "markdown spell"
+      }
+    },
+    {
       "id": "doc:docs/concepts/spells/md.md",
       "kind": "doc",
       "label": "docs/concepts/spells/md.md",
@@ -2547,6 +2559,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/spells/python.md",
+      "kind": "doc",
+      "label": "docs/concepts/spells/python.md",
+      "source": "docs/concepts/spells/python.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "python,spell,uv,pytest,ruff,tools",
+        "title": "python spell"
+      }
+    },
+    {
       "id": "doc:docs/concepts/spells/rs.md",
       "kind": "doc",
       "label": "docs/concepts/spells/rs.md",
@@ -2559,6 +2583,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/spells/rust.md",
+      "kind": "doc",
+      "label": "docs/concepts/spells/rust.md",
+      "source": "docs/concepts/spells/rust.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "rust,spell,cargo,build,test,tools",
+        "title": "rust spell"
+      }
+    },
+    {
       "id": "doc:docs/concepts/spells/ts.md",
       "kind": "doc",
       "label": "docs/concepts/spells/ts.md",
@@ -2568,6 +2604,18 @@
         "section": "concepts",
         "tags": "ts,spell,typescript,node,eslint,vitest,tools",
         "title": "ts spell"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/spells/typescript.md",
+      "kind": "doc",
+      "label": "docs/concepts/spells/typescript.md",
+      "source": "docs/concepts/spells/typescript.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "typescript,spell,node,eslint,vitest,tools",
+        "title": "typescript spell"
       }
     },
     {
@@ -5807,199 +5855,199 @@
       }
     },
     {
-      "id": "file:spells/examples/md/markdownlint.buzz",
+      "id": "file:spells/examples/markdown/markdownlint.buzz",
       "kind": "file",
-      "label": "spells/examples/md/markdownlint.buzz",
-      "source": "spells/examples/md/markdownlint.buzz",
+      "label": "spells/examples/markdown/markdownlint.buzz",
+      "source": "spells/examples/markdown/markdownlint.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/md/prettier.buzz",
+      "id": "file:spells/examples/markdown/prettier.buzz",
       "kind": "file",
-      "label": "spells/examples/md/prettier.buzz",
-      "source": "spells/examples/md/prettier.buzz",
+      "label": "spells/examples/markdown/prettier.buzz",
+      "source": "spells/examples/markdown/prettier.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/py/pytest.buzz",
+      "id": "file:spells/examples/python/pytest.buzz",
       "kind": "file",
-      "label": "spells/examples/py/pytest.buzz",
-      "source": "spells/examples/py/pytest.buzz",
+      "label": "spells/examples/python/pytest.buzz",
+      "source": "spells/examples/python/pytest.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/py/ruff-check.buzz",
+      "id": "file:spells/examples/python/ruff-check.buzz",
       "kind": "file",
-      "label": "spells/examples/py/ruff-check.buzz",
-      "source": "spells/examples/py/ruff-check.buzz",
+      "label": "spells/examples/python/ruff-check.buzz",
+      "source": "spells/examples/python/ruff-check.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/py/ruff-format.buzz",
+      "id": "file:spells/examples/python/ruff-format.buzz",
       "kind": "file",
-      "label": "spells/examples/py/ruff-format.buzz",
-      "source": "spells/examples/py/ruff-format.buzz",
+      "label": "spells/examples/python/ruff-format.buzz",
+      "source": "spells/examples/python/ruff-format.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/py/uv-build.buzz",
+      "id": "file:spells/examples/python/uv-build.buzz",
       "kind": "file",
-      "label": "spells/examples/py/uv-build.buzz",
-      "source": "spells/examples/py/uv-build.buzz",
+      "label": "spells/examples/python/uv-build.buzz",
+      "source": "spells/examples/python/uv-build.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/py/uv-clean.buzz",
+      "id": "file:spells/examples/python/uv-clean.buzz",
       "kind": "file",
-      "label": "spells/examples/py/uv-clean.buzz",
-      "source": "spells/examples/py/uv-clean.buzz",
+      "label": "spells/examples/python/uv-clean.buzz",
+      "source": "spells/examples/python/uv-clean.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/rs/cargo-build.buzz",
+      "id": "file:spells/examples/rust/cargo-build.buzz",
       "kind": "file",
-      "label": "spells/examples/rs/cargo-build.buzz",
-      "source": "spells/examples/rs/cargo-build.buzz",
+      "label": "spells/examples/rust/cargo-build.buzz",
+      "source": "spells/examples/rust/cargo-build.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/rs/cargo-clean.buzz",
+      "id": "file:spells/examples/rust/cargo-clean.buzz",
       "kind": "file",
-      "label": "spells/examples/rs/cargo-clean.buzz",
-      "source": "spells/examples/rs/cargo-clean.buzz",
+      "label": "spells/examples/rust/cargo-clean.buzz",
+      "source": "spells/examples/rust/cargo-clean.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/rs/cargo-clippy.buzz",
+      "id": "file:spells/examples/rust/cargo-clippy.buzz",
       "kind": "file",
-      "label": "spells/examples/rs/cargo-clippy.buzz",
-      "source": "spells/examples/rs/cargo-clippy.buzz",
+      "label": "spells/examples/rust/cargo-clippy.buzz",
+      "source": "spells/examples/rust/cargo-clippy.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/rs/cargo-fmt.buzz",
+      "id": "file:spells/examples/rust/cargo-fmt.buzz",
       "kind": "file",
-      "label": "spells/examples/rs/cargo-fmt.buzz",
-      "source": "spells/examples/rs/cargo-fmt.buzz",
+      "label": "spells/examples/rust/cargo-fmt.buzz",
+      "source": "spells/examples/rust/cargo-fmt.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/rs/cargo-test.buzz",
+      "id": "file:spells/examples/rust/cargo-test.buzz",
       "kind": "file",
-      "label": "spells/examples/rs/cargo-test.buzz",
-      "source": "spells/examples/rs/cargo-test.buzz",
+      "label": "spells/examples/rust/cargo-test.buzz",
+      "source": "spells/examples/rust/cargo-test.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/biome-check.buzz",
+      "id": "file:spells/examples/typescript/biome-check.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/biome-check.buzz",
-      "source": "spells/examples/ts/biome-check.buzz",
+      "label": "spells/examples/typescript/biome-check.buzz",
+      "source": "spells/examples/typescript/biome-check.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/biome-format.buzz",
+      "id": "file:spells/examples/typescript/biome-format.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/biome-format.buzz",
-      "source": "spells/examples/ts/biome-format.buzz",
+      "label": "spells/examples/typescript/biome-format.buzz",
+      "source": "spells/examples/typescript/biome-format.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/dev-server.buzz",
+      "id": "file:spells/examples/typescript/dev-server.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/dev-server.buzz",
-      "source": "spells/examples/ts/dev-server.buzz",
+      "label": "spells/examples/typescript/dev-server.buzz",
+      "source": "spells/examples/typescript/dev-server.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/eslint.buzz",
+      "id": "file:spells/examples/typescript/eslint.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/eslint.buzz",
-      "source": "spells/examples/ts/eslint.buzz",
+      "label": "spells/examples/typescript/eslint.buzz",
+      "source": "spells/examples/typescript/eslint.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/preflight.buzz",
+      "id": "file:spells/examples/typescript/preflight.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/preflight.buzz",
-      "source": "spells/examples/ts/preflight.buzz",
+      "label": "spells/examples/typescript/preflight.buzz",
+      "source": "spells/examples/typescript/preflight.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/prettier.buzz",
+      "id": "file:spells/examples/typescript/prettier.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/prettier.buzz",
-      "source": "spells/examples/ts/prettier.buzz",
+      "label": "spells/examples/typescript/prettier.buzz",
+      "source": "spells/examples/typescript/prettier.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/tsc-build.buzz",
+      "id": "file:spells/examples/typescript/tsc-build.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/tsc-build.buzz",
-      "source": "spells/examples/ts/tsc-build.buzz",
+      "label": "spells/examples/typescript/tsc-build.buzz",
+      "source": "spells/examples/typescript/tsc-build.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/tsc-clean.buzz",
+      "id": "file:spells/examples/typescript/tsc-clean.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/tsc-clean.buzz",
-      "source": "spells/examples/ts/tsc-clean.buzz",
+      "label": "spells/examples/typescript/tsc-clean.buzz",
+      "source": "spells/examples/typescript/tsc-clean.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/tsc.buzz",
+      "id": "file:spells/examples/typescript/tsc.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/tsc.buzz",
-      "source": "spells/examples/ts/tsc.buzz",
+      "label": "spells/examples/typescript/tsc.buzz",
+      "source": "spells/examples/typescript/tsc.buzz",
       "attrs": {
         "language": "buzz"
       }
     },
     {
-      "id": "file:spells/examples/ts/vitest.buzz",
+      "id": "file:spells/examples/typescript/vitest.buzz",
       "kind": "file",
-      "label": "spells/examples/ts/vitest.buzz",
-      "source": "spells/examples/ts/vitest.buzz",
+      "label": "spells/examples/typescript/vitest.buzz",
+      "source": "spells/examples/typescript/vitest.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -15440,199 +15488,199 @@
       }
     },
     {
-      "id": "function:spells/examples/md/markdownlint.buzz:lint",
+      "id": "function:spells/examples/markdown/markdownlint.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "spells/examples/md/markdownlint.buzz:7",
+      "source": "spells/examples/markdown/markdownlint.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/md/prettier.buzz:format",
+      "id": "function:spells/examples/markdown/prettier.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "spells/examples/md/prettier.buzz:7",
+      "source": "spells/examples/markdown/prettier.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/py/pytest.buzz:test",
+      "id": "function:spells/examples/python/pytest.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "spells/examples/py/pytest.buzz:9",
+      "source": "spells/examples/python/pytest.buzz:9",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/py/ruff-check.buzz:lint",
+      "id": "function:spells/examples/python/ruff-check.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "spells/examples/py/ruff-check.buzz:7",
+      "source": "spells/examples/python/ruff-check.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/py/ruff-format.buzz:format",
+      "id": "function:spells/examples/python/ruff-format.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "spells/examples/py/ruff-format.buzz:7",
+      "source": "spells/examples/python/ruff-format.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/py/uv-build.buzz:build",
+      "id": "function:spells/examples/python/uv-build.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "spells/examples/py/uv-build.buzz:7",
+      "source": "spells/examples/python/uv-build.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/py/uv-clean.buzz:clean",
+      "id": "function:spells/examples/python/uv-clean.buzz:clean",
       "kind": "function",
       "label": "clean",
-      "source": "spells/examples/py/uv-clean.buzz:7",
+      "source": "spells/examples/python/uv-clean.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/rs/cargo-build.buzz:build",
+      "id": "function:spells/examples/rust/cargo-build.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "spells/examples/rs/cargo-build.buzz:7",
+      "source": "spells/examples/rust/cargo-build.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/rs/cargo-clean.buzz:clean",
+      "id": "function:spells/examples/rust/cargo-clean.buzz:clean",
       "kind": "function",
       "label": "clean",
-      "source": "spells/examples/rs/cargo-clean.buzz:7",
+      "source": "spells/examples/rust/cargo-clean.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/rs/cargo-clippy.buzz:clippy",
+      "id": "function:spells/examples/rust/cargo-clippy.buzz:clippy",
       "kind": "function",
       "label": "clippy",
-      "source": "spells/examples/rs/cargo-clippy.buzz:7",
+      "source": "spells/examples/rust/cargo-clippy.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/rs/cargo-fmt.buzz:format",
+      "id": "function:spells/examples/rust/cargo-fmt.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "spells/examples/rs/cargo-fmt.buzz:7",
+      "source": "spells/examples/rust/cargo-fmt.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/rs/cargo-test.buzz:test",
+      "id": "function:spells/examples/rust/cargo-test.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "spells/examples/rs/cargo-test.buzz:7",
+      "source": "spells/examples/rust/cargo-test.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/biome-check.buzz:lint",
+      "id": "function:spells/examples/typescript/biome-check.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "spells/examples/ts/biome-check.buzz:8",
+      "source": "spells/examples/typescript/biome-check.buzz:8",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/biome-format.buzz:format",
+      "id": "function:spells/examples/typescript/biome-format.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "spells/examples/ts/biome-format.buzz:9",
+      "source": "spells/examples/typescript/biome-format.buzz:9",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/dev-server.buzz:serve",
+      "id": "function:spells/examples/typescript/dev-server.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "spells/examples/ts/dev-server.buzz:9",
+      "source": "spells/examples/typescript/dev-server.buzz:9",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/eslint.buzz:lint",
+      "id": "function:spells/examples/typescript/eslint.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "spells/examples/ts/eslint.buzz:7",
+      "source": "spells/examples/typescript/eslint.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/preflight.buzz:preflight",
+      "id": "function:spells/examples/typescript/preflight.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "spells/examples/ts/preflight.buzz:7",
+      "source": "spells/examples/typescript/preflight.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/prettier.buzz:format",
+      "id": "function:spells/examples/typescript/prettier.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "spells/examples/ts/prettier.buzz:7",
+      "source": "spells/examples/typescript/prettier.buzz:7",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/tsc-build.buzz:build",
+      "id": "function:spells/examples/typescript/tsc-build.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "spells/examples/ts/tsc-build.buzz:8",
+      "source": "spells/examples/typescript/tsc-build.buzz:8",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/tsc-clean.buzz:clean",
+      "id": "function:spells/examples/typescript/tsc-clean.buzz:clean",
       "kind": "function",
       "label": "clean",
-      "source": "spells/examples/ts/tsc-clean.buzz:8",
+      "source": "spells/examples/typescript/tsc-clean.buzz:8",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/tsc.buzz:lint",
+      "id": "function:spells/examples/typescript/tsc.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "spells/examples/ts/tsc.buzz:9",
+      "source": "spells/examples/typescript/tsc.buzz:9",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/examples/ts/vitest.buzz:test",
+      "id": "function:spells/examples/typescript/vitest.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "spells/examples/ts/vitest.buzz:7",
+      "source": "spells/examples/typescript/vitest.buzz:7",
       "attrs": {
         "exported": "true"
       }
@@ -16894,24 +16942,24 @@
       "label": "magus/spell/magusfile"
     },
     {
-      "id": "import:magus/spell/md",
+      "id": "import:magus/spell/markdown",
       "kind": "import",
-      "label": "magus/spell/md"
+      "label": "magus/spell/markdown"
     },
     {
-      "id": "import:magus/spell/py",
+      "id": "import:magus/spell/python",
       "kind": "import",
-      "label": "magus/spell/py"
+      "label": "magus/spell/python"
     },
     {
-      "id": "import:magus/spell/rs",
+      "id": "import:magus/spell/rust",
       "kind": "import",
-      "label": "magus/spell/rs"
+      "label": "magus/spell/rust"
     },
     {
-      "id": "import:magus/spell/ts",
+      "id": "import:magus/spell/typescript",
       "kind": "import",
-      "label": "magus/spell/ts"
+      "label": "magus/spell/typescript"
     },
     {
       "id": "import:magus/target",
@@ -19058,7 +19106,7 @@
       }
     },
     {
-      "id": "op:md:markdownlint",
+      "id": "op:markdown:markdownlint",
       "kind": "op",
       "label": "markdownlint",
       "attrs": {
@@ -19067,7 +19115,7 @@
       }
     },
     {
-      "id": "op:md:prettier",
+      "id": "op:markdown:prettier",
       "kind": "op",
       "label": "prettier",
       "attrs": {
@@ -19076,7 +19124,7 @@
       }
     },
     {
-      "id": "op:md:typos",
+      "id": "op:markdown:typos",
       "kind": "op",
       "label": "typos",
       "attrs": {
@@ -19085,7 +19133,7 @@
       }
     },
     {
-      "id": "op:py:pytest",
+      "id": "op:python:pytest",
       "kind": "op",
       "label": "pytest",
       "attrs": {
@@ -19094,7 +19142,7 @@
       }
     },
     {
-      "id": "op:py:ruff-check",
+      "id": "op:python:ruff-check",
       "kind": "op",
       "label": "ruff-check",
       "attrs": {
@@ -19103,7 +19151,7 @@
       }
     },
     {
-      "id": "op:py:ruff-format",
+      "id": "op:python:ruff-format",
       "kind": "op",
       "label": "ruff-format",
       "attrs": {
@@ -19112,7 +19160,7 @@
       }
     },
     {
-      "id": "op:py:scip",
+      "id": "op:python:scip",
       "kind": "op",
       "label": "scip",
       "attrs": {
@@ -19121,7 +19169,7 @@
       }
     },
     {
-      "id": "op:py:uv-build",
+      "id": "op:python:uv-build",
       "kind": "op",
       "label": "uv-build",
       "attrs": {
@@ -19130,7 +19178,7 @@
       }
     },
     {
-      "id": "op:py:uv-clean",
+      "id": "op:python:uv-clean",
       "kind": "op",
       "label": "uv-clean",
       "attrs": {
@@ -19139,7 +19187,7 @@
       }
     },
     {
-      "id": "op:rs:cargo-build",
+      "id": "op:rust:cargo-build",
       "kind": "op",
       "label": "cargo-build",
       "attrs": {
@@ -19148,7 +19196,7 @@
       }
     },
     {
-      "id": "op:rs:cargo-clean",
+      "id": "op:rust:cargo-clean",
       "kind": "op",
       "label": "cargo-clean",
       "attrs": {
@@ -19157,7 +19205,7 @@
       }
     },
     {
-      "id": "op:rs:cargo-clippy",
+      "id": "op:rust:cargo-clippy",
       "kind": "op",
       "label": "cargo-clippy",
       "attrs": {
@@ -19166,7 +19214,7 @@
       }
     },
     {
-      "id": "op:rs:cargo-fmt",
+      "id": "op:rust:cargo-fmt",
       "kind": "op",
       "label": "cargo-fmt",
       "attrs": {
@@ -19175,7 +19223,7 @@
       }
     },
     {
-      "id": "op:rs:cargo-test",
+      "id": "op:rust:cargo-test",
       "kind": "op",
       "label": "cargo-test",
       "attrs": {
@@ -19184,7 +19232,7 @@
       }
     },
     {
-      "id": "op:rs:scip",
+      "id": "op:rust:scip",
       "kind": "op",
       "label": "scip",
       "attrs": {
@@ -19193,7 +19241,7 @@
       }
     },
     {
-      "id": "op:ts:biome-check",
+      "id": "op:typescript:biome-check",
       "kind": "op",
       "label": "biome-check",
       "attrs": {
@@ -19202,7 +19250,7 @@
       }
     },
     {
-      "id": "op:ts:biome-format",
+      "id": "op:typescript:biome-format",
       "kind": "op",
       "label": "biome-format",
       "attrs": {
@@ -19211,7 +19259,7 @@
       }
     },
     {
-      "id": "op:ts:dev-server",
+      "id": "op:typescript:dev-server",
       "kind": "op",
       "label": "dev-server",
       "attrs": {
@@ -19220,7 +19268,7 @@
       }
     },
     {
-      "id": "op:ts:eslint",
+      "id": "op:typescript:eslint",
       "kind": "op",
       "label": "eslint",
       "attrs": {
@@ -19229,12 +19277,12 @@
       }
     },
     {
-      "id": "op:ts:preflight",
+      "id": "op:typescript:preflight",
       "kind": "op",
       "label": "preflight"
     },
     {
-      "id": "op:ts:prettier",
+      "id": "op:typescript:prettier",
       "kind": "op",
       "label": "prettier",
       "attrs": {
@@ -19243,7 +19291,7 @@
       }
     },
     {
-      "id": "op:ts:scip",
+      "id": "op:typescript:scip",
       "kind": "op",
       "label": "scip",
       "attrs": {
@@ -19252,7 +19300,7 @@
       }
     },
     {
-      "id": "op:ts:tsc",
+      "id": "op:typescript:tsc",
       "kind": "op",
       "label": "tsc",
       "attrs": {
@@ -19261,7 +19309,7 @@
       }
     },
     {
-      "id": "op:ts:tsc-build",
+      "id": "op:typescript:tsc-build",
       "kind": "op",
       "label": "tsc-build",
       "attrs": {
@@ -19270,7 +19318,7 @@
       }
     },
     {
-      "id": "op:ts:tsc-clean",
+      "id": "op:typescript:tsc-clean",
       "kind": "op",
       "label": "tsc-clean",
       "attrs": {
@@ -19279,7 +19327,7 @@
       }
     },
     {
-      "id": "op:ts:vitest",
+      "id": "op:typescript:vitest",
       "kind": "op",
       "label": "vitest",
       "attrs": {
@@ -19476,33 +19524,33 @@
       }
     },
     {
-      "id": "spell:md",
+      "id": "spell:markdown",
       "kind": "spell",
-      "label": "md",
+      "label": "markdown",
       "attrs": {
         "declared": "true"
       }
     },
     {
-      "id": "spell:py",
+      "id": "spell:python",
       "kind": "spell",
-      "label": "py",
+      "label": "python",
       "attrs": {
         "language": "python"
       }
     },
     {
-      "id": "spell:rs",
+      "id": "spell:rust",
       "kind": "spell",
-      "label": "rs",
+      "label": "rust",
       "attrs": {
         "language": "rust"
       }
     },
     {
-      "id": "spell:ts",
+      "id": "spell:typescript",
       "kind": "spell",
-      "label": "ts",
+      "label": "typescript",
       "attrs": {
         "declared": "true",
         "language": "typescript"
@@ -19527,7 +19575,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out3d9cadc6",
+        "last_output_ref": "out2c74ec82",
         "last_run_ok": "true"
       }
     },
@@ -19779,7 +19827,7 @@
       "attrs": {
         "declared_as": "spells_generate",
         "engine": "buzz",
-        "last_output_ref": "oute9d53ad3",
+        "last_output_ref": "out9d154633",
         "last_run_ok": "true"
       }
     },
@@ -21571,6 +21619,14 @@
     },
     {
       "source": "dir:docs/concepts/spells",
+      "target": "doc:docs/concepts/spells/markdown.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/markdown.md"
+    },
+    {
+      "source": "dir:docs/concepts/spells",
       "target": "doc:docs/concepts/spells/md.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -21587,6 +21643,14 @@
     },
     {
       "source": "dir:docs/concepts/spells",
+      "target": "doc:docs/concepts/spells/python.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/python.md"
+    },
+    {
+      "source": "dir:docs/concepts/spells",
       "target": "doc:docs/concepts/spells/rs.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -21595,11 +21659,27 @@
     },
     {
       "source": "dir:docs/concepts/spells",
+      "target": "doc:docs/concepts/spells/rust.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/rust.md"
+    },
+    {
+      "source": "dir:docs/concepts/spells",
       "target": "doc:docs/concepts/spells/ts.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/spells/ts.md"
+    },
+    {
+      "source": "dir:docs/concepts/spells",
+      "target": "doc:docs/concepts/spells/typescript.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/typescript.md"
     },
     {
       "source": "dir:docs/concepts/targets",
@@ -24059,35 +24139,35 @@
     },
     {
       "source": "dir:spells/examples",
-      "target": "dir:spells/examples/md",
+      "target": "dir:spells/examples/markdown",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/md"
+      "provenance": "spells/examples/markdown"
     },
     {
       "source": "dir:spells/examples",
-      "target": "dir:spells/examples/py",
+      "target": "dir:spells/examples/python",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py"
+      "provenance": "spells/examples/python"
     },
     {
       "source": "dir:spells/examples",
-      "target": "dir:spells/examples/rs",
+      "target": "dir:spells/examples/rust",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs"
+      "provenance": "spells/examples/rust"
     },
     {
       "source": "dir:spells/examples",
-      "target": "dir:spells/examples/ts",
+      "target": "dir:spells/examples/typescript",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts"
+      "provenance": "spells/examples/typescript"
     },
     {
       "source": "dir:spells/examples/bash",
@@ -24298,180 +24378,180 @@
       "provenance": "spells/examples/go/govulncheck.buzz"
     },
     {
-      "source": "dir:spells/examples/md",
-      "target": "file:spells/examples/md/markdownlint.buzz",
+      "source": "dir:spells/examples/markdown",
+      "target": "file:spells/examples/markdown/markdownlint.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/md/markdownlint.buzz"
+      "provenance": "spells/examples/markdown/markdownlint.buzz"
     },
     {
-      "source": "dir:spells/examples/md",
-      "target": "file:spells/examples/md/prettier.buzz",
+      "source": "dir:spells/examples/markdown",
+      "target": "file:spells/examples/markdown/prettier.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/md/prettier.buzz"
+      "provenance": "spells/examples/markdown/prettier.buzz"
     },
     {
-      "source": "dir:spells/examples/py",
-      "target": "file:spells/examples/py/pytest.buzz",
+      "source": "dir:spells/examples/python",
+      "target": "file:spells/examples/python/pytest.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/pytest.buzz"
+      "provenance": "spells/examples/python/pytest.buzz"
     },
     {
-      "source": "dir:spells/examples/py",
-      "target": "file:spells/examples/py/ruff-check.buzz",
+      "source": "dir:spells/examples/python",
+      "target": "file:spells/examples/python/ruff-check.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/ruff-check.buzz"
+      "provenance": "spells/examples/python/ruff-check.buzz"
     },
     {
-      "source": "dir:spells/examples/py",
-      "target": "file:spells/examples/py/ruff-format.buzz",
+      "source": "dir:spells/examples/python",
+      "target": "file:spells/examples/python/ruff-format.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/ruff-format.buzz"
+      "provenance": "spells/examples/python/ruff-format.buzz"
     },
     {
-      "source": "dir:spells/examples/py",
-      "target": "file:spells/examples/py/uv-build.buzz",
+      "source": "dir:spells/examples/python",
+      "target": "file:spells/examples/python/uv-build.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/uv-build.buzz"
+      "provenance": "spells/examples/python/uv-build.buzz"
     },
     {
-      "source": "dir:spells/examples/py",
-      "target": "file:spells/examples/py/uv-clean.buzz",
+      "source": "dir:spells/examples/python",
+      "target": "file:spells/examples/python/uv-clean.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/uv-clean.buzz"
+      "provenance": "spells/examples/python/uv-clean.buzz"
     },
     {
-      "source": "dir:spells/examples/rs",
-      "target": "file:spells/examples/rs/cargo-build.buzz",
+      "source": "dir:spells/examples/rust",
+      "target": "file:spells/examples/rust/cargo-build.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-build.buzz"
+      "provenance": "spells/examples/rust/cargo-build.buzz"
     },
     {
-      "source": "dir:spells/examples/rs",
-      "target": "file:spells/examples/rs/cargo-clean.buzz",
+      "source": "dir:spells/examples/rust",
+      "target": "file:spells/examples/rust/cargo-clean.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-clean.buzz"
+      "provenance": "spells/examples/rust/cargo-clean.buzz"
     },
     {
-      "source": "dir:spells/examples/rs",
-      "target": "file:spells/examples/rs/cargo-clippy.buzz",
+      "source": "dir:spells/examples/rust",
+      "target": "file:spells/examples/rust/cargo-clippy.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-clippy.buzz"
+      "provenance": "spells/examples/rust/cargo-clippy.buzz"
     },
     {
-      "source": "dir:spells/examples/rs",
-      "target": "file:spells/examples/rs/cargo-fmt.buzz",
+      "source": "dir:spells/examples/rust",
+      "target": "file:spells/examples/rust/cargo-fmt.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-fmt.buzz"
+      "provenance": "spells/examples/rust/cargo-fmt.buzz"
     },
     {
-      "source": "dir:spells/examples/rs",
-      "target": "file:spells/examples/rs/cargo-test.buzz",
+      "source": "dir:spells/examples/rust",
+      "target": "file:spells/examples/rust/cargo-test.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-test.buzz"
+      "provenance": "spells/examples/rust/cargo-test.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/biome-check.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/biome-check.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/biome-check.buzz"
+      "provenance": "spells/examples/typescript/biome-check.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/biome-format.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/biome-format.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/biome-format.buzz"
+      "provenance": "spells/examples/typescript/biome-format.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/dev-server.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/dev-server.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/dev-server.buzz"
+      "provenance": "spells/examples/typescript/dev-server.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/eslint.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/eslint.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/eslint.buzz"
+      "provenance": "spells/examples/typescript/eslint.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/preflight.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/preflight.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/preflight.buzz"
+      "provenance": "spells/examples/typescript/preflight.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/prettier.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/prettier.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/prettier.buzz"
+      "provenance": "spells/examples/typescript/prettier.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/tsc-build.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/tsc-build.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc-build.buzz"
+      "provenance": "spells/examples/typescript/tsc-build.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/tsc-clean.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/tsc-clean.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc-clean.buzz"
+      "provenance": "spells/examples/typescript/tsc-clean.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/tsc.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/tsc.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc.buzz"
+      "provenance": "spells/examples/typescript/tsc.buzz"
     },
     {
-      "source": "dir:spells/examples/ts",
-      "target": "file:spells/examples/ts/vitest.buzz",
+      "source": "dir:spells/examples/typescript",
+      "target": "file:spells/examples/typescript/vitest.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/vitest.buzz"
+      "provenance": "spells/examples/typescript/vitest.buzz"
     },
     {
       "source": "dir:spells/github",
@@ -24930,6 +25010,14 @@
       "provenance": ".agents/skills/magus-architecture/SKILL.md"
     },
     {
+      "source": "doc:.agents/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".agents/skills/magus-buzz/SKILL.md"
+    },
+    {
       "source": "doc:.agents/skills/magus-changes/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
@@ -25050,6 +25138,14 @@
       "provenance": ".claude/skills/magus-architecture/SKILL.md"
     },
     {
+      "source": "doc:.claude/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".claude/skills/magus-buzz/SKILL.md"
+    },
+    {
       "source": "doc:.claude/skills/magus-changes/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
@@ -25168,6 +25264,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": ".opencode/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "doc:.opencode/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": ".opencode/skills/magus-buzz/SKILL.md"
     },
     {
       "source": "doc:.opencode/skills/magus-changes/SKILL.md",
@@ -25578,20 +25682,20 @@
       "provenance": "benchmarks/README.md"
     },
     {
-      "source": "doc:benchmarks/README.md",
-      "target": "spell:ts",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "benchmarks/README.md"
-    },
-    {
       "source": "doc:cmd/magus/skills/magus-architecture/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "cmd/magus/skills/magus-buzz/SKILL.md"
     },
     {
       "source": "doc:cmd/magus/skills/magus-changes/SKILL.md",
@@ -26250,6 +26354,14 @@
       "provenance": "docs/concepts/engines.md"
     },
     {
+      "source": "doc:docs/concepts/engines.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/engines.md"
+    },
+    {
       "source": "doc:docs/concepts/knowledge.md",
       "target": "diagnostic:MGS7001",
       "relation": "documents",
@@ -26763,7 +26875,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/spells/md.md",
+      "target": "doc:docs/concepts/spells/markdown.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26771,7 +26883,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/spells/py.md",
+      "target": "doc:docs/concepts/spells/python.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26779,7 +26891,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/spells/rs.md",
+      "target": "doc:docs/concepts/spells/rust.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26787,7 +26899,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/spells/ts.md",
+      "target": "doc:docs/concepts/spells/typescript.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26907,7 +27019,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "spell:md",
+      "target": "spell:markdown",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -26915,7 +27027,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "spell:py",
+      "target": "spell:python",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -26923,7 +27035,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "spell:rs",
+      "target": "spell:rust",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -26931,7 +27043,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "spell:ts",
+      "target": "spell:typescript",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -27034,17 +27146,25 @@
       "provenance": "docs/concepts/spells/go.md"
     },
     {
-      "source": "doc:docs/concepts/spells/md.md",
+      "source": "doc:docs/concepts/spells/markdown.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/spells/md.md"
+      "provenance": "docs/concepts/spells/markdown.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells/markdown.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/markdown.md"
     },
     {
       "source": "doc:docs/concepts/spells/md.md",
-      "target": "spell:md",
-      "relation": "documents",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/spells/md.md"
@@ -27058,12 +27178,20 @@
       "provenance": "docs/concepts/spells/py.md"
     },
     {
-      "source": "doc:docs/concepts/spells/py.md",
-      "target": "spell:py",
+      "source": "doc:docs/concepts/spells/python.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/python.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells/python.md",
+      "target": "spell:python",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/spells/py.md"
+      "provenance": "docs/concepts/spells/python.md"
     },
     {
       "source": "doc:docs/concepts/spells/rs.md",
@@ -27074,12 +27202,20 @@
       "provenance": "docs/concepts/spells/rs.md"
     },
     {
-      "source": "doc:docs/concepts/spells/rs.md",
-      "target": "spell:rs",
+      "source": "doc:docs/concepts/spells/rust.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/rust.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells/rust.md",
+      "target": "spell:rust",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/spells/rs.md"
+      "provenance": "docs/concepts/spells/rust.md"
     },
     {
       "source": "doc:docs/concepts/spells/ts.md",
@@ -27090,12 +27226,20 @@
       "provenance": "docs/concepts/spells/ts.md"
     },
     {
-      "source": "doc:docs/concepts/spells/ts.md",
-      "target": "spell:ts",
+      "source": "doc:docs/concepts/spells/typescript.md",
+      "target": "doc:docs/concepts/charms.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spells/typescript.md"
+    },
+    {
+      "source": "doc:docs/concepts/spells/typescript.md",
+      "target": "spell:typescript",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/spells/ts.md"
+      "provenance": "docs/concepts/spells/typescript.md"
     },
     {
       "source": "doc:docs/concepts/targets.md",
@@ -27850,6 +27994,38 @@
       "provenance": "docs/documentation.md"
     },
     {
+      "source": "doc:docs/documentation.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/documentation.md"
+    },
+    {
       "source": "doc:docs/glossary.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
@@ -27988,14 +28164,6 @@
     {
       "source": "doc:docs/glossary.md",
       "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/glossary.md"
-    },
-    {
-      "source": "doc:docs/glossary.md",
-      "target": "spell:md",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -28890,14 +29058,6 @@
       "provenance": "docs/migrating/from-nx.md"
     },
     {
-      "source": "doc:docs/migrating/from-nx.md",
-      "target": "spell:ts",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/migrating/from-nx.md"
-    },
-    {
       "source": "doc:docs/reference/buzz/archive.md",
       "target": "module:archive",
       "relation": "documents",
@@ -29167,6 +29327,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/buzz/index.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/index.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
       "provenance": "docs/reference/buzz/index.md"
     },
     {
@@ -34170,6 +34338,14 @@
       "provenance": "docs/reference/skills/magus-buzz.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-buzz.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/skills/magus-buzz.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-changes.md",
       "target": "doc:docs/guides/integrations/agents.md",
       "relation": "references",
@@ -34400,6 +34576,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "schema/README.md"
+    },
+    {
+      "source": "doc:std/README.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "std/README.md"
     },
     {
       "source": "file:badge.buzz",
@@ -34739,7 +34923,7 @@
     },
     {
       "source": "file:console/magusfile.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -36091,7 +36275,7 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -37107,7 +37291,7 @@
     },
     {
       "source": "file:docs/magusfile.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -38235,7 +38419,7 @@
     },
     {
       "source": "file:docs/tour/05-slots.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -38659,7 +38843,7 @@
     },
     {
       "source": "file:docs/tour/12-magusfile.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46147,7 +46331,7 @@
     },
     {
       "source": "file:libs/textsearch/magusfile.buzz",
-      "target": "import:magus/spell/ts",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -46587,7 +46771,7 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "import:magus/spell/md",
+      "target": "import:magus/spell/markdown",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -47834,532 +48018,532 @@
       "provenance": "spells/examples/go/govulncheck.buzz"
     },
     {
-      "source": "file:spells/examples/md/markdownlint.buzz",
-      "target": "function:spells/examples/md/markdownlint.buzz:lint",
+      "source": "file:spells/examples/markdown/markdownlint.buzz",
+      "target": "function:spells/examples/markdown/markdownlint.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/md/markdownlint.buzz"
+      "provenance": "spells/examples/markdown/markdownlint.buzz"
     },
     {
-      "source": "file:spells/examples/md/markdownlint.buzz",
+      "source": "file:spells/examples/markdown/markdownlint.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/md/markdownlint.buzz"
+      "provenance": "spells/examples/markdown/markdownlint.buzz"
     },
     {
-      "source": "file:spells/examples/md/markdownlint.buzz",
-      "target": "import:magus/spell/md",
+      "source": "file:spells/examples/markdown/markdownlint.buzz",
+      "target": "import:magus/spell/markdown",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/md/markdownlint.buzz"
+      "provenance": "spells/examples/markdown/markdownlint.buzz"
     },
     {
-      "source": "file:spells/examples/md/prettier.buzz",
-      "target": "function:spells/examples/md/prettier.buzz:format",
+      "source": "file:spells/examples/markdown/prettier.buzz",
+      "target": "function:spells/examples/markdown/prettier.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/md/prettier.buzz"
+      "provenance": "spells/examples/markdown/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/md/prettier.buzz",
+      "source": "file:spells/examples/markdown/prettier.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/md/prettier.buzz"
+      "provenance": "spells/examples/markdown/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/md/prettier.buzz",
-      "target": "import:magus/spell/md",
+      "source": "file:spells/examples/markdown/prettier.buzz",
+      "target": "import:magus/spell/markdown",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/md/prettier.buzz"
+      "provenance": "spells/examples/markdown/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/py/pytest.buzz",
-      "target": "function:spells/examples/py/pytest.buzz:test",
+      "source": "file:spells/examples/python/pytest.buzz",
+      "target": "function:spells/examples/python/pytest.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/pytest.buzz"
+      "provenance": "spells/examples/python/pytest.buzz"
     },
     {
-      "source": "file:spells/examples/py/pytest.buzz",
+      "source": "file:spells/examples/python/pytest.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/pytest.buzz"
+      "provenance": "spells/examples/python/pytest.buzz"
     },
     {
-      "source": "file:spells/examples/py/pytest.buzz",
-      "target": "import:magus/spell/py",
+      "source": "file:spells/examples/python/pytest.buzz",
+      "target": "import:magus/spell/python",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/pytest.buzz"
+      "provenance": "spells/examples/python/pytest.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-check.buzz",
-      "target": "function:spells/examples/py/ruff-check.buzz:lint",
+      "source": "file:spells/examples/python/ruff-check.buzz",
+      "target": "function:spells/examples/python/ruff-check.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/ruff-check.buzz"
+      "provenance": "spells/examples/python/ruff-check.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-check.buzz",
+      "source": "file:spells/examples/python/ruff-check.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/ruff-check.buzz"
+      "provenance": "spells/examples/python/ruff-check.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-check.buzz",
-      "target": "import:magus/spell/py",
+      "source": "file:spells/examples/python/ruff-check.buzz",
+      "target": "import:magus/spell/python",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/ruff-check.buzz"
+      "provenance": "spells/examples/python/ruff-check.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-format.buzz",
-      "target": "function:spells/examples/py/ruff-format.buzz:format",
+      "source": "file:spells/examples/python/ruff-format.buzz",
+      "target": "function:spells/examples/python/ruff-format.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/ruff-format.buzz"
+      "provenance": "spells/examples/python/ruff-format.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-format.buzz",
+      "source": "file:spells/examples/python/ruff-format.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/ruff-format.buzz"
+      "provenance": "spells/examples/python/ruff-format.buzz"
     },
     {
-      "source": "file:spells/examples/py/ruff-format.buzz",
-      "target": "import:magus/spell/py",
+      "source": "file:spells/examples/python/ruff-format.buzz",
+      "target": "import:magus/spell/python",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/ruff-format.buzz"
+      "provenance": "spells/examples/python/ruff-format.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-build.buzz",
-      "target": "function:spells/examples/py/uv-build.buzz:build",
+      "source": "file:spells/examples/python/uv-build.buzz",
+      "target": "function:spells/examples/python/uv-build.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/uv-build.buzz"
+      "provenance": "spells/examples/python/uv-build.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-build.buzz",
+      "source": "file:spells/examples/python/uv-build.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/uv-build.buzz"
+      "provenance": "spells/examples/python/uv-build.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-build.buzz",
-      "target": "import:magus/spell/py",
+      "source": "file:spells/examples/python/uv-build.buzz",
+      "target": "import:magus/spell/python",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/uv-build.buzz"
+      "provenance": "spells/examples/python/uv-build.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-clean.buzz",
-      "target": "function:spells/examples/py/uv-clean.buzz:clean",
+      "source": "file:spells/examples/python/uv-clean.buzz",
+      "target": "function:spells/examples/python/uv-clean.buzz:clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/py/uv-clean.buzz"
+      "provenance": "spells/examples/python/uv-clean.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-clean.buzz",
+      "source": "file:spells/examples/python/uv-clean.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/uv-clean.buzz"
+      "provenance": "spells/examples/python/uv-clean.buzz"
     },
     {
-      "source": "file:spells/examples/py/uv-clean.buzz",
-      "target": "import:magus/spell/py",
+      "source": "file:spells/examples/python/uv-clean.buzz",
+      "target": "import:magus/spell/python",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/py/uv-clean.buzz"
+      "provenance": "spells/examples/python/uv-clean.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-build.buzz",
-      "target": "function:spells/examples/rs/cargo-build.buzz:build",
+      "source": "file:spells/examples/rust/cargo-build.buzz",
+      "target": "function:spells/examples/rust/cargo-build.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-build.buzz"
+      "provenance": "spells/examples/rust/cargo-build.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-build.buzz",
+      "source": "file:spells/examples/rust/cargo-build.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-build.buzz"
+      "provenance": "spells/examples/rust/cargo-build.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-build.buzz",
-      "target": "import:magus/spell/rs",
+      "source": "file:spells/examples/rust/cargo-build.buzz",
+      "target": "import:magus/spell/rust",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-build.buzz"
+      "provenance": "spells/examples/rust/cargo-build.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clean.buzz",
-      "target": "function:spells/examples/rs/cargo-clean.buzz:clean",
+      "source": "file:spells/examples/rust/cargo-clean.buzz",
+      "target": "function:spells/examples/rust/cargo-clean.buzz:clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-clean.buzz"
+      "provenance": "spells/examples/rust/cargo-clean.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clean.buzz",
+      "source": "file:spells/examples/rust/cargo-clean.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-clean.buzz"
+      "provenance": "spells/examples/rust/cargo-clean.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clean.buzz",
-      "target": "import:magus/spell/rs",
+      "source": "file:spells/examples/rust/cargo-clean.buzz",
+      "target": "import:magus/spell/rust",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-clean.buzz"
+      "provenance": "spells/examples/rust/cargo-clean.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clippy.buzz",
-      "target": "function:spells/examples/rs/cargo-clippy.buzz:clippy",
+      "source": "file:spells/examples/rust/cargo-clippy.buzz",
+      "target": "function:spells/examples/rust/cargo-clippy.buzz:clippy",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-clippy.buzz"
+      "provenance": "spells/examples/rust/cargo-clippy.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clippy.buzz",
+      "source": "file:spells/examples/rust/cargo-clippy.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-clippy.buzz"
+      "provenance": "spells/examples/rust/cargo-clippy.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-clippy.buzz",
-      "target": "import:magus/spell/rs",
+      "source": "file:spells/examples/rust/cargo-clippy.buzz",
+      "target": "import:magus/spell/rust",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-clippy.buzz"
+      "provenance": "spells/examples/rust/cargo-clippy.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-fmt.buzz",
-      "target": "function:spells/examples/rs/cargo-fmt.buzz:format",
+      "source": "file:spells/examples/rust/cargo-fmt.buzz",
+      "target": "function:spells/examples/rust/cargo-fmt.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-fmt.buzz"
+      "provenance": "spells/examples/rust/cargo-fmt.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-fmt.buzz",
+      "source": "file:spells/examples/rust/cargo-fmt.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-fmt.buzz"
+      "provenance": "spells/examples/rust/cargo-fmt.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-fmt.buzz",
-      "target": "import:magus/spell/rs",
+      "source": "file:spells/examples/rust/cargo-fmt.buzz",
+      "target": "import:magus/spell/rust",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-fmt.buzz"
+      "provenance": "spells/examples/rust/cargo-fmt.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-test.buzz",
-      "target": "function:spells/examples/rs/cargo-test.buzz:test",
+      "source": "file:spells/examples/rust/cargo-test.buzz",
+      "target": "function:spells/examples/rust/cargo-test.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/rs/cargo-test.buzz"
+      "provenance": "spells/examples/rust/cargo-test.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-test.buzz",
+      "source": "file:spells/examples/rust/cargo-test.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-test.buzz"
+      "provenance": "spells/examples/rust/cargo-test.buzz"
     },
     {
-      "source": "file:spells/examples/rs/cargo-test.buzz",
-      "target": "import:magus/spell/rs",
+      "source": "file:spells/examples/rust/cargo-test.buzz",
+      "target": "import:magus/spell/rust",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/rs/cargo-test.buzz"
+      "provenance": "spells/examples/rust/cargo-test.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-check.buzz",
-      "target": "function:spells/examples/ts/biome-check.buzz:lint",
+      "source": "file:spells/examples/typescript/biome-check.buzz",
+      "target": "function:spells/examples/typescript/biome-check.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/biome-check.buzz"
+      "provenance": "spells/examples/typescript/biome-check.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-check.buzz",
+      "source": "file:spells/examples/typescript/biome-check.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/biome-check.buzz"
+      "provenance": "spells/examples/typescript/biome-check.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-check.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/biome-check.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/biome-check.buzz"
+      "provenance": "spells/examples/typescript/biome-check.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-format.buzz",
-      "target": "function:spells/examples/ts/biome-format.buzz:format",
+      "source": "file:spells/examples/typescript/biome-format.buzz",
+      "target": "function:spells/examples/typescript/biome-format.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/biome-format.buzz"
+      "provenance": "spells/examples/typescript/biome-format.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-format.buzz",
+      "source": "file:spells/examples/typescript/biome-format.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/biome-format.buzz"
+      "provenance": "spells/examples/typescript/biome-format.buzz"
     },
     {
-      "source": "file:spells/examples/ts/biome-format.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/biome-format.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/biome-format.buzz"
+      "provenance": "spells/examples/typescript/biome-format.buzz"
     },
     {
-      "source": "file:spells/examples/ts/dev-server.buzz",
-      "target": "function:spells/examples/ts/dev-server.buzz:serve",
+      "source": "file:spells/examples/typescript/dev-server.buzz",
+      "target": "function:spells/examples/typescript/dev-server.buzz:serve",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/dev-server.buzz"
+      "provenance": "spells/examples/typescript/dev-server.buzz"
     },
     {
-      "source": "file:spells/examples/ts/dev-server.buzz",
+      "source": "file:spells/examples/typescript/dev-server.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/dev-server.buzz"
+      "provenance": "spells/examples/typescript/dev-server.buzz"
     },
     {
-      "source": "file:spells/examples/ts/dev-server.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/dev-server.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/dev-server.buzz"
+      "provenance": "spells/examples/typescript/dev-server.buzz"
     },
     {
-      "source": "file:spells/examples/ts/eslint.buzz",
-      "target": "function:spells/examples/ts/eslint.buzz:lint",
+      "source": "file:spells/examples/typescript/eslint.buzz",
+      "target": "function:spells/examples/typescript/eslint.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/eslint.buzz"
+      "provenance": "spells/examples/typescript/eslint.buzz"
     },
     {
-      "source": "file:spells/examples/ts/eslint.buzz",
+      "source": "file:spells/examples/typescript/eslint.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/eslint.buzz"
+      "provenance": "spells/examples/typescript/eslint.buzz"
     },
     {
-      "source": "file:spells/examples/ts/eslint.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/eslint.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/eslint.buzz"
+      "provenance": "spells/examples/typescript/eslint.buzz"
     },
     {
-      "source": "file:spells/examples/ts/preflight.buzz",
-      "target": "function:spells/examples/ts/preflight.buzz:preflight",
+      "source": "file:spells/examples/typescript/preflight.buzz",
+      "target": "function:spells/examples/typescript/preflight.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/preflight.buzz"
+      "provenance": "spells/examples/typescript/preflight.buzz"
     },
     {
-      "source": "file:spells/examples/ts/preflight.buzz",
+      "source": "file:spells/examples/typescript/preflight.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/preflight.buzz"
+      "provenance": "spells/examples/typescript/preflight.buzz"
     },
     {
-      "source": "file:spells/examples/ts/preflight.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/preflight.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/preflight.buzz"
+      "provenance": "spells/examples/typescript/preflight.buzz"
     },
     {
-      "source": "file:spells/examples/ts/prettier.buzz",
-      "target": "function:spells/examples/ts/prettier.buzz:format",
+      "source": "file:spells/examples/typescript/prettier.buzz",
+      "target": "function:spells/examples/typescript/prettier.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/prettier.buzz"
+      "provenance": "spells/examples/typescript/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/ts/prettier.buzz",
+      "source": "file:spells/examples/typescript/prettier.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/prettier.buzz"
+      "provenance": "spells/examples/typescript/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/ts/prettier.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/prettier.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/prettier.buzz"
+      "provenance": "spells/examples/typescript/prettier.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-build.buzz",
-      "target": "function:spells/examples/ts/tsc-build.buzz:build",
+      "source": "file:spells/examples/typescript/tsc-build.buzz",
+      "target": "function:spells/examples/typescript/tsc-build.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc-build.buzz"
+      "provenance": "spells/examples/typescript/tsc-build.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-build.buzz",
+      "source": "file:spells/examples/typescript/tsc-build.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc-build.buzz"
+      "provenance": "spells/examples/typescript/tsc-build.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-build.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/tsc-build.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc-build.buzz"
+      "provenance": "spells/examples/typescript/tsc-build.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-clean.buzz",
-      "target": "function:spells/examples/ts/tsc-clean.buzz:clean",
+      "source": "file:spells/examples/typescript/tsc-clean.buzz",
+      "target": "function:spells/examples/typescript/tsc-clean.buzz:clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc-clean.buzz"
+      "provenance": "spells/examples/typescript/tsc-clean.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-clean.buzz",
+      "source": "file:spells/examples/typescript/tsc-clean.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc-clean.buzz"
+      "provenance": "spells/examples/typescript/tsc-clean.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc-clean.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/tsc-clean.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc-clean.buzz"
+      "provenance": "spells/examples/typescript/tsc-clean.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc.buzz",
-      "target": "function:spells/examples/ts/tsc.buzz:lint",
+      "source": "file:spells/examples/typescript/tsc.buzz",
+      "target": "function:spells/examples/typescript/tsc.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/tsc.buzz"
+      "provenance": "spells/examples/typescript/tsc.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc.buzz",
+      "source": "file:spells/examples/typescript/tsc.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc.buzz"
+      "provenance": "spells/examples/typescript/tsc.buzz"
     },
     {
-      "source": "file:spells/examples/ts/tsc.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/tsc.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/tsc.buzz"
+      "provenance": "spells/examples/typescript/tsc.buzz"
     },
     {
-      "source": "file:spells/examples/ts/vitest.buzz",
-      "target": "function:spells/examples/ts/vitest.buzz:test",
+      "source": "file:spells/examples/typescript/vitest.buzz",
+      "target": "function:spells/examples/typescript/vitest.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/examples/ts/vitest.buzz"
+      "provenance": "spells/examples/typescript/vitest.buzz"
     },
     {
-      "source": "file:spells/examples/ts/vitest.buzz",
+      "source": "file:spells/examples/typescript/vitest.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/vitest.buzz"
+      "provenance": "spells/examples/typescript/vitest.buzz"
     },
     {
-      "source": "file:spells/examples/ts/vitest.buzz",
-      "target": "import:magus/spell/ts",
+      "source": "file:spells/examples/typescript/vitest.buzz",
+      "target": "import:magus/spell/typescript",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/examples/ts/vitest.buzz"
+      "provenance": "spells/examples/typescript/vitest.buzz"
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
@@ -55944,175 +56128,175 @@
       "score": 1
     },
     {
-      "source": "op:md:markdownlint",
+      "source": "op:markdown:markdownlint",
       "target": "tool:markdownlint",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:md:prettier",
+      "source": "op:markdown:prettier",
       "target": "tool:prettier",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:md:typos",
+      "source": "op:markdown:typos",
       "target": "tool:typos",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:pytest",
+      "source": "op:python:pytest",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:ruff-check",
+      "source": "op:python:ruff-check",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:ruff-format",
+      "source": "op:python:ruff-format",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:scip",
+      "source": "op:python:scip",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:uv-build",
+      "source": "op:python:uv-build",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:py:uv-clean",
+      "source": "op:python:uv-clean",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:cargo-build",
+      "source": "op:rust:cargo-build",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:cargo-clean",
+      "source": "op:rust:cargo-clean",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:cargo-clippy",
+      "source": "op:rust:cargo-clippy",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:cargo-fmt",
+      "source": "op:rust:cargo-fmt",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:cargo-test",
+      "source": "op:rust:cargo-test",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:rs:scip",
+      "source": "op:rust:scip",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:biome-check",
+      "source": "op:typescript:biome-check",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:biome-format",
+      "source": "op:typescript:biome-format",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:dev-server",
+      "source": "op:typescript:dev-server",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:eslint",
+      "source": "op:typescript:eslint",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:prettier",
+      "source": "op:typescript:prettier",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:scip",
+      "source": "op:typescript:scip",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:tsc",
+      "source": "op:typescript:tsc",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:tsc-build",
+      "source": "op:typescript:tsc-build",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:tsc-clean",
+      "source": "op:typescript:tsc-clean",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "op:ts:vitest",
+      "source": "op:typescript:vitest",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
@@ -57506,245 +57690,245 @@
       "score": 1
     },
     {
-      "source": "spell:md",
-      "target": "op:md:markdownlint",
+      "source": "spell:markdown",
+      "target": "op:markdown:markdownlint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:md",
-      "target": "op:md:prettier",
+      "source": "spell:markdown",
+      "target": "op:markdown:prettier",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:md",
-      "target": "op:md:typos",
+      "source": "spell:markdown",
+      "target": "op:markdown:typos",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:md",
+      "source": "spell:markdown",
       "target": "tool:markdownlint",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:md",
+      "source": "spell:markdown",
       "target": "tool:prettier",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:md",
+      "source": "spell:markdown",
       "target": "tool:typos",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:pytest",
+      "source": "spell:python",
+      "target": "op:python:pytest",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:ruff-check",
+      "source": "spell:python",
+      "target": "op:python:ruff-check",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:ruff-format",
+      "source": "spell:python",
+      "target": "op:python:ruff-format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:scip",
+      "source": "spell:python",
+      "target": "op:python:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:uv-build",
+      "source": "spell:python",
+      "target": "op:python:uv-build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
-      "target": "op:py:uv-clean",
+      "source": "spell:python",
+      "target": "op:python:uv-clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
+      "source": "spell:python",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:py",
+      "source": "spell:python",
       "target": "tool:uv",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:cargo-build",
+      "source": "spell:rust",
+      "target": "op:rust:cargo-build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:cargo-clean",
+      "source": "spell:rust",
+      "target": "op:rust:cargo-clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:cargo-clippy",
+      "source": "spell:rust",
+      "target": "op:rust:cargo-clippy",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:cargo-fmt",
+      "source": "spell:rust",
+      "target": "op:rust:cargo-fmt",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:cargo-test",
+      "source": "spell:rust",
+      "target": "op:rust:cargo-test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
-      "target": "op:rs:scip",
+      "source": "spell:rust",
+      "target": "op:rust:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
+      "source": "spell:rust",
       "target": "tool:cargo",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:rs",
+      "source": "spell:rust",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:biome-check",
+      "source": "spell:typescript",
+      "target": "op:typescript:biome-check",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:biome-format",
+      "source": "spell:typescript",
+      "target": "op:typescript:biome-format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:dev-server",
+      "source": "spell:typescript",
+      "target": "op:typescript:dev-server",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:eslint",
+      "source": "spell:typescript",
+      "target": "op:typescript:eslint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:preflight",
+      "source": "spell:typescript",
+      "target": "op:typescript:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:prettier",
+      "source": "spell:typescript",
+      "target": "op:typescript:prettier",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:scip",
+      "source": "spell:typescript",
+      "target": "op:typescript:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:tsc",
+      "source": "spell:typescript",
+      "target": "op:typescript:tsc",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:tsc-build",
+      "source": "spell:typescript",
+      "target": "op:typescript:tsc-build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:tsc-clean",
+      "source": "spell:typescript",
+      "target": "op:typescript:tsc-clean",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
-      "target": "op:ts:vitest",
+      "source": "spell:typescript",
+      "target": "op:typescript:vitest",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
+      "source": "spell:typescript",
       "target": "tool:pnpm",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1
     },
     {
-      "source": "spell:ts",
+      "source": "spell:typescript",
       "target": "tool:sh",
       "relation": "uses",
       "confidence": "extracted",
@@ -58016,7 +58200,7 @@
     },
     {
       "source": "target:.:lint",
-      "target": "op:md:markdownlint",
+      "target": "op:markdown:markdownlint",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -58040,7 +58224,7 @@
     },
     {
       "source": "target:.:lint",
-      "target": "spell:md",
+      "target": "spell:markdown",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
@@ -58880,6 +59064,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/concepts/spells/markdown.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/concepts/spells/md.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -58896,6 +59088,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/concepts/spells/python.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/concepts/spells/rs.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -58904,7 +59104,23 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/concepts/spells/rust.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/concepts/spells/ts.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/concepts/spells/typescript.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

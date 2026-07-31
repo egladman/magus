@@ -2,7 +2,7 @@ import "magus/target";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 
-export fun mgs_getName() > str { return "rs"; }
+export fun mgs_getName() > str { return "rust"; }
 
 export fun mgs_listRequiredGlobs(root: str) > [str] {
     return ["**/*.rs", "Cargo.toml", "Cargo.lock"];

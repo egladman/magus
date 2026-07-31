@@ -1,0 +1,10 @@
+// biome-check lints the project through Biome (pnpm exec biome check), the
+// spell's alternative to eslint - the magusfile picks one, not both.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    typescript["biome-check"](ctx);
+}

@@ -1,0 +1,10 @@
+// tsc-build compiles the project via TypeScript's project-references
+// incremental build mode (pnpm exec tsc --build).
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun build(ctx: magus\Context, args: [str]) > void {
+    typescript["tsc-build"](ctx);
+}
