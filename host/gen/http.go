@@ -27,7 +27,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("post", vm.DirectValue("http.post", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		url := host.Str(bzArgs, 0)
@@ -38,7 +38,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("request", vm.DirectValue("http.request", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		method := host.Str(bzArgs, 0)
@@ -50,7 +50,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("server", vm.DirectValue("http.server", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		opts := host.AnyMap(bzArgs, 0)

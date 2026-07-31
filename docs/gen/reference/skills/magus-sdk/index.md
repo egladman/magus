@@ -2,8 +2,8 @@
 title: magus-sdk
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13251
-skill_simple_bytes: 12585
+skill_full_bytes: 13286
+skill_simple_bytes: 12620
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `21` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `e95cbc33a64a` |
+| `skill-content` | `064275bc9429` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -55,23 +55,23 @@ cannot see.
 VERIFIED against the real published module at the real latest tag
 (`go get github.com/egladman/magus@v0.3.0` from a clean module, no local
 replace): it fails outright. `go.mod` requires
-`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diag` - nested
+`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diagnostics` - nested
 modules with their own `go.mod` - at `v0.0.0`, and no `libs/gopherbuzz/vX.Y.Z`
-or `libs/diag/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
+or `libs/diagnostics/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
 The root module's own `go.mod` resolves them via LOCAL replace directives
 (`replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz`);
 replace directives are not transitive, so a downstream consumer inherits
 none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those nested modules get their own tags, the only working install is:
-clone the repo (or vendor `libs/gopherbuzz` and `libs/diag` from it), and add
+clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag => /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
 ```
 
 Tell the reader this plainly before anything else. A worked example that
@@ -293,23 +293,23 @@ cannot see.
 VERIFIED against the real published module at the real latest tag
 (`go get github.com/egladman/magus@v0.3.0` from a clean module, no local
 replace): it fails outright. `go.mod` requires
-`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diag` - nested
+`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diagnostics` - nested
 modules with their own `go.mod` - at `v0.0.0`, and no `libs/gopherbuzz/vX.Y.Z`
-or `libs/diag/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
+or `libs/diagnostics/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
 The root module's own `go.mod` resolves them via LOCAL replace directives
 (`replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz`);
 replace directives are not transitive, so a downstream consumer inherits
 none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those nested modules get their own tags, the only working install is:
-clone the repo (or vendor `libs/gopherbuzz` and `libs/diag` from it), and add
+clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag => /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagnostics
 ```
 
 Tell the reader this plainly before anything else. A worked example that

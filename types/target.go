@@ -184,11 +184,11 @@ type ExecResult struct {
 	OK     bool `buzz:"ok"`
 }
 
-// ToMap is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
+// BuzzObject is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
 // {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
 // building the struct (the captured-output convention), so this is a plain field
 // map.
-func (r ExecResult) ToMap() map[string]any {
+func (r ExecResult) BuzzObject() BuzzObject {
 	return map[string]any{
 		"stdout": r.Stdout,
 		"stderr": r.Stderr,

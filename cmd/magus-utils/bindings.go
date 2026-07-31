@@ -56,7 +56,7 @@ func runBindings(args []string) error {
 	// Checked across EVERY module, not just the one being generated: the
 	// declarations are one table, and a per-module check would report a mismatch
 	// only when that module happened to be the regenerate target.
-	if err := checkRecordDecls(std.All()); err != nil {
+	if err := checkObjectDecls(std.All()); err != nil {
 		return err
 	}
 	out, err := emitBuzz(m)
@@ -292,33 +292,36 @@ func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	}
 }
 
-// fielderType is the interface a typed record return implements (ToMap() map[string]any).
-var fielderType = reflect.TypeOf((*interface{ ToMap() map[string]any })(nil)).Elem()
+// objecterType is host.BuzzObjecter, the interface a typed object return implements
+// (BuzzObject() types.BuzzObject). Referenced rather than re-declared so the
+// generator and the runtime it generates code for share one interface
+// declaration, not two spellings of it.
+var objecterType = reflect.TypeOf((*host.BuzzObjecter)(nil)).Elem()
 
 // returnConv returns the Go expression that converts a method's single return
-// (src) to a vm.Value. When the Impl returns a typed record (or a slice of them),
-// i.e. its Go type implements ToMap, it marshals via ToMap so the Buzz boundary
+// (src) to a vm.Value. When the Impl returns a typed object (or a slice of them),
+// i.e. its Go type implements BuzzObject, it marshals via BuzzObject so the Buzz boundary
 // stays the same map a magusfile reads while the Go SDK gets the struct. Otherwise
 // it falls back to the TypeTag-driven conversion.
 func returnConv(tag std.TypeTag, goType reflect.Type, src string) string {
 	switch {
-	case goType.Implements(fielderType):
-		return "host.AnyMapVal(" + src + ".ToMap())"
-	case goType.Kind() == reflect.Slice && goType.Elem().Implements(fielderType):
+	case goType.Implements(objecterType):
+		return "host.AnyMapVal(" + src + ".BuzzObject())"
+	case goType.Kind() == reflect.Slice && goType.Elem().Implements(objecterType):
 		return "host.MapsVal(" + src + ")"
 	default:
 		return buzzValConv(tag, src)
 	}
 }
 
-// recordName returns the Buzz object a return marshals to, or "" for a scalar.
+// objectName returns the Buzz object a return marshals to, or "" for a scalar.
 // It reads the Impl's reflected type, which is the same signal returnConv uses to
-// pick ToMap marshalling, so the two can never disagree about what a record is.
-func recordName(goType reflect.Type) string {
+// pick BuzzObject marshalling, so the two can never disagree about what an object is.
+func objectName(goType reflect.Type) string {
 	switch {
-	case goType.Implements(fielderType):
+	case goType.Implements(objecterType):
 		return goType.Name()
-	case goType.Kind() == reflect.Slice && goType.Elem().Implements(fielderType):
+	case goType.Kind() == reflect.Slice && goType.Elem().Implements(objecterType):
 		// Bracketed, so the descriptor states the shape as a magusfile annotation
 		// spells it and no consumer has to reflect to recover the list-ness.
 		return "[" + goType.Elem().Name() + "]"
@@ -326,46 +329,46 @@ func recordName(goType reflect.Type) string {
 	return ""
 }
 
-// checkRecordDecls verifies every method's declared Ret.Record against the Impl's
+// checkObjectDecls verifies every method's declared Ret.Object against the Impl's
 // actual return type, and returns one error naming every disagreement.
 //
-// This is what licenses stating the record name in the descriptor at all. The name
+// This is what licenses stating the object name in the descriptor at all. The name
 // is already derivable by reflection, so a hand-written copy is only safe while
 // something proves the copy right - otherwise it is a second source of truth that
-// drifts silently, and a wrong record name is worse than none: it tells an author to
+// drifts silently, and a wrong object name is worse than none: it tells an author to
 // annotate `> FileInfo` on a call that returns ExecResult, and the checker then
 // rejects correct code.
 //
 // Codegen is the right place to fail. It runs on every `magus run generate`, it
 // already has the reflection in hand, and a build-time error costs a developer one
 // message where a runtime one costs a user a confusing load failure.
-func checkRecordDecls(mods []std.Module) error {
+func checkObjectDecls(mods []std.Module) error {
 	var problems []string
 	for _, mod := range mods {
 		for _, meth := range mod.Methods {
 			if len(meth.Returns) != 1 || meth.Impl == nil {
 				continue
 			}
-			want := recordName(reflect.TypeOf(meth.Impl).Out(0))
-			got := meth.Returns[0].Record
+			want := objectName(reflect.TypeOf(meth.Impl).Out(0))
+			got := meth.Returns[0].Object
 			if want == got {
 				continue
 			}
 			switch {
 			case want == "":
-				problems = append(problems, fmt.Sprintf("%s\\%s: declares Record %q but its Impl returns a scalar",
+				problems = append(problems, fmt.Sprintf("%s\\%s: declares Object %q but its Impl returns a scalar",
 					mod.Name, meth.Name, got))
 			case got == "":
-				problems = append(problems, fmt.Sprintf("%s\\%s: Impl returns record %s; add Record: %q to its Ret",
+				problems = append(problems, fmt.Sprintf("%s\\%s: Impl returns object %s; add Object: %q to its Ret",
 					mod.Name, meth.Name, want, want))
 			default:
-				problems = append(problems, fmt.Sprintf("%s\\%s: declares Record %q but its Impl returns %s",
+				problems = append(problems, fmt.Sprintf("%s\\%s: declares Object %q but its Impl returns %s",
 					mod.Name, meth.Name, got, want))
 			}
 		}
 	}
 	if len(problems) > 0 {
-		return fmt.Errorf("record return declarations disagree with their Impls:\n  %s", strings.Join(problems, "\n  "))
+		return fmt.Errorf("object return declarations disagree with their Impls:\n  %s", strings.Join(problems, "\n  "))
 	}
 	return nil
 }

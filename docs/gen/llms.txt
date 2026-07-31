@@ -47,7 +47,7 @@
 - [Contributing](https://eli.gladman.cc/magus/development/contributing/index.md): How to build, test, and contribute to magus: the performance-evidence rule, the docs-site flow, and one-person-project etiquette.
 - [docs/guides/integrations/agents targets](https://eli.gladman.cc/magus/development/docs-guides-integrations-agents/index.md): Target catalog and run-order graph for the docs/guides/integrations/agents project, generated from its magusfile.
 - [docs targets](https://eli.gladman.cc/magus/development/docs/index.md): Target catalog and run-order graph for the docs project, generated from its magusfile.
-- [libs/diag targets](https://eli.gladman.cc/magus/development/libs-diag/index.md): Target catalog and run-order graph for the libs/diag project, generated from its magusfile.
+- [libs/diagnostics targets](https://eli.gladman.cc/magus/development/libs-diagnostics/index.md): Target catalog and run-order graph for the libs/diagnostics project, generated from its magusfile.
 - [libs/gopherbuzz targets](https://eli.gladman.cc/magus/development/libs-gopherbuzz/index.md): Target catalog and run-order graph for the libs/gopherbuzz project, generated from its magusfile.
 - [libs/textsearch targets](https://eli.gladman.cc/magus/development/libs-textsearch/index.md): Target catalog and run-order graph for the libs/textsearch project, generated from its magusfile.
 - [magus targets](https://eli.gladman.cc/magus/development/magus/index.md): Target catalog and run-order graph for the magus project, generated from its magusfile.

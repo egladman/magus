@@ -87,7 +87,7 @@ func (g *Graph) Predecessors(path string) []string { return g.repo.Predecessors(
 func (g *Graph) Nodes() []string                   { return g.repo.Nodes() }
 func (g *Graph) Project(path string) *Project      { return g.projects[path] }
 
-// GraphView is the boundary record magus.graph returns: the project dependency
+// GraphView is the boundary object magus.graph returns: the project dependency
 // DAG flattened to plain data a magusfile can walk.
 //
 // Nodes are in topological order, so a caller that just iterates gets a valid
@@ -103,8 +103,8 @@ type GraphView struct {
 	BlastRadius map[string]int
 }
 
-// ToMap is the Buzz boundary map magus.graph returns.
-func (g GraphView) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map magus.graph returns.
+func (g GraphView) BuzzObject() BuzzObject {
 	dependsOn := make(map[string]any, len(g.DependsOn))
 	for k, v := range g.DependsOn {
 		dependsOn[k] = v
@@ -120,7 +120,7 @@ func (g GraphView) ToMap() map[string]any {
 	}
 }
 
-// View flattens the graph into the boundary record above.
+// View flattens the graph into the boundary object above.
 //
 // Edges in this graph run DEPENDENT -> DEPENDENCY, so Successors(web) is what web
 // depends on and TopoSort yields dependents before dependencies. A caller wanting a

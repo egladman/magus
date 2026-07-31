@@ -144,7 +144,7 @@ fun workspaceDependencies(graph: Graph) > str {
 // A Mermaid block draws the run order from each node's declared dependencies, so the
 // arrows are the real ctx.needs edges and not a hand-maintained picture.
 fun projectCatalog(proj: TargetGraphProject) > str {
-    // No `?? []` guards below: TargetGraphOutput.ToMap normalizes every optional list to
+    // No `?? []` guards below: TargetGraphOutput.BuzzObject normalizes every optional list to
     // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
     // rather than null. That is what makes the annotation worth having - the field names
     // are compile-checked AND the values have the shape the mirror declares.

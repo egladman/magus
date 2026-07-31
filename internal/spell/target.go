@@ -27,7 +27,7 @@ var TargetModuleSource string
 // PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
 // mirrors of spells.PatchOp, spells.Charm, and types.Run: the {cmd, args, charms}
 // command a command target's handler hands to its cb callback, down to the RFC 6902
-// ops. Unlike the other record mirrors they are inlined into self-contained
+// ops. Unlike the other object mirrors they are inlined into self-contained
 // built-ins (every command spell references Run), so they ship in the magus/target
 // bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
@@ -58,7 +58,7 @@ var ServiceSource string
 // types.ExecResult (see cmd/magus-utils types). It ships alongside the other value
 // types in the magus/target module so a magusfile can annotate an os.exec /
 // magus.describe / captured-op result as `> ExecResult`; the runtime value is the
-// matching {stdout, stderr, code, ok} record (see run.ExecResult.Record).
+// matching {stdout, stderr, code, ok} object (see run.ExecResult.BuzzObject).
 //
 //go:generate go run ../../cmd/magus-utils types -type ExecResult -out gen/types/execresult.buzz
 //go:embed gen/types/execresult.buzz
@@ -79,7 +79,7 @@ var CommitAuthorSource string
 var CommitSource string
 
 // FileInfoSource / HTTPResponseSource / SemverVersionSource / URLSource are the
-// generated Buzz mirrors of the remaining host-method record shapes (fs.stat,
+// generated Buzz mirrors of the remaining host-method object shapes (fs.stat,
 // http.*, semver.parse, encoding.parse_url), shipped in the magus/target module
 // so a magusfile can annotate those results for compile-checked field access.
 //
@@ -96,7 +96,7 @@ var HTTPResponseSource string
 var SemverVersionSource string
 
 // SemverNextSource is the generated Buzz mirror of types.SemverNext: the
-// {major, minor, patch} candidate-next-version record semver.next returns.
+// {major, minor, patch} candidate-next-version object semver.next returns.
 // No ordering dependency on SemverVersion (its fields are plain strings), but
 // it lives next to it in this file since the two host methods are a pair.
 //
@@ -124,7 +124,7 @@ var ProjectEntrySource string
 var ProjectsSource string
 
 // TagSource / AffectedSource / GraphSource and the Module trio complete the set:
-// every Go boundary type with a ToMap (the marker for "this crosses into Buzz")
+// every Go boundary type with a BuzzObject (the marker for "this crosses into Buzz")
 // now has a mirror, so a magusfile can name the type of any host result rather
 // than indexing an untyped map. Affected and Graph are magus.affected's and
 // magus.graph's returns - the in-process verbs beside ls, which had the same gap

@@ -224,24 +224,24 @@ func buzzList(s []string) []string {
 	return s
 }
 
-// ToMap is the Buzz boundary map for one target. Keys are the camelCase names the
+// BuzzObject is the Buzz boundary map for one target. Keys are the camelCase names the
 // generated mirror declares, not the snake_case JSON ones.
-func (n TargetGraphNode) ToMap() map[string]any {
+func (n TargetGraphNode) BuzzObject() BuzzObject {
 	spells := make([]any, len(n.Spells))
 	for i, s := range n.Spells {
-		spells[i] = s.ToMap()
+		spells[i] = s.BuzzObject()
 	}
 	cross := make([]any, len(n.CrossDependencies))
 	for i, c := range n.CrossDependencies {
-		cross[i] = c.ToMap()
+		cross[i] = c.BuzzObject()
 	}
 	inputs := make([]any, len(n.Inputs))
 	for i, in := range n.Inputs {
-		inputs[i] = in.ToMap()
+		inputs[i] = in.BuzzObject()
 	}
 	outputs := make([]any, len(n.Outputs))
 	for i, o := range n.Outputs {
-		outputs[i] = o.ToMap()
+		outputs[i] = o.BuzzObject()
 	}
 	return map[string]any{
 		"name":              n.Name,
@@ -264,8 +264,8 @@ type CrossTargetRef struct {
 	Target  string `json:"target"  yaml:"target"`
 }
 
-// ToMap is the Buzz boundary map for one cross-project target reference.
-func (c CrossTargetRef) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for one cross-project target reference.
+func (c CrossTargetRef) BuzzObject() BuzzObject {
 	return map[string]any{
 		"project": c.Project,
 		"target":  c.Target,
@@ -287,8 +287,8 @@ type InputRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// ToMap is the Buzz boundary map for one declared file input.
-func (r InputRef) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for one declared file input.
+func (r InputRef) BuzzObject() BuzzObject {
 	return map[string]any{
 		"project": r.Project,
 		"glob":    r.Glob,
@@ -331,8 +331,8 @@ type UpdateRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// ToMap is the Buzz boundary map for one declared file output.
-func (r OutputRef) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for one declared file output.
+func (r OutputRef) BuzzObject() BuzzObject {
 	return map[string]any{
 		"project": r.Project,
 		"glob":    r.Glob,
@@ -352,8 +352,8 @@ type TargetSpellUse struct {
 	Ops   []string `json:"ops,omitempty" yaml:"ops,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for one spell a target drives.
-func (u TargetSpellUse) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for one spell a target drives.
+func (u TargetSpellUse) BuzzObject() BuzzObject {
 	return map[string]any{
 		"spell": u.Spell,
 		"ops":   buzzList(u.Ops),
@@ -391,13 +391,13 @@ func (p TargetGraphProject) Label() string {
 	return ProjectDisplayName(p.Path, name, "")
 }
 
-// ToMap is the Buzz boundary map for one project's target graph. RelPath is dropped:
+// BuzzObject is the Buzz boundary map for one project's target graph. RelPath is dropped:
 // it exists for Label(), which a Go render site calls, and mirroring it would put a
 // field on the Buzz value that the value never carries.
-func (p TargetGraphProject) ToMap() map[string]any {
+func (p TargetGraphProject) BuzzObject() BuzzObject {
 	nodes := make([]any, len(p.Nodes))
 	for i, n := range p.Nodes {
-		nodes[i] = n.ToMap()
+		nodes[i] = n.BuzzObject()
 	}
 	return map[string]any{
 		"path":      p.Path,
@@ -414,19 +414,19 @@ func (p TargetGraphProject) ToMap() map[string]any {
 // The Buzz `object TargetGraph` mirror is generated from this struct by
 // cmd/magus-utils types, so magus.targets's result can be annotated `> TargetGraph`
 // for compile-checked field access. Definition carries `buzz:"-"` for the same reason
-// ProjectsOutput's does: ToMap drops it, so a mirrored field would be one the Buzz
+// ProjectsOutput's does: BuzzObject drops it, so a mirrored field would be one the Buzz
 // value never has.
 type TargetGraphOutput struct {
 	Definition string               `json:"definition" yaml:"definition" buzz:"-"`
 	Projects   []TargetGraphProject `json:"projects"   yaml:"projects"`
 }
 
-// ToMap is the Buzz boundary map magus.targets returns. Definition is dropped: it is
+// BuzzObject is the Buzz boundary map magus.targets returns. Definition is dropped: it is
 // prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o TargetGraphOutput) ToMap() map[string]any {
+func (o TargetGraphOutput) BuzzObject() BuzzObject {
 	projects := make([]any, len(o.Projects))
 	for i, p := range o.Projects {
-		projects[i] = p.ToMap()
+		projects[i] = p.BuzzObject()
 	}
 	return map[string]any{"projects": projects}
 }
@@ -438,7 +438,7 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
 // ProjectEntry is the structured view of a single project. Its Buzz mirror is
-// generated alongside Projects; DependsOn is tagged because ToMap emits the
+// generated alongside Projects; DependsOn is tagged because BuzzObject emits the
 // camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
 // JSON name.
 type ProjectEntry struct {
@@ -465,8 +465,8 @@ type ProjectEntry struct {
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for one project (magus.ls's entries).
-func (p ProjectEntry) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for one project (magus.ls's entries).
+func (p ProjectEntry) BuzzObject() BuzzObject {
 	return map[string]any{
 		"path":      p.Path,
 		"name":      p.Name,
@@ -485,7 +485,7 @@ func (p ProjectEntry) ToMap() map[string]any {
 // The Buzz `object Projects` mirror is generated from this struct by
 // cmd/magus-utils types, so magus.ls's result can be annotated `> Projects` for
 // compile-checked field access. Definition carries `buzz:"-"` to keep the mirror
-// honest: ToMap drops it, so a mirrored field would be one the Buzz value never
+// honest: BuzzObject drops it, so a mirrored field would be one the Buzz value never
 // has.
 type ProjectsOutput struct {
 	Definition string         `json:"definition" yaml:"definition" buzz:"-"`
@@ -494,12 +494,12 @@ type ProjectsOutput struct {
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`
 }
 
-// ToMap is the Buzz boundary map magus.ls returns. Definition is dropped: it is
+// BuzzObject is the Buzz boundary map magus.ls returns. Definition is dropped: it is
 // prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o ProjectsOutput) ToMap() map[string]any {
+func (o ProjectsOutput) BuzzObject() BuzzObject {
 	projects := make([]any, len(o.Projects))
 	for i, p := range o.Projects {
-		projects[i] = p.ToMap()
+		projects[i] = p.BuzzObject()
 	}
 	return map[string]any{
 		"workspace": o.Workspace,
@@ -523,8 +523,8 @@ type ModuleMethodEntry struct {
 	BuzzStdlib string `json:"buzz_stdlib,omitempty" yaml:"buzz_stdlib,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for a method entry (magus.module's methods).
-func (m ModuleMethodEntry) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for a method entry (magus.module's methods).
+func (m ModuleMethodEntry) BuzzObject() BuzzObject {
 	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "buzzStdlib": m.BuzzStdlib}
 }
 
@@ -535,8 +535,8 @@ type ModuleFieldEntry struct {
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for a field entry (magus.module's fields).
-func (f ModuleFieldEntry) ToMap() map[string]any {
+// BuzzObject is the Buzz boundary map for a field entry (magus.module's fields).
+func (f ModuleFieldEntry) BuzzObject() BuzzObject {
 	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
@@ -548,17 +548,17 @@ type ModuleEntry struct {
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
 }
 
-// ToMap is the Buzz boundary map magus.modules / magus.module return:
+// BuzzObject is the Buzz boundary map magus.modules / magus.module return:
 // {name, doc, fields, methods}. fields/methods are always present (empty in the
-// summary view). The generated/hand-written bindings marshal it via host.Mapper.
-func (e ModuleEntry) ToMap() map[string]any {
+// summary view). The generated/hand-written bindings marshal it via host.BuzzObjecter.
+func (e ModuleEntry) BuzzObject() BuzzObject {
 	fields := make([]any, len(e.Fields))
 	for i, f := range e.Fields {
-		fields[i] = f.ToMap()
+		fields[i] = f.BuzzObject()
 	}
 	methods := make([]any, len(e.Methods))
 	for i, m := range e.Methods {
-		methods[i] = m.ToMap()
+		methods[i] = m.BuzzObject()
 	}
 	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
 }
@@ -630,18 +630,18 @@ type EvaluatedProject struct {
 	TargetPolicies map[string]Target `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for one evaluated project. Written explicitly
-// rather than left to the ToMap ProjectEntry promotes: an embedded ProjectEntry's
-// ToMap is promoted onto EvaluatedProject too, which would satisfy host.Mapper
+// BuzzObject is the Buzz boundary map for one evaluated project. Written explicitly
+// rather than left to the BuzzObject ProjectEntry promotes: an embedded ProjectEntry's
+// BuzzObject is promoted onto EvaluatedProject too, which would satisfy host.BuzzObjecter
 // (host/helpers.go) while emitting only the declared half and silently dropping
 // ResolvedSpells/TargetPolicies. EvaluatedProject is not on the Buzz mirror
 // allowlist and no std/ host method returns it today, so nothing calls this yet -
 // it exists to keep that latent trap from going live if one ever does. Neither
 // EvaluatedSpell nor Target (whose zero value serves double duty as a per-target
-// policy - see Target's identity-fields comment) has its own ToMap, so their
+// policy - see Target's identity-fields comment) has its own BuzzObject, so their
 // fields are read directly rather than through a promoted-in-the-same-way call.
-func (p EvaluatedProject) ToMap() map[string]any {
-	m := p.ProjectEntry.ToMap()
+func (p EvaluatedProject) BuzzObject() BuzzObject {
+	m := p.ProjectEntry.BuzzObject()
 	spells := make([]any, len(p.ResolvedSpells))
 	for i, s := range p.ResolvedSpells {
 		spells[i] = map[string]any{

@@ -134,7 +134,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 		// registers the same bundle; keep the two in step.
 		ispell.ServiceSource,
 		ispell.ExecResultSource,
-		// Boundary mirrors of the host-method record shapes, so a magusfile can
+		// Boundary mirrors of the host-method object shapes, so a magusfile can
 		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
 		// for compile-checked field access. CommitAuthor precedes Commit (Commit's
 		// author field is typed CommitAuthor).

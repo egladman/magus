@@ -10,6 +10,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // --- arg decoders (0-indexed; a missing or wrong-typed arg yields the zero value) ---
@@ -227,6 +228,14 @@ func AnyVal(v any) vm.Value {
 		return vm.ListValue(items)
 	case map[string]any:
 		return AnyMapVal(x)
+	// types.BuzzObject is a NAMED map[string]any, and a type switch matches on type
+	// IDENTITY, not on underlying type - so without its own case it falls through to
+	// the null below. That is not theoretical: it is what broke every NESTED boundary
+	// value the moment the named type was introduced. Tag.BuzzObject() nests
+	// Version.BuzzObject(), whose Go type is BuzzObject, so `t.version` arrived in a
+	// magusfile as null and every field read off it read null too.
+	case types.BuzzObject:
+		return AnyMapVal(x)
 	case map[string]string:
 		return StrMapVal(x)
 	}
@@ -287,18 +296,26 @@ func AnyToValue(v any) vm.Value { return AnyVal(v) }
 // [AnyToValue]; see its note for why this is exported.
 func ValueToAny(v vm.Value) any { return valToAny(v) }
 
-// Mapper is a host value that renders itself as its Buzz boundary map via ToMap.
-// The typed record returns (types.ExecResult, types.FileInfo, types.Commit, ...)
-// implement it; the generated trampolines call ToMap so a magusfile sees the
-// same {field: value} map the Impl used to return directly.
-type Mapper interface{ ToMap() map[string]any }
+// BuzzObjecter is a host value that renders itself as its Buzz boundary map via
+// BuzzObject. The typed object returns (types.ExecResult, types.FileInfo,
+// types.Commit, ...) implement it; the generated trampolines call BuzzObject so
+// a magusfile sees the same {field: value} map the Impl used to return directly.
+//
+// A method named after its own return type reads odd until you've seen the
+// precedent: database/sql/driver.Valuer is Value() (driver.Value, error). Do
+// not "fix" this into BuzzObject() (BuzzObject, error) or similar - the shared
+// name is deliberate, not a leftover.
+type BuzzObjecter interface{ BuzzObject() types.BuzzObject }
 
-// MapsVal marshals a slice of field-records to a Buzz list of their boundary maps,
-// the return form for list-of-record Impls like vcs.history.
-func MapsVal[T Mapper](rs []T) vm.Value {
+// MapsVal marshals a slice of field-objects to a Buzz list of their boundary maps,
+// the return form for list-of-object Impls like vcs.history. It keeps the "Maps"
+// name (not "ObjectsVal") because it names the vm.Value SHAPE it produces - a
+// Buzz list of maps - matching AnyMapVal/StrMapVal's convention of naming after
+// the runtime value, not the source type's Buzz-language name.
+func MapsVal[T BuzzObjecter](rs []T) vm.Value {
 	items := make([]vm.Value, len(rs))
 	for i, r := range rs {
-		items[i] = AnyMapVal(r.ToMap())
+		items[i] = AnyMapVal(r.BuzzObject())
 	}
 	return vm.ListValue(items)
 }

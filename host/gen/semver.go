@@ -33,7 +33,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("next", vm.DirectValue("semver.next", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		v := host.Str(bzArgs, 0)
@@ -41,7 +41,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	return m
 }

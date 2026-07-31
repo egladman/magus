@@ -140,7 +140,7 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 	// integer case it would mirror as a bare `int`, handing a magusfile a
 	// nanosecond count with nothing in the type or the value saying so. It crosses
 	// as its own string form ("1.5s") for the same reason time.Time crosses as
-	// RFC3339 - the unit travels WITH the value. A ToMap emitting one must call
+	// RFC3339 - the unit travels WITH the value. A BuzzObject emitting one must call
 	// d.String(), not d.Nanoseconds().
 	if t == reflect.TypeOf(time.Duration(0)) {
 		return "str", `""`, nil
@@ -187,7 +187,7 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 		return "[" + elem + "]", "[]", nil
 	case reflect.Struct:
 		// A timestamp crosses the boundary as an RFC3339 string, never as an object:
-		// every ToMap in types/ formats it that way (and emits "" for a zero time),
+		// every BuzzObject in types/ formats it that way (and emits "" for a zero time),
 		// so mirroring it as a `Time` object would describe a value Buzz never sees.
 		if t == reflect.TypeOf(time.Time{}) {
 			return "str", `""`, nil

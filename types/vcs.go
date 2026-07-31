@@ -87,11 +87,11 @@ type Tag struct {
 	ID string `buzz:"id"`
 }
 
-// ToMap is the Buzz boundary map vcs.tags entries return: {name, prefix,
+// BuzzObject is the Buzz boundary map vcs.tags entries return: {name, prefix,
 // version, date, id}. date is RFC3339, empty when the VCS reported no
-// timestamp; version nests SemverVersion.ToMap() (its own zero value when Name
+// timestamp; version nests SemverVersion.BuzzObject() (its own zero value when Name
 // did not parse as semver).
-func (t Tag) ToMap() map[string]any {
+func (t Tag) BuzzObject() BuzzObject {
 	date := ""
 	if !t.Date.IsZero() {
 		date = t.Date.Format(time.RFC3339)
@@ -99,7 +99,7 @@ func (t Tag) ToMap() map[string]any {
 	return map[string]any{
 		"name":    t.Name,
 		"prefix":  t.Prefix,
-		"version": t.Version.ToMap(),
+		"version": t.Version.BuzzObject(),
 		"date":    date,
 		"id":      t.ID,
 	}
@@ -132,10 +132,10 @@ type Commit struct {
 	Parents []string
 }
 
-// ToMap is the Buzz boundary map vcs.commit / vcs.history entries return:
+// BuzzObject is the Buzz boundary map vcs.commit / vcs.history entries return:
 // {id, short, author {name, email}, date, subject, body, parents}. date is
 // RFC3339, empty when the VCS reported no timestamp.
-func (c Commit) ToMap() map[string]any {
+func (c Commit) BuzzObject() BuzzObject {
 	date := ""
 	if !c.Date.IsZero() {
 		date = c.Date.Format(time.RFC3339)
@@ -151,7 +151,7 @@ func (c Commit) ToMap() map[string]any {
 	}
 }
 
-// CommitAuthor is the boundary mirror of the {name, email} author record a
+// CommitAuthor is the boundary mirror of the {name, email} author object a
 // vcs.commit / vcs.history result carries. The Buzz `object CommitAuthor` mirror
 // is generated from this struct by cmd/magus-utils types; keep them in lockstep.
 type CommitAuthor struct {
@@ -159,11 +159,11 @@ type CommitAuthor struct {
 	Email string
 }
 
-// CommitRecord is the boundary mirror of the record vcs.commit / vcs.history
+// CommitRecord is the boundary mirror of the object vcs.commit / vcs.history
 // return: the serializable, every-field-present view of a Commit (Date as an
 // RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
-// compile-checked field access on a commit record; the runtime value is the
-// matching map (see commitToMap). The Buzz `object Commit` mirror is generated
+// compile-checked field access on a commit object; the runtime value is the
+// matching map (see Commit.BuzzObject). The Buzz `object Commit` mirror is generated
 // from this struct by cmd/magus-utils types (go:generate -type Commit).
 type CommitRecord struct {
 	ID      string `buzz:"id"`

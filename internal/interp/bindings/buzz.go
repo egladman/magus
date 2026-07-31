@@ -66,7 +66,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
 	// module registry - the same host.ModulesOutput core `magus describe module[s]`
-	// formats, marshalled straight to Buzz records instead of scraping a subprocess's
+	// formats, marshalled straight to Buzz objects instead of scraping a subprocess's
 	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
@@ -83,7 +83,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
 		}
-		return host.AnyMapVal(out[0].ToMap()), nil
+		return host.AnyMapVal(out[0].BuzzObject()), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name - a target, a

@@ -91,20 +91,20 @@ var Vcs = Module{
 		},
 		{
 			Name: "commit",
-			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
+			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero object (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAny, Record: "Commit"}},
+			Returns: []Ret{{Type: TypeAny, Object: "Commit"}},
 			Impl:    VcsCommit,
 		},
 		{
 			Name: "history",
-			Doc:  "Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
+			Doc:  "Up to limit recent commits, newest first; each is the same object vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
 			Args: []Arg{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 			},
-			Returns: []Ret{{Type: TypeAny, Record: "[Commit]"}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Commit]"}},
 			Impl:    VcsHistory,
 		},
 		{
@@ -115,11 +115,11 @@ var Vcs = Module{
 		},
 		{
 			Name: "tags",
-			Doc:  "Repository tags, newest first. Each is a record {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone legitimately fetches no tags, so an empty list still means \"none present here\", not \"none exist\".",
+			Doc:  "Repository tags, newest first. Each is an object {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone legitimately fetches no tags, so an empty list still means \"none present here\", not \"none exist\".",
 			Args: []Arg{
 				{Name: "pattern", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAny, Record: "[Tag]"}},
+			Returns: []Ret{{Type: TypeAny, Object: "[Tag]"}},
 			Impl:    VcsTags,
 		},
 		{
@@ -375,9 +375,9 @@ func VcsMetadata(ctx context.Context) (map[string]any, error) {
 	}, nil
 }
 
-// VcsCommit resolves rev (empty = current revision) to its commit record. When
+// VcsCommit resolves rev (empty = current revision) to its commit object. When
 // no VCS is resolved or the revision can't be looked up it returns the zero
-// types.Commit - an all-empty record (id/date/… are ""), so a caller tests a
+// types.Commit - an all-empty object (id/date/… are ""), so a caller tests a
 // field (e.g. c.date == "") rather than a null.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
@@ -386,12 +386,12 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	}
 	c, err := v.FindCommit(ctx, "", rev) // host bindings run in the project cwd
 	if err != nil {
-		return types.Commit{}, nil //nolint:nilerr // unresolved (no commits yet, bad rev): empty record, matching the metadata accessors' graceful empties
+		return types.Commit{}, nil //nolint:nilerr // unresolved (no commits yet, bad rev): empty object, matching the metadata accessors' graceful empties
 	}
 	return c, nil
 }
 
-// VcsHistory returns up to limit recent commits (newest first) as records, or an
+// VcsHistory returns up to limit recent commits (newest first) as objects, or an
 // empty list when no VCS is resolved or the query fails.
 func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)

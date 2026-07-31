@@ -36,21 +36,21 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    MagusCmd,
 		},
 		{
 			Name:    "ls",
 			Doc:     "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ProjectsOutput"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ProjectsOutput"}},
 			Impl:    MagusLs,
 		},
 		{
 			Name:    "targets",
 			Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap, Record: "TargetGraphOutput"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraphOutput"}},
 			Impl:    MagusTargets,
 		},
 		{
@@ -59,14 +59,14 @@ var Magus = Module{
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "AffectedResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "AffectedResult"}},
 			Impl:    MagusAffected,
 		},
 		{
 			Name:    "graph",
 			Doc:     "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
 			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap, Record: "GraphView"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "GraphView"}},
 			Impl:    MagusGraph,
 		},
 		{
@@ -85,7 +85,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    MagusRun,
 		},
 		{
@@ -95,7 +95,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    MagusDescribe,
 		},
 		{
@@ -105,7 +105,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    MagusInsight,
 		},
 		{
@@ -115,7 +115,7 @@ var Magus = Module{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    MagusDoctor,
 		},
 		{
@@ -236,7 +236,7 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 	return p.Path, nil
 }
 
-// MagusGraph returns the project dependency graph as a flat record. See MagusLs for
+// MagusGraph returns the project dependency graph as a flat object. See MagusLs for
 // why the read-only verbs are served in-process.
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
@@ -300,9 +300,9 @@ func runMagusSub(ctx context.Context, sub string, args []string, opts map[string
 // runMagus runs a nested magus invocation with the full arg vector, yielding the
 // caller's concurrency slot for the duration so the child can run. Output streams
 // live and is captured: on success it returns the same {stdout, stderr, code, ok}
-// record as os.exec, so a magusfile can read a subcommand's output (e.g. `magus
+// object as os.exec, so a magusfile can read a subcommand's output (e.g. `magus
 // describe graph -o markdown` to generate MAGUS.md). It raises (non-nil error, nil
-// record) when the child can't launch or exits non-zero, mirroring os.exec. label
+// object) when the child can't launch or exits non-zero, mirroring os.exec. label
 // names the calling method for error messages.
 //
 // The child runs in the working directory carried by ctx (WithCwd), so a nested

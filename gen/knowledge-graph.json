@@ -21795,7 +21795,7 @@
       "id": "method:vcs.commit",
       "kind": "method",
       "label": "vcs.commit",
-      "doc": "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit record: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero record (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
+      "doc": "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero object (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
       "attrs": {
         "buzz": "vcs\\commit([rev]) → Commit"
       }
@@ -21858,7 +21858,7 @@
       "id": "method:vcs.history",
       "kind": "method",
       "label": "vcs.history",
-      "doc": "Up to limit recent commits, newest first; each is the same record vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
+      "doc": "Up to limit recent commits, newest first; each is the same object vcs.commit returns. limit defaults to 10 when omitted. An empty list when no VCS is resolved.",
       "attrs": {
         "buzz": "vcs\\history([limit]) → [Commit]"
       }
@@ -21903,7 +21903,7 @@
       "id": "method:vcs.tags",
       "kind": "method",
       "label": "vcs.tags",
-      "doc": "Repository tags, newest first. Each is a record {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone le",
+      "doc": "Repository tags, newest first. Each is an object {name, date, id}: name as written (\"v0.3.0\", no refs/tags/ prefix), date RFC3339 (empty when the VCS reported none), id the revision it resolves to. pattern is a glob over the name (\"v*\"); wildcards stop at \"/\", so \"v*\" selects releases and skips a namespaced tag like backup/x. Omit it to list every tag. Empty when no VCS is resolved or the backend has no tags (jj); a failed query raises rather than reporting \"no tags\". Note a shallow or single-branch clone l",
       "attrs": {
         "buzz": "vcs\\tags([pattern]) → [Tag]"
       }
@@ -22804,7 +22804,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outf840054d",
+        "last_output_ref": "outb7087c7e",
         "last_run_ok": "true"
       }
     },
@@ -22893,7 +22893,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out19fc887f",
+        "last_output_ref": "outfa2d014a",
         "last_run_ok": "true"
       }
     },
@@ -22905,7 +22905,9 @@
       "source": ".",
       "attrs": {
         "declared_as": "go_build",
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out21b28dc3",
+        "last_run_ok": "true"
       }
     },
     {
@@ -22949,7 +22951,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out9865c037",
+        "last_output_ref": "out9bcae80e",
         "last_run_ok": "false"
       }
     },
@@ -23080,7 +23082,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outc97cfe91",
+        "last_output_ref": "oute1199658",
         "last_run_ok": "true"
       }
     },
@@ -23340,7 +23342,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out93dc8606",
+        "last_output_ref": "out36e8fe3e",
         "last_run_ok": "true"
       }
     },
@@ -23381,7 +23383,9 @@
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out3320e6e0",
+        "last_run_ok": "false"
       }
     },
     {

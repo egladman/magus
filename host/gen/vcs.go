@@ -98,7 +98,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("history", vm.DirectValue("vcs.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		limit := host.Int(bzArgs, 0, 10)

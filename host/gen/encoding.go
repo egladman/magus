@@ -87,7 +87,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("buildUrl", vm.DirectValue("encoding.buildUrl", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		parts := host.AnyMap(bzArgs, 0)

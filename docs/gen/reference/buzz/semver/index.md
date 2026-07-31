@@ -17,7 +17,7 @@ Semantic version parsing and comparison (SemVer 2.0.0).
 
 Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true when the relation holds.
 
-**Signature:** `semver\compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L43)
+**Signature:** `semver\compare(a, op, b) → bool` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L50)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -31,7 +31,19 @@ Compare two semver strings; op is "==", "!=", "<", "<=", ">", or ">=" - true whe
 
 Parse a semver string into {major, minor, patch, prerelease, metadata, original}; errors on invalid input.
 
-**Signature:** `semver\parse(v) → SemverVersion` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L56)
+**Signature:** `semver\parse(v) → SemverVersion` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L63)
+
+| Parameter | Type | Optional | Description |
+|-----------|------|----------|-------------|
+| `v` | `string` |  | |
+
+**Returns:** map[string]any
+
+### next
+
+Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the result of bumping the major, minor, or patch component. Errors on invalid input.
+
+**Signature:** `semver\next(v) → SemverNext` · [source](https://github.com/egladman/magus/blob/main/std/semver.go#L84)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

@@ -84,12 +84,12 @@ type Arg struct {
 type Ret struct {
 	Name string
 	Type TypeTag
-	// Record names the Buzz object this return marshals to, for a method whose
-	// Impl returns a Go struct carrying ToMap (or a slice of them). Empty for a
+	// Object names the Buzz object this return marshals to, for a method whose
+	// Impl returns a Go struct carrying BuzzObject (or a slice of them). Empty for a
 	// scalar return.
 	//
 	// It is documentation the CHECKER and the reader can both use, not a
-	// marshalling instruction: the generator already recognises a record by
+	// marshalling instruction: the generator already recognises an object by
 	// reflecting on the Impl, so the bytes are correct either way. What was
 	// missing is the NAME. Without it a method's return types as {str: any}
 	// everywhere outside the generator, so `magus\cmd(...)` hands back a map
@@ -99,7 +99,7 @@ type Ret struct {
 	// The generator VALIDATES this against the reflected Impl and fails codegen on
 	// a mismatch or an omission, so it cannot drift from the struct it names. That
 	// is the whole reason it is safe to state twice.
-	Record string
+	Object string
 }
 
 // Method declares one host function bound into the VM.

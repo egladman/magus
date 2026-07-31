@@ -50,9 +50,9 @@ type ExecResult struct {
 	Started bool   // whether the process actually started; distinguishes a -1 exit from a start failure
 }
 
-// ToMap renders the shared exec result shape.
-func (r ExecResult) ToMap() map[string]any {
-	return map[string]any{
+// BuzzObject renders the shared exec result shape.
+func (r ExecResult) BuzzObject() types.BuzzObject {
+	return types.BuzzObject{
 		"stdout": strings.TrimSpace(r.Stdout),
 		"stderr": strings.TrimSpace(r.Stderr),
 		"code":   r.Code,

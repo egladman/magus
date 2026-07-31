@@ -26,21 +26,21 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("ls", vm.DirectValue("magus.ls", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusLs(ctx)
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("targets", vm.DirectValue("magus.targets", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusTargets(ctx)
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("affected", vm.DirectValue("magus.affected", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := host.Str(bzArgs, 0)
@@ -48,14 +48,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGraph(ctx)
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("where", vm.DirectValue("magus.where", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		dir := host.Str(bzArgs, 0)
@@ -72,7 +72,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("describe", vm.DirectValue("magus.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := host.StrSlice(bzArgs, 0)
@@ -81,7 +81,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("insight", vm.DirectValue("magus.insight", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := host.StrSlice(bzArgs, 0)
@@ -90,7 +90,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := host.StrSlice(bzArgs, 0)
@@ -99,7 +99,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, err
 		}
-		return host.AnyMapVal(ret0.ToMap()), nil
+		return host.AnyMapVal(ret0.BuzzObject()), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := host.Str(bzArgs, 0)

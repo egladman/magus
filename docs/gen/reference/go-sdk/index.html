@@ -111,18 +111,18 @@ tagged <a class="code-xref" href="../manpage/magus-version/" data-kind="command"
 <p>As of this writing, <code>go get github.com/egladman/magus</code> does not resolve on
 its own. The <a class="glossary-term" href="../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>'s <code>go.mod</code> requires two nested modules -
 <code>github.com/egladman/magus/libs/gopherbuzz</code> and
-<code>github.com/egladman/magus/libs/diag</code>, each with its own <code>go.mod</code> - and
+<code>github.com/egladman/magus/libs/diagnostics</code>, each with its own <code>go.mod</code> - and
 neither has a tagged release (<code>libs/gopherbuzz/vX.Y.Z</code> /
-<code>libs/diag/vX.Y.Z</code>) yet. The root repository resolves them with local
+<code>libs/diagnostics/vX.Y.Z</code>) yet. The root repository resolves them with local
 <code>replace</code> directives, which are not transitive, so a downstream consumer
 inherits none of that and hits <code>unknown revision libs/gopherbuzz/v0.0.0</code>.</p>
 <p>Until those get their own tags, clone the repository (or vendor
-<code>libs/gopherbuzz</code> and <code>libs/diag</code> out of it) and add matching <code>replace</code>
+<code>libs/gopherbuzz</code> and <code>libs/diagnostics</code> out of it) and add matching <code>replace</code>
 directives to your own <code>go.mod</code>:</p>
 <pre><code>require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag =&gt; /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics =&gt; /path/to/magus/libs/diagnostics
 </code></pre>
 <p>Everything below assumes that step is done.</p>
 <h2 id="open-vs-inspect">Open vs Inspect</h2>
@@ -369,7 +369,7 @@ this module) can run it today.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22go%22">go</a><a class="tag" href="../../search/?q=tag%3A%22sdk%22">sdk</a><a class="tag" href="../../search/?q=tag%3A%22library%22">library</a><a class="tag" href="../../search/?q=tag%3A%22api%22">api</a><a class="tag" href="../../search/?q=tag%3A%22embedding%22">embedding</a><a class="tag" href="../../search/?q=tag%3A%22import%22">import</a><a class="tag" href="../../search/?q=tag%3A%22package%22">package</a><a class="tag" href="../../search/?q=tag%3A%22reference%22">reference</a></div>
-    
+    <small>Last updated <time datetime="2026-07-31T15:52:43Z">July 31, 2026, 3:52 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/419b9568be5e786848cb8625f5048a6d88f60c4a" data-tooltip="419b9568be5e786848cb8625f5048a6d88f60c4a" title="419b9568be5e786848cb8625f5048a6d88f60c4a">419b9568</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/go-sdk.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/go-sdk.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

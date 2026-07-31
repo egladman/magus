@@ -97,7 +97,7 @@
     <small class="reading-time" title="Estimated reading time">14 min read</small>
     <article>
 <h1 id="magus-sdk">magus-sdk</h1>
-<p><progress value="12585" max="13251" aria-label="The --simple permutation is 5% smaller: 12585 of 13251 bytes."></progress><small>The --simple permutation is 5% smaller: 12585 of 13251 bytes.</small></p>
+<p><progress value="12620" max="13286" aria-label="The --simple permutation is 5% smaller: 12620 of 13286 bytes."></progress><small>The --simple permutation is 5% smaller: 12620 of 13286 bytes.</small></p>
 <p>Help a Go developer consume magus as a library (import &quot;github.com/egladman/magus&quot;) instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/<a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> from their own Go program, embed magus's <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> model in another tool, or asks &quot;can I use magus without the binary&quot;. Also use to audit the SDK <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>) or for editing magus's own source (magus-architecture).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -136,7 +136,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>e95cbc33a64a</code></td>
+<td><code>064275bc9429</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -162,23 +162,23 @@ cannot see.
 VERIFIED against the real published module at the real latest tag
 (`go get github.com/egladman/magus@v0.3.0` from a clean module, no local
 replace): it fails outright. `go.mod` requires
-`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diag` - nested
+`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diagnostics` - nested
 modules with their own `go.mod` - at `v0.0.0`, and no `libs/gopherbuzz/vX.Y.Z`
-or `libs/diag/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
+or `libs/diagnostics/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
 The root module's own `go.mod` resolves them via LOCAL replace directives
 (`replace github.com/egladman/magus/libs/gopherbuzz =&gt; ./libs/gopherbuzz`);
 replace directives are not transitive, so a downstream consumer inherits
 none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those nested modules get their own tags, the only working install is:
-clone the repo (or vendor `libs/gopherbuzz` and `libs/diag` from it), and add
+clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag =&gt; /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics =&gt; /path/to/magus/libs/diagnostics
 ```
 
 Tell the reader this plainly before anything else. A worked example that
@@ -395,23 +395,23 @@ cannot see.
 VERIFIED against the real published module at the real latest tag
 (`go get github.com/egladman/magus@v0.3.0` from a clean module, no local
 replace): it fails outright. `go.mod` requires
-`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diag` - nested
+`github.com/egladman/magus/libs/gopherbuzz` and `.../libs/diagnostics` - nested
 modules with their own `go.mod` - at `v0.0.0`, and no `libs/gopherbuzz/vX.Y.Z`
-or `libs/diag/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
+or `libs/diagnostics/vX.Y.Z` tag exists in the repo (only root tags: v0.1.0 - v0.3.0).
 The root module's own `go.mod` resolves them via LOCAL replace directives
 (`replace github.com/egladman/magus/libs/gopherbuzz =&gt; ./libs/gopherbuzz`);
 replace directives are not transitive, so a downstream consumer inherits
 none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
 Until those nested modules get their own tags, the only working install is:
-clone the repo (or vendor `libs/gopherbuzz` and `libs/diag` from it), and add
+clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
 ```
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
-replace github.com/egladman/magus/libs/diag =&gt; /path/to/magus/libs/diag
+replace github.com/egladman/magus/libs/diagnostics =&gt; /path/to/magus/libs/diagnostics
 ```
 
 Tell the reader this plainly before anything else. A worked example that
@@ -619,7 +619,7 @@ specific that has to be.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-sdk%22">magus-sdk</a></div>
-    
+    <small>Last updated <time datetime="2026-07-31T14:02:03Z">July 31, 2026, 2:02 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760" data-tooltip="3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760" title="3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760">3f7517ec</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

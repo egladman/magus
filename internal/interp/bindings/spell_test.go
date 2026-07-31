@@ -225,10 +225,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, "overridden", string(got))
 }
 
-// TestBuzzSpellCaptureReturnsRecord verifies a capture=true target returns the
-// {stdout, stderr, code, ok} record map, accessed with dot syntax the way a
+// TestBuzzSpellCaptureReturnsObject verifies a capture=true target returns the
+// {stdout, stderr, code, ok} object, accessed with dot syntax the way a
 // magusfile reads os.exec(...).stdout.
-func TestBuzzSpellCaptureReturnsRecord(t *testing.T) {
+func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -313,7 +313,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
-// fallback: outside any repository, vcs.commit() returns the zero record (every
+// fallback: outside any repository, vcs.commit() returns the zero object (every
 // field empty), not null — callers test a field (c.date == "") for "no commit".
 func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
@@ -322,12 +322,12 @@ func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void {
     final c = vcs.commit();
-    if (c == null) { magus.fatal("vcs.commit should be an empty record, not null, outside a repo"); }
+    if (c == null) { magus.fatal("vcs.commit should be an empty object, not null, outside a repo"); }
     if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
     if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
 }`)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
-	require.NoError(t, runErr, "vcs.commit empty-record case")
+	require.NoError(t, runErr, "vcs.commit empty-object case")
 }
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
