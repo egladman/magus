@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -92,7 +93,7 @@ func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository 
 func TestDescribeSpells_ShapeAndOrder(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const name = "zzz-describe-spells-test"
-	spell := types.NewSpell(name, types.WithTargets("build", "test"))
+	spell := spells.NewSpell(name, spells.WithTargets("build", "test"))
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
 
@@ -119,7 +120,7 @@ func TestDescribeSpells_ShapeAndOrder(t *testing.T) {
 func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-targets-spell"
-	spell := types.NewSpell(spellName, types.WithTargets("zzz-target-a", "zzz-target-b"))
+	spell := spells.NewSpell(spellName, spells.WithTargets("zzz-target-a", "zzz-target-b"))
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
@@ -147,9 +148,9 @@ func TestDescribeTargets_CanonicalCIFirst(t *testing.T) {
 
 func TestDescribeTarget_Charms(t *testing.T) {
 	const spellName = "zzz-charm-spell"
-	s := types.NewSpell(spellName,
-		types.WithTargets("lint"),
-		types.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
+	s := spells.NewSpell(spellName,
+		spells.WithTargets("lint"),
+		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
 	project.DefaultSpellRegistry().RegisterSpell(s)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -172,9 +173,9 @@ func TestDescribeTarget_Charms(t *testing.T) {
 func TestDescribeCharms_InverseIndex(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-describe-charms-spell"
-	s := types.NewSpell(spellName,
-		types.WithTargets("lint"),
-		types.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
+	s := spells.NewSpell(spellName,
+		spells.WithTargets("lint"),
+		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
 	project.DefaultSpellRegistry().RegisterSpell(s)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -310,11 +311,11 @@ func TestDescribeTarget_UnknownProject(t *testing.T) {
 func TestDescribeTarget_WithSpellAndPolicy(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-dt-spell"
-	spell := types.NewSpell(
+	spell := spells.NewSpell(
 		spellName,
-		types.WithTargets("my-target"),
-		types.WithSources("**/*.zzz"),
-		types.WithClaims("**/*.zzz"),
+		spells.WithTargets("my-target"),
+		spells.WithSources("**/*.zzz"),
+		spells.WithClaims("**/*.zzz"),
 	)
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -366,7 +367,7 @@ func TestDescribeEvaluatedProjects_Shape(t *testing.T) {
 func TestDescribeEvaluatedProjects_WorkspaceRootedSources(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-ep-spell"
-	spell := types.NewSpell(spellName, types.WithSources("**/*.ep"))
+	spell := spells.NewSpell(spellName, spells.WithSources("**/*.ep"))
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
@@ -425,9 +426,9 @@ func TestDescribeFiles_Classification(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
 	const rootSpell, webSpell = "zzz-df-root", "zzz-df-web"
 	project.DefaultSpellRegistry().RegisterSpell(
-		types.NewSpell(rootSpell, types.WithSources("docs/**/*.md"), types.WithSpellOutputs("GEN.md", "gen/**")))
+		spells.NewSpell(rootSpell, spells.WithSources("docs/**/*.md"), spells.WithOutputs("GEN.md", "gen/**")))
 	project.DefaultSpellRegistry().RegisterSpell(
-		types.NewSpell(webSpell, types.WithSources("**/*.ts"), types.WithSpellOutputs("dist/**")))
+		spells.NewSpell(webSpell, spells.WithSources("**/*.ts"), spells.WithOutputs("dist/**")))
 	t.Cleanup(func() {
 		project.DefaultSpellRegistry().UnregisterSpell(rootSpell)
 		project.DefaultSpellRegistry().UnregisterSpell(webSpell)

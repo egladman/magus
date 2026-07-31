@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +17,7 @@ func TestJournalRecordForget(t *testing.T) {
 	j, err := NewJournal(dir)
 	require.NoError(t, err)
 
-	j.record("abc", types.Command{Bin: "true"})
+	j.record("abc", spells.Command{Bin: "true"})
 	_, err = os.Stat(filepath.Join(dir, "abc.json"))
 	require.NoError(t, err, "record wrote a file")
 
@@ -37,8 +37,8 @@ func TestJournalSweepRunsStopCommands(t *testing.T) {
 	sentinel := filepath.Join(t.TempDir(), "stopped")
 	// A record whose stop command has an observable effect, as if left by a crashed
 	// daemon; and one with no stop command (unreapable).
-	j.record("svc1", types.Command{Bin: "sh", Args: []string{"-c", "touch " + sentinel}})
-	j.record("svc2", types.Command{})
+	j.record("svc1", spells.Command{Bin: "sh", Args: []string{"-c", "touch " + sentinel}})
+	j.record("svc2", spells.Command{})
 
 	res := j.Sweep(context.Background())
 	assert.Equal(t, 1, res.Reaped)
@@ -53,7 +53,7 @@ func TestJournalSweepRunsStopCommands(t *testing.T) {
 
 func TestJournalNilSafe(t *testing.T) {
 	var j *Journal
-	j.record("k", types.Command{Bin: "true"}) // must not panic
+	j.record("k", spells.Command{Bin: "true"}) // must not panic
 	j.forget("k")
 	assert.Equal(t, SweepResult{}, j.Sweep(context.Background()))
 }
@@ -64,9 +64,9 @@ func TestRegistryRecordsAndForgetsWithJournal(t *testing.T) {
 	require.NoError(t, err)
 	r := New(&fakeRunner{}, 0, WithJournal(j)) // idle 0: Release stops immediately
 
-	svc := types.Service{
-		Command: types.Command{Bin: "docker", Args: []string{"run", "postgres:15"}},
-		Stop:    types.Command{Bin: "docker", Args: []string{"stop", "pg"}},
+	svc := spells.Service{
+		Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}},
+		Stop:    spells.Command{Bin: "docker", Args: []string{"stop", "pg"}},
 	}
 	_, err = r.Acquire(context.Background(), "pg", svc)
 	require.NoError(t, err)

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // ApplyPatch applies an RFC 6902 JSON Patch to argv, treating argv as a JSON
@@ -18,7 +18,7 @@ import (
 // always argv: paths are single-token pointers ("/N" or, for add, "/-"), and
 // values are strings. The op vocabulary is complete (add/remove/replace/move/
 // copy/test); the test suite checks it against the RFC's own examples.
-func ApplyPatch(argv []string, ops []types.PatchOp) ([]string, error) {
+func ApplyPatch(argv []string, ops []spells.PatchOp) ([]string, error) {
 	out := slices.Clone(argv)
 	for i, op := range ops {
 		next, err := applyOp(out, op)
@@ -37,7 +37,7 @@ func ApplyPatch(argv []string, ops []types.PatchOp) ([]string, error) {
 // activeNames) contributes nothing. The result is always a fresh slice. This is the one
 // place the "which charms, in what order, over which argv" rule lives; both the engine's
 // command binding and the dry run route through it.
-func ApplyCharms(argv []string, charms map[string]types.Charm, activeNames []string) ([]string, error) {
+func ApplyCharms(argv []string, charms map[string]spells.Charm, activeNames []string) ([]string, error) {
 	if len(charms) == 0 || len(activeNames) == 0 {
 		return slices.Clone(argv), nil
 	}
@@ -53,7 +53,7 @@ func ApplyCharms(argv []string, charms map[string]types.Charm, activeNames []str
 	}
 	slices.Sort(names)
 
-	var ops []types.PatchOp
+	var ops []spells.PatchOp
 	for _, name := range names {
 		ops = append(ops, charms[name].Ops...)
 	}
@@ -70,7 +70,7 @@ func ApplyCharms(argv []string, charms map[string]types.Charm, activeNames []str
 // unmodified argv. A charm named in activeNames but not declared in charms (or
 // declaring no ops) contributes nothing and no step. An op that does not apply is
 // an error, exactly as in ApplyCharms, naming the charm that failed.
-func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []string) ([]types.CharmTraceStep, error) {
+func ExplainCharms(argv []string, charms map[string]spells.Charm, activeNames []string) ([]spells.CharmTraceStep, error) {
 	on := make(map[string]bool, len(activeNames))
 	for _, name := range activeNames {
 		on[name] = true
@@ -83,7 +83,7 @@ func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []s
 	}
 	slices.Sort(names)
 
-	var steps []types.CharmTraceStep
+	var steps []spells.CharmTraceStep
 	cur := slices.Clone(argv)
 	for _, name := range names {
 		next, err := ApplyPatch(cur, charms[name].Ops)
@@ -91,20 +91,20 @@ func ExplainCharms(argv []string, charms map[string]types.Charm, activeNames []s
 			return nil, fmt.Errorf("charm %q: %w", name, err)
 		}
 		cur = next
-		steps = append(steps, types.CharmTraceStep{Charm: name, Command: slices.Clone(cur)})
+		steps = append(steps, spells.CharmTraceStep{Charm: name, Command: slices.Clone(cur)})
 	}
 	return steps, nil
 }
 
 // Conflicts returns the active charms whose effect is clobbered by another active
-// charm on argv (as types.CharmConflict: the lost charm and the one that overwrites
+// charm on argv (as spells.CharmConflict: the lost charm and the one that overwrites
 // it). A charm conflicts when it changes the command on its own but the command with
 // the full active set equals the command with that charm removed - proof its edit
 // left no trace. Disjoint edits (two appended flags both survive) never conflict;
 // only a destructive overlap on the same position does. A charm that is a no-op on
 // its own is not a conflict (that is the Before==After case describe surfaces
 // separately). activeNames need not be sorted or deduped.
-func Conflicts(argv []string, charms map[string]types.Charm, activeNames []string) ([]types.CharmConflict, error) {
+func Conflicts(argv []string, charms map[string]spells.Charm, activeNames []string) ([]spells.CharmConflict, error) {
 	seen := map[string]bool{}
 	var active []string
 	for _, name := range activeNames {
@@ -122,7 +122,7 @@ func Conflicts(argv []string, charms map[string]types.Charm, activeNames []strin
 		return nil, err
 	}
 
-	var out []types.CharmConflict
+	var out []spells.CharmConflict
 	for _, name := range active {
 		alone, err := ApplyCharms(argv, charms, []string{name})
 		if err != nil {
@@ -142,7 +142,7 @@ func Conflicts(argv []string, charms map[string]types.Charm, activeNames []strin
 			return nil, err
 		}
 		if slices.Equal(without, canonical) {
-			out = append(out, types.CharmConflict{Name: name, OverriddenBy: overrider(argv, charms, name, active)})
+			out = append(out, spells.CharmConflict{Name: name, OverriddenBy: overrider(argv, charms, name, active)})
 		}
 	}
 	return out, nil
@@ -152,7 +152,7 @@ func Conflicts(argv []string, charms map[string]types.Charm, activeNames []strin
 // other} applied together yields the same command as other alone (name is lost),
 // which name alone would have changed. Returns "" when no single charm accounts for
 // the override. Scanned in sorted-name order for a stable answer.
-func overrider(argv []string, charms map[string]types.Charm, name string, active []string) string {
+func overrider(argv []string, charms map[string]spells.Charm, name string, active []string) string {
 	others := make([]string, 0, len(active)-1)
 	for _, n := range active {
 		if n != name {
@@ -177,28 +177,28 @@ func overrider(argv []string, charms map[string]types.Charm, name string, active
 }
 
 // applyOp applies a single op to argv (already a private copy ApplyPatch owns).
-func applyOp(argv []string, op types.PatchOp) ([]string, error) {
+func applyOp(argv []string, op spells.PatchOp) ([]string, error) {
 	switch op.Op {
-	case OpAdd:
+	case spells.OpAdd:
 		i, err := argvIndex(op.Path, len(argv), true)
 		if err != nil {
 			return nil, err
 		}
 		return slices.Insert(argv, i, op.Value), nil
-	case OpRemove:
+	case spells.OpRemove:
 		i, err := argvIndex(op.Path, len(argv), false)
 		if err != nil {
 			return nil, err
 		}
 		return slices.Delete(argv, i, i+1), nil
-	case OpReplace:
+	case spells.OpReplace:
 		i, err := argvIndex(op.Path, len(argv), false)
 		if err != nil {
 			return nil, err
 		}
 		argv[i] = op.Value
 		return argv, nil
-	case OpTest:
+	case spells.OpTest:
 		i, err := argvIndex(op.Path, len(argv), false)
 		if err != nil {
 			return nil, err
@@ -207,7 +207,7 @@ func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 			return nil, fmt.Errorf("test failed: %q != %q", argv[i], op.Value)
 		}
 		return argv, nil
-	case OpMove:
+	case spells.OpMove:
 		from, err := argvIndex(op.From, len(argv), false)
 		if err != nil {
 			return nil, err
@@ -219,7 +219,7 @@ func applyOp(argv []string, op types.PatchOp) ([]string, error) {
 			return nil, err
 		}
 		return slices.Insert(argv, i, v), nil
-	case OpCopy:
+	case spells.OpCopy:
 		from, err := argvIndex(op.From, len(argv), false)
 		if err != nil {
 			return nil, err

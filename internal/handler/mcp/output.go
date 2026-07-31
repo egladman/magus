@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -44,27 +45,27 @@ type outputRefResult struct {
 
 // Invoke resolves a target-output ref (or unique prefix) to its stored bytes and
 // descriptor. The ctx is unused: resolution is a straight read from the cache dir.
-func (t *outputTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *outputTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	ref := paramString(req.Params, "ref", "")
 	if ref == "" {
-		return types.InvokeResponse{}, errors.New("mcp: ref is required")
+		return spells.InvokeResponse{}, errors.New("mcp: ref is required")
 	}
 	if !cache.LooksLikeRef(ref) {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: %q is not a target-output reference (expected out<hex>, e.g. out1a2b3c)", ref)
 	}
 	data, desc, err := t.reader.OutputByRef(ref)
 	if err != nil {
 		var amb *cache.AmbiguousRefError
 		switch {
 		case errors.As(err, &amb):
-			return types.InvokeResponse{}, fmt.Errorf("mcp: %w", amb)
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: %w", amb)
 		case errors.Is(err, fs.ErrNotExist):
-			return types.InvokeResponse{}, fmt.Errorf("mcp: no stored output for ref %q: %w", ref, err)
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: no stored output for ref %q: %w", ref, err)
 		default:
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
 	}
-	return types.InvokeResponse{Data: outputRefResult{
+	return spells.InvokeResponse{Data: outputRefResult{
 		Ref:        desc.Ref,
 		Project:    desc.Project,
 		Target:     desc.Target,
@@ -86,30 +87,30 @@ type tailLogTool struct {
 
 func (t *tailLogTool) Name() string { return "magus_tail_log" }
 
-func (t *tailLogTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *tailLogTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	projectPath := paramString(req.Params, "project", "")
 	if projectPath == "" {
-		return types.InvokeResponse{}, errors.New("mcp: project is required")
+		return spells.InvokeResponse{}, errors.New("mcp: project is required")
 	}
 
 	logPath, err := t.opts.Magus.TailLog(projectPath, "")
 	if errors.Is(err, types.ErrNoCache) {
-		return types.InvokeResponse{}, errors.New("mcp: workspace cache is not open")
+		return spells.InvokeResponse{}, errors.New("mcp: workspace cache is not open")
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return types.InvokeResponse{}, errors.New("mcp: no cache entries for project " + projectPath)
+		return spells.InvokeResponse{}, errors.New("mcp: no cache entries for project " + projectPath)
 	}
 	if err != nil {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: cache lookup: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: cache lookup: %w", err)
 	}
 
 	b, err := os.ReadFile(filepath.Clean(logPath))
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: read log failed", "path", logPath, "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: read log: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: read log: %w", err)
 	}
 
-	return types.InvokeResponse{Data: tailResult{
+	return spells.InvokeResponse{Data: tailResult{
 		Project: projectPath,
 		LogPath: logPath,
 		Content: string(b),
@@ -117,6 +118,6 @@ func (t *tailLogTool) Invoke(ctx context.Context, req types.InvokeRequest) (type
 }
 
 var (
-	_ types.SpellDriver = (*outputTool)(nil)
-	_ types.SpellDriver = (*tailLogTool)(nil)
+	_ spells.Driver = (*outputTool)(nil)
+	_ spells.Driver = (*tailLogTool)(nil)
 )

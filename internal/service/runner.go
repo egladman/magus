@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // Default readiness polling bounds, used when a service declares a readiness probe.
@@ -61,7 +61,7 @@ func (r ExecRunner) readyInterval() time.Duration {
 
 type execHandle struct {
 	cmd   *exec.Cmd
-	stop  types.Command
+	stop  spells.Command
 	grace time.Duration
 	done  chan struct{} // closed once the process has been reaped
 }
@@ -69,7 +69,7 @@ type execHandle struct {
 // Start forks the service and returns once its readiness probe passes (or
 // immediately if it declares none). A readiness failure stops the just-started
 // process and returns an error, so a failed Start leaves nothing running.
-func (r ExecRunner) Start(ctx context.Context, s types.Service) (Handle, error) {
+func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error) {
 	if s.Command.Bin == "" {
 		return nil, fmt.Errorf("service: no command to run")
 	}
@@ -132,7 +132,7 @@ func stopProc(h *execHandle) {
 // runStopCommand runs a service's graceful stop command, bounded by grace so a hung
 // stop binary cannot block teardown indefinitely (the caller still escalates to a
 // group kill afterward).
-func runStopCommand(stop types.Command, grace time.Duration) {
+func runStopCommand(stop spells.Command, grace time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
 	_ = exec.CommandContext(ctx, stop.Bin, stop.Args...).Run()
@@ -141,7 +141,7 @@ func runStopCommand(stop types.Command, grace time.Duration) {
 // waitReady polls the readiness probe until it exits 0 or the timeout elapses. The
 // probe is a command whose exit code is the signal (the Kubernetes exec-probe
 // model), run repeatedly at a fixed interval.
-func (r ExecRunner) waitReady(ctx context.Context, probe types.Command) error {
+func (r ExecRunner) waitReady(ctx context.Context, probe spells.Command) error {
 	deadline := time.Now().Add(r.readyTimeout())
 	for {
 		c := exec.Command(probe.Bin, probe.Args...)

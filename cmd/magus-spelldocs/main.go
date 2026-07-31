@@ -29,7 +29,7 @@ import (
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/docs"
 	ispell "github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // spellInfo is the authored, editorial metadata for a built-in spell (purpose,
@@ -168,14 +168,14 @@ func main() {
 // resolvedArgv joins an op's command and arguments into the shell-free argv a
 // target forks (`go tool golangci-lint run ./...`). Empty for a marker op with no
 // command (an opaque spell's aggregate target).
-func resolvedArgv(op types.SpellOp) string {
+func resolvedArgv(op spells.Op) string {
 	if op.Bin == "" {
 		return ""
 	}
 	return strings.TrimSpace(op.Bin + " " + strings.Join(op.Args, " "))
 }
 
-func renderSpell(d ispell.Descriptor) string {
+func renderSpell(d spells.Descriptor) string {
 	meta := spellMeta[d.Name]
 	var b strings.Builder
 
@@ -295,7 +295,7 @@ const (
 // docs/spells.md (the /spells/ landing), so that page both explains the spell
 // concept and lists every built-in with a link to its reference page. It preserves
 // the marker lines and everything outside them, so re-running is idempotent.
-func injectSpellList(path string, builtins map[string]ispell.Descriptor, names []string) error {
+func injectSpellList(path string, builtins map[string]spells.Descriptor, names []string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -423,7 +423,7 @@ func cleanDoc(doc string) string {
 // argument (e.g. "replaces `-l` with `-w`") when it can. It handles only the shapes
 // the built-ins use (add/remove/replace on argv indices); anything unusual falls
 // back to naming the op count.
-func describeCharm(c types.Charm, args []string) string {
+func describeCharm(c spells.Charm, args []string) string {
 	parts := make([]string, 0, len(c.Ops))
 	for _, p := range c.Ops {
 		switch p.Op {
@@ -473,7 +473,7 @@ func argAt(args []string, path string) string {
 
 // charmPatchJSON renders a charm's ops as indented JSON (RFC 6902), the exact
 // notation the docs expose behind a details dropdown.
-func charmPatchJSON(c types.Charm) string {
+func charmPatchJSON(c spells.Charm) string {
 	data, err := json.MarshalIndent(c.Ops, "", "  ")
 	if err != nil {
 		return "[]"
@@ -489,7 +489,7 @@ func capitalize(s string) string {
 	return string(s[0]-'a'+'A') + s[1:]
 }
 
-func sortedCharmNames(charms map[string]types.Charm) []string {
+func sortedCharmNames(charms map[string]spells.Charm) []string {
 	names := make([]string, 0, len(charms))
 	for n := range charms {
 		names = append(names, n)

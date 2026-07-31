@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/project"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // This file lives in the bindings layer (not the magus library) because a
@@ -45,7 +45,7 @@ func openSpellRemoteBackend(ctx context.Context, selector string) (cache.RemoteB
 // The adapter moves a temp file across the boundary and reads the op's Data; it
 // has no provider knowledge, so the binary stays CI-provider-agnostic.
 type spellRemoteBackend struct {
-	drv types.SpellDriver
+	drv spells.Driver
 
 	mu          sync.Mutex
 	activeKnown bool // true once a probe has returned a definitive answer
@@ -64,7 +64,7 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	if b.activeKnown {
 		return b.active
 	}
-	resp, err := b.drv.Invoke(ctx, types.InvokeRequest{Target: "enabled"})
+	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{Target: "enabled"})
 	if err != nil {
 		return false // transient: don't latch, re-probe next call
 	}
@@ -86,7 +86,7 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, projectPath, hash 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := b.drv.Invoke(ctx, types.InvokeRequest{
+	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "get_artifact",
 		Params: map[string]any{"project": projectPath, "hash": hash, "dest": dest},
 	})
@@ -129,7 +129,7 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash 
 		return err
 	}
 
-	resp, err := b.drv.Invoke(ctx, types.InvokeRequest{
+	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "put_artifact",
 		Params: map[string]any{"project": projectPath, "hash": hash, "src": src},
 	})
@@ -150,7 +150,7 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, projectPath, hash 
 // a silent success. Counts/dry-run detail are reported by the spell itself; only
 // completion crosses back here.
 func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.RetentionPolicy) error {
-	resp, err := b.drv.Invoke(ctx, types.InvokeRequest{
+	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
 		Target: "prune",
 		Params: map[string]any{
 			"older_than_secs": int64(policy.OlderThan / time.Second),
@@ -178,7 +178,7 @@ func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.Re
 // loaded (and registered) as a spell with handler op support; any other value
 // is a spell name looked up in the registry. The magusfile wires the backend by
 // calling magus.cache.remote(<spell handle>), which records the spell's name.
-func resolveBackendSpell(ctx context.Context, selector string) (types.SpellDriver, error) {
+func resolveBackendSpell(ctx context.Context, selector string) (spells.Driver, error) {
 	if strings.HasSuffix(selector, ".buzz") {
 		return loadSpellFile(ctx, selector)
 	}

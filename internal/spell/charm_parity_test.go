@@ -24,8 +24,8 @@ import (
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,14 +60,14 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		return v
 	}
 	// norm collapses both shapes — the host's map[string]any and the Buzz Charm
-	// object's field map — through types.Charm, so the comparison ignores whether an
+	// object's field map — through spells.Charm, so the comparison ignores whether an
 	// empty value/from key is present (the object carries all fields; the host omits
 	// empties) and pins only the RFC 6902 content.
-	norm := func(v any) types.Charm {
+	norm := func(v any) spells.Charm {
 		t.Helper()
 		b, err := json.Marshal(v)
 		require.NoError(t, err)
-		var c types.Charm
+		var c spells.Charm
 		require.NoError(t, json.Unmarshal(b, &c))
 		return c
 	}

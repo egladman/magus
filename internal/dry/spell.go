@@ -10,6 +10,7 @@ import (
 
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,7 +28,7 @@ func isSpell(sess *buzz.Session) bool {
 }
 
 // spellOp is one op discovered from a spell buffer: its name, resolved kind
-// (types.OpKindService | types.OpKindCommand), declared command, any kind-coherence
+// (spells.OpKindService | spells.OpKindCommand), declared command, any kind-coherence
 // ward raised for it (e.g. MGS5002 for a detached service), and a decodeErr set when
 // its Command could not be decoded (a malformed charm patch). The op is discovered
 // even when warded or undecodable, so `ls`/`graph` list it; a `run` surfaces
@@ -35,7 +36,7 @@ func isSpell(sess *buzz.Session) bool {
 type spellOp struct {
 	name      string
 	kind      string
-	cmd       types.Command
+	cmd       spells.Command
 	wards     []*types.DiagnosticError
 	decodeErr error
 }
@@ -73,7 +74,7 @@ func probeSpell(ctx context.Context, sess *buzz.Session) []spellOp {
 			continue
 		}
 		op := decodeSpellOp(name, mv)
-		op.wards = ward.Check(name, types.SpellOp{Kind: op.kind, Command: op.cmd})
+		op.wards = ward.Check(name, spells.Op{Kind: op.kind, Command: op.cmd})
 		ops = append(ops, op)
 	}
 	sortSpellOps(ops)
@@ -91,12 +92,12 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 		// A Service: its `command` field is the process magus supervises.
 		if cv, ok := cmdV.MapView(); ok {
 			cmd, err := ispell.DecodeCommandValue(cv)
-			return spellOp{name: name, kind: types.OpKindService, cmd: cmd, decodeErr: err}
+			return spellOp{name: name, kind: spells.OpKindService, cmd: cmd, decodeErr: err}
 		}
-		return spellOp{name: name, kind: types.OpKindService}
+		return spellOp{name: name, kind: spells.OpKindService}
 	}
 	cmd, err := ispell.DecodeCommandValue(mv)
-	return spellOp{name: name, kind: types.OpKindCommand, cmd: cmd, decodeErr: err}
+	return spellOp{name: name, kind: spells.OpKindCommand, cmd: cmd, decodeErr: err}
 }
 
 // renderCommand renders the op's command line for display: bin plus the argv reshaped

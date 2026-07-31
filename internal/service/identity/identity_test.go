@@ -3,14 +3,14 @@ package identity
 import (
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // dockerRun builds a service whose process command is "docker run <args...>".
-func dockerRun(args ...string) types.Service {
-	return types.Service{Command: types.Command{Bin: "docker", Args: append([]string{"run"}, args...)}}
+func dockerRun(args ...string) spells.Service {
+	return spells.Service{Command: spells.Command{Bin: "docker", Args: append([]string{"run"}, args...)}}
 }
 
 func TestParseExtractsIdentity(t *testing.T) {
@@ -51,7 +51,7 @@ func TestParseUnknownValueFlagDoesNotEatImage(t *testing.T) {
 }
 
 func TestParseNonContainer(t *testing.T) {
-	id := Parse(types.Command{Bin: "go", Args: []string{"run", "./server"}})
+	id := Parse(spells.Command{Bin: "go", Args: []string{"run", "./server"}})
 	assert.False(t, id.IsContainer())
 	assert.Empty(t, id.Image)
 }
@@ -112,9 +112,9 @@ func TestFingerprintTagMatters(t *testing.T) {
 }
 
 func TestFingerprintNonContainerFallsBackToArgv(t *testing.T) {
-	a := types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "./server"}}}
-	b := types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "./server"}}}
-	c := types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "./worker"}}}
+	a := spells.Service{Command: spells.Command{Bin: "go", Args: []string{"run", "./server"}}}
+	b := spells.Service{Command: spells.Command{Bin: "go", Args: []string{"run", "./server"}}}
+	c := spells.Service{Command: spells.Command{Bin: "go", Args: []string{"run", "./worker"}}}
 	assert.Equal(t, Fingerprint(a), Fingerprint(b))
 	assert.NotEqual(t, Fingerprint(a), Fingerprint(c))
 }
@@ -132,7 +132,7 @@ func TestClusterKey(t *testing.T) {
 	assert.NotEqual(t, k15, kOther)
 
 	// Non-container service is not clusterable.
-	_, ok := ClusterKey(types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "."}}})
+	_, ok := ClusterKey(spells.Service{Command: spells.Command{Bin: "go", Args: []string{"run", "."}}})
 	assert.False(t, ok)
 }
 

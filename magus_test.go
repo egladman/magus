@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ func TestSpellTargetSources(t *testing.T) {
 	vs := map[string][]string{
 		"lint": {".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"},
 	}
-	s := types.NewSpell("testpack", types.WithTargetSources(vs))
+	s := spells.NewSpell("testpack", spells.WithTargetSources(vs))
 
 	assert.Equal(t, []string{".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json"},
 		s.TargetSources()["lint"], "TargetSources(lint)")
@@ -77,7 +78,7 @@ func TestSpellTargetSources(t *testing.T) {
 // Spell constructed without any verb_sources (the common case for non-Go spells).
 func TestSpellTargetSources_nilMap(t *testing.T) {
 	t.Parallel()
-	s := types.NewSpell("bare")
+	s := spells.NewSpell("bare")
 	assert.Nil(t, s.TargetSources()["lint"], "TargetSources on nil-map spell")
 }
 
@@ -129,8 +130,8 @@ func TestForEachSpell_BudgetHonored(t *testing.T) {
 		peak     int
 	)
 
-	newSpell := func(name string) *types.Spell {
-		return types.NewSpell(name, types.WithInvoker(func(_ context.Context, _ types.InvokeRequest) (any, error) {
+	newSpell := func(name string) *spells.Spell {
+		return spells.NewSpell(name, spells.WithInvoker(func(_ context.Context, _ spells.InvokeRequest) (any, error) {
 			mu.Lock()
 			inFlight++
 			if inFlight > peak {
@@ -149,13 +150,13 @@ func TestForEachSpell_BudgetHonored(t *testing.T) {
 
 	p := &types.Project{
 		Path: "test-budget",
-		ResolvedSpells: []*types.Spell{
+		ResolvedSpells: []*spells.Spell{
 			newSpell("a"), newSpell("b"), newSpell("c"), newSpell("d"),
 		},
 	}
 
-	require.NoError(t, forEachSpell(ctx, p, "build", func(ctx context.Context, s *types.Spell) error {
-		_, err := s.Invoke(ctx, types.InvokeRequest{Target: "build"})
+	require.NoError(t, forEachSpell(ctx, p, "build", func(ctx context.Context, s *spells.Spell) error {
+		_, err := s.Invoke(ctx, spells.InvokeRequest{Target: "build"})
 		return err
 	}), "forEachSpell")
 
@@ -175,8 +176,8 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 		ran []string
 	)
 
-	newSpell := func(name string) *types.Spell {
-		return types.NewSpell(name, types.WithInvoker(func(_ context.Context, _ types.InvokeRequest) (any, error) {
+	newSpell := func(name string) *spells.Spell {
+		return spells.NewSpell(name, spells.WithInvoker(func(_ context.Context, _ spells.InvokeRequest) (any, error) {
 			mu.Lock()
 			ran = append(ran, name)
 			mu.Unlock()
@@ -186,13 +187,13 @@ func TestForEachSpell_NoBudgetUnchanged(t *testing.T) {
 
 	p := &types.Project{
 		Path: "test-no-budget",
-		ResolvedSpells: []*types.Spell{
+		ResolvedSpells: []*spells.Spell{
 			newSpell("x"), newSpell("y"), newSpell("z"),
 		},
 	}
 
-	require.NoError(t, forEachSpell(context.Background(), p, "build", func(ctx context.Context, s *types.Spell) error {
-		_, err := s.Invoke(ctx, types.InvokeRequest{Target: "build"})
+	require.NoError(t, forEachSpell(context.Background(), p, "build", func(ctx context.Context, s *spells.Spell) error {
+		_, err := s.Invoke(ctx, spells.InvokeRequest{Target: "build"})
 		return err
 	}), "forEachSpell")
 
@@ -206,10 +207,10 @@ func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
 
 	var gotClaims []string
 
-	spell := types.NewSpell(
+	spell := spells.NewSpell(
 		"s",
-		types.WithClaims("**/*.go"),
-		types.WithInvoker(func(ctx context.Context, _ types.InvokeRequest) (any, error) {
+		spells.WithClaims("**/*.go"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			gotClaims = types.EffectiveClaimsFromContext(ctx)
 			return nil, nil
 		}),
@@ -219,7 +220,7 @@ func TestRunTarget_InjectsEffectiveClaims(t *testing.T) {
 		Path:           "p",
 		Spells:         []string{"s"},
 		Bindings:       []*types.Binding{{Name: "s"}},
-		ResolvedSpells: []*types.Spell{spell},
+		ResolvedSpells: []*spells.Spell{spell},
 	}
 
 	require.NoError(t, runTarget(context.Background(), p, "ci"))
@@ -331,9 +332,9 @@ func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	p := &types.Project{
 		Path:    ".",
 		Sources: []string{"**/*.go"},
-		ResolvedSpells: []*types.Spell{
-			types.NewSpell("go", types.WithIgnoreDirs("vendor")),
-			types.NewSpell("ts", types.WithIgnoreDirs("node_modules", "vendor")), // vendor overlaps -> deduped
+		ResolvedSpells: []*spells.Spell{
+			spells.NewSpell("go", spells.WithIgnoreDirs("vendor")),
+			spells.NewSpell("ts", spells.WithIgnoreDirs("node_modules", "vendor")), // vendor overlaps -> deduped
 		},
 	}
 	assert.Equal(t, []string{"vendor", "node_modules"}, m.baseStep(p).IgnoreDirs,
@@ -921,10 +922,10 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 	t.Parallel()
 
 	var ran []string
-	newSpell := func(name string, targets ...string) *types.Spell {
-		return types.NewSpell(name,
-			types.WithTargets(targets...),
-			types.WithInvoker(func(_ context.Context, _ types.InvokeRequest) (any, error) {
+	newSpell := func(name string, targets ...string) *spells.Spell {
+		return spells.NewSpell(name,
+			spells.WithTargets(targets...),
+			spells.WithInvoker(func(_ context.Context, _ spells.InvokeRequest) (any, error) {
 				ran = append(ran, name)
 				return nil, nil
 			}))
@@ -935,14 +936,14 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 		MagusfileTargets: []string{"go-build"},
 		Exclusive:        true, // deterministic order for the assertion
 	}
-	p.ResolvedSpells = []*types.Spell{
+	p.ResolvedSpells = []*spells.Spell{
 		newSpell("go", "go-build"),
 		newSpell(types.MagusfileSpellName),
 	}
 
 	require.NoError(t, forEachSpell(context.Background(), p, "go-build",
-		func(ctx context.Context, s *types.Spell) error {
-			_, err := s.Invoke(ctx, types.InvokeRequest{Dir: ".", Target: "go-build"})
+		func(ctx context.Context, s *spells.Spell) error {
+			_, err := s.Invoke(ctx, spells.InvokeRequest{Dir: ".", Target: "go-build"})
 			return err
 		}))
 	assert.Equal(t, []string{types.MagusfileSpellName}, ran,

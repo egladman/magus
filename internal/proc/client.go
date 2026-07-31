@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // statusQueryTimeout caps the QueryStatus round-trip; prevents hung daemons from blocking forever.
@@ -210,7 +210,7 @@ func Shutdown(ctx context.Context, addr string) error {
 // AcquireService asks the daemon at addr to start (or reuse) a shared service and
 // keep it warm past this invocation, returning once it is ready. addr accepts a
 // unix:// URL or a bare path.
-func AcquireService(ctx context.Context, addr, key string, svc types.Service) error {
+func AcquireService(ctx context.Context, addr, key string, svc spells.Service) error {
 	ep, err := endpoint.ParseEndpoint(addr)
 	if err != nil {
 		return fmt.Errorf("proc: service.acquire: invalid address: %w", err)

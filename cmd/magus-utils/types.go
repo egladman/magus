@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,10 +23,10 @@ import (
 // Add an entry here to generate another value type.
 var registry = map[string]reflect.Type{
 	"Target":        reflect.TypeOf(types.Target{}),
-	"Command":       reflect.TypeOf(types.Command{}),
-	"Service":       reflect.TypeOf(types.Service{}),
-	"Charm":         reflect.TypeOf(types.Charm{}),
-	"PatchOp":       reflect.TypeOf(types.PatchOp{}),
+	"Command":       reflect.TypeOf(spells.Command{}),
+	"Service":       reflect.TypeOf(spells.Service{}),
+	"Charm":         reflect.TypeOf(spells.Charm{}),
+	"PatchOp":       reflect.TypeOf(spells.PatchOp{}),
 	"ExecResult":    reflect.TypeOf(types.ExecResult{}),
 	"CommitAuthor":  reflect.TypeOf(types.CommitAuthor{}),
 	"Commit":        reflect.TypeOf(types.CommitRecord{}),

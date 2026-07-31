@@ -3,7 +3,7 @@ package spell
 import (
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +14,7 @@ func TestBuiltins_NonEmpty(t *testing.T) {
 	for key, s := range m {
 		assert.NotEmptyf(t, s.Name, "Builtins()[%q].Name is empty", key)
 		// The registry is keyed by runtime name, so the key is the spell's Name.
-		assert.Equalf(t, key, s.Name, "Builtins() key %q != Descriptor.Name %q", key, s.Name)
+		assert.Equalf(t, key, s.Name, "Builtins() key %q != spells.Descriptor.Name %q", key, s.Name)
 	}
 }
 
@@ -53,7 +53,7 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	// rw charm drops --diff (remove /2) so tidy actually applies the changes.
 	w, ok := tidy.Charms["rw"]
 	require.True(t, ok, "tidy has no rw charm")
-	assert.Equal(t, []types.PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
+	assert.Equal(t, []spells.PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
 }
 
 // TestBuiltinCharmsUnchanged pins every bundled spell's charm patches after the
@@ -64,7 +64,7 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 func TestBuiltinCharmsUnchanged(t *testing.T) {
 	specs := Builtins()
 
-	charm := func(t *testing.T, spell, op, ch string) []types.PatchOp {
+	charm := func(t *testing.T, spell, op, ch string) []spells.PatchOp {
 		t.Helper()
 		sp, ok := specs[spell]
 		require.Truef(t, ok, "spell %q missing", spell)
@@ -77,40 +77,40 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 
 	cases := []struct {
 		spell, op, charm string
-		want             []types.PatchOp
+		want             []spells.PatchOp
 	}{
 		// go
-		{"go", "go-fmt", "rw", []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
-		{"go", "golangci-lint", "debug", []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		{"go", "go-fmt", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+		{"go", "golangci-lint", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		// /1, not /3: golangci-lint runs from PATH now, so the argv lost the leading
 		// "tool", "golangci-lint" prefix and --fix inserts right after "run".
-		{"go", "golangci-lint", "rw", []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-		{"go", "go-test", "cd", []types.PatchOp{
+		{"go", "golangci-lint", "rw", []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+		{"go", "go-test", "cd", []spells.PatchOp{
 			{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 			{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 		}},
-		{"go", "go-mod-tidy", "rw", []types.PatchOp{{Op: "remove", Path: "/2"}}},
+		{"go", "go-mod-tidy", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 		// py
-		{"py", "pytest", "debug", []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		{"py", "ruff-check", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-		{"py", "ruff-check", "gha", []types.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
-		{"py", "ruff-format", "rw", []types.PatchOp{{Op: "remove", Path: "/3"}}},
+		{"py", "pytest", "debug", []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		{"py", "ruff-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+		{"py", "ruff-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
+		{"py", "ruff-format", "rw", []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 		// ts
-		{"ts", "prettier", "rw", []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
-		{"ts", "vitest", "gha", []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
-		{"ts", "eslint", "rw", []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
-		{"ts", "eslint", "gha", []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
-		{"ts", "biome-check", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
-		{"ts", "biome-check", "gha", []types.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
-		{"ts", "biome-format", "rw", []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+		{"ts", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
+		{"ts", "vitest", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+		{"ts", "eslint", "rw", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
+		{"ts", "eslint", "gha", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
+		{"ts", "biome-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+		{"ts", "biome-check", "gha", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
+		{"ts", "biome-format", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 		// md
-		{"md", "prettier", "rw", []types.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
+		{"md", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf
-		{"buf", "buf-lint", "gha", []types.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-		{"buf", "buf-format", "rw", []types.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
+		{"buf", "buf-lint", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+		{"buf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 		// rs — compound charm (two drops): the constructor concat must still yield
 		// remove /2 then remove /1, in that order.
-		{"rs", "cargo-fmt", "rw", []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
+		{"rs", "cargo-fmt", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 	}
 
 	for _, c := range cases {

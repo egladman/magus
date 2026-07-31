@@ -12,6 +12,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -26,33 +27,33 @@ import (
 // the handler op invoker capture the spell source; the spec-only handle
 // can't. Op bodies re-read their inputs each invocation, so a fixed captured
 // source is correct, and the registration is idempotent for re-imports.
-func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.Spell, error) {
+func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells.Spell, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
+		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
 	src := string(data)
 	spec, err := extractDescriptorWithModules(ctx, src, filepath.Dir(path))
 	if err != nil {
-		return ispell.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
+		return spells.Descriptor{}, nil, fmt.Errorf("load spell %q: %w", path, err)
 	}
-	sp := types.NewSpell(spec.Name,
-		types.WithSources(spec.Needs...),
-		types.WithClaims(spec.Claims...),
-		types.WithIgnoreDirs(spec.IgnoreDirs...),
-		types.WithSpellOutputs(spec.Provides...),
-		types.WithTargets(spec.OpNames()...),
-		types.WithServiceTargets(spec.ServiceOpNames()...),
-		types.WithInvoker(newBuzzSpellInvoker(spec, src)),
-		types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
-		types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
-		types.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
-		types.WithServiceView(newServiceViewer(spec.Ops)),
-		types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
-		types.WithTargetDocs(docsByTarget(spec.Ops)),
+	sp := spells.NewSpell(spec.Name,
+		spells.WithSources(spec.Needs...),
+		spells.WithClaims(spec.Claims...),
+		spells.WithIgnoreDirs(spec.IgnoreDirs...),
+		spells.WithOutputs(spec.Provides...),
+		spells.WithTargets(spec.OpNames()...),
+		spells.WithServiceTargets(spec.ServiceOpNames()...),
+		spells.WithInvoker(newBuzzSpellInvoker(spec, src)),
+		spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
+		spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
+		spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
+		spells.WithServiceView(newServiceViewer(spec.Ops)),
+		spells.WithTargetCharms(charmNamesByTarget(spec.Ops)),
+		spells.WithTargetDocs(docsByTarget(spec.Ops)),
 		// A workspace-local Buzz spell: doctor enforces a doc comment on each
 		// function-handler target (record-style {cmd,args} ops are exempt).
-		types.WithDocRequiredTargets(spec.DocOps...),
+		spells.WithDocRequiredTargets(spec.DocOps...),
 	)
 	// The rest of OptionalContract. These are applied here rather than in the
 	// NewSpell call above because each is conditional on the spell having declared
@@ -67,18 +68,18 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 	// as transparent. The two sibling construction paths in spell.go already wired
 	// all of this, which is why built-in spells were unaffected and the gap stayed
 	// invisible.
-	var extra []types.SpellOption
+	var extra []spells.Option
 	if len(spec.VersionCmd) > 0 {
-		extra = append(extra, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
+		extra = append(extra, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
 	}
 	for tool, argv := range spec.VersionCmds {
-		extra = append(extra, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+		extra = append(extra, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 	}
 	if spec.Language != "" {
-		extra = append(extra, types.WithLanguage(spec.Language))
+		extra = append(extra, spells.WithLanguage(spec.Language))
 	}
 	if spec.Opaque {
-		extra = append(extra, types.WithOpaque())
+		extra = append(extra, spells.WithOpaque())
 	}
 	for _, o := range extra {
 		o(sp)
@@ -96,7 +97,7 @@ func loadBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, *types.
 // host modules at top level loads as well as it runs. dir is the spell file's own
 // directory, added to the import search path so a spell that imports sibling helper
 // modules (e.g. render.buzz's `import "render_text"`) resolves during discovery.
-func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.Descriptor, error) {
+func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.Descriptor, error) {
 	roots := []string{dir}
 	if source := interp.SourceFromContext(ctx); source != nil && source.Dir != dir {
 		roots = append(roots, source.Dir)
@@ -106,7 +107,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (ispell.
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	registerMagusModules(ctx, sess)
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
-		return ispell.Descriptor{}, err
+		return spells.Descriptor{}, err
 	}
 	return ispell.Resolve(ctx, sess)
 }
@@ -135,8 +136,8 @@ func spellSearchPaths(roots ...string) []string {
 // put_artifact/prune are plain exported functions, invoked by name with req.Params,
 // not operations in the command model. An unknown name is a no-op (fan-out skip, or
 // an optional backend op a spell doesn't implement).
-func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Context, types.InvokeRequest) (any, error) {
-	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
+func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
+	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
 			return dispatchOp(ctx, spec.Ops, req)
 		}
@@ -155,7 +156,7 @@ func newBuzzSpellInvoker(spec ispell.Descriptor, src string) func(context.Contex
 // the spell's top-level code re-runs every invocation, so a handler op spell's
 // module body must be idempotent (no one-time side effects) — the mgs_ functions
 // and op bodies do the work.
-func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequest) (any, error) {
+func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeRequest) (any, error) {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
@@ -200,7 +201,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req types.InvokeRequ
 // and most handlers ignore it; it carries the invocation's identity for those
 // that don't. The active charms ride on ctx, so a handler that inspects
 // target.charms sees the run's real charms rather than an always-empty list.
-func targetValue(ctx context.Context, req types.InvokeRequest) vm.Value {
+func targetValue(ctx context.Context, req spells.InvokeRequest) vm.Value {
 	t := vm.NewMap()
 	t.MapSet("name", vm.StrValue(req.Target))
 	t.MapSet("projectPath", vm.StrValue(req.Dir))

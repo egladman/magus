@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -262,12 +262,12 @@ func TestAgentFromRequest(t *testing.T) {
 
 // fakeDriver is a SpellDriver that returns a canned response for adapt tests.
 type fakeDriver struct {
-	resp types.InvokeResponse
+	resp spells.InvokeResponse
 	err  error
 }
 
 func (f fakeDriver) Name() string { return "fake" }
-func (f fakeDriver) Invoke(context.Context, types.InvokeRequest) (types.InvokeResponse, error) {
+func (f fakeDriver) Invoke(context.Context, spells.InvokeRequest) (spells.InvokeResponse, error) {
 	return f.resp, f.err
 }
 
@@ -283,7 +283,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("structured Data is marshaled to JSON text", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: types.InvokeResponse{Data: map[string]any{"ok": true}}})
+		h := adapt(fakeDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.False(t, res.IsError)
@@ -291,7 +291,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("plain Text is returned verbatim when Data is nil", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: types.InvokeResponse{Text: "just text"}})
+		h := adapt(fakeDriver{resp: spells.InvokeResponse{Text: "just text"}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "just text", allText(res))

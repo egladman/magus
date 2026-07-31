@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/doctor"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +31,7 @@ func TestDoctorToolAgainstFixture(t *testing.T) {
 	tool := &doctorTool{opts: Options{Magus: fixtureMagus(t)}}
 	assert.Equal(t, "magus_doctor", tool.Name())
 
-	resp, err := tool.Invoke(context.Background(), types.InvokeRequest{})
+	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
 	rep, ok := resp.Data.(doctor.Report)
 	require.True(t, ok, "doctor tool should return a doctor.Report")
@@ -47,7 +47,7 @@ func TestStatusToolNoDaemon(t *testing.T) {
 	assert.Equal(t, "magus_status", tool.Name())
 
 	// status never returns an error; an unreachable daemon becomes a PoolError.
-	resp, err := tool.Invoke(context.Background(), types.InvokeRequest{})
+	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
 	got := resp.Data.(statusResult)
 	assert.Nil(t, got.Pool, "no daemon should mean no pool reply")

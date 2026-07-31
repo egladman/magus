@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -38,7 +39,7 @@ type commandOpts struct {
 // active charms (see resolveCharmArgs). Empty Cmd is a no-op. opts.cwd defaults to
 // "." (the process cwd). Write-mode rides along as the "rw" charm on ctx, so no
 // separate write flag is needed.
-func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.ExecResult, error) {
+func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecResult, error) {
 	if tgt.Bin == "" {
 		return run.ExecResult{}, nil
 	}
@@ -71,8 +72,8 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 	// would block the run forever. A directly-run service (no supervisor active) falls
 	// through and foregrounds, blocking as intended (Ctrl-C stops it).
 	if tgt.IsService() && tgt.Service != nil {
-		svc := types.Service{
-			Command:   types.Command{Bin: tgt.Bin, Args: args},
+		svc := spells.Service{
+			Command:   spells.Command{Bin: tgt.Bin, Args: args},
 			Readiness: tgt.Service.Readiness,
 			Stop:      tgt.Service.Stop,
 			Idle:      tgt.Service.Idle,
@@ -98,7 +99,7 @@ func runCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.E
 // element-level (no root replace), disjoint edits compose freely; overlapping
 // positions resolve by name order. The result is always a fresh slice (callers may
 // mutate it; base is the shared cached spec).
-func resolveCharmArgs(ctx context.Context, base []string, charms map[string]types.Charm) ([]string, error) {
+func resolveCharmArgs(ctx context.Context, base []string, charms map[string]spells.Charm) ([]string, error) {
 	var activeNames []string
 	for name := range charms {
 		if types.HasCharm(ctx, name) {
@@ -118,7 +119,7 @@ var charmConflictWarned sync.Map // signature string -> struct{}
 // alphabetical name, so the loser has no effect). It never blocks the run - the
 // command still resolves deterministically - but an author almost never means to
 // declare a charm whose edit is thrown away, so magus says so.
-func warnCharmConflicts(ctx context.Context, base []string, charms map[string]types.Charm) {
+func warnCharmConflicts(ctx context.Context, base []string, charms map[string]spells.Charm) {
 	var activeNames []string
 	for name := range charms {
 		if types.HasCharm(ctx, name) {

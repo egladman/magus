@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,7 +20,7 @@ const defaultServiceIdle = 30 * time.Minute
 // is dropped. Release maps straight through.
 type serviceHost struct{ reg *service.Registry }
 
-func (h serviceHost) Acquire(ctx context.Context, key string, svc types.Service) error {
+func (h serviceHost) Acquire(ctx context.Context, key string, svc spells.Service) error {
 	_, err := h.reg.Acquire(ctx, key, svc)
 	return err
 }

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // scratchpadTool (magus_scratchpad) gives an agent a private, per-workspace scratch
@@ -32,15 +32,15 @@ type scratchpadResult struct {
 // Invoke dispatches on the op param and reads/mutates the per-workspace scratchpad
 // file. The ctx is unused: every op is a straight local file operation under the
 // cache dir. Content is required in practice for write/append (empty is allowed).
-func (t *scratchpadTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *scratchpadTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	op := paramString(req.Params, "op", "read")
 	content := paramString(req.Params, "content", "")
 
 	res, err := scratchpadOp(filepath.Join(t.opts.Magus.CacheDir(), "scratch"), op, content)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
-	return types.InvokeResponse{Data: res}, nil
+	return spells.InvokeResponse{Data: res}, nil
 }
 
 // scratchpadOp is the pure file logic behind magus_scratchpad, split out so it is
@@ -109,4 +109,4 @@ func scratchpadOpFile(dir, name, op, content string) (scratchpadResult, error) {
 	}
 }
 
-var _ types.SpellDriver = (*scratchpadTool)(nil)
+var _ spells.Driver = (*scratchpadTool)(nil)

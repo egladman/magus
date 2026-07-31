@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,25 +98,25 @@ func TestCheckCITarget_FailDetails(t *testing.T) {
 
 func TestCheckSpellDocs(t *testing.T) {
 	// A local Buzz spell with one documented and one undocumented handler target.
-	localMissing := types.NewSpell("local",
-		types.WithTargets("build", "test"),
-		types.WithTargetDocs(map[string]string{"build": "build compiles."}),
-		types.WithDocRequiredTargets("build", "test"),
+	localMissing := spells.NewSpell("local",
+		spells.WithTargets("build", "test"),
+		spells.WithTargetDocs(map[string]string{"build": "build compiles."}),
+		spells.WithDocRequiredTargets("build", "test"),
 	)
-	localComplete := types.NewSpell("local",
-		types.WithTargets("build", "test"),
-		types.WithTargetDocs(map[string]string{"build": "build compiles.", "test": "test runs the suite."}),
-		types.WithDocRequiredTargets("build", "test"),
+	localComplete := spells.NewSpell("local",
+		spells.WithTargets("build", "test"),
+		spells.WithTargetDocs(map[string]string{"build": "build compiles.", "test": "test runs the suite."}),
+		spells.WithDocRequiredTargets("build", "test"),
 	)
 	// A record-style target ("deploy" not in the doc-required set) is exempt even
 	// when undocumented, alongside a documented handler target.
-	recordStyle := types.NewSpell("local",
-		types.WithTargets("build", "deploy"),
-		types.WithTargetDocs(map[string]string{"build": "build compiles."}),
-		types.WithDocRequiredTargets("build"),
+	recordStyle := spells.NewSpell("local",
+		spells.WithTargets("build", "deploy"),
+		spells.WithTargetDocs(map[string]string{"build": "build compiles."}),
+		spells.WithDocRequiredTargets("build"),
 	)
 	// A spell that opts in nothing (built-in / Teal) is exempt even with no docs.
-	exempt := types.NewSpell("builtin", types.WithTargets("build", "test"))
+	exempt := spells.NewSpell("builtin", spells.WithTargets("build", "test"))
 
 	r := &runner{}
 
@@ -124,23 +125,23 @@ func TestCheckSpellDocs(t *testing.T) {
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("exempt spell with no docs", func(t *testing.T) {
-		got := r.checkSpellDocs([]*types.Spell{exempt})
+		got := r.checkSpellDocs([]*spells.Spell{exempt})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("local spell fully documented", func(t *testing.T) {
-		got := r.checkSpellDocs([]*types.Spell{localComplete})
+		got := r.checkSpellDocs([]*spells.Spell{localComplete})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("local spell missing a doc", func(t *testing.T) {
-		got := r.checkSpellDocs([]*types.Spell{localMissing})
+		got := r.checkSpellDocs([]*spells.Spell{localMissing})
 		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 	t.Run("record-style target exempt", func(t *testing.T) {
-		got := r.checkSpellDocs([]*types.Spell{recordStyle})
+		got := r.checkSpellDocs([]*spells.Spell{recordStyle})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("exempt does not rescue local", func(t *testing.T) {
-		got := r.checkSpellDocs([]*types.Spell{exempt, localMissing})
+		got := r.checkSpellDocs([]*spells.Spell{exempt, localMissing})
 		assert.Equal(t, StatusFail, got.Status, got.Message)
 	})
 }
@@ -148,12 +149,12 @@ func TestCheckSpellDocs(t *testing.T) {
 // TestCheckSpellDocs_Details pins that the failure lists the exact missing
 // spell:target pairs, which is what tells the user what to document.
 func TestCheckSpellDocs_Details(t *testing.T) {
-	s := types.NewSpell("local",
-		types.WithTargets("build", "lint", "test"),
-		types.WithTargetDocs(map[string]string{"build": "build compiles."}),
-		types.WithDocRequiredTargets("build", "lint", "test"),
+	s := spells.NewSpell("local",
+		spells.WithTargets("build", "lint", "test"),
+		spells.WithTargetDocs(map[string]string{"build": "build compiles."}),
+		spells.WithDocRequiredTargets("build", "lint", "test"),
 	)
-	got := (&runner{}).checkSpellDocs([]*types.Spell{s})
+	got := (&runner{}).checkSpellDocs([]*spells.Spell{s})
 	require.Equal(t, StatusFail, got.Status)
 	assert.Equal(t, []string{"local:lint", "local:test"}, got.Details)
 }
@@ -603,14 +604,14 @@ func mustSymlink(t *testing.T, target, link string) {
 
 func TestCheckNearDuplicateServices(t *testing.T) {
 	dbProject := func(path string, args ...string) *types.Project {
-		spell := types.NewSpell("docker",
-			types.WithTargets("db"),
-			types.WithServiceTargets("db"),
-			types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+		spell := spells.NewSpell("docker",
+			spells.WithTargets("db"),
+			spells.WithServiceTargets("db"),
+			spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 				return "docker", append([]string{"run"}, args...), true, nil
 			}),
 		)
-		return &types.Project{Path: path, ResolvedSpells: []*types.Spell{spell}}
+		return &types.Project{Path: path, ResolvedSpells: []*spells.Spell{spell}}
 	}
 
 	t.Run("clean when no services", func(t *testing.T) {

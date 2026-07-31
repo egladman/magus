@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,14 +18,14 @@ type runAffectedTool struct {
 
 func (t *runAffectedTool) Name() string { return "magus_run_affected" }
 
-func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *runAffectedTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	rawTarget := paramString(req.Params, "target", "")
 	if rawTarget == "" {
-		return types.InvokeResponse{}, errors.New("mcp: target is required")
+		return spells.InvokeResponse{}, errors.New("mcp: target is required")
 	}
 	parsed, err := types.ParseTarget(rawTarget)
 	if err != nil {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: invalid target: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: invalid target: %w", err)
 	}
 	base := paramString(req.Params, "base", "")
 	dryRun := paramBool(req.Params, "dry_run", false)
@@ -32,7 +33,7 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	var buf bytes.Buffer
 	rw, err := magus.NewReportWriter(&buf, nil)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	// Route graph events to this request's writer via context, not the shared
 	// workspace observer: the daemon serves concurrent requests on one *Magus,
@@ -68,7 +69,7 @@ func (t *runAffectedTool) Invoke(ctx context.Context, req types.InvokeRequest) (
 	if runErr != nil {
 		out.Error = runErr.Error()
 	}
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*runAffectedTool)(nil)
+var _ spells.Driver = (*runAffectedTool)(nil)

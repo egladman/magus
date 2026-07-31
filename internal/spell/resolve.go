@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // builtinCtxKey marks a resolve running under the embedded built-in loader, so the
@@ -49,7 +49,7 @@ var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_
 
 // Resolve calls a Buzz spell module's exported mgs_ functions once and assembles the
 // definition map the shared decoder reads (keyed by the decoder's field names),
-// returning the decoded Descriptor. Centralizing it here keeps the mgs_ naming in one
+// returning the decoded spells.Descriptor. Centralizing it here keeps the mgs_ naming in one
 // place and lets the decoder, bind-time handles, and embedded built-ins all read plain
 // data uniformly.
 //
@@ -58,7 +58,7 @@ var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_
 // helpers in the buzz engine wrap it for the bare-session case. Each function-valued
 // op in mgs_listTargets is reduced to its declared command (see resolveOps); a spell
 // that does in-VM work (a cache backend) exports plain functions and declares no ops.
-func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
+func Resolve(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error) {
 	if p := providerFrom(ctx); p != nil {
 		start := time.Now()
 		d, err := resolveSpell(ctx, sess)
@@ -68,17 +68,17 @@ func Resolve(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 	return resolveSpell(ctx, sess)
 }
 
-func resolveSpell(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
+func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex["mgs_getName"]
 	if !ok {
-		return Descriptor{}, ErrNotASpell
+		return spells.Descriptor{}, ErrNotASpell
 	}
 	def := vm.NewMap()
 	nv, err := sess.CallValue(ctx, nameFn, nil)
 	if err != nil {
-		return Descriptor{}, fmt.Errorf("magus/spell: mgs_getName: %w", err)
+		return spells.Descriptor{}, fmt.Errorf("magus/spell: mgs_getName: %w", err)
 	}
 	def.MapSet("name", nv)
 
@@ -95,14 +95,14 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (Descriptor, error) {
 		}
 		rv, err := sess.CallValue(ctx, fn, args)
 		if err != nil {
-			return Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
+			return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 		}
 		// ops is post-processed here because its handlers can be function-valued
 		// (a Buzz-only form) and need resolving to data. See contract.go.
 		if f.Field == "ops" {
 			rv, err = resolveOps(ctx, sess, rv)
 			if err != nil {
-				return Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
+				return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
 		}
 		def.MapSet(f.Field, rv)
@@ -208,19 +208,19 @@ func validateCmdFields(m vm.Value) error {
 }
 
 // DecodeHandle decodes a bind-time spell handle - a map of resolved native data
-// built by a workspace-local spell import - into a Descriptor, so a workspace-local
+// built by a workspace-local spell import - into a spells.Descriptor, so a workspace-local
 // Buzz spell can be registered by value at bind time.
-func DecodeHandle(v vm.Value) (Descriptor, error) {
+func DecodeHandle(v vm.Value) (spells.Descriptor, error) {
 	return Decode(buzzSpellObj{v: v})
 }
 
 // DecodeCommandValue decodes a single Buzz Command value (bin + args + the charm
-// JSON-Patch table) into a types.Command, reusing the same reader the engine uses
+// JSON-Patch table) into a spells.Command, reusing the same reader the engine uses
 // for a spell op. It is the by-value entrypoint for a caller holding a raw Command
 // map - the playground's dry run - so the sandbox and the engine agree on a
 // command's shape without a second decoder. v must be a map or object instance
 // (MapView'd form); an invalid charm patch is an error, as it is for the engine.
-func DecodeCommandValue(v vm.Value) (types.Command, error) {
+func DecodeCommandValue(v vm.Value) (spells.Command, error) {
 	return decodeCommand("", "", buzzSpellObj{v: v})
 }
 

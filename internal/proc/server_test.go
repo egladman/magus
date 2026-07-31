@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc/endpoint"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,7 +115,7 @@ type fakeServiceHost struct {
 	acquireErr error
 }
 
-func (h *fakeServiceHost) Acquire(_ context.Context, key string, _ types.Service) error {
+func (h *fakeServiceHost) Acquire(_ context.Context, key string, _ spells.Service) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.acquireErr != nil {
@@ -149,7 +149,7 @@ func TestServiceAcquireReleaseRoundTrip(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	svc := types.Service{Command: types.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
+	svc := spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
 	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "pg", svc))
 	require.NoError(t, ReleaseService(context.Background(), srv.Addr(), "pg"))
 
@@ -169,7 +169,7 @@ func TestStopAllServicesRoundTrip(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	svc := types.Service{Command: types.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
+	svc := spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
 	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "a", svc))
 	require.NoError(t, AcquireService(context.Background(), srv.Addr(), "b", svc))
 
@@ -192,7 +192,7 @@ func TestServiceAcquireError(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	err = AcquireService(context.Background(), srv.Addr(), "pg", types.Service{})
+	err = AcquireService(context.Background(), srv.Addr(), "pg", spells.Service{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "readiness failed")
 }
@@ -205,7 +205,7 @@ func TestServiceAcquireNoHost(t *testing.T) {
 	defer srv.Close()
 	require.NoError(t, srv.Start())
 
-	err = AcquireService(context.Background(), srv.Addr(), "pg", types.Service{})
+	err = AcquireService(context.Background(), srv.Addr(), "pg", spells.Service{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not host shared services")
 }

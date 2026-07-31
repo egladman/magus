@@ -5,13 +5,13 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // SpellRegistry is the metadata repository for registered spells.
 type SpellRegistry struct {
 	mu     sync.RWMutex
-	items  []*types.Spell
+	items  []*spells.Spell
 	ensure func() // lazy-init hook; must be idempotent (typically sync.OnceFunc-wrapped)
 }
 
@@ -40,7 +40,7 @@ func (r *SpellRegistry) runEnsure() {
 }
 
 // RegisterSpell adds s to the registry; panics on nil or duplicate name.
-func (r *SpellRegistry) RegisterSpell(s *types.Spell) {
+func (r *SpellRegistry) RegisterSpell(s *spells.Spell) {
 	if s == nil {
 		panic("magus/project: SpellRegistry.RegisterSpell called with nil spell")
 	}
@@ -60,7 +60,7 @@ func (r *SpellRegistry) RegisterSpell(s *types.Spell) {
 // concurrent callers that load the same spell (parallel magusfile evaluation,
 // remote-cache backend resolution and an `import` racing for one spell) settle on
 // a single registration instead of racing into RegisterSpell's duplicate panic.
-func (r *SpellRegistry) RegisterIfAbsent(s *types.Spell) *types.Spell {
+func (r *SpellRegistry) RegisterIfAbsent(s *spells.Spell) *spells.Spell {
 	if s == nil {
 		panic("magus/project: SpellRegistry.RegisterIfAbsent called with nil spell")
 	}
@@ -80,23 +80,23 @@ func (r *SpellRegistry) RegisterIfAbsent(s *types.Spell) *types.Spell {
 func (r *SpellRegistry) UnregisterSpell(name string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.items = slices.DeleteFunc(r.items, func(s *types.Spell) bool {
+	r.items = slices.DeleteFunc(r.items, func(s *spells.Spell) bool {
 		return s.Name() == name
 	})
 }
 
 // All returns a snapshot of every registered spell.
-func (r *SpellRegistry) All() []*types.Spell {
+func (r *SpellRegistry) All() []*spells.Spell {
 	r.runEnsure()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]*types.Spell, len(r.items))
+	out := make([]*spells.Spell, len(r.items))
 	copy(out, r.items)
 	return out
 }
 
 // Lookup returns the named spell, or (nil, false) if not found.
-func (r *SpellRegistry) Lookup(name string) (*types.Spell, bool) {
+func (r *SpellRegistry) Lookup(name string) (*spells.Spell, bool) {
 	r.runEnsure()
 	r.mu.RLock()
 	defer r.mu.RUnlock()

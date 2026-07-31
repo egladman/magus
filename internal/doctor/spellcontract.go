@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // checkSpellContract reports what each registered spell actually implements of the
@@ -33,7 +33,7 @@ import (
 // only ever observes the registered spell, never the descriptor it was built from.
 // Catching declaration-versus-application drift needs a test over magus's own
 // construction paths, not a workspace diagnostic. See TestSpellOptionsApplied.
-func checkSpellContract(spells []*types.Spell) Check {
+func checkSpellContract(spells []*spells.Spell) Check {
 	const name = "spell contract"
 	if len(spells) == 0 {
 		return Check{Name: name, Status: StatusOK, Message: "no spells registered"}
@@ -74,7 +74,7 @@ func checkSpellContract(spells []*types.Spell) Check {
 
 // implementedHooks names the optional contract a spell actually carries, so the
 // coverage is legible without a reader cross-referencing spell sources.
-func implementedHooks(s *types.Spell) []string {
+func implementedHooks(s *spells.Spell) []string {
 	var got []string
 	if len(s.Sources()) > 0 {
 		got = append(got, "needs")

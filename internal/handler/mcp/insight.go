@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,10 +23,10 @@ type insightTool struct {
 
 func (t *insightTool) Name() string { return "magus_insight" }
 
-func (t *insightTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	analyzer, ok := t.ws.(insightAnalyzer)
 	if !ok {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: workspace does not support insight analysis")
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: workspace does not support insight analysis")
 	}
 	// Agents have no meaningful cwd, so Dir is left empty (whole workspace).
 	opts := types.InsightOptions{
@@ -49,13 +50,13 @@ func (t *insightTool) Invoke(ctx context.Context, req types.InvokeRequest) (type
 	case "trend":
 		data, err = analyzer.Trend(ctx, opts)
 	default:
-		return types.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, or trend)", lens)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, or trend)", lens)
 	}
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: insight computation failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: insight: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: insight: %w", err)
 	}
-	return types.InvokeResponse{Data: data}, nil
+	return spells.InvokeResponse{Data: data}, nil
 }
 
-var _ types.SpellDriver = (*insightTool)(nil)
+var _ spells.Driver = (*insightTool)(nil)

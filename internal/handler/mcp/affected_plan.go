@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +29,7 @@ type affectedPlanTool struct {
 
 func (t *affectedPlanTool) Name() string { return "magus_affected_plan" }
 
-func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	maxShards := t.opts.Config.CI.MaxShards
 	if v := paramFloat(req.Params, "max_shards", 0); v != 0 {
 		maxShards = int(v)
@@ -39,7 +40,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) 
 	targets, source, _, err := ws.ExpandAffected(ctx, "ci", "")
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: expand affected failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: expand affected: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: expand affected: %w", err)
 	}
 
 	projects := make([]*types.Project, 0, len(targets))
@@ -52,7 +53,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) 
 	var hist forecast.History
 	if err := hist.Load(ctx, t.opts.Config.HistoryPath); err != nil {
 		toolLogger(ctx).Warn("mcp: load history failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: load history: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: load history: %w", err)
 	}
 
 	f := forecast.Forecaster{History: hist, Target: "ci"}
@@ -73,7 +74,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) 
 	plan, err := ci.Build(projects, source, ciOpts...)
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: build plan failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: build plan: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: build plan: %w", err)
 	}
 
 	runnerBudget := t.opts.Config.CI.RunnerPoolBudget
@@ -98,7 +99,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req types.InvokeRequest) 
 			Projects: strings.Join(paths, " "),
 		}
 	}
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*affectedPlanTool)(nil)
+var _ spells.Driver = (*affectedPlanTool)(nil)

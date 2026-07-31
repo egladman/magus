@@ -25,7 +25,7 @@ const TargetModulePath = "magus/target"
 var TargetModuleSource string
 
 // PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
-// mirrors of types.PatchOp, types.Charm, and types.Run: the {cmd, args, charms}
+// mirrors of spells.PatchOp, spells.Charm, and types.Run: the {cmd, args, charms}
 // command a command target's handler hands to its cb callback, down to the RFC 6902
 // ops. Unlike the other record mirrors they are inlined into self-contained
 // built-ins (every command spell references Run), so they ship in the magus/target
@@ -44,7 +44,7 @@ var CharmTypeSource string
 //go:embed gen/types/command.buzz
 var CommandSource string
 
-// ServiceSource is the generated Buzz `object Service` mirror of types.Service: the
+// ServiceSource is the generated Buzz `object Service` mirror of spells.Service: the
 // {command, readiness, stop} a service op returns, each field a Command (command is the
 // process; readiness/stop are optional). It ships in the magus/target bundle so a spell
 // can author a service op; it must follow CommandSource there (Service's fields are

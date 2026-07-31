@@ -24,6 +24,7 @@ import (
 	json "github.com/egladman/magus/internal/codec"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "yo
 	require.Equal(t, "echo-import", metadata.Name)
 	drv, found := project.DefaultSpellRegistry().Lookup("echo-import")
 	require.True(t, found, "import path did not register the spell")
-	resp, err := drv.Invoke(context.Background(), types.InvokeRequest{
+	resp, err := drv.Invoke(context.Background(), spells.InvokeRequest{
 		Target: "echo",
 		Params: map[string]any{"x": "there"},
 	})
@@ -182,7 +183,7 @@ export fun echo(target: any, cb: fun(any)) > str { var p = {}; cb(p); return "hi
 	require.NoError(t, os.WriteFile(path, []byte(src), 0o644))
 	sp, err := loadSpellFile(context.Background(), path)
 	require.NoError(t, err, "loadSpellFile")
-	resp, err := sp.Invoke(context.Background(), types.InvokeRequest{
+	resp, err := sp.Invoke(context.Background(), spells.InvokeRequest{
 		Target: "echo",
 		Params: map[string]any{"who": "magus"},
 	})
@@ -425,12 +426,12 @@ export final cname = build().charms[0];
 }
 
 func TestNewCommandRenderer(t *testing.T) {
-	targets := map[string]types.SpellOp{
-		"lint": {Command: types.Command{Bin: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]types.Charm{
-			"write": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-			"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+	targets := map[string]spells.Op{
+		"lint": {Command: spells.Command{Bin: "go", Args: []string{"tool", "golangci-lint", "run", "./..."}, Charms: map[string]spells.Charm{
+			"write": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+			"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 		}}},
-		"build": {Command: types.Command{Bin: "go", Args: []string{"build"}}},
+		"build": {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
 		"noop":  {}, // empty cmd
 	}
 	render := newCommandRenderer(targets)
@@ -493,9 +494,9 @@ func TestNewCommandRenderer(t *testing.T) {
 		// An out-of-range index is valid in shape (passes ValidatePatch at load) but
 		// cannot apply to a 2-element argv; the renderer surfaces it (MGS6001 upstream)
 		// rather than dropping the command line.
-		oob := map[string]types.SpellOp{
-			"lint": {Command: types.Command{Bin: "go", Args: []string{"run", "./..."}, Charms: map[string]types.Charm{
-				"write": {Ops: []types.PatchOp{{Op: "add", Path: "/9", Value: "--fix"}}},
+		oob := map[string]spells.Op{
+			"lint": {Command: spells.Command{Bin: "go", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
+				"write": {Ops: []spells.PatchOp{{Op: "add", Path: "/9", Value: "--fix"}}},
 			}}},
 		}
 		_, _, ok, err := newCommandRenderer(oob)("lint", []string{"write"})
@@ -507,10 +508,10 @@ func TestNewCommandRenderer(t *testing.T) {
 func TestResolveCharmArgs(t *testing.T) {
 	base := []string{"run", "./..."}
 	// write inserts --fix before ./... (index 1); debug/trace append at the end.
-	charmArgs := map[string]types.Charm{
-		"write": {Ops: []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-		"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		"trace": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--trace"}}},
+	charmArgs := map[string]spells.Charm{
+		"write": {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+		"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		"trace": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--trace"}}},
 	}
 	with := func(names ...string) context.Context {
 		return types.WithCharms(context.Background(), names)

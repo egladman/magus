@@ -1,6 +1,6 @@
-// Package spells holds this test only; the directory is otherwise a tree of
-// built-in spell sources and their doc examples, not a Go package.
-package spells
+// External test package: these examples drive the interpreter, which imports
+// spells, so an in-package test would close an import cycle.
+package spells_test
 
 import (
 	"context"

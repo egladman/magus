@@ -3,17 +3,18 @@ package ward
 import (
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func service(bin string, args ...string) types.SpellOp {
-	return types.SpellOp{Kind: types.OpKindService, Command: types.Command{Bin: bin, Args: args}}
+func service(bin string, args ...string) spells.Op {
+	return spells.Op{Kind: spells.OpKindService, Command: spells.Command{Bin: bin, Args: args}}
 }
 
-func command(bin string, args ...string) types.SpellOp {
-	return types.SpellOp{Command: types.Command{Bin: bin, Args: args}}
+func command(bin string, args ...string) spells.Op {
+	return spells.Op{Command: spells.Command{Bin: bin, Args: args}}
 }
 
 func TestDetachOnServiceIsError(t *testing.T) {

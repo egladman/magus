@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -411,7 +412,7 @@ func outputWatchDirs(ws *types.Workspace, p *types.Project, target string) []str
 
 // servesTarget reports whether target is backed by a service op in any of the
 // project's resolved spells.
-func servesTarget(spells []*types.Spell, target string) bool {
+func servesTarget(spells []*spells.Spell, target string) bool {
 	for _, s := range spells {
 		if s.IsServiceTarget(target) {
 			return true
@@ -1025,15 +1026,15 @@ func (m *Magus) buildVolatilityRuntime(ctx context.Context) *volatility.Runtime 
 // runTarget executes name on every spell in p and rejects writes into descendant projects.
 func runTarget(ctx context.Context, p *types.Project, name string) error {
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
-	err := forEachSpell(ctx, p, name, func(ctx context.Context, s *types.Spell) error {
+	err := forEachSpell(ctx, p, name, func(ctx context.Context, s *spells.Spell) error {
 		return invokeSpell(ctx, p, name, s)
 	})
 	return errors.Join(err, a.Finish(ctx, name))
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.
-func invokeSpell(ctx context.Context, p *types.Project, name string, s *types.Spell) error {
-	req := types.InvokeRequest{Target: name, Dir: p.Dir}
+func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.Spell) error {
+	req := spells.InvokeRequest{Target: name, Dir: p.Dir}
 	rt := volatility.RuntimeFromContext(ctx)
 	if rt == nil {
 		resp, err := s.Invoke(ctx, req)
@@ -1215,7 +1216,7 @@ func (m *Magus) withTargetDeadline(ctx context.Context) (context.Context, contex
 // makeSpellFilteredHandler returns a handler that runs name on a single named spell.
 func (*Magus) makeSpellFilteredHandler(name, spellName string) TargetHandler {
 	return func(ctx context.Context, p *types.Project) error {
-		return forSpellNamed(ctx, p, name, spellName, func(ctx context.Context, s *types.Spell) error {
+		return forSpellNamed(ctx, p, name, spellName, func(ctx context.Context, s *spells.Spell) error {
 			return invokeSpell(ctx, p, name, s)
 		})
 	}

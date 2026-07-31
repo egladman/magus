@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +30,7 @@ func TestWhereTool(t *testing.T) {
 	tool := &whereTool{ws: ws}
 
 	t.Run("unambiguous match resolves to abs dir", func(t *testing.T) {
-		resp, err := tool.Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"filter": "api"}})
+		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"filter": "api"}})
 		require.NoError(t, err)
 		got := resp.Data.(whereResult)
 		assert.Equal(t, 1, got.Matched)
@@ -38,7 +39,7 @@ func TestWhereTool(t *testing.T) {
 	})
 
 	t.Run("no filter with multiple projects is ambiguous", func(t *testing.T) {
-		resp, err := tool.Invoke(context.Background(), types.InvokeRequest{})
+		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 		require.NoError(t, err)
 		got := resp.Data.(whereResult)
 		assert.Equal(t, 2, got.Matched)
@@ -47,13 +48,13 @@ func TestWhereTool(t *testing.T) {
 	})
 
 	t.Run("no project matches the filter", func(t *testing.T) {
-		_, err := tool.Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"filter": "zzz-nope"}})
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"filter": "zzz-nope"}})
 		assert.Error(t, err)
 	})
 
 	t.Run("empty workspace errors", func(t *testing.T) {
 		empty := &whereTool{ws: &fakeWorkspace{}}
-		_, err := empty.Invoke(context.Background(), types.InvokeRequest{})
+		_, err := empty.Invoke(context.Background(), spells.InvokeRequest{})
 		assert.Error(t, err)
 	})
 }

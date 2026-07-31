@@ -3,7 +3,7 @@ package identity
 import (
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,7 +64,7 @@ func TestNearDuplicatesIgnoresNonContainer(t *testing.T) {
 	members := []Member{
 		{Name: "a/db", Service: dockerRun("-e", "POSTGRES_DB=api", "-p", "5432:5432", "postgres:15")},
 		{Name: "b/db", Service: dockerRun("-e", "POSTGRES_DB=billing", "-p", "5432:5432", "postgres:15")},
-		{Name: "svc/app", Service: types.Service{Command: types.Command{Bin: "go", Args: []string{"run", "./server"}}}},
+		{Name: "svc/app", Service: spells.Service{Command: spells.Command{Bin: "go", Args: []string{"run", "./server"}}}},
 	}
 	clusters := NearDuplicates(members)
 	require.Len(t, clusters, 1)
@@ -90,7 +90,7 @@ func TestFormatWarning(t *testing.T) {
 }
 
 // distinct marks a service intentionally-separate with a reason.
-func distinct(s types.Service, reason string) types.Service {
+func distinct(s spells.Service, reason string) spells.Service {
 	s.Distinct = reason
 	return s
 }

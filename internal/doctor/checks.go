@@ -25,6 +25,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -140,7 +141,7 @@ func (*runner) checkCITarget(projects []*types.Project) Check {
 // built-ins and record-style {cmd,args} ops, whose handler comments aren't
 // captured, are skipped - so the check enforces the convention exactly where the
 // Buzz interpreter can verify it.
-func (*runner) checkSpellDocs(spells []*types.Spell) Check {
+func (*runner) checkSpellDocs(spells []*spells.Spell) Check {
 	const name = "spell target docs"
 	var undocumented []string
 	for _, s := range spells {

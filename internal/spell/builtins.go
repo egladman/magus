@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"github.com/egladman/magus/spells"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ import (
 //go:embed gen/*.bo
 var builtinFS embed.FS
 
-// Builtins is the built-in spell registry, keyed by runtime spell name (Descriptor.Name,
+// Builtins is the built-in spell registry, keyed by runtime spell name (spells.Descriptor.Name,
 // e.g. "go", "ts"), loaded once. This is the registry callers use: users refer to a
 // spell by its name, and registration is by name. The source directory a spell was
 // authored in (e.g. "golang" for "go") has no runtime presence.
@@ -45,7 +46,7 @@ var BuiltinsHash = sync.OnceValue(func() string {
 
 // BuiltinOps returns each built-in spell's op names keyed by runtime spell name. It is
 // the surface the dry-run tracer needs to build spell stubs without depending on the
-// full Descriptor; derived from Builtins() so it cannot drift from the registry.
+// full spells.Descriptor; derived from Builtins() so it cannot drift from the registry.
 func BuiltinOps() map[string][]string {
 	b := Builtins()
 	out := make(map[string][]string, len(b))
@@ -56,13 +57,13 @@ func BuiltinOps() map[string][]string {
 }
 
 // loadBuiltins recovers every embedded built-in's bytecode, runs it, and resolves
-// the exported mgs_ functions into a Descriptor, keyed by runtime spell name
-// (Descriptor.Name). It backs Builtins.
+// the exported mgs_ functions into a spells.Descriptor, keyed by runtime spell name
+// (spells.Descriptor.Name). It backs Builtins.
 //
 // It panics on failure: the .bo blobs are a trusted build artifact, so a failure
 // here is a broken build (stale bytecode, a compiler/format mismatch), not bad
 // user input — the same severity as a missing embedded asset.
-func loadBuiltins() map[string]Descriptor {
+func loadBuiltins() map[string]spells.Descriptor {
 	entries, err := builtinFS.ReadDir("gen")
 	if err != nil {
 		panic("magus/spell: read embedded built-ins: " + err.Error())
@@ -73,7 +74,7 @@ func loadBuiltins() map[string]Descriptor {
 	// a provider-carrying ctx ever drive this path.
 	ctx := withBuiltinResolve(context.Background())
 	p := providerFrom(ctx)
-	out := make(map[string]Descriptor, len(entries))
+	out := make(map[string]spells.Descriptor, len(entries))
 	for _, e := range entries {
 		blob, err := builtinFS.ReadFile("gen/" + e.Name())
 		if err != nil {

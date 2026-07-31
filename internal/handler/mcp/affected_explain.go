@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,23 +28,23 @@ type affectedExplainTool struct {
 
 func (t *affectedExplainTool) Name() string { return "magus_affected_explain" }
 
-func (t *affectedExplainTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *affectedExplainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	project := paramString(req.Params, "project", "")
 	if project == "" {
-		return types.InvokeResponse{}, errors.New("mcp: project is required")
+		return spells.InvokeResponse{}, errors.New("mcp: project is required")
 	}
 	base := paramString(req.Params, "base", "")
 
 	r, err := t.ws.Affected(ctx, base)
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: affected computation failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: affected: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: affected: %w", err)
 	}
 
 	g, err := t.ws.Graph()
 	if err != nil {
 		toolLogger(ctx).Warn("mcp: graph load failed", "error", err)
-		return types.InvokeResponse{}, fmt.Errorf("mcp: graph: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: graph: %w", err)
 	}
 
 	out := describeResult{Project: project, Base: r.Base}
@@ -65,7 +66,7 @@ func (t *affectedExplainTool) Invoke(ctx context.Context, req types.InvokeReques
 		}
 	}
 
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*affectedExplainTool)(nil)
+var _ spells.Driver = (*affectedExplainTool)(nil)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,9 +74,9 @@ func TestRaceForcesNoCache(t *testing.T) {
 func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 	const spellName = "zzz-race-test-spell"
 	var calls atomic.Int32
-	spell := types.NewSpell(spellName,
-		types.WithTargets("build"),
-		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),
@@ -112,9 +113,9 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	const spellName = "zzz-no-cache-test-spell"
 	var calls atomic.Int32
-	spell := types.NewSpell(spellName,
-		types.WithTargets("build"),
-		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),
@@ -152,9 +153,9 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	const spellName = "zzz-affected-no-cache-test-spell"
 	var calls atomic.Int32
-	spell := types.NewSpell(spellName,
-		types.WithTargets("build"),
-		types.WithInvoker(func(context.Context, types.InvokeRequest) (any, error) {
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),

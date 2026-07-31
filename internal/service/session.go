@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // Session is the per-run routing layer over service supervision. It acquires each
@@ -19,7 +19,7 @@ type Session struct {
 
 	// daemonAcquire/daemonRelease route to the cross-invocation host when non-nil;
 	// nil means no daemon is reachable, so services run in-process for this run only.
-	daemonAcquire func(ctx context.Context, key string, svc types.Service) error
+	daemonAcquire func(ctx context.Context, key string, svc spells.Service) error
 	daemonRelease func(key string)
 
 	mu         sync.Mutex
@@ -28,7 +28,7 @@ type Session struct {
 
 // NewSession returns a Session backed by reg. daemonAcquire/daemonRelease may be nil
 // (no cross-invocation host), in which case every service runs in-process.
-func NewSession(reg *Registry, daemonAcquire func(context.Context, string, types.Service) error, daemonRelease func(string)) *Session {
+func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spells.Service) error, daemonRelease func(string)) *Session {
 	return &Session{
 		reg:           reg,
 		daemonAcquire: daemonAcquire,
@@ -42,7 +42,7 @@ func NewSession(reg *Registry, daemonAcquire func(context.Context, string, types
 // reachable at run start but has since died or wedged) the service is hosted
 // in-process for this run rather than aborting - the design's "degrade to
 // per-invocation" - so a daemon hiccup does not fail an otherwise-fine run.
-func (s *Session) acquire(ctx context.Context, key string, svc types.Service) error {
+func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) error {
 	if s.daemonAcquire != nil {
 		if err := s.daemonAcquire(ctx, key, svc); err != nil {
 			slog.WarnContext(ctx, "magus: daemon service acquire failed; hosting in-process for this run",

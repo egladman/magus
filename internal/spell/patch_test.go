@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	json "github.com/egladman/magus/internal/codec"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,9 +12,9 @@ import (
 
 func TestExplainCharms(t *testing.T) {
 	base := []string{"tool", "golangci-lint", "run", "./..."}
-	charms := map[string]types.Charm{
-		"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-		"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+	charms := map[string]spells.Charm{
+		"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+		"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 	}
 
 	t.Run("one step per active charm, cumulative, sorted", func(t *testing.T) {
@@ -42,7 +42,7 @@ func TestExplainCharms(t *testing.T) {
 	})
 
 	t.Run("a charm that does not apply is an error naming it", func(t *testing.T) {
-		bad := map[string]types.Charm{"oob": {Ops: []types.PatchOp{{Op: "add", Path: "/99", Value: "x"}}}}
+		bad := map[string]spells.Charm{"oob": {Ops: []spells.PatchOp{{Op: "add", Path: "/99", Value: "x"}}}}
 		_, err := ExplainCharms(base, bad, []string{"oob"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oob")
@@ -51,14 +51,14 @@ func TestExplainCharms(t *testing.T) {
 
 func TestApplyPatch(t *testing.T) {
 	// applies asserts a patch produces the expected argv.
-	applies := func(t *testing.T, argv []string, ops []types.PatchOp, want []string) {
+	applies := func(t *testing.T, argv []string, ops []spells.PatchOp, want []string) {
 		t.Helper()
 		got, err := ApplyPatch(argv, ops)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	}
 	// fails asserts a patch is rejected.
-	fails := func(t *testing.T, argv []string, ops []types.PatchOp) {
+	fails := func(t *testing.T, argv []string, ops []spells.PatchOp) {
 		t.Helper()
 		_, err := ApplyPatch(argv, ops)
 		assert.Error(t, err)
@@ -68,57 +68,57 @@ func TestApplyPatch(t *testing.T) {
 		applies(t, []string{"a", "b"}, nil, []string{"a", "b"})
 	})
 	t.Run("append end", func(t *testing.T) {
-		applies(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "./...", "-v"})
+		applies(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "./...", "-v"})
 	})
 	t.Run("prepend", func(t *testing.T) {
-		applies(t, []string{"build"}, []types.PatchOp{{Op: "add", Path: "/0", Value: "-x"}}, []string{"-x", "build"})
+		applies(t, []string{"build"}, []spells.PatchOp{{Op: "add", Path: "/0", Value: "-x"}}, []string{"-x", "build"})
 	})
 	t.Run("insert middle", func(t *testing.T) {
-		applies(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}, []string{"run", "--fix", "./..."})
+		applies(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}, []string{"run", "--fix", "./..."})
 	})
 	t.Run("replace element", func(t *testing.T) {
-		applies(t, []string{"-l", "."}, []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, []string{"-w", "."})
+		applies(t, []string{"-l", "."}, []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}, []string{"-w", "."})
 	})
 	t.Run("remove element", func(t *testing.T) {
-		applies(t, []string{"mod", "tidy", "--diff"}, []types.PatchOp{{Op: "remove", Path: "/2"}}, []string{"mod", "tidy"})
+		applies(t, []string{"mod", "tidy", "--diff"}, []spells.PatchOp{{Op: "remove", Path: "/2"}}, []string{"mod", "tidy"})
 	})
 	t.Run("two removes (rust fmt)", func(t *testing.T) {
-		applies(t, []string{"fmt", "--", "--check"}, []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}, []string{"fmt"})
+		applies(t, []string{"fmt", "--", "--check"}, []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}, []string{"fmt"})
 	})
 	t.Run("compose: insert then append", func(t *testing.T) {
-		applies(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "--fix", "./...", "-v"})
+		applies(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}}, []string{"run", "--fix", "./...", "-v"})
 	})
 	t.Run("move", func(t *testing.T) {
-		applies(t, []string{"a", "b", "c"}, []types.PatchOp{{Op: "move", Path: "/0", From: "/2"}}, []string{"c", "a", "b"})
+		applies(t, []string{"a", "b", "c"}, []spells.PatchOp{{Op: "move", Path: "/0", From: "/2"}}, []string{"c", "a", "b"})
 	})
 	t.Run("copy", func(t *testing.T) {
-		applies(t, []string{"a", "b"}, []types.PatchOp{{Op: "copy", Path: "/-", From: "/0"}}, []string{"a", "b", "a"})
+		applies(t, []string{"a", "b"}, []spells.PatchOp{{Op: "copy", Path: "/-", From: "/0"}}, []string{"a", "b", "a"})
 	})
 	t.Run("test pass", func(t *testing.T) {
-		applies(t, []string{"go", "test"}, []types.PatchOp{{Op: "test", Path: "/0", Value: "go"}}, []string{"go", "test"})
+		applies(t, []string{"go", "test"}, []spells.PatchOp{{Op: "test", Path: "/0", Value: "go"}}, []string{"go", "test"})
 	})
 	t.Run("test fail", func(t *testing.T) {
-		fails(t, []string{"go", "test"}, []types.PatchOp{{Op: "test", Path: "/0", Value: "rustc"}})
+		fails(t, []string{"go", "test"}, []spells.PatchOp{{Op: "test", Path: "/0", Value: "rustc"}})
 	})
 	t.Run("index out of range", func(t *testing.T) {
-		fails(t, []string{"a"}, []types.PatchOp{{Op: "remove", Path: "/3"}})
+		fails(t, []string{"a"}, []spells.PatchOp{{Op: "remove", Path: "/3"}})
 	})
 	t.Run("replace past end", func(t *testing.T) {
-		fails(t, []string{"a"}, []types.PatchOp{{Op: "replace", Path: "/1", Value: "x"}})
+		fails(t, []string{"a"}, []spells.PatchOp{{Op: "replace", Path: "/1", Value: "x"}})
 	})
 	t.Run("add past end", func(t *testing.T) {
-		fails(t, []string{"a"}, []types.PatchOp{{Op: "add", Path: "/5", Value: "x"}})
+		fails(t, []string{"a"}, []spells.PatchOp{{Op: "add", Path: "/5", Value: "x"}})
 	})
 	t.Run("dash on remove invalid", func(t *testing.T) {
-		fails(t, []string{"a"}, []types.PatchOp{{Op: "remove", Path: "/-"}})
+		fails(t, []string{"a"}, []spells.PatchOp{{Op: "remove", Path: "/-"}})
 	})
 	t.Run("leading zero invalid", func(t *testing.T) {
-		fails(t, []string{"a", "b"}, []types.PatchOp{{Op: "remove", Path: "/01"}})
+		fails(t, []string{"a", "b"}, []spells.PatchOp{{Op: "remove", Path: "/01"}})
 	})
 
 	// Input must never be mutated.
 	base := []string{"a", "b"}
-	_, err := ApplyPatch(base, []types.PatchOp{{Op: "add", Path: "/-", Value: "c"}})
+	_, err := ApplyPatch(base, []spells.PatchOp{{Op: "add", Path: "/-", Value: "c"}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"a", "b"}, base, "base mutated")
 }
@@ -128,7 +128,7 @@ func TestApplyPatch(t *testing.T) {
 // use, so "follow the RFC" is verified, not just asserted.
 func TestApplyPatchConformance(t *testing.T) {
 	// agrees asserts our flat-array applier matches the reference impl.
-	agrees := func(t *testing.T, argv []string, ops []types.PatchOp) {
+	agrees := func(t *testing.T, argv []string, ops []spells.PatchOp) {
 		t.Helper()
 		got, err := ApplyPatch(argv, ops)
 		require.NoError(t, err)
@@ -137,19 +137,19 @@ func TestApplyPatchConformance(t *testing.T) {
 		assert.Equal(t, ref, got)
 	}
 
-	agrees(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}})
-	agrees(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}})
-	agrees(t, []string{"-l", "."}, []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}})
-	agrees(t, []string{"mod", "tidy", "--diff"}, []types.PatchOp{{Op: "remove", Path: "/2"}})
-	agrees(t, []string{"fmt", "--", "--check"}, []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}})
-	agrees(t, []string{"a", "b", "c"}, []types.PatchOp{{Op: "move", Path: "/0", From: "/2"}})
-	agrees(t, []string{"a", "b"}, []types.PatchOp{{Op: "copy", Path: "/-", From: "/0"}})
-	agrees(t, []string{"run", "./..."}, []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}})
+	agrees(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}})
+	agrees(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}})
+	agrees(t, []string{"-l", "."}, []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}})
+	agrees(t, []string{"mod", "tidy", "--diff"}, []spells.PatchOp{{Op: "remove", Path: "/2"}})
+	agrees(t, []string{"fmt", "--", "--check"}, []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}})
+	agrees(t, []string{"a", "b", "c"}, []spells.PatchOp{{Op: "move", Path: "/0", From: "/2"}})
+	agrees(t, []string{"a", "b"}, []spells.PatchOp{{Op: "copy", Path: "/-", From: "/0"}})
+	agrees(t, []string{"run", "./..."}, []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}, {Op: "add", Path: "/-", Value: "-v"}})
 }
 
 // applyWithEvanphx runs ops over argv via the reference RFC 6902 library by
 // marshalling argv to a JSON array document and the ops to a JSON Patch.
-func applyWithEvanphx(argv []string, ops []types.PatchOp) ([]string, error) {
+func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 	doc, err := json.Marshal(argv)
 	if err != nil {
 		return nil, err
@@ -180,13 +180,13 @@ func applyWithEvanphx(argv []string, ops []types.PatchOp) ([]string, error) {
 // reproduces these exact values, so an accidental change in a built-in's .buzz — or in
 // the Buzz toolchain — is caught. Update this table in lockstep with an intentional
 // built-in change.
-var goldenBuiltins = map[string]Descriptor{
+var goldenBuiltins = map[string]spells.Descriptor{
 	"bash": {
 		Name:       "bash",
 		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
 		IgnoreDirs: []string{"node_modules"},
-		Ops: map[string]types.SpellOp{
-			"shellcheck": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name node_modules -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+		Ops: map[string]spells.Op{
+			"shellcheck": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name node_modules -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
 		},
 	},
 	"buf": {
@@ -194,36 +194,36 @@ var goldenBuiltins = map[string]Descriptor{
 		Needs:      []string{"**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"},
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
-		Ops: map[string]types.SpellOp{
-			"buf-build":    {Command: types.Command{Bin: "buf", Args: []string{"build"}}},
-			"buf-generate": {Command: types.Command{Bin: "buf", Args: []string{"generate"}}},
-			"buf-lint": {Command: types.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]types.Charm{
-				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+		Ops: map[string]spells.Op{
+			"buf-build":    {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
+			"buf-generate": {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
+			"buf-lint": {Command: spells.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]spells.Charm{
+				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
-			"buf-format": {Command: types.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
+			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
 			}}},
-			"buf-breaking": {Command: types.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]types.Charm{
-				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]spells.Charm{
+				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
 		},
 	},
 	"buzz": {
 		Name:  "buzz",
 		Needs: []string{"**/*.buzz"},
-		Ops: map[string]types.SpellOp{
-			"buzz-check": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
-			"buzz-test":  {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
-			"magus-buzz": {Command: types.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
+		Ops: map[string]spells.Op{
+			"buzz-check": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
+			"buzz-test":  {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
+			"magus-buzz": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
 		},
 	},
 	"cosign": {
 		Name:       "cosign",
 		VersionCmd: []string{"cosign", "version"},
-		Ops: map[string]types.SpellOp{
-			"cosign-sign":   {Command: types.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
-			"cosign-verify": {Command: types.Command{Bin: "cosign", Args: []string{"verify"}}},
-			"cosign-attest": {Command: types.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
+		Ops: map[string]spells.Op{
+			"cosign-sign":   {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
+			"cosign-verify": {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}}},
+			"cosign-attest": {Command: spells.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
 		},
 	},
 	"docker": {
@@ -234,11 +234,11 @@ var goldenBuiltins = map[string]Descriptor{
 		// needs its own probe: upgrading it changes lint verdicts with nothing in any
 		// cache key to notice.
 		VersionCmds: map[string][]string{"hadolint": {"hadolint", "--version"}},
-		Ops: map[string]types.SpellOp{
-			"docker-build":       {Command: types.Command{Bin: "docker", Args: []string{"build"}}},
-			"docker-buildx":      {Command: types.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
-			"docker-build-check": {Command: types.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Command: types.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
+		Ops: map[string]spells.Op{
+			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
+			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
+			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
 		},
 	},
 	"go": {
@@ -250,49 +250,49 @@ var goldenBuiltins = map[string]Descriptor{
 		VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
 		Language:    "go",
 		IgnoreDirs:  []string{"vendor"},
-		Ops: map[string]types.SpellOp{
-			"go-build":    {Command: types.Command{Bin: "go", Args: []string{"build"}}},
-			"go-clean":    {Command: types.Command{Bin: "go", Args: []string{"clean", "./..."}}},
-			"go-generate": {Command: types.Command{Bin: "go", Args: []string{"generate", "./..."}}},
-			"go-run":      {Command: types.Command{Bin: "go", Args: []string{"run"}}},
-			"go-fmt": {Command: types.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+		Ops: map[string]spells.Op{
+			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
+			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
+			"go-generate": {Command: spells.Command{Bin: "go", Args: []string{"generate", "./..."}}},
+			"go-run":      {Command: spells.Command{Bin: "go", Args: []string{"run"}}},
+			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
-			"golangci-lint": {Command: types.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]types.Charm{
-				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
+			"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run", "./..."}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
 			}}},
-			"go-test": {Command: types.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]types.Charm{
-				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"cd": {Ops: []types.PatchOp{
+			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+				"cd": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 					{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 				}},
 			}}},
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
 			// changes — safe for CI gating); the write charm applies the changes.
-			"go-mod-tidy": {Command: types.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/2"}}},
+			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
-			"go-vet":      {Command: types.Command{Bin: "go", Args: []string{"vet", "./..."}}},
-			"govulncheck": {Command: types.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
-			"scip":        {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
+			"govulncheck": {Command: spells.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
+			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"md": {
 		Name:   "md",
 		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
 		Claims: []string{"**/*.md", "**/*.mdx"},
-		Ops: map[string]types.SpellOp{
-			"markdownlint": {Command: types.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
-			"prettier": {Command: types.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
+		Ops: map[string]spells.Op{
+			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
+			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 			}}},
-			"typos": {Command: types.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
+			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
 			}}},
 		},
 	},
@@ -302,21 +302,21 @@ var goldenBuiltins = map[string]Descriptor{
 		VersionCmd: []string{"python3", "--version"},
 		Language:   "python",
 		IgnoreDirs: []string{"__pycache__"},
-		Ops: map[string]types.SpellOp{
-			"uv-build": {Command: types.Command{Bin: "uv", Args: []string{"build"}}},
-			"uv-clean": {Command: types.Command{Bin: "uv", Args: []string{"clean"}}},
-			"pytest": {Command: types.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]types.Charm{
-				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		Ops: map[string]spells.Op{
+			"uv-build": {Command: spells.Command{Bin: "uv", Args: []string{"build"}}},
+			"uv-clean": {Command: spells.Command{Bin: "uv", Args: []string{"clean"}}},
+			"pytest": {Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 			}}},
-			"ruff-check": {Command: types.Command{Bin: "uv", Args: []string{"run", "ruff", "check", "."}, Charms: map[string]types.Charm{
-				"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"rw":    {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
-				"gha":   {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
+			"ruff-check": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "check", "."}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+				"rw":    {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--fix"}}},
+				"gha":   {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--output-format=github"}}},
 			}}},
-			"ruff-format": {Command: types.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/3"}}},
+			"ruff-format": {Command: spells.Command{Bin: "uv", Args: []string{"run", "ruff", "format", "--check", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 			}}},
-			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-python index . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"rs": {
@@ -325,15 +325,15 @@ var goldenBuiltins = map[string]Descriptor{
 		VersionCmd: []string{"rustc", "--version"},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
-		Ops: map[string]types.SpellOp{
-			"cargo-build":  {Command: types.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
-			"cargo-clean":  {Command: types.Command{Bin: "cargo", Args: []string{"clean"}}},
-			"cargo-clippy": {Command: types.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
-			"cargo-fmt": {Command: types.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
+		Ops: map[string]spells.Op{
+			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
+			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
+			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
+			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
-			"cargo-test": {Command: types.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Command: types.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
+			"scip":       {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"ts": {
@@ -345,32 +345,32 @@ var goldenBuiltins = map[string]Descriptor{
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",
 		IgnoreDirs: []string{"node_modules"},
-		Ops: map[string]types.SpellOp{
-			"biome-check": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]types.Charm{
-				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
-				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
+		Ops: map[string]spells.Op{
+			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]spells.Charm{
+				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--reporter=github"}}},
 			}}},
-			"biome-format": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
+			"biome-format": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "format", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
 			}}},
-			"eslint": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Charms: map[string]types.Charm{
-				"rw":  {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
-				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
+			"eslint": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}, Charms: map[string]spells.Charm{
+				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
+				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 			}}},
 			"preflight": {},
-			"prettier": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]types.Charm{
-				"rw": {Ops: []types.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
+			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc":       {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
-			"tsc-build": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
-			"tsc-clean": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
-			"vitest": {Command: types.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]types.Charm{
-				"gha": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc-build": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
+			"tsc-clean": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
+			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
+				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
 			}}},
-			"dev-server": {Kind: "service", Command: types.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &types.Service{
-				Command: types.Command{Bin: "pnpm", Args: []string{"run", "dev"}},
+			"dev-server": {Kind: "service", Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &spells.Service{
+				Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}},
 			}},
-			"scip": {Command: types.Command{Bin: "sh", Args: []string{"-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"scip": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-typescript index --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 }
@@ -402,13 +402,13 @@ func TestBuiltinsMatchGolden(t *testing.T) {
 // disjoint edits, a lone charm, and an inert charm are not.
 func TestConflicts(t *testing.T) {
 	base := []string{"lint", "."}
-	charms := map[string]types.Charm{
+	charms := map[string]spells.Charm{
 		// two charms fight over /0; "rw" sorts after "fmt", so rw wins and fmt is lost.
-		"fmt": {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "format"}}},
-		"rw":  {Ops: []types.PatchOp{{Op: "replace", Path: "/0", Value: "fix"}}},
+		"fmt": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "format"}}},
+		"rw":  {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "fix"}}},
 		// disjoint appends: both survive regardless of order.
-		"debug": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-		"trace": {Ops: []types.PatchOp{{Op: "add", Path: "/-", Value: "-x"}}},
+		"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
+		"trace": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-x"}}},
 		// inert: declares no ops.
 		"noop": {},
 	}

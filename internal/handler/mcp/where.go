@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,7 +28,7 @@ type whereTool struct {
 
 func (t *whereTool) Name() string { return "magus_where" }
 
-func (t *whereTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *whereTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	filter := paramString(req.Params, "filter", "")
 	var filters []string
 	if filter != "" {
@@ -36,18 +37,18 @@ func (t *whereTool) Invoke(_ context.Context, req types.InvokeRequest) (types.In
 
 	all := t.ws.All()
 	if len(all) == 0 {
-		return types.InvokeResponse{}, errors.New("mcp: no projects in workspace")
+		return spells.InvokeResponse{}, errors.New("mcp: no projects in workspace")
 	}
 
 	scored := interactive.ScoreProjects(all, filters)
 	if len(scored) == 0 {
-		return types.InvokeResponse{}, errors.New("mcp: no projects match filter: " + filter)
+		return spells.InvokeResponse{}, errors.New("mcp: no projects match filter: " + filter)
 	}
 
 	// strictly-greater means an unambiguous top match
 	if len(scored) == 1 || (len(filters) > 0 && scored[0].Score > scored[1].Score) {
 		p := scored[0].P
-		return types.InvokeResponse{Data: whereResult{
+		return spells.InvokeResponse{Data: whereResult{
 			Path:    p.Path,
 			AbsDir:  filepath.Join(t.ws.Root(), p.Path),
 			Matched: 1,
@@ -58,11 +59,11 @@ func (t *whereTool) Invoke(_ context.Context, req types.InvokeRequest) (types.In
 	for i, s := range scored {
 		candidates[i] = s.P.Path
 	}
-	return types.InvokeResponse{Data: whereResult{
+	return spells.InvokeResponse{Data: whereResult{
 		Matched:    len(scored),
 		Candidates: candidates,
 		Error:      "ambiguous filter — multiple projects match; narrow your filter",
 	}}, nil
 }
 
-var _ types.SpellDriver = (*whereTool)(nil)
+var _ spells.Driver = (*whereTool)(nil)

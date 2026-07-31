@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,10 +46,10 @@ type paginatedQuery struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
-func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	terms := paramString(req.Params, "query", "")
 	if terms == "" {
-		return types.InvokeResponse{}, errors.New("mcp: query is required")
+		return spells.InvokeResponse{}, errors.New("mcp: query is required")
 	}
 	budget := int(paramFloat(req.Params, "budget", 0))
 	limit := int(paramFloat(req.Params, "limit", 0))
@@ -63,13 +64,13 @@ func (t *queryTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.
 		g, err = knowledgeGraph(ctx, t.graph)
 	}
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	resp, err := pagedQuery(g, terms, budget, limit, cursor)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
-	return types.InvokeResponse{Data: resp}, nil
+	return spells.InvokeResponse{Data: resp}, nil
 }
 
 type refsTool struct{ graph graphResolver }
@@ -84,20 +85,20 @@ type paginatedRefs struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
-func (t *refsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *refsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	symbol := paramString(req.Params, "symbol", "")
 	if symbol == "" {
-		return types.InvokeResponse{}, errors.New("mcp: symbol is required")
+		return spells.InvokeResponse{}, errors.New("mcp: symbol is required")
 	}
 	g, err := t.graph.KnowledgeGraphWithSymbolsForRef(ctx, symbol)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	resp, err := pagedRefs(g, symbol, int(paramFloat(req.Params, "limit", 0)), paramString(req.Params, "cursor", ""))
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
-	return types.InvokeResponse{Data: resp}, nil
+	return spells.InvokeResponse{Data: resp}, nil
 }
 
 // pagedRefs resolves the symbol and pages its referencing files. A refs list is the
@@ -192,62 +193,62 @@ type explainTool struct{ graph graphResolver }
 
 func (t *explainTool) Name() string { return "magus_explain" }
 
-func (t *explainTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	node := paramString(req.Params, "node", "")
 	if node == "" {
-		return types.InvokeResponse{}, errors.New("mcp: node is required")
+		return spells.InvokeResponse{}, errors.New("mcp: node is required")
 	}
 	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	out, ok := g.Explain(node)
 	if !ok {
-		return types.InvokeResponse{}, errors.New("mcp: no node matches " + node)
+		return spells.InvokeResponse{}, errors.New("mcp: no node matches " + node)
 	}
 	// Return the compact, natural-language rendering (not the verbose JSON struct):
 	// for a result an agent reads and reasons about, aligned text with full IDs is
 	// more token-efficient and less error-prone than repeated-key JSON.
-	return types.InvokeResponse{Text: render.ExplainText(out)}, nil
+	return spells.InvokeResponse{Text: render.ExplainText(out)}, nil
 }
 
 type pathTool struct{ graph graphResolver }
 
 func (t *pathTool) Name() string { return "magus_path" }
 
-func (t *pathTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *pathTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	from := paramString(req.Params, "from", "")
 	to := paramString(req.Params, "to", "")
 	if from == "" || to == "" {
-		return types.InvokeResponse{}, errors.New("mcp: from and to are required")
+		return spells.InvokeResponse{}, errors.New("mcp: from and to are required")
 	}
 	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	out, ok := g.Path(from, to)
 	if !ok {
-		return types.InvokeResponse{}, errors.New("mcp: could not resolve " + from + " or " + to + " to a node")
+		return spells.InvokeResponse{}, errors.New("mcp: could not resolve " + from + " or " + to + " to a node")
 	}
-	return types.InvokeResponse{Text: render.PathText(out)}, nil
+	return spells.InvokeResponse{Text: render.PathText(out)}, nil
 }
 
 type statsTool struct{ graph graphResolver }
 
 func (t *statsTool) Name() string { return "magus_stats" }
 
-func (t *statsTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *statsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	g, err := knowledgeGraph(ctx, t.graph)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
-	return types.InvokeResponse{Data: g.Stats(paramString(req.Params, "kind", ""))}, nil
+	return spells.InvokeResponse{Data: g.Stats(paramString(req.Params, "kind", ""))}, nil
 }
 
 var (
-	_ types.SpellDriver = (*queryTool)(nil)
-	_ types.SpellDriver = (*refsTool)(nil)
-	_ types.SpellDriver = (*explainTool)(nil)
-	_ types.SpellDriver = (*pathTool)(nil)
-	_ types.SpellDriver = (*statsTool)(nil)
+	_ spells.Driver = (*queryTool)(nil)
+	_ spells.Driver = (*refsTool)(nil)
+	_ spells.Driver = (*explainTool)(nil)
+	_ spells.Driver = (*pathTool)(nil)
+	_ spells.Driver = (*statsTool)(nil)
 )

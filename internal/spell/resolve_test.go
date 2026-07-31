@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 // resolve builds a bare session with the magus/target types registered, execs
 // src, and resolves its spec — the same setup Extract uses. Every op resolves to
 // its declared command.
-func resolve(t *testing.T, src string) (Descriptor, error) {
+func resolve(t *testing.T, src string) (spells.Descriptor, error) {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
@@ -76,8 +77,8 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 	assert.Equal(t, "gofmt", f.Bin)
 	ch, ok := f.Charms["write"]
 	require.Truef(t, ok, "fmt missing charm \"write\": %+v", f)
-	want := types.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
-	assert.Equal(t, []types.PatchOp{want}, ch.Ops)
+	want := spells.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
+	assert.Equal(t, []spells.PatchOp{want}, ch.Ops)
 }
 
 // TestResolve_ServiceAndCommandCoexist proves op-level kind: one spell mixes a
@@ -100,7 +101,7 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 	require.NoError(t, err)
 
 	build := spec.Ops["build"]
-	assert.Equal(t, types.OpKindCommand, build.OpKind())
+	assert.Equal(t, spells.OpKindCommand, build.OpKind())
 	assert.Equal(t, "npm", build.Bin)
 	assert.Equal(t, []string{"run", "build"}, build.Args)
 	assert.Nil(t, build.Service, "a command op has no Service")
@@ -109,7 +110,7 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 	assert.Equal(t, []string{"serve"}, spec.ServiceOpNames())
 
 	serve := spec.Ops["serve"]
-	assert.Equal(t, types.OpKindService, serve.OpKind())
+	assert.Equal(t, spells.OpKindService, serve.OpKind())
 	assert.True(t, serve.IsService())
 	require.NotNil(t, serve.Service)
 	assert.Equal(t, "npm", serve.Service.Command.Bin)
@@ -125,7 +126,7 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 
 // TestResolve_ServiceDistinctAndIdle pins that the optional distinct (justified
 // dedup opt-out) and idle (per-service idle-timeout override) fields decode from
-// the Buzz object Service into types.Service.
+// the Buzz object Service into spells.Service.
 func TestResolve_ServiceDistinctAndIdle(t *testing.T) {
 	src := `
 import "magus/target";

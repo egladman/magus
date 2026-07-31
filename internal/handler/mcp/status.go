@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 type statusResult struct {
@@ -20,24 +20,24 @@ type statusTool struct {
 
 func (t *statusTool) Name() string { return "magus_status" }
 
-func (t *statusTool) Invoke(ctx context.Context, _ types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *statusTool) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	addr, err := resolveStatusAddr(ctx, t.opts)
 	out := statusResult{}
 	if err != nil {
 		out.PoolError = err.Error()
 		//nolint:nilerr // the pool error is reported in the response payload, not as a tool-call error
-		return types.InvokeResponse{Data: out}, nil
+		return spells.InvokeResponse{Data: out}, nil
 	}
 	reply, err := proc.QueryStatus(ctx, addr)
 	if err != nil {
 		out.PoolError = fmt.Sprintf("mcp: query %s: %v", addr, err)
-		return types.InvokeResponse{Data: out}, nil
+		return spells.InvokeResponse{Data: out}, nil
 	}
 	out.Pool = reply
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*statusTool)(nil)
+var _ spells.Driver = (*statusTool)(nil)
 
 func resolveStatusAddr(ctx context.Context, opts Options) (string, error) {
 	if v := opts.Config.Daemon.Address; v != "" {

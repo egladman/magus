@@ -7,6 +7,7 @@ package serviceaudit
 
 import (
 	"github.com/egladman/magus/internal/service/identity"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +29,7 @@ func collectMembers(projects []*types.Project, charms []string) []identity.Membe
 				}
 				members = append(members, identity.Member{
 					Name:    p.Path + ":" + target,
-					Service: types.Service{Command: types.Command{Bin: bin, Args: args}},
+					Service: spells.Service{Command: spells.Command{Bin: bin, Args: args}},
 				})
 			}
 		}

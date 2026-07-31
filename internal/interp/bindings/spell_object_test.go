@@ -7,7 +7,7 @@ import (
 )
 
 // TestSpellOptionsApplied guards declaration-versus-application drift: every file that
-// builds a *types.Spell from a Descriptor must wire every optional mgs_ hook the
+// builds a *spells.Spell from a Descriptor must wire every optional mgs_ hook the
 // descriptor can carry.
 //
 // This is the bug it exists to prevent, which shipped and stayed invisible. Workspace-

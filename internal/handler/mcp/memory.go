@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/memory"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // memoryTool (magus_memory) is the durable counterpart to magus_scratchpad: a set of
@@ -51,33 +51,33 @@ func toRecordView(r memory.Record) memoryRecordView {
 	}
 }
 
-func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *memoryTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	root := t.opts.Magus.Root()
 	op := paramString(req.Params, "op", "list")
 	switch op {
 	case "list":
 		recs, issues, err := memory.Inspect(root)
 		if err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
 		views := make([]memoryRecordView, len(recs))
 		for i, r := range recs {
 			views[i] = toRecordView(r)
 		}
-		return types.InvokeResponse{Data: map[string]any{"records": views, "issues": issues}}, nil
+		return spells.InvokeResponse{Data: map[string]any{"records": views, "issues": issues}}, nil
 
 	case "get":
 		name := paramString(req.Params, "name", "")
 		rec, err := memory.Get(root, name)
 		if err != nil {
-			return types.InvokeResponse{}, fmt.Errorf("mcp: no memory named %q", name)
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: no memory named %q", name)
 		}
-		return types.InvokeResponse{Data: toRecordView(rec)}, nil
+		return spells.InvokeResponse{Data: toRecordView(rec)}, nil
 
 	case "put":
 		refs, err := memory.ParseRefs(paramString(req.Params, "refs", ""))
 		if err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
 		rec := memory.Record{
 			Name:       strings.TrimSpace(paramString(req.Params, "name", "")),
@@ -89,41 +89,41 @@ func (t *memoryTool) Invoke(_ context.Context, req types.InvokeRequest) (types.I
 		}
 		stored, err := memory.Put(root, rec) // validates the schema, rejects at the door
 		if err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
-		return types.InvokeResponse{Data: toRecordView(stored)}, nil
+		return spells.InvokeResponse{Data: toRecordView(stored)}, nil
 
 	case "delete":
 		name := paramString(req.Params, "name", "")
 		if err := memory.Delete(root, name, true); err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
-		return types.InvokeResponse{Data: map[string]any{"deleted": name}}, nil
+		return spells.InvokeResponse{Data: map[string]any{"deleted": name}}, nil
 
 	case "verify":
 		report, err := memory.Verify(root)
 		if err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
-		return types.InvokeResponse{Data: report}, nil
+		return spells.InvokeResponse{Data: report}, nil
 
 	case "cursor":
 		// The cursor is the single "where did I leave off" snapshot, kept beside the
 		// record set. Passing content overwrites it; omitting content reads it.
 		if _, writing := req.Params["content"]; writing {
-			return types.InvokeResponse{}, errors.New("mcp: cursor writes are retired because one shared snapshot is unsafe across sessions; create or update a named plan/decision with op=put instead")
+			return spells.InvokeResponse{}, errors.New("mcp: cursor writes are retired because one shared snapshot is unsafe across sessions; create or update a named plan/decision with op=put instead")
 		}
 		content, err := memory.ReadCursor(root)
 		if err != nil {
-			return types.InvokeResponse{}, err
+			return spells.InvokeResponse{}, err
 		}
-		return types.InvokeResponse{Data: map[string]any{
+		return spells.InvokeResponse{Data: map[string]any{
 			"cursor":  content,
 			"warning": "legacy cursor snapshot; use named handoff-journal entries with op=put instead",
 		}}, nil
 
 	default:
-		return types.InvokeResponse{}, errors.New("mcp: memory op must be one of list, get, put, delete, verify (cursor is legacy read-only)")
+		return spells.InvokeResponse{}, errors.New("mcp: memory op must be one of list, get, put, delete, verify (cursor is legacy read-only)")
 	}
 }
 
@@ -139,4 +139,4 @@ func splitCommaList(s string) []string {
 	return out
 }
 
-var _ types.SpellDriver = (*memoryTool)(nil)
+var _ spells.Driver = (*memoryTool)(nil)

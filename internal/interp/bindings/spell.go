@@ -18,6 +18,7 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -31,41 +32,41 @@ func init() {
 
 var ensureSpellsRegistered = sync.OnceFunc(func() {
 	for _, spec := range ispell.Builtins() {
-		opts := []types.SpellOption{
-			types.WithSources(spec.Needs...),
-			types.WithClaims(spec.Claims...),
-			types.WithIgnoreDirs(spec.IgnoreDirs...),
-			types.WithSpellOutputs(spec.Provides...),
-			types.WithTargets(spec.OpNames()...),
-			types.WithServiceTargets(spec.ServiceOpNames()...),
-			types.WithInvoker(newSpellInvoker(spec.Ops)),
-			types.WithCommandRenderer(newCommandRenderer(spec.Ops)),
-			types.WithCommandExplainer(newCommandExplainer(spec.Ops)),
-			types.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
-			types.WithServiceView(newServiceViewer(spec.Ops)),
-			types.WithTargetSources(spec.TargetNeeds),
-			types.WithTargetCharms(charmNamesByTarget(spec.Ops)),
-			types.WithTargetDocs(docsByTarget(spec.Ops)),
+		opts := []spells.Option{
+			spells.WithSources(spec.Needs...),
+			spells.WithClaims(spec.Claims...),
+			spells.WithIgnoreDirs(spec.IgnoreDirs...),
+			spells.WithOutputs(spec.Provides...),
+			spells.WithTargets(spec.OpNames()...),
+			spells.WithServiceTargets(spec.ServiceOpNames()...),
+			spells.WithInvoker(newSpellInvoker(spec.Ops)),
+			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
+			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
+			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
+			spells.WithServiceView(newServiceViewer(spec.Ops)),
+			spells.WithTargetSources(spec.TargetNeeds),
+			spells.WithTargetCharms(charmNamesByTarget(spec.Ops)),
+			spells.WithTargetDocs(docsByTarget(spec.Ops)),
 		}
 		if spec.Opaque {
-			opts = append(opts, types.WithOpaque())
+			opts = append(opts, spells.WithOpaque())
 		}
 		if len(spec.VersionCmd) > 0 {
-			opts = append(opts, types.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
+			opts = append(opts, spells.WithVersionProbe(newVersionProbe(spec.VersionCmd)))
 		}
 		for tool, argv := range spec.VersionCmds {
-			opts = append(opts, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+			opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 		}
 		if spec.Language != "" {
-			opts = append(opts, types.WithLanguage(spec.Language))
+			opts = append(opts, spells.WithLanguage(spec.Language))
 		}
-		project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(spec.Name, opts...))
+		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
 })
 
 // charmNamesByTarget extracts the sorted charm names each target declares, for
 // discovery surfaces like `magus describe`.
-func charmNamesByTarget(targets map[string]types.SpellOp) map[string][]string {
+func charmNamesByTarget(targets map[string]spells.Op) map[string][]string {
 	out := make(map[string][]string, len(targets))
 	for name, t := range targets {
 		if len(t.Charms) == 0 {
@@ -83,7 +84,7 @@ func charmNamesByTarget(targets map[string]types.SpellOp) map[string][]string {
 
 // docsByTarget extracts each target handler's doc comment, for discovery surfaces
 // like `magus describe`. Targets with no comment are omitted.
-func docsByTarget(targets map[string]types.SpellOp) map[string]string {
+func docsByTarget(targets map[string]spells.Op) map[string]string {
 	out := make(map[string]string, len(targets))
 	for name, t := range targets {
 		if t.Doc != "" {
@@ -112,7 +113,7 @@ func newVersionProbe(argv []string) func(context.Context, string) (string, error
 // A charm whose patch is well-formed but does not apply to this op's argv (an
 // out-of-range index, a failing `test` op) returns the apply error, so `describe`
 // reports it as MGS6001 instead of dropping the command line without a word.
-func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string) (string, []string, bool, error) {
+func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (string, []string, bool, error) {
 	return func(target string, charms []string) (string, []string, bool, error) {
 		op, ok := targets[target]
 		if !ok || op.Bin == "" {
@@ -131,8 +132,8 @@ func newCommandRenderer(targets map[string]types.SpellOp) func(string, []string)
 // is the command after one more active charm's patch, in magus's sorted-name
 // application order. It mirrors newCommandRenderer's ok/err contract and executes
 // nothing.
-func newCommandExplainer(targets map[string]types.SpellOp) func(string, []string) ([]types.CharmTraceStep, bool, error) {
-	return func(target string, charms []string) ([]types.CharmTraceStep, bool, error) {
+func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([]spells.CharmTraceStep, bool, error) {
+	return func(target string, charms []string) ([]spells.CharmTraceStep, bool, error) {
 		op, ok := targets[target]
 		if !ok || op.Bin == "" {
 			return nil, false, nil
@@ -150,10 +151,10 @@ func newCommandExplainer(targets map[string]types.SpellOp) func(string, []string
 		}
 		// Prepend the base step, then prefix every step's argv with the bin so each
 		// line is the full command a reader can compare top to bottom.
-		steps := make([]types.CharmTraceStep, 0, len(charmSteps)+1)
-		steps = append(steps, types.CharmTraceStep{Command: append([]string{op.Bin}, op.Args...)})
+		steps := make([]spells.CharmTraceStep, 0, len(charmSteps)+1)
+		steps = append(steps, spells.CharmTraceStep{Command: append([]string{op.Bin}, op.Args...)})
 		for _, s := range charmSteps {
-			steps = append(steps, types.CharmTraceStep{Charm: s.Charm, Command: append([]string{op.Bin}, s.Command...)})
+			steps = append(steps, spells.CharmTraceStep{Charm: s.Charm, Command: append([]string{op.Bin}, s.Command...)})
 		}
 		return steps, true, nil
 	}
@@ -163,8 +164,8 @@ func newCommandExplainer(targets map[string]types.SpellOp) func(string, []string
 // describe target`: it reports the active charms whose edit is overridden by another
 // active charm on this op's argv (see ispell.Conflicts). It mirrors the renderer's
 // ok/err contract and executes nothing.
-func newCommandConflictChecker(targets map[string]types.SpellOp) func(string, []string) ([]types.CharmConflict, bool, error) {
-	return func(target string, charms []string) ([]types.CharmConflict, bool, error) {
+func newCommandConflictChecker(targets map[string]spells.Op) func(string, []string) ([]spells.CharmConflict, bool, error) {
+	return func(target string, charms []string) ([]spells.CharmConflict, bool, error) {
 		op, ok := targets[target]
 		if !ok || op.Bin == "" {
 			return nil, false, nil
@@ -188,20 +189,20 @@ func newCommandConflictChecker(targets map[string]types.SpellOp) func(string, []
 // target`: for a service op it reports the readiness probe, stop command, idle
 // override, distinct reason, and fingerprint - all known without starting the
 // service. ok is false for a non-service op. It executes nothing.
-func newServiceViewer(targets map[string]types.SpellOp) func(string) (*types.ServiceView, bool) {
-	return func(target string) (*types.ServiceView, bool) {
+func newServiceViewer(targets map[string]spells.Op) func(string) (*spells.ServiceView, bool) {
+	return func(target string) (*spells.ServiceView, bool) {
 		op, ok := targets[target]
 		if !ok || !op.IsService() || op.Service == nil {
 			return nil, false
 		}
-		svc := types.Service{
-			Command:   types.Command{Bin: op.Bin, Args: op.Args},
+		svc := spells.Service{
+			Command:   spells.Command{Bin: op.Bin, Args: op.Args},
 			Readiness: op.Service.Readiness,
 			Stop:      op.Service.Stop,
 			Idle:      op.Service.Idle,
 			Distinct:  op.Service.Distinct,
 		}
-		view := &types.ServiceView{
+		view := &spells.ServiceView{
 			Idle:        op.Service.Idle,
 			Distinct:    op.Service.Distinct,
 			Fingerprint: identity.Fingerprint(svc),
@@ -219,7 +220,7 @@ func newServiceViewer(targets map[string]types.SpellOp) func(string) (*types.Ser
 // noResult is the invoker's no-op outcome (no Data, no error) for a request that
 // fans out to a spell with nothing to contribute: an unknown target, or a handler
 // op on a built-in spell (no script body to run). nil Data is an ordinary invoker
-// result (a command op returns it on success too; see types.Spell.Invoke), so this
+// result (a command op returns it on success too; see spells.Spell.Invoke), so this
 // is a real result rather than a sentinel; the helper names the intent and keeps
 // the nilnil suppression in one documented place.
 func noResult() (any, error) {
@@ -227,11 +228,11 @@ func noResult() (any, error) {
 }
 
 // dispatchOp is the single op-dispatch bridge between the magus host and the Buzz
-// interpreter. It resolves the request's target to a [types.SpellOp] and runs its
+// interpreter. It resolves the request's target to a [spells.Op] and runs its
 // declared command as a subprocess. An unknown target is a no-op, matching the
 // fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
 // backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
-func dispatchOp(ctx context.Context, ops map[string]types.SpellOp, req types.InvokeRequest) (any, error) {
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
@@ -280,15 +281,15 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
 // are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]types.SpellOp) func(context.Context, types.InvokeRequest) (any, error) {
-	return func(ctx context.Context, req types.InvokeRequest) (any, error) {
+func newSpellInvoker(targets map[string]spells.Op) func(context.Context, spells.InvokeRequest) (any, error) {
+	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		return dispatchOp(ctx, targets, req)
 	}
 }
 
 // commandTargetNames returns the spell's command target names, sorted. Every op is
 // a command, so this is all of them.
-func commandTargetNames(targets map[string]types.SpellOp) []string {
+func commandTargetNames(targets map[string]spells.Op) []string {
 	names := make([]string, 0, len(targets))
 	for name := range targets {
 		names = append(names, name)
@@ -300,12 +301,12 @@ func commandTargetNames(targets map[string]types.SpellOp) []string {
 // loadLocalSpell compiles a workspace-local Buzz spell at path and registers
 // it, returning its spec and ok=false on any failure. Errors are logged, not
 // raised: discovery paths cannot route an error back to a caller.
-func loadLocalSpell(ctx context.Context, path string) (ispell.Descriptor, bool) {
+func loadLocalSpell(ctx context.Context, path string) (spells.Descriptor, bool) {
 	if !filepath.IsAbs(path) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
 			slog.Error("load local spell: getwd", "err", err)
-			return ispell.Descriptor{}, false
+			return spells.Descriptor{}, false
 		}
 		path = filepath.Join(cwd, path)
 	}
@@ -317,13 +318,13 @@ func loadLocalSpell(ctx context.Context, path string) (ispell.Descriptor, bool) 
 // resolve a backend selected by a file path. A .buzz spell loads through the Buzz
 // path (registering a function-op spell eagerly, capturing its source for in-VM
 // dispatch).
-func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) {
+func loadSpellFile(ctx context.Context, path string) (spells.Driver, error) {
 	if !strings.HasSuffix(path, ".buzz") {
 		return nil, fmt.Errorf("spell file %q: must be a .buzz spell", path)
 	}
 	_, sp, err := loadBuzzSpell(ctx, path)
 	if err != nil {
-		return nil, err // explicit nil: don't return a typed-nil *types.Spell as a non-nil interface
+		return nil, err // explicit nil: don't return a typed-nil *spells.Spell as a non-nil interface
 	}
 	return sp, nil
 }
@@ -334,7 +335,7 @@ func loadSpellFile(ctx context.Context, path string) (types.SpellDriver, error) 
 // identically. Errors are logged, not raised, since discovery paths cannot route an
 // error back to the caller. Registration is deferred to magus.project; the handle
 // the caller builds carries the resolved spec so it registers by value there.
-func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bool) {
+func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bool) {
 	// loadBuzzSpell registers the spell with the function-op invoker (capturing its
 	// source), so an imported Buzz spell carries function-ops whether it is later
 	// bound to a project or wired as the remote cache backend. project bind finds
@@ -347,7 +348,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bo
 		if !errors.Is(err, ispell.ErrNotASpell) {
 			slog.Error("load local spell: buzz", "path", path, "err", err)
 		}
-		return ispell.Descriptor{}, false
+		return spells.Descriptor{}, false
 	}
 	return m, true
 }
@@ -355,33 +356,33 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (ispell.Descriptor, bo
 // localSpellBaseOptions builds the SpellOptions common to every workspace-local
 // spell registration (cache metadata, command renderer, charm/doc discovery),
 // minus the invoker, which each registration path supplies itself.
-func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
-	opts := []types.SpellOption{
-		types.WithSources(m.Needs...),
-		types.WithClaims(m.Claims...),
-		types.WithIgnoreDirs(m.IgnoreDirs...),
-		types.WithSpellOutputs(m.Provides...),
-		types.WithTargets(m.OpNames()...),
-		types.WithServiceTargets(m.ServiceOpNames()...),
-		types.WithCommandRenderer(newCommandRenderer(m.Ops)),
-		types.WithCommandExplainer(newCommandExplainer(m.Ops)),
-		types.WithCommandConflicts(newCommandConflictChecker(m.Ops)),
-		types.WithServiceView(newServiceViewer(m.Ops)),
-		types.WithTargetCharms(charmNamesByTarget(m.Ops)),
-		types.WithTargetDocs(docsByTarget(m.Ops)),
-		types.WithDocRequiredTargets(m.DocOps...),
+func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
+	opts := []spells.Option{
+		spells.WithSources(m.Needs...),
+		spells.WithClaims(m.Claims...),
+		spells.WithIgnoreDirs(m.IgnoreDirs...),
+		spells.WithOutputs(m.Provides...),
+		spells.WithTargets(m.OpNames()...),
+		spells.WithServiceTargets(m.ServiceOpNames()...),
+		spells.WithCommandRenderer(newCommandRenderer(m.Ops)),
+		spells.WithCommandExplainer(newCommandExplainer(m.Ops)),
+		spells.WithCommandConflicts(newCommandConflictChecker(m.Ops)),
+		spells.WithServiceView(newServiceViewer(m.Ops)),
+		spells.WithTargetCharms(charmNamesByTarget(m.Ops)),
+		spells.WithTargetDocs(docsByTarget(m.Ops)),
+		spells.WithDocRequiredTargets(m.DocOps...),
 	}
 	if m.Opaque {
-		opts = append(opts, types.WithOpaque())
+		opts = append(opts, spells.WithOpaque())
 	}
 	if m.Language != "" {
-		opts = append(opts, types.WithLanguage(m.Language))
+		opts = append(opts, spells.WithLanguage(m.Language))
 	}
 	if len(m.VersionCmd) > 0 {
-		opts = append(opts, types.WithVersionProbe(newVersionProbe(m.VersionCmd)))
+		opts = append(opts, spells.WithVersionProbe(newVersionProbe(m.VersionCmd)))
 	}
 	for tool, argv := range m.VersionCmds {
-		opts = append(opts, types.WithVersionProbeNamed(tool, newVersionProbe(argv)))
+		opts = append(opts, spells.WithVersionProbeNamed(tool, newVersionProbe(argv)))
 	}
 	return opts
 }
@@ -391,9 +392,9 @@ func localSpellBaseOptions(m ispell.Descriptor) []types.SpellOption {
 // spell by-value path, so this is the single deferred registration point (called at
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
-func registerLocalSpell(m ispell.Descriptor) {
-	opts := append(localSpellBaseOptions(m), types.WithInvoker(newSpellInvoker(m.Ops)))
-	project.DefaultSpellRegistry().RegisterIfAbsent(types.NewSpell(m.Name, opts...))
+func registerLocalSpell(m spells.Descriptor) {
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops)))
+	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 
 // commonSpellAliases maps the language or tool name a user is likely to type to

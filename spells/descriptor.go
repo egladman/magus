@@ -1,14 +1,8 @@
-// Package spell holds the engine-agnostic spell types and the built-in spell
-// registry: the Descriptor / Target / Charm value types the Buzz spell engine speaks,
-// kept free of engine imports so the type package stays a neutral boundary.
-// Importers conventionally alias it `ispell` (it is one of three `spell` packages).
-package spell
+package spells
 
 import (
 	"fmt"
 	"sort"
-
-	"github.com/egladman/magus/types"
 )
 
 // JSON Patch (RFC 6902) operation names. A charm is an ordered patch applied
@@ -22,11 +16,11 @@ const (
 	OpTest    = "test"
 )
 
-// The spell value types — PatchOp, Charm, Run, and the resolved SpellOp — live in
+// The spell value types — PatchOp, Charm, Run, and the resolved Op — live in
 // the neutral types package. PatchOp/Charm/Run are mirrored to Buzz objects by
 // magus-utils types (the Go struct is the single source of truth) and must sit in
 // types so the generator can reflect them without importing this package, which
-// would form an embed/codegen cycle; SpellOp (Go-internal, no Buzz mirror) joins
+// would form an embed/codegen cycle; Op (Go-internal, no Buzz mirror) joins
 // its family there since it embeds Run. They are referenced as types.* throughout —
 // no spell-local aliases.
 
@@ -34,7 +28,7 @@ const (
 // non-root single-rooted JSON Pointer path, and a 'from' pointer for move/copy.
 // Rejecting the root path ("") is what enforces the element-level boundary —
 // a charm rewrites individual args, never swaps the whole argv (let alone cmd).
-func ValidatePatch(ops []types.PatchOp) error {
+func ValidatePatch(ops []PatchOp) error {
 	for i, op := range ops {
 		switch op.Op {
 		case OpAdd, OpRemove, OpReplace, OpMove, OpCopy, OpTest:
@@ -70,10 +64,10 @@ type Descriptor struct {
 	// them per-project instead of the engine hardcoding language-specific names.
 	// Dot-directories are already skipped structurally, so only non-dot names belong
 	// here. Declared by mgs_listIgnoreDirs.
-	IgnoreDirs  []string                 `json:"ignore_dirs,omitempty"`
-	Opaque      bool                     `json:"opaque,omitempty"`
-	TargetNeeds map[string][]string      `json:"target_needs,omitempty"`
-	Ops         map[string]types.SpellOp `json:"targets,omitempty"`
+	IgnoreDirs  []string            `json:"ignore_dirs,omitempty"`
+	Opaque      bool                `json:"opaque,omitempty"`
+	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
+	Ops         map[string]Op       `json:"targets,omitempty"`
 	// VersionCmd argv prints the spell's toolchain version, mixed into the cache key; empty = no probe.
 	VersionCmd []string `json:"version_cmd,omitempty"`
 	// VersionCmds are ADDITIONAL named probes, tool name to argv, for a spell that

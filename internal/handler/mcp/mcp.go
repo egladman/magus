@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -97,9 +98,9 @@ type handlerFn func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.Ca
 // Soft errors from Invoke are surfaced as IsError tool results, mirroring the
 // pre-refactor behaviour where validation failures returned via
 // NewToolResultError rather than transport errors.
-func adapt(t types.SpellDriver) handlerFn {
+func adapt(t spells.Driver) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
-		resp, err := t.Invoke(ctx, types.InvokeRequest{Params: req.GetArguments()})
+		resp, err := t.Invoke(ctx, spells.InvokeRequest{Params: req.GetArguments()})
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
@@ -137,12 +138,12 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 
 // allMCPTools constructs every MCP tool the daemon exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
-func allMCPTools(opts Options) []types.SpellDriver {
+func allMCPTools(opts Options) []spells.Driver {
 	wsCfg := types.WorkspaceConfig{
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
 	}
-	return []types.SpellDriver{
+	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&describeFileTool{ws: opts.Magus},
 		&whereTool{ws: opts.Magus},
@@ -182,7 +183,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	if opts.Magus != nil {
 		tel = opts.Magus.Telemetry()
 	}
-	byName := make(map[string]types.SpellDriver, len(Registry))
+	byName := make(map[string]spells.Driver, len(Registry))
 	for _, t := range allMCPTools(opts) {
 		byName[t.Name()] = t
 	}

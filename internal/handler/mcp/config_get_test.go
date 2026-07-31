@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ func TestConfigGetTool(t *testing.T) {
 
 	assert.Equal(t, "magus_config_get", tool.Name())
 
-	resp, err := tool.Invoke(context.Background(), types.InvokeRequest{})
+	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{})
 	require.NoError(t, err)
 	assert.Equal(t, cfg, resp.Data, "config_get should echo the resolved config verbatim")
 }

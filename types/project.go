@@ -3,6 +3,8 @@ package types
 import (
 	"path/filepath"
 	"slices"
+
+	"github.com/egladman/magus/spells"
 )
 
 // workspaceScheme is the URI scheme every project reference renders as when
@@ -170,7 +172,7 @@ type Project struct {
 	// Populated at load, after the walk, once every project is known (the owner may not
 	// be discovered yet when the writer declares it).
 	InboundOutputs map[string][]string
-	ResolvedSpells []*Spell // set at the end of magus.Open; immutable thereafter
+	ResolvedSpells []*spells.Spell // set at the end of magus.Open; immutable thereafter
 }
 
 // AllOutputs is every output glob that lands in this project's tree, deduplicated and
@@ -220,7 +222,7 @@ func (p *Project) AllOutputs() []string {
 }
 
 // AttachSpell associates spell with p without applying registration overrides.
-func (p *Project) AttachSpell(spell *Spell) {
+func (p *Project) AttachSpell(spell *spells.Spell) {
 	if p.Spell == "" {
 		p.Spell = spell.Name()
 	}

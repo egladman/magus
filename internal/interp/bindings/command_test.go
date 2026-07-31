@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,18 +15,18 @@ import (
 // recordRunner is a service.Runner that records starts without forking a process.
 type recordRunner struct{ started int }
 
-func (r *recordRunner) Start(context.Context, types.Service) (service.Handle, error) {
+func (r *recordRunner) Start(context.Context, spells.Service) (service.Handle, error) {
 	r.started++
 	return struct{}{}, nil
 }
 func (r *recordRunner) Stop(service.Handle) {}
 
-func serviceOp() types.SpellOp {
+func serviceOp() spells.Op {
 	// bin "true" exits 0, so the non-supervised fall-through fork is harmless.
-	return types.SpellOp{
-		Kind:    types.OpKindService,
-		Command: types.Command{Bin: "true"},
-		Service: &types.Service{Command: types.Command{Bin: "true"}},
+	return spells.Op{
+		Kind:    spells.OpKindService,
+		Command: spells.Command{Bin: "true"},
+		Service: &spells.Service{Command: spells.Command{Bin: "true"}},
 	}
 }
 
@@ -38,7 +38,7 @@ func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 	dir := t.TempDir()
 	ctx := std.WithCwd(context.Background(), dir)
 
-	op := types.SpellOp{Command: types.Command{Bin: "sh", Args: []string{"-c", "echo hi > marker.txt"}}}
+	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", "echo hi > marker.txt"}}}
 	_, err := runCommand(ctx, op, commandOpts{})
 	require.NoError(t, err)
 

@@ -5,14 +5,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // Member is a named service considered for near-duplicate clustering. Name is a
 // human-facing label, typically the target identity ("web/api-db").
 type Member struct {
 	Name    string
-	Service types.Service
+	Service spells.Service
 }
 
 // Cluster is a group of two or more near-duplicate services: they share a

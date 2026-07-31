@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ type fakeRunner struct {
 
 type fakeHandle struct{ id int }
 
-func (f *fakeRunner) Start(_ context.Context, _ types.Service) (Handle, error) {
+func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.startErr != nil {
@@ -45,8 +45,8 @@ func (f *fakeRunner) counts() (int, int) {
 	return f.started, f.stopped
 }
 
-func svc() types.Service {
-	return types.Service{Command: types.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
+func svc() spells.Service {
+	return spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}}}
 }
 
 func TestAcquireSharesOneInstance(t *testing.T) {
@@ -195,7 +195,7 @@ type slowRunner struct {
 	proceed chan struct{}
 }
 
-func (s *slowRunner) Start(context.Context, types.Service) (Handle, error) {
+func (s *slowRunner) Start(context.Context, spells.Service) (Handle, error) {
 	close(s.entered) // announce we are mid-start (only one start in these tests)
 	<-s.proceed      // block until the test lets it finish
 	s.mu.Lock()
@@ -285,7 +285,7 @@ func TestSessionRoutesToDaemonWhenPresent(t *testing.T) {
 	f := &fakeRunner{}
 	var acquired, released []string
 	sess := NewSession(New(f, time.Hour),
-		func(_ context.Context, key string, _ types.Service) error {
+		func(_ context.Context, key string, _ spells.Service) error {
 			acquired = append(acquired, key)
 			return nil
 		},
@@ -311,7 +311,7 @@ func TestSessionFallsBackToInProcessOnDaemonFailure(t *testing.T) {
 	f := &fakeRunner{}
 	var released []string
 	sess := NewSession(New(f, time.Hour),
-		func(context.Context, string, types.Service) error { return errors.New("daemon gone") },
+		func(context.Context, string, spells.Service) error { return errors.New("daemon gone") },
 		func(key string) { released = append(released, key) },
 	)
 	ctx := WithSupervision(WithSession(context.Background(), sess))
@@ -355,8 +355,8 @@ func TestConcurrentAcquireStartsOnce(t *testing.T) {
 
 // portSvc is a container service with a published port, for exercising the derived
 // label/command/port fields of a Snapshot entry.
-func portSvc() types.Service {
-	return types.Service{Command: types.Command{Bin: "docker", Args: []string{"run", "-p", "5432:5432", "postgres:15"}}}
+func portSvc() spells.Service {
+	return spells.Service{Command: spells.Command{Bin: "docker", Args: []string{"run", "-p", "5432:5432", "postgres:15"}}}
 }
 
 func TestSnapshotRunningEntry(t *testing.T) {
@@ -420,7 +420,7 @@ func TestSnapshotNonContainerLabel(t *testing.T) {
 	f := &fakeRunner{}
 	r := New(f, time.Hour)
 
-	local := types.Service{Command: types.Command{Bin: "/usr/local/bin/myserver", Args: []string{"--port", "8080"}}}
+	local := spells.Service{Command: spells.Command{Bin: "/usr/local/bin/myserver", Args: []string{"--port", "8080"}}}
 	_, err := r.Acquire(context.Background(), "local", local)
 	require.NoError(t, err)
 

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +27,7 @@ func (f fakeOutputReader) OutputByRef(string) ([]byte, cache.OutputDescriptor, e
 
 // TestOutputToolRequiredParam covers the guard that returns before any store access.
 func TestOutputToolRequiredParam(t *testing.T) {
-	_, err := (&outputTool{}).Invoke(context.Background(), types.InvokeRequest{})
+	_, err := (&outputTool{}).Invoke(context.Background(), spells.InvokeRequest{})
 	assert.ErrorContains(t, err, "ref is required")
 }
 
@@ -35,7 +35,7 @@ func TestOutputToolRequiredParam(t *testing.T) {
 // before touching the store, so a non-ref argument fails loudly (and, unlike the old
 // magus_query shape-routing, a graph search term can never land here by accident).
 func TestOutputToolRejectsMalformedRef(t *testing.T) {
-	_, err := (&outputTool{}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "refactor"}})
+	_, err := (&outputTool{}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "refactor"}})
 	assert.ErrorContains(t, err, "not a target-output reference")
 }
 
@@ -52,7 +52,7 @@ func TestOutputToolInvokeHappy(t *testing.T) {
 			DurationMs: 42,
 		},
 	}
-	resp, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	resp, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	require.NoError(t, err)
 	assert.Equal(t, outputRefResult{
 		Ref:        "out1a2b3c",
@@ -68,7 +68,7 @@ func TestOutputToolInvokeHappy(t *testing.T) {
 // is wrapped as an "mcp: ..." error that still lists the candidates.
 func TestOutputToolInvokeAmbiguous(t *testing.T) {
 	reader := fakeOutputReader{err: &cache.AmbiguousRefError{Prefix: "ref1a", Candidates: []string{"out1a2b3c", "out1a9f0e"}}}
-	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorContains(t, err, "mcp: ")
 	assert.ErrorContains(t, err, "is ambiguous")
 	var amb *cache.AmbiguousRefError
@@ -79,11 +79,11 @@ func TestOutputToolInvokeAmbiguous(t *testing.T) {
 // message; a generic error passes through unwrapped.
 func TestOutputToolInvokeNotExist(t *testing.T) {
 	reader := fakeOutputReader{err: fs.ErrNotExist}
-	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	_, err := (&outputTool{reader: reader}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorContains(t, err, "no stored output")
 
 	generic := errors.New("disk on fire")
-	_, err = (&outputTool{reader: fakeOutputReader{err: generic}}).Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
+	_, err = (&outputTool{reader: fakeOutputReader{err: generic}}).Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"ref": "out1a2b3c"}})
 	assert.ErrorIs(t, err, generic)
 }
 

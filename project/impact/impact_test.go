@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 )
@@ -32,8 +33,8 @@ func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path
 func (f *fakeWorkspace) DescribeTargets() types.TargetsOutput { return f.targets }
 
 func TestCompute(t *testing.T) {
-	goSpell := types.NewSpell("go", types.WithTargets("go-build", "go-test", "go-vet"))
-	tsSpell := types.NewSpell("ts", types.WithTargets("biome-check"))
+	goSpell := spells.NewSpell("go", spells.WithTargets("go-build", "go-test", "go-vet"))
+	tsSpell := spells.NewSpell("ts", spells.WithTargets("biome-check"))
 
 	tests := []struct {
 		name     string
@@ -62,8 +63,8 @@ func TestCompute(t *testing.T) {
 				Affected:    []string{"api", "web"},
 			},
 			projects: map[string]*types.Project{
-				"api": {Path: "api", Spells: []string{"go"}, ResolvedSpells: []*types.Spell{goSpell}},
-				"web": {Path: "web", Spells: []string{"ts"}, ResolvedSpells: []*types.Spell{tsSpell}},
+				"api": {Path: "api", Spells: []string{"go"}, ResolvedSpells: []*spells.Spell{goSpell}},
+				"web": {Path: "web", Spells: []string{"ts"}, ResolvedSpells: []*spells.Spell{tsSpell}},
 			},
 			targets: types.TargetsOutput{Targets: []types.TargetEntry{
 				{Name: "ci", Kind: "canonical"},

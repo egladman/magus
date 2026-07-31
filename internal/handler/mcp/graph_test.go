@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func (f fakeGraphResolver) KnowledgeGraphWithSymbolsForRef(context.Context, stri
 // matching targets, demonstrating the tool is testable with a hand-built graph.
 func TestQueryToolInvokeThroughFake(t *testing.T) {
 	tool := &queryTool{graph: fakeGraphResolver{g: pagedGraph(3)}}
-	resp, err := tool.Invoke(context.Background(), types.InvokeRequest{Params: map[string]any{"query": "kind:target"}})
+	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"query": "kind:target"}})
 	require.NoError(t, err)
 	got, ok := resp.Data.(paginatedQuery)
 	require.True(t, ok, "query result is a paginatedQuery")
@@ -99,13 +100,13 @@ func TestRegistryHasStatsDriver(t *testing.T) {
 func TestKnowledgeToolRequiredParams(t *testing.T) {
 	ctx := context.Background()
 
-	_, err := (&queryTool{}).Invoke(ctx, types.InvokeRequest{})
+	_, err := (&queryTool{}).Invoke(ctx, spells.InvokeRequest{})
 	assert.ErrorContains(t, err, "query is required")
 
-	_, err = (&explainTool{}).Invoke(ctx, types.InvokeRequest{})
+	_, err = (&explainTool{}).Invoke(ctx, spells.InvokeRequest{})
 	assert.ErrorContains(t, err, "node is required")
 
-	_, err = (&pathTool{}).Invoke(ctx, types.InvokeRequest{Params: map[string]any{"from": "a"}})
+	_, err = (&pathTool{}).Invoke(ctx, spells.InvokeRequest{Params: map[string]any{"from": "a"}})
 	assert.ErrorContains(t, err, "from and to are required")
 }
 
@@ -175,7 +176,7 @@ func TestPagedQueryRejectsStaleCursor(t *testing.T) {
 }
 
 func TestRefsToolRequiredParam(t *testing.T) {
-	_, err := (&refsTool{}).Invoke(context.Background(), types.InvokeRequest{})
+	_, err := (&refsTool{}).Invoke(context.Background(), spells.InvokeRequest{})
 	assert.ErrorContains(t, err, "symbol is required")
 }
 

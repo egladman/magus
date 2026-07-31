@@ -1,4 +1,4 @@
-package types
+package spells
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"sort"
 )
 
-// SpellDriver is implemented by both spells (*Spell) and MCP tools.
+// Driver is implemented by both spells (*Spell) and MCP tools.
 // Metadata (markers, claims, sources) is not part of this interface.
-type SpellDriver interface {
+type Driver interface {
 	// Name returns the stable identifier for this spell or tool.
 	Name() string
 	// Invoke runs the spell or tool with the given request.
@@ -16,7 +16,7 @@ type SpellDriver interface {
 	Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, error)
 }
 
-// InvokeRequest is the unified invocation payload for SpellDriver.
+// InvokeRequest is the unified invocation payload for Driver.
 // Execution charms (including "rw") are carried on the context, not here.
 type InvokeRequest struct {
 	Target string         // build target or sub-action
@@ -24,7 +24,7 @@ type InvokeRequest struct {
 	Params map[string]any // MCP tool parameters; ignored by *Spell
 }
 
-// InvokeResponse is the unified result payload for SpellDriver.
+// InvokeResponse is the unified result payload for Driver.
 type InvokeResponse struct {
 	Text string // human-readable output
 	Data any    // structured result for MCP tools; nil for *Spell
@@ -64,10 +64,10 @@ type Spell struct {
 	versionProbes map[string]func(ctx context.Context, dir string) (string, error)
 }
 
-// Name implements SpellDriver.
+// Name implements Driver.
 func (s *Spell) Name() string { return s.name }
 
-// Invoke implements SpellDriver. A nil invoke func is a no-op. Fork-target
+// Invoke implements Driver. A nil invoke func is a no-op. Fork-target
 // spells ignore req.Params and return no Data; function-op spells (Buzz ops
 // declared with "fn") receive req.Params and return their result as Data, the
 // channel the remote cache backend and other Go callers read. Charms (including
@@ -80,7 +80,7 @@ func (s *Spell) Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, 
 	return InvokeResponse{Data: data}, err
 }
 
-var _ SpellDriver = (*Spell)(nil)
+var _ Driver = (*Spell)(nil)
 
 func (s *Spell) Sources() []string { return s.sources }
 func (s *Spell) Claims() []string  { return s.claims }
@@ -215,33 +215,33 @@ func (s *Spell) ProbeVersionOf(ctx context.Context, name, dir string) (string, e
 	return fn(ctx, dir)
 }
 
-// SpellOption configures NewSpell.
-type SpellOption func(*Spell)
+// Option configures NewSpell.
+type Option func(*Spell)
 
-func WithSources(sources ...string) SpellOption {
+func WithSources(sources ...string) Option {
 	return func(s *Spell) { s.sources = append(s.sources, sources...) }
 }
 
-func WithClaims(claims ...string) SpellOption {
+func WithClaims(claims ...string) Option {
 	return func(s *Spell) { s.claims = append(s.claims, claims...) }
 }
 
-func WithIgnoreDirs(dirs ...string) SpellOption {
+func WithIgnoreDirs(dirs ...string) Option {
 	return func(s *Spell) { s.ignoreDirs = append(s.ignoreDirs, dirs...) }
 }
 
-func WithSpellOutputs(outputs ...string) SpellOption {
+func WithOutputs(outputs ...string) Option {
 	return func(s *Spell) { s.outputs = append(s.outputs, outputs...) }
 }
 
-func WithTargets(targets ...string) SpellOption {
+func WithTargets(targets ...string) Option {
 	return func(s *Spell) { s.targets = append(s.targets, targets...) }
 }
 
 // WithServiceTargets records which of the spell's targets are backed by a service
 // op (long-running). The runner forces such targets uncacheable so a re-run
 // restarts the process instead of replaying a completed-target result.
-func WithServiceTargets(names ...string) SpellOption {
+func WithServiceTargets(names ...string) Option {
 	return func(s *Spell) {
 		if len(names) == 0 {
 			return
@@ -257,61 +257,61 @@ func WithServiceTargets(names ...string) SpellOption {
 
 // WithLanguage sets the canonical source language the spell adapts, used to tag the
 // spell node so a `language:` query reaches the adapter alongside that language's code.
-func WithLanguage(language string) SpellOption {
+func WithLanguage(language string) Option {
 	return func(s *Spell) { s.language = language }
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that
 // manages its own dependency graph, so magus treats the project as a black box
 // rather than tracking per-file inputs. Informational only.
-func WithOpaque() SpellOption {
+func WithOpaque() Option {
 	return func(s *Spell) { s.opaque = true }
 }
 
 // WithInvoker sets the function that runs a target; a spell with none is a no-op.
 // The invoker receives the full request (so function-ops can read Params) and
 // returns structured Data (nil for fork targets), surfaced via InvokeResponse.
-func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) SpellOption {
+func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) Option {
 	return func(s *Spell) { s.invoke = fn }
 }
 
 // WithCommandRenderer sets the fork-command renderer used by `magus describe` to
 // preview the charm-applied argv without executing. See Spell.RenderCommand.
-func WithCommandRenderer(fn func(target string, charms []string) (cmd string, args []string, ok bool, err error)) SpellOption {
+func WithCommandRenderer(fn func(target string, charms []string) (cmd string, args []string, ok bool, err error)) Option {
 	return func(s *Spell) { s.renderCmd = fn }
 }
 
 // WithCommandExplainer sets the charm-trace renderer used by `magus describe
 // target --explain`. See Spell.ExplainCommand.
-func WithCommandExplainer(fn func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)) SpellOption {
+func WithCommandExplainer(fn func(target string, charms []string) (steps []CharmTraceStep, ok bool, err error)) Option {
 	return func(s *Spell) { s.explainCmd = fn }
 }
 
 // WithCommandConflicts sets the charm-conflict detector used by `magus describe` to
 // report active charms whose edit another active charm overrides.
-func WithCommandConflicts(fn func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)) SpellOption {
+func WithCommandConflicts(fn func(target string, charms []string) (conflicts []CharmConflict, ok bool, err error)) Option {
 	return func(s *Spell) { s.conflictCmd = fn }
 }
 
 // WithServiceView sets the static service-facts accessor used by `magus describe
 // target` to describe a service op before it runs.
-func WithServiceView(fn func(target string) (view *ServiceView, ok bool)) SpellOption {
+func WithServiceView(fn func(target string) (view *ServiceView, ok bool)) Option {
 	return func(s *Spell) { s.serviceView = fn }
 }
 
-func WithSpellDependsOn(fn func(dir string) []string) SpellOption {
+func WithSpellDependsOn(fn func(dir string) []string) Option {
 	return func(s *Spell) { s.dependsOn = fn }
 }
 
 // WithVersionProbe sets the toolchain version probe; the result mixes into the cache key.
-func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) SpellOption {
+func WithVersionProbe(fn func(ctx context.Context, dir string) (string, error)) Option {
 	return func(s *Spell) { s.versionProbe = fn }
 }
 
 // WithVersionProbeNamed registers an ADDITIONAL probe under a tool name, for a
 // spell driving more than one binary (buf also runs protoc-gen-go; go also runs
 // gofmt and mockery). Each contributes its own cache-key entry.
-func WithVersionProbeNamed(name string, fn func(ctx context.Context, dir string) (string, error)) SpellOption {
+func WithVersionProbeNamed(name string, fn func(ctx context.Context, dir string) (string, error)) Option {
 	return func(s *Spell) {
 		if s.versionProbes == nil {
 			s.versionProbes = map[string]func(ctx context.Context, dir string) (string, error){}
@@ -320,40 +320,40 @@ func WithVersionProbeNamed(name string, fn func(ctx context.Context, dir string)
 	}
 }
 
-func WithDeclarationFiles(files ...string) SpellOption {
+func WithDeclarationFiles(files ...string) Option {
 	return func(s *Spell) { s.declarationFiles = append(s.declarationFiles, files...) }
 }
 
-func WithDeclarationDirGlobs(globs ...string) SpellOption {
+func WithDeclarationDirGlobs(globs ...string) Option {
 	return func(s *Spell) { s.declarationDirGlobs = append(s.declarationDirGlobs, globs...) }
 }
 
 // WithTargetSources attaches workspace-root globs for the cache key per target.
 // The map is cloned to prevent caller mutation.
-func WithTargetSources(sources map[string][]string) SpellOption {
+func WithTargetSources(sources map[string][]string) Option {
 	return func(s *Spell) { s.targetSources = maps.Clone(sources) }
 }
 
 // WithTargetCharms records the charm names each target declares, for discovery
 // (e.g. `magus describe`). The map is cloned to prevent caller mutation.
-func WithTargetCharms(charms map[string][]string) SpellOption {
+func WithTargetCharms(charms map[string][]string) Option {
 	return func(s *Spell) { s.targetCharms = maps.Clone(charms) }
 }
 
 // WithTargetDocs records each target handler's doc comment, surfaced by
 // `magus describe`. The map is cloned to prevent caller mutation.
-func WithTargetDocs(docs map[string]string) SpellOption {
+func WithTargetDocs(docs map[string]string) Option {
 	return func(s *Spell) { s.targetDocs = maps.Clone(docs) }
 }
 
 // WithDocRequiredTargets records the function-handler targets `magus doctor`
 // requires a doc comment on (workspace-local Buzz spells).
-func WithDocRequiredTargets(targets ...string) SpellOption {
+func WithDocRequiredTargets(targets ...string) Option {
 	return func(s *Spell) { s.docRequiredTargets = append(s.docRequiredTargets, targets...) }
 }
 
 // NewSpell constructs a Spell with the given name and options.
-func NewSpell(name string, opts ...SpellOption) *Spell {
+func NewSpell(name string, opts ...Option) *Spell {
 	s := &Spell{name: name}
 	for _, o := range opts {
 		o(s)

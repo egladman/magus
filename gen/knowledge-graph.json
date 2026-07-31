@@ -19527,7 +19527,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outb681e804",
+        "last_output_ref": "outd33e6c32",
         "last_run_ok": "true"
       }
     },
@@ -20116,7 +20116,9 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diag",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outbbffae52",
+        "last_run_ok": "false"
       }
     },
     {
@@ -20192,7 +20194,9 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out02a52e45",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20339,7 +20343,9 @@
       "label": "ci",
       "source": "proto",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out25c52547",
+        "last_run_ok": "true"
       }
     },
     {

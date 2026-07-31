@@ -26,7 +26,7 @@
 //
 // Today identity is inferred with a docker-argv heuristic ([Parse]), since the
 // canonical case is a container service. A future spell-provided identity
-// descriptor on types.Service will supersede the heuristic where present.
+// descriptor on spells.Service will supersede the heuristic where present.
 package identity
 
 import (
@@ -36,7 +36,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // Identity is the tool-aware view of a service's process command used for dedup
@@ -82,7 +82,7 @@ func (i Identity) IsContainer() bool { return i.Image != "" }
 // scripts declaring the same image would still share one container. Callers that can
 // supply a root must; closing it properly means giving a rootless run a stable
 // identity of its own, which nothing currently has.
-func InstanceKey(root string, s types.Service) string {
+func InstanceKey(root string, s spells.Service) string {
 	return root + "\x00" + Fingerprint(s)
 }
 
@@ -94,7 +94,7 @@ func InstanceKey(root string, s types.Service) string {
 //
 // This is config identity ONLY. To share a running instance, key on
 // [InstanceKey], which scopes it to a workspace.
-func Fingerprint(s types.Service) string {
+func Fingerprint(s spells.Service) string {
 	id := Parse(s.Command)
 	h := sha256.New()
 	if id.IsContainer() {
@@ -136,7 +136,7 @@ func mustWrite(h io.Writer, p []byte) {
 // and the full config is too narrow (that is the fingerprint). The tag is
 // deliberately excluded so version skew (postgres:15 vs :16) still clusters and is
 // reported as a delta rather than hidden as a different service.
-func ClusterKey(s types.Service) (string, bool) {
+func ClusterKey(s spells.Service) (string, bool) {
 	id := Parse(s.Command)
 	if !id.IsContainer() {
 		return "", false
@@ -153,7 +153,7 @@ func ClusterKey(s types.Service) (string, bool) {
 // pulls out the image, container-side ports, declared env, and mount targets,
 // dropping ephemeral tokens (--name, --rm, tty and detach flags) that do not
 // define the service. An unrecognized command yields a zero Identity.
-func Parse(cmd types.Command) Identity {
+func Parse(cmd spells.Command) Identity {
 	if !isContainerRun(cmd) {
 		return Identity{}
 	}
@@ -224,7 +224,7 @@ func Parse(cmd types.Command) Identity {
 }
 
 // isContainerRun reports whether cmd looks like "docker run" / "podman run".
-func isContainerRun(cmd types.Command) bool {
+func isContainerRun(cmd spells.Command) bool {
 	return IsContainerRuntime(cmd.Bin) && slices.Contains(cmd.Args, "run")
 }
 

@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -139,9 +140,9 @@ const ShutdownMagic = "magus-shutdown-v1"
 // keep it warm past this invocation. Key is the service fingerprint; Service is the
 // resolved process description (command, readiness, stop, idle).
 type ServiceAcquireRequest struct {
-	Protocol string        `json:"protocol"`
-	Key      string        `json:"key"`
-	Service  types.Service `json:"service"`
+	Protocol string         `json:"protocol"`
+	Key      string         `json:"key"`
+	Service  spells.Service `json:"service"`
 }
 
 // ServiceAcquireReply reports whether the service came up. Err is non-empty when it
@@ -180,7 +181,7 @@ type ServiceStopAllReply struct {
 type ServiceHost interface {
 	// Acquire starts (or reuses) the service identified by key, returning once it is
 	// ready, and increments its dependent count.
-	Acquire(ctx context.Context, key string, svc types.Service) error
+	Acquire(ctx context.Context, key string, svc spells.Service) error
 	// Release drops one dependent of key; the host keeps it warm and reaps it later.
 	Release(key string)
 	// StopAll stops every hosted service and returns how many were stopped, leaving

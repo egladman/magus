@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/service/identity"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // Runner starts and stops the OS process behind a service. The Registry owns
@@ -29,7 +29,7 @@ import (
 type Runner interface {
 	// Start launches the service and returns once it is ready (Runner-defined), or
 	// an error if it could not be started or never became ready.
-	Start(ctx context.Context, s types.Service) (Handle, error)
+	Start(ctx context.Context, s spells.Service) (Handle, error)
 	// Stop terminates a running service. It is called at most once per Handle.
 	Stop(h Handle)
 }
@@ -69,7 +69,7 @@ type entry struct {
 	// svc and startedAt are the retained descriptor and start time for introspection
 	// (Snapshot). They are written once when the entry is created (before ready closes)
 	// and read only under r.mu, so they need no further synchronization.
-	svc       types.Service
+	svc       spells.Service
 	startedAt time.Time
 
 	refs  int
@@ -93,7 +93,7 @@ func New(runner Runner, defaultIdle time.Duration, opts ...Option) *Registry {
 // count. Concurrent acquires of the same key share one Start (the others block on
 // its completion). A failed Start is not cached: the entry is discarded so a later
 // Acquire retries.
-func (r *Registry) Acquire(ctx context.Context, key string, s types.Service) (Handle, error) {
+func (r *Registry) Acquire(ctx context.Context, key string, s spells.Service) (Handle, error) {
 	r.mu.Lock()
 	if e := r.entries[key]; e != nil {
 		if e.timer != nil {
@@ -281,7 +281,7 @@ func shortServiceID(key string) string {
 
 // serviceLabel derives a human name for a service: image[:tag] for a recognized
 // container run, else the process binary's basename.
-func serviceLabel(s types.Service) string {
+func serviceLabel(s spells.Service) string {
 	if id := identity.Parse(s.Command); id.IsContainer() {
 		if id.Tag != "" {
 			return id.Image + ":" + id.Tag
@@ -292,7 +292,7 @@ func serviceLabel(s types.Service) string {
 }
 
 // commandString renders a Command as its space-joined bin and args, for display.
-func commandString(c types.Command) string {
+func commandString(c spells.Command) string {
 	if len(c.Args) == 0 {
 		return c.Bin
 	}
@@ -301,7 +301,7 @@ func commandString(c types.Command) string {
 
 // idleFor resolves a service's idle window: its own Service.Idle override when it
 // parses to a positive duration, else the Registry default.
-func (r *Registry) idleFor(s types.Service) time.Duration {
+func (r *Registry) idleFor(s spells.Service) time.Duration {
 	if s.Idle != "" {
 		if d, err := time.ParseDuration(s.Idle); err == nil && d > 0 {
 			return d

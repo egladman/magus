@@ -1,4 +1,4 @@
-package types
+package spells
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func TestNewSpellAccessors(t *testing.T) {
 		"go",
 		WithSources("**/*.go"),
 		WithClaims("**/*.go"),
-		WithSpellOutputs("bin/**"),
+		WithOutputs("bin/**"),
 		WithIgnoreDirs("vendor", "node_modules"),
 		WithTargets("build", "test"),
 		WithOpaque(),
@@ -74,7 +74,7 @@ func TestSpellNilInvokerIsNoop(t *testing.T) {
 }
 
 func TestSpellImplementsSpellDriver(t *testing.T) {
-	require.Implements(t, (*SpellDriver)(nil), NewSpell("x"))
+	require.Implements(t, (*Driver)(nil), NewSpell("x"))
 }
 
 // TestSpellMetadataAccessors covers the plain metadata accessors that read back

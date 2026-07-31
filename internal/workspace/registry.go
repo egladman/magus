@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -102,7 +103,7 @@ func (r *WorkspaceRegistry) ProjectPaths() []string {
 
 // Apply applies the registered project options to every project in w.
 // Paths that do not match any discovered project are errors. Option errors
-// are collected and joined. Spell names are resolved to *types.Spell values
+// are collected and joined. Spell names are resolved to *spells.Spell values
 // and their declared deps are unioned into each project's DependsOn.
 func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 	r.mu.Lock()
@@ -122,12 +123,12 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 			}
 		}
 	}
-	// Resolve spell names to *types.Spell and accumulate spell-declared deps.
+	// Resolve spell names to *spells.Spell and accumulate spell-declared deps.
 	// If any spell name is missing, the project's ResolvedSpells is left nil
 	// so that Spells/Bindings/ResolvedSpells stay index-aligned: either all
 	// three are in sync or the resolved view is absent, never shorter.
 	for _, p := range w.All() {
-		var resolved []*types.Spell
+		var resolved []*spells.Spell
 		projectOK := true
 		for _, name := range p.Spells {
 			l, ok := project.DefaultSpellRegistry().Lookup(name)

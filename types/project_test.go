@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -59,9 +60,9 @@ func TestProjectRef(t *testing.T) {
 }
 
 func TestProject_AttachSpell(t *testing.T) {
-	goSpell := NewSpell("go",
-		WithSources("**/*.go"),
-		WithSpellOutputs("bin/**"),
+	goSpell := spells.NewSpell("go",
+		spells.WithSources("**/*.go"),
+		spells.WithOutputs("bin/**"),
 	)
 
 	p := &Project{Path: "api/"}
@@ -75,9 +76,9 @@ func TestProject_AttachSpell(t *testing.T) {
 	assert.NotEmpty(t, p.Outputs, "Outputs should be populated after AttachSpell")
 
 	// Attaching a second spell must NOT overwrite the primary Spell field.
-	pySpell := NewSpell("python",
-		WithSources("**/*.py"),
-		WithSpellOutputs("dist/**"),
+	pySpell := spells.NewSpell("python",
+		spells.WithSources("**/*.py"),
+		spells.WithOutputs("dist/**"),
 	)
 	p.AttachSpell(pySpell)
 	assert.Equal(t, "go", p.Spell, "primary Spell must not change on second AttachSpell")

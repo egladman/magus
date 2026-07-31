@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,9 +87,9 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	versionFile := filepath.Join(projDir, "VERSION")
 	require.NoError(t, os.WriteFile(versionFile, []byte("v1"), 0o644))
 
-	fake := types.NewSpell(
+	fake := spells.NewSpell(
 		"faketool",
-		types.WithInvoker(func(_ context.Context, req types.InvokeRequest) (any, error) {
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			f, err := os.OpenFile(filepath.Join(req.Dir, "count"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err != nil {
 				return nil, err
@@ -97,7 +98,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 			_, err = f.WriteString("x")
 			return nil, err
 		}),
-		types.WithVersionProbe(func(_ context.Context, dir string) (string, error) {
+		spells.WithVersionProbe(func(_ context.Context, dir string) (string, error) {
 			return readFile(t, filepath.Join(dir, "VERSION")), nil
 		}),
 	)

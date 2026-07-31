@@ -1,4 +1,4 @@
-package types
+package spells
 
 import (
 	"testing"
@@ -12,13 +12,13 @@ import (
 func TestSpellOpKind(t *testing.T) {
 	tests := []struct {
 		name     string
-		op       SpellOp
+		op       Op
 		wantKind string
 		wantSvc  bool
 	}{
-		{"empty defaults to command", SpellOp{}, OpKindCommand, false},
-		{"explicit command", SpellOp{Kind: OpKindCommand}, OpKindCommand, false},
-		{"service", SpellOp{Kind: OpKindService}, OpKindService, true},
+		{"empty defaults to command", Op{}, OpKindCommand, false},
+		{"explicit command", Op{Kind: OpKindCommand}, OpKindCommand, false},
+		{"service", Op{Kind: OpKindService}, OpKindService, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

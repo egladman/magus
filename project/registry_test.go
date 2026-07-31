@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 func TestNewSpellRegistry_Empty(t *testing.T) {
@@ -17,7 +17,7 @@ func TestNewSpellRegistry_Empty(t *testing.T) {
 
 func TestSpellRegistry_RegisterAndLookup(t *testing.T) {
 	r := NewSpellRegistry()
-	s := types.NewSpell("myspell")
+	s := spells.NewSpell("myspell")
 	r.RegisterSpell(s)
 
 	got, ok := r.Lookup("myspell")
@@ -27,7 +27,7 @@ func TestSpellRegistry_RegisterAndLookup(t *testing.T) {
 
 func TestSpellRegistry_Unregister(t *testing.T) {
 	r := NewSpellRegistry()
-	s := types.NewSpell("gone")
+	s := spells.NewSpell("gone")
 	r.RegisterSpell(s)
 	r.UnregisterSpell("gone")
 

@@ -8,7 +8,7 @@ import (
 
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // sweepStopTimeout bounds each stop command replayed during a startup sweep so one
@@ -32,8 +32,8 @@ type Journal struct {
 }
 
 type journalEntry struct {
-	Key  string        `json:"key"`
-	Stop types.Command `json:"stop,omitempty"`
+	Key  string         `json:"key"`
+	Stop spells.Command `json:"stop,omitempty"`
 }
 
 // NewJournal returns a Journal writing under dir (created if absent).
@@ -48,7 +48,7 @@ func (j *Journal) path(key string) string { return filepath.Join(j.dir, key+".js
 
 // record notes that the service for key is running, with the command that stops it.
 // A nil Journal (the in-process Registry) is a no-op.
-func (j *Journal) record(key string, stop types.Command) {
+func (j *Journal) record(key string, stop spells.Command) {
 	if j == nil {
 		return
 	}

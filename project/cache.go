@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	json "github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -104,7 +105,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 // restoreFromCache reconstructs a *types.Workspace from c, re-binding spells from the registry.
 func restoreFromCache(root string, c *wsCache) *types.Workspace {
 	all := defaultRegistry.All()
-	spellByName := make(map[string]*types.Spell, len(all))
+	spellByName := make(map[string]*spells.Spell, len(all))
 	for _, s := range all {
 		spellByName[s.Name()] = s
 	}

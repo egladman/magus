@@ -8,6 +8,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -128,7 +129,7 @@ func WithSpell(name string, opts ...BindingOption) ProjectOption {
 	}
 }
 
-func bindSpell(p *types.Project, spell *types.Spell, name string, opts ...BindingOption) error {
+func bindSpell(p *types.Project, spell *spells.Spell, name string, opts ...BindingOption) error {
 	b := &types.Binding{Name: name}
 	for _, opt := range opts {
 		if err := opt(b); err != nil {

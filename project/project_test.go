@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -18,11 +19,11 @@ func init() {
 	// magusfile.tl and magusfiles/*.tl during project discovery in these tests.
 	// The real "magusfile" spell lives in internal/interp and can't be imported
 	// here (cycle).
-	DefaultSpellRegistry().RegisterSpell(types.NewSpell(
+	DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 		"magusfile",
-		types.WithSources("magusfile.tl"),
-		types.WithDeclarationFiles("magusfile.tl"),
-		types.WithDeclarationDirGlobs("magusfiles/*.tl"),
+		spells.WithSources("magusfile.tl"),
+		spells.WithDeclarationFiles("magusfile.tl"),
+		spells.WithDeclarationDirGlobs("magusfiles/*.tl"),
 	))
 }
 

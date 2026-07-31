@@ -9,7 +9,7 @@ import (
 	ispell "github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // spellHandleFromMeta builds the MagusSpell handle a workspace-local spell import
@@ -17,7 +17,7 @@ import (
 // magus.project can decode and register the spell by value at bind time, needed
 // because the spell is evaluated in a throwaway session whose functions are gone by
 // then.
-func spellHandleFromMeta(m ispell.Descriptor) vm.Value {
+func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h := vm.NewMap()
 	h.MapSet("name", vm.StrValue(m.Name))
 	h.MapSet("needs", strSliceToBuzzList(m.Needs))
@@ -41,7 +41,7 @@ func spellHandleFromMeta(m ispell.Descriptor) vm.Value {
 // the target's base argv and overlays opts.env on the subprocess, so
 // flag-carrying and cross-compile invocations need no os.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
-func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
+func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op) {
 	h.MapSet("listTargets", vm.DirectValue("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return strSliceToBuzzList(commandTargetNames(targets)), nil
 	}))
@@ -52,7 +52,7 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]types.SpellOp) {
 
 // bindBuzzCommandMethod attaches tgt as a callable method named target on h,
 // so spell.<target>(opts?) forks the target.
-func bindBuzzCommandMethod(h vm.Value, target string, tgt types.SpellOp) {
+func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		// The leading magus.Context is REQUIRED, not optional. Optional would overload
 		// argument one on TYPE - f(), f(ctx), f({args:...}), f(ctx, {args:...}) - which
@@ -102,7 +102,7 @@ func execRecordToBuzz(rec map[string]any) vm.Value {
 // runCommand). With explicit opts.args it uses them; otherwise it forwards the
 // `magus run <t> -- <extra>` args, so a bare go.test() still threads through
 // `magus run test -- -run X`.
-func runBuzzCommand(ctx context.Context, tgt types.SpellOp, opts commandOpts) (run.ExecResult, error) {
+func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecResult, error) {
 	if !opts.hasArgs {
 		opts.args = project.ExtraArgs(ctx)
 	}
@@ -188,7 +188,7 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 
 // targetsToBuzzMap marshals resolved targets back to the nested ops map shape
 // ispell.Decode reads (a fork target unless it declares fn).
-func targetsToBuzzMap(targets map[string]types.SpellOp) vm.Value {
+func targetsToBuzzMap(targets map[string]spells.Op) vm.Value {
 	ops := vm.NewMap()
 	for name, t := range targets {
 		op := vm.NewMap()
@@ -214,7 +214,7 @@ func targetsToBuzzMap(targets map[string]types.SpellOp) vm.Value {
 
 // patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records
 // list shape ispell.Decode reads.
-func patchOpsToBuzzList(ops []types.PatchOp) vm.Value {
+func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 	items := make([]vm.Value, len(ops))
 	for i, po := range ops {
 		m := vm.NewMap()

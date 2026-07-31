@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,10 +31,10 @@ func init() {
 		{"json", []string{"**/*.json"}, []string{"**/*.json", "**/*.jsonc"}},
 	} {
 		m := meta
-		project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(
+		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 			m.name,
-			types.WithSources(m.sources...),
-			types.WithClaims(m.claims...),
+			spells.WithSources(m.sources...),
+			spells.WithClaims(m.claims...),
 		))
 	}
 }

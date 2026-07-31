@@ -3,6 +3,7 @@ package serviceaudit
 import (
 	"testing"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,17 +12,17 @@ import (
 // dbProject builds a project at path whose one spell exposes a "db" service target
 // rendering "docker run <args>".
 func dbProject(path string, args ...string) *types.Project {
-	spell := types.NewSpell("docker",
-		types.WithTargets("db"),
-		types.WithServiceTargets("db"),
-		types.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+	spell := spells.NewSpell("docker",
+		spells.WithTargets("db"),
+		spells.WithServiceTargets("db"),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			if target != "db" {
 				return "", nil, false, nil
 			}
 			return "docker", append([]string{"run"}, args...), true, nil
 		}),
 	)
-	return &types.Project{Path: path, ResolvedSpells: []*types.Spell{spell}}
+	return &types.Project{Path: path, ResolvedSpells: []*spells.Spell{spell}}
 }
 
 func TestCollectMembersRendersServiceTargets(t *testing.T) {
@@ -35,13 +36,13 @@ func TestCollectMembersRendersServiceTargets(t *testing.T) {
 
 func TestCollectMembersSkipsCommandTargets(t *testing.T) {
 	// A non-service target must not be collected even if it renders a command.
-	spell := types.NewSpell("go",
-		types.WithTargets("build"),
-		types.WithCommandRenderer(func(string, []string) (string, []string, bool, error) {
+	spell := spells.NewSpell("go",
+		spells.WithTargets("build"),
+		spells.WithCommandRenderer(func(string, []string) (string, []string, bool, error) {
 			return "go", []string{"build"}, true, nil
 		}),
 	)
-	p := &types.Project{Path: "svc", ResolvedSpells: []*types.Spell{spell}}
+	p := &types.Project{Path: "svc", ResolvedSpells: []*spells.Spell{spell}}
 	assert.Empty(t, collectMembers([]*types.Project{p}, nil))
 }
 

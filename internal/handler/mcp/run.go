@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -51,10 +52,10 @@ type runTargetTool struct {
 
 func (t *runTargetTool) Name() string { return "magus_run_target" }
 
-func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	rawTarget := paramString(req.Params, "target", "")
 	if rawTarget == "" {
-		return types.InvokeResponse{}, errors.New("mcp: target is required")
+		return spells.InvokeResponse{}, errors.New("mcp: target is required")
 	}
 	projectsArg := paramString(req.Params, "projects", "")
 	dryRun := paramBool(req.Params, "dry_run", false)
@@ -65,7 +66,7 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 	}
 	parsed, err := types.ParseTarget(targetStr)
 	if err != nil {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: invalid target: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: invalid target: %w", err)
 	}
 	switch parsed.Name {
 	case "fmt":
@@ -81,14 +82,14 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 		for _, path := range strings.Fields(projectsArg) {
 			tg, e := ws.ExpandPath(types.Target{Path: path, Name: parsed.Name})
 			if e != nil {
-				return types.InvokeResponse{}, fmt.Errorf("mcp: expand %s: %w", path, e)
+				return spells.InvokeResponse{}, fmt.Errorf("mcp: expand %s: %w", path, e)
 			}
 			targets = append(targets, tg...)
 		}
 	} else {
 		cwdTargets, found, e := ws.ExpandCwd(parsed)
 		if e != nil {
-			return types.InvokeResponse{}, fmt.Errorf("mcp: expand cwd: %w", e)
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: expand cwd: %w", e)
 		}
 		if found {
 			targets = cwdTargets
@@ -97,17 +98,17 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 		}
 	}
 	if err != nil {
-		return types.InvokeResponse{}, fmt.Errorf("mcp: resolve targets: %w", err)
+		return spells.InvokeResponse{}, fmt.Errorf("mcp: resolve targets: %w", err)
 	}
 	if len(targets) == 0 {
 		toolLogger(ctx).Warn("mcp: no targets resolved", "raw_target", rawTarget)
-		return types.InvokeResponse{}, errors.New("mcp: no targets resolved for " + rawTarget)
+		return spells.InvokeResponse{}, errors.New("mcp: no targets resolved for " + rawTarget)
 	}
 
 	var buf bytes.Buffer
 	rw, err := magus.NewReportWriter(&buf, nil)
 	if err != nil {
-		return types.InvokeResponse{}, err
+		return spells.InvokeResponse{}, err
 	}
 	// Run dispatches explicit targets and builds no affected graph, so it needs
 	// no graph observer. (Graph events come from the affected path; see
@@ -142,10 +143,10 @@ func (t *runTargetTool) Invoke(ctx context.Context, req types.InvokeRequest) (ty
 	if runErr != nil {
 		out.Error = runErr.Error()
 	}
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*runTargetTool)(nil)
+var _ spells.Driver = (*runTargetTool)(nil)
 
 // parseRunEvents decodes the run report's JSONL buffer into a slice of raw JSON event objects.
 func parseRunEvents(buf *bytes.Buffer) []codec.RawMessage {

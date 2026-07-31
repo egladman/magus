@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/doctor"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 type doctorTool struct {
@@ -13,13 +13,13 @@ type doctorTool struct {
 
 func (t *doctorTool) Name() string { return "magus_doctor" }
 
-func (t *doctorTool) Invoke(_ context.Context, _ types.InvokeRequest) (types.InvokeResponse, error) {
+func (t *doctorTool) Invoke(_ context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
 	ws := t.opts.Magus
 	out := doctor.Run(
 		ws.Root(), ws, nil,
 		doctor.WithConfig(t.opts.Config),
 	)
-	return types.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: out}, nil
 }
 
-var _ types.SpellDriver = (*doctorTool)(nil)
+var _ spells.Driver = (*doctorTool)(nil)

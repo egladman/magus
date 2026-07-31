@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 type configGetTool struct {
@@ -13,8 +13,8 @@ type configGetTool struct {
 
 func (t *configGetTool) Name() string { return "magus_config_get" }
 
-func (t *configGetTool) Invoke(_ context.Context, _ types.InvokeRequest) (types.InvokeResponse, error) {
-	return types.InvokeResponse{Data: t.cfg}, nil
+func (t *configGetTool) Invoke(_ context.Context, _ spells.InvokeRequest) (spells.InvokeResponse, error) {
+	return spells.InvokeResponse{Data: t.cfg}, nil
 }
 
-var _ types.SpellDriver = (*configGetTool)(nil)
+var _ spells.Driver = (*configGetTool)(nil)

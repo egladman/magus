@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -403,7 +404,7 @@ func (m *Magus) autobindMagusfileSpell() {
 			continue
 		}
 		p.AttachSpell(magusfileSpell)
-		p.ResolvedSpells = []*types.Spell{magusfileSpell}
+		p.ResolvedSpells = []*spells.Spell{magusfileSpell}
 	}
 }
 
@@ -786,12 +787,12 @@ func TargetLabel(targets []types.Target, source string) string {
 // magusfile exports target AND some other spell also provides it, else -1. Only a
 // genuine collision overrides: a magusfile target no spell claims needs no precedence,
 // and neither does a spell op the magusfile never mentions.
-func magusfileOverride(p *types.Project, spells []*types.Spell, target string) int {
+func magusfileOverride(p *types.Project, resolved []*spells.Spell, target string) int {
 	if !slices.Contains(p.MagusfileTargets, target) {
 		return -1
 	}
 	idx, contested := -1, false
-	for i, s := range spells {
+	for i, s := range resolved {
 		if s.Name() == types.MagusfileSpellName {
 			idx = i
 			continue
@@ -811,12 +812,12 @@ func magusfileOverride(p *types.Project, spells []*types.Spell, target string) i
 // When the context carries a [cache.Limiter] and the caller holds a slot, the
 // parallel branch yields the slot and each spell acquires its own, keeping total
 // concurrent spells bounded by the workspace concurrency cap.
-func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(context.Context, *types.Spell) error) error {
-	spells := p.ResolvedSpells
-	if len(spells) == 0 {
+func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(context.Context, *spells.Spell) error) error {
+	resolved := p.ResolvedSpells
+	if len(resolved) == 0 {
 		return nil
 	}
-	dispatch := func(ctx context.Context, i int, s *types.Spell) error {
+	dispatch := func(ctx context.Context, i int, s *spells.Spell) error {
 		effective := project.EffectiveClaims(p, i)
 		pctx := ctx
 		if effective != nil {
@@ -833,21 +834,21 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	//
 	// Dispatched by INDEX rather than by narrowing the slice: EffectiveClaims is
 	// positional, so a filtered slice would hand a spell another spell's claims.
-	if only := magusfileOverride(p, spells, target); only >= 0 {
-		if err := dispatch(ctx, only, spells[only]); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: spells[only].Name(), Err: err}}}
+	if only := magusfileOverride(p, resolved, target); only >= 0 {
+		if err := dispatch(ctx, only, resolved[only]); err != nil {
+			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: resolved[only].Name(), Err: err}}}
 		}
 		return nil
 	}
-	if len(spells) == 1 {
-		if err := dispatch(ctx, 0, spells[0]); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: spells[0].Name(), Err: err}}}
+	if len(resolved) == 1 {
+		if err := dispatch(ctx, 0, resolved[0]); err != nil {
+			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: resolved[0].Name(), Err: err}}}
 		}
 		return nil
 	}
 	if p.Exclusive {
 		var failed []types.SpellFailure
-		for i, s := range spells {
+		for i, s := range resolved {
 			if err := dispatch(ctx, i, s); err != nil {
 				failed = append(failed, types.SpellFailure{Spell: s.Name(), Err: err})
 			}
@@ -866,13 +867,13 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		name string
 		err  error
 	}
-	results := make([]result, len(spells))
+	results := make([]result, len(resolved))
 	var wg sync.WaitGroup
 
 	fanOut := func() {
-		for i, s := range spells {
+		for i, s := range resolved {
 			wg.Add(1)
-			go func(i int, s *types.Spell) {
+			go func(i int, s *spells.Spell) {
 				defer wg.Done()
 				spellCtx := ctx
 				if bounded {
@@ -910,7 +911,7 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 
 // forSpellNamed is like forEachSpell but targets only the spell whose Name
 // equals name. If no matching spell is registered the call is a no-op.
-func forSpellNamed(ctx context.Context, p *types.Project, target, name string, fn func(context.Context, *types.Spell) error) error {
+func forSpellNamed(ctx context.Context, p *types.Project, target, name string, fn func(context.Context, *spells.Spell) error) error {
 	for i, s := range p.ResolvedSpells {
 		if s.Name() != name {
 			continue

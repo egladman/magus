@@ -1,4 +1,4 @@
-package types
+package spells
 
 // PatchOp is one RFC 6902 operation over a target's argv array. Path/From are
 // single-token JSON Pointers (RFC 6901) into the array — "/N" for an index, or
@@ -44,7 +44,7 @@ type Command struct {
 // returns - a [Command] (OpKindCommand) or a [Service] (OpKindService) - so
 // authoring stays a single mgs_listTargets. Both are declarative data differing only
 // in lifecycle (run-to-completion vs long-running), not the imperative handler split
-// magus removed. An empty SpellOp.Kind means OpKindCommand.
+// magus removed. An empty Op.Kind means OpKindCommand.
 const (
 	OpKindCommand = "command"
 	OpKindService = "service"
@@ -78,7 +78,7 @@ type Service struct {
 	Idle string `json:"idle,omitempty"`
 }
 
-// SpellOp is a single dispatchable surface of a spell — one tool-native Operation
+// Op is a single dispatchable surface of a spell — one tool-native Operation
 // (see docs/operations.md). An op is one of two declarative shapes, tagged by Kind:
 // a command op (OpKindCommand, the default) whose embedded [Command] Bin/Args run
 // via PATH with no script VM; or a service op (OpKindService) whose [Service]
@@ -97,7 +97,7 @@ type Service struct {
 // record (the same shape os.exec returns) instead of void — for ops whose output
 // is the point (a hash, a revision date) rather than a build action whose exit code
 // is all that matters. It is Go-internal (the resolved op), not mirrored to Buzz.
-type SpellOp struct {
+type Op struct {
 	// Kind is the op's lifecycle kind (OpKind*); empty means OpKindCommand.
 	Kind string `json:"kind,omitempty"`
 	Command
@@ -113,7 +113,7 @@ type SpellOp struct {
 
 // OpKind returns the op's kind, resolving the empty default to OpKindCommand so
 // callers dispatch on one canonical value.
-func (o SpellOp) OpKind() string {
+func (o Op) OpKind() string {
 	if o.Kind == "" {
 		return OpKindCommand
 	}
@@ -122,7 +122,7 @@ func (o SpellOp) OpKind() string {
 
 // IsService reports whether the op is a service op (a long-running process) rather
 // than a command op (run to completion).
-func (o SpellOp) IsService() bool { return o.Kind == OpKindService }
+func (o Op) IsService() bool { return o.Kind == OpKindService }
 
 // Key returns the lines identifying this op's work for the cache: the command it runs, which is
 // the honest answer to "what work is this" and what lets two entry points onto the same
@@ -132,7 +132,7 @@ func (o SpellOp) IsService() bool { return o.Kind == OpKindService }
 // service-backed target is forced NoCache at run.go's step construction, so it is never
 // replayed and has no key to protect. A function-op computes its argv in-VM, so an empty
 // Bin likewise has nothing to say.
-func (o SpellOp) Key() []string {
+func (o Op) Key() []string {
 	if o.Bin == "" {
 		return nil
 	}

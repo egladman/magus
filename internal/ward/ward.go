@@ -23,12 +23,13 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/service/identity"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
 // Check returns the kind-coherence violations for a resolved op (empty when the op
 // is coherent). opName is used only to phrase the diagnostic.
-func Check(opName string, op types.SpellOp) []*types.DiagnosticError {
+func Check(opName string, op spells.Op) []*types.DiagnosticError {
 	var out []*types.DiagnosticError
 	if op.IsService() {
 		if flag, ok := detachFlag(op.Command); ok {
@@ -53,7 +54,7 @@ func Check(opName string, op types.SpellOp) []*types.DiagnosticError {
 // container runtimes so a bare -d in an unrelated tool (dnsmasq -d = foreground) is
 // not misread. It recognizes -d, --detach, --detach=true, and combined short-flag
 // blocks like -itd.
-func detachFlag(cmd types.Command) (string, bool) {
+func detachFlag(cmd spells.Command) (string, bool) {
 	if !identity.IsContainerRuntime(cmd.Bin) {
 		return "", false
 	}
@@ -79,7 +80,7 @@ var watchTools = map[string]bool{
 // watchFlag reports a watch flag on a command whose tool runs a watch loop. It
 // looks at the bin and, for runners like npx/pnpm/yarn/bunx, the first tool
 // argument, then requires an explicit --watch (the unambiguous long form).
-func watchFlag(cmd types.Command) (string, bool) {
+func watchFlag(cmd spells.Command) (string, bool) {
 	if !invokesWatchTool(cmd) {
 		return "", false
 	}
@@ -93,7 +94,7 @@ func watchFlag(cmd types.Command) (string, bool) {
 
 // invokesWatchTool reports whether the command's effective tool is a known watcher,
 // looking through common runners (npx, pnpm, yarn, bunx) to their first argument.
-func invokesWatchTool(cmd types.Command) bool {
+func invokesWatchTool(cmd spells.Command) bool {
 	bin := identity.Basename(cmd.Bin)
 	if watchTools[bin] {
 		return true

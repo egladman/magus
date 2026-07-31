@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/project"
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 )
 
 // This file lives in the bindings layer (not internal/ci/annotate) because
@@ -71,7 +71,7 @@ func openSpellAnnotator(io.Writer) annotate.Annotator {
 // what makes crossing into the VM affordable, and why quoting is declared
 // as a prefix list read once rather than a hook called per line.
 type spellAnnotator struct {
-	drv types.SpellDriver
+	drv spells.Driver
 
 	mu          sync.Mutex
 	activeKnown bool
@@ -110,7 +110,7 @@ func (a *spellAnnotator) Active() bool {
 	}
 	ctx, cancel := spellCtx()
 	defer cancel()
-	resp, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: "enabled"})
+	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "enabled"})
 	if err != nil {
 		return false
 	}
@@ -176,7 +176,7 @@ func (a *spellAnnotator) quotePrefixes() []string {
 	}
 	ctx, cancel := spellCtx()
 	defer cancel()
-	resp, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: "quote_prefixes"})
+	resp, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: "quote_prefixes"})
 	if err != nil {
 		return nil // transient: do not latch an empty list
 	}
@@ -202,7 +202,7 @@ func (a *spellAnnotator) quotePrefixes() []string {
 func (a *spellAnnotator) call(op string, params map[string]any) error {
 	ctx, cancel := spellCtx()
 	defer cancel()
-	_, err := a.drv.Invoke(ctx, types.InvokeRequest{Target: op, Params: params})
+	_, err := a.drv.Invoke(ctx, spells.InvokeRequest{Target: op, Params: params})
 	if err != nil {
 		return nil
 	}

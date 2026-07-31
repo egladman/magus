@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,9 +125,9 @@ func TestApply_PropagatesOptionError(t *testing.T) {
 
 func TestApply_ResolvesSpellsAndUnionsDeps(t *testing.T) {
 	const spellName = "workspace_apply_test_spell"
-	project.DefaultSpellRegistry().RegisterSpell(types.NewSpell(
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 		spellName,
-		types.WithSpellDependsOn(func(string) []string { return []string{"shared/lib"} }),
+		spells.WithSpellDependsOn(func(string) []string { return []string{"shared/lib"} }),
 	))
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 

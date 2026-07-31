@@ -5,14 +5,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-func makeSpell(name string, claims []string) *types.Spell {
-	return types.NewSpell(name, types.WithClaims(claims...))
+func makeSpell(name string, claims []string) *spells.Spell {
+	return spells.NewSpell(name, spells.WithClaims(claims...))
 }
 
-func projectFor(spells []*types.Spell, bindings []*types.Binding) *types.Project {
+func projectFor(spells []*spells.Spell, bindings []*types.Binding) *types.Project {
 	return &types.Project{ResolvedSpells: spells, Bindings: bindings}
 }
 
@@ -20,7 +21,7 @@ func projectFor(spells []*types.Spell, bindings []*types.Binding) *types.Project
 // later-registered spells carve out overlapping globs from earlier ones.
 func TestEffectiveClaimsLastWins(t *testing.T) {
 	p := projectFor(
-		[]*types.Spell{
+		[]*spells.Spell{
 			makeSpell("json", []string{"**/*.json"}),
 			makeSpell("ts", []string{"**/*.json", "**/*.ts"}),
 		},
@@ -38,7 +39,7 @@ func TestEffectiveClaimsLastWins(t *testing.T) {
 // spell has a higher weight and should keep its overlapping claims.
 func TestEffectiveClaimsWeightWins(t *testing.T) {
 	p := projectFor(
-		[]*types.Spell{
+		[]*spells.Spell{
 			makeSpell("ts", []string{"**/*.json", "**/*.ts"}),
 			makeSpell("json", []string{"**/*.json"}),
 		},
@@ -56,7 +57,7 @@ func TestEffectiveClaimsWeightWins(t *testing.T) {
 // works as an escape hatch on top of weighted resolution.
 func TestEffectiveClaimsRemovedClaimsStillApplied(t *testing.T) {
 	p := projectFor(
-		[]*types.Spell{
+		[]*spells.Spell{
 			makeSpell("ts", []string{"**/*.json", "**/*.ts"}),
 		},
 		[]*types.Binding{

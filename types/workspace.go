@@ -82,7 +82,7 @@ type workspaceKey struct{}
 
 // WithWorkspace returns a context carrying ws for downstream code (e.g. audit).
 // The workspace rides on the context rather than a parameter because it must
-// cross the spell-invocation boundary (types.SpellDriver.Invoke takes only ctx +
+// cross the spell-invocation boundary (spells.Driver.Invoke takes only ctx +
 // InvokeRequest), reaching host bindings the run engine cannot thread it to
 // directly. WorkspaceFromContext callers must handle a nil result.
 func WithWorkspace(ctx context.Context, ws WorkspaceRepository) context.Context {

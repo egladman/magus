@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +24,9 @@ func TestExecRunnerReadyThenStop(t *testing.T) {
 	if !hasBin("sleep") || !hasBin("true") {
 		t.Skip("needs sleep and true")
 	}
-	h, err := ExecRunner{}.Start(context.Background(), types.Service{
-		Command:   types.Command{Bin: "sleep", Args: []string{"60"}},
-		Readiness: types.Command{Bin: "true"}, // exits 0 immediately: ready at once
+	h, err := ExecRunner{}.Start(context.Background(), spells.Service{
+		Command:   spells.Command{Bin: "sleep", Args: []string{"60"}},
+		Readiness: spells.Command{Bin: "true"}, // exits 0 immediately: ready at once
 	})
 	require.NoError(t, err)
 	eh := h.(*execHandle)
@@ -55,9 +55,9 @@ func TestExecRunnerReadinessFailureCleansUp(t *testing.T) {
 	// a short context so the test stays fast.
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	_, err := ExecRunner{}.Start(ctx, types.Service{
-		Command:   types.Command{Bin: "sleep", Args: []string{"60"}},
-		Readiness: types.Command{Bin: "false"}, // never exits 0
+	_, err := ExecRunner{}.Start(ctx, spells.Service{
+		Command:   spells.Command{Bin: "sleep", Args: []string{"60"}},
+		Readiness: spells.Command{Bin: "false"}, // never exits 0
 	})
 	assert.Error(t, err)
 }
@@ -67,9 +67,9 @@ func TestExecRunnerUsesStopCommand(t *testing.T) {
 		t.Skip("needs sleep")
 	}
 	runner := ExecRunner{StopGrace: 100 * time.Millisecond}
-	h, err := runner.Start(context.Background(), types.Service{
-		Command: types.Command{Bin: "sleep", Args: []string{"60"}},
-		Stop:    types.Command{Bin: "true"}, // stand-in graceful stop; process then killed on grace
+	h, err := runner.Start(context.Background(), spells.Service{
+		Command: spells.Command{Bin: "sleep", Args: []string{"60"}},
+		Stop:    spells.Command{Bin: "true"}, // stand-in graceful stop; process then killed on grace
 	})
 	require.NoError(t, err)
 	done := make(chan struct{})

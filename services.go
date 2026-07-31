@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +25,7 @@ func (m *Magus) newServiceSession(ctx context.Context) *service.Session {
 	if !ok {
 		return service.NewSession(reg, nil, nil) // no daemon: in-process only
 	}
-	acquire := func(ctx context.Context, key string, svc types.Service) error {
+	acquire := func(ctx context.Context, key string, svc spells.Service) error {
 		return proc.AcquireService(ctx, addr, key, svc)
 	}
 	release := func(key string) {
