@@ -6475,7 +6475,7 @@
       "id": "function:badge.buzz:whole_percent",
       "kind": "function",
       "label": "whole_percent",
-      "doc": "whole_percent reads a figure's integer part (\"56.8\" -\u003e 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
+      "doc": "whole_percent reads a figure's integer part (\"56.8\" -> 56). std\\parseInt returns null on non-numeric input, which we turn into a clear error so a bad figure fails loudly instead of rendering wrong.",
       "source": "badge.buzz:29"
     },
     {
@@ -6695,7 +6695,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogIndex",
       "kind": "function",
       "label": "renderBlogIndex",
-      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain \u003cul\u003e under renderPage(), so it inherits nav/breadcrumb/footer.",
+      "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under renderPage(), so it inherits nav/breadcrumb/footer.",
       "source": "docs/engine/blog.buzz:167",
       "attrs": {
         "exported": "true"
@@ -6712,7 +6712,7 @@
       "id": "function:docs/engine/blog.buzz:renderBlogPost",
       "kind": "function",
       "label": "renderBlogPost",
-      "doc": "renderBlogPost renders one blog/\u003cfile\u003e.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
+      "doc": "renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
       "source": "docs/engine/blog.buzz:24",
       "attrs": {
         "exported": "true"
@@ -6722,7 +6722,7 @@
       "id": "function:docs/engine/discovery.buzz:llmsIndexBody",
       "kind": "function",
       "label": "llmsIndexBody",
-      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's \u003curl\u003eindex.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
+      "doc": "llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary, then every docs page as \"- [title](base+url): description\", sorted by URL for a byte-stable artifact. base is the link prefix (baseURL, else \"/\"). Links point at each page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit test can pin the output.",
       "source": "docs/engine/discovery.buzz:40"
     },
     {
@@ -6749,7 +6749,7 @@
       "id": "function:docs/engine/feeds.buzz:renderBlogAtom",
       "kind": "function",
       "label": "renderBlogAtom",
-      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per \u003centry\u003e: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
+      "doc": "renderBlogAtom writes gen/public/atom/blog.atom.xml: an Atom 1.0 feed of site.blogPosts, newest first. Per <entry>: title, link (absolute), id (same URL), updated (post date), summary (description), author. Feed-level updated = newest post's date. Gated on site.config.baseURL so it can ship dark until the host is confirmed.",
       "source": "docs/engine/feeds.buzz:16",
       "attrs": {
         "exported": "true"
@@ -6759,7 +6759,7 @@
       "id": "function:docs/engine/feeds.buzz:renderReleasesAtom",
       "kind": "function",
       "label": "renderReleasesAtom",
-      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per \u003centry\u003e: title = version, link = site.config.repoURL/releases/tag/\u003cver\u003e, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
+      "doc": "renderReleasesAtom writes gen/public/atom/releases.atom.xml from parsed releases (newest first as authored). Per <entry>: title = version, link = site.config.repoURL/releases/tag/<ver>, id = same, updated = release date, summary = the section body. Feed-level updated = newest release's date. Gated on site.config.baseURL and on having at least one released version.",
       "source": "docs/engine/feeds.buzz:55",
       "attrs": {
         "exported": "true"
@@ -6789,7 +6789,7 @@
       "id": "function:docs/engine/gates.buzz:buildCommits",
       "kind": "function",
       "label": "buildCommits",
-      "doc": "buildCommits parses one git-log pass: - metaCommits: path -\u003e \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -\u003e up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:\u003csubject\u003e\" after each \"\u003e\u003e\u003e\" header so both fields ride together without a second git spawn.",
+      "doc": "buildCommits parses one git-log pass: - metaCommits: path -> \"full|short|stamp\" of the FIRST (newest) sighting; drives the always-visible \"Last updated\" footer line. - metaHistory: path -> up to HISTORY_MAX \"full|short|stamp|subject\" entries, newest- first; drives the collapsed history panel. The log prints \"SUBJ:<subject>\" after each \">>>\" header so both fields ride together without a second git spawn.",
       "source": "docs/engine/gates.buzz:143",
       "attrs": {
         "exported": "true"
@@ -6848,7 +6848,7 @@
       "id": "function:docs/engine/gates.buzz:pruneStaleOutputs",
       "kind": "function",
       "label": "pruneStaleOutputs",
-      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"\u003cdir\u003e/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
+      "doc": "pruneStaleOutputs deletes gen/ output whose source no longer produces it - a renamed/removed page, a deleted post, a dropped alias, a release out of CHANGELOG.md. gen/ is not wiped before each render, so this keeps it from accumulating orphans: for every \"<dir>/index.html\" not in writtenPaths and not in alwaysKeep, delete the whole directory (sibling index.md and all). Runs before assetIntegrityCheck/orphanCheck so neither trips on a stale page's dangling reference to content removed with it.",
       "source": "docs/engine/gates.buzz:265",
       "attrs": {
         "exported": "true"
@@ -6858,7 +6858,7 @@
       "id": "function:docs/engine/gates.buzz:readURLSet",
       "kind": "function",
       "label": "readURLSet",
-      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -\u003e empty set (the bootstrap case for URL_LOCK).",
+      "doc": "readURLSet reads a newline-delimited URL file into a set, skipping blanks and \"#\" comments. Missing file -> empty set (the bootstrap case for URL_LOCK).",
       "source": "docs/engine/gates.buzz:347",
       "attrs": {
         "exported": "true"
@@ -6898,7 +6898,7 @@
       "id": "function:docs/engine/gates.buzz:writeSiteManifest",
       "kind": "function",
       "label": "writeSiteManifest",
-      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"\u003csha256\u003e  \u003cpath\u003e\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
+      "doc": "writeSiteManifest emits gen/site-manifest.sha256: one \"<sha256>  <path>\\n\" line (standard sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/, repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js (served assets) only after site_render() returns - computing the manifest earlier would omit them. Excludes its own output path (a file cannot hash itself).",
       "source": "docs/engine/gates.buzz:314",
       "attrs": {
         "exported": "true"
@@ -6918,7 +6918,7 @@
       "id": "function:docs/engine/meta.buzz:deriveTitle",
       "kind": "function",
       "label": "deriveTitle",
-      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in \u003ctitle\u003e, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
+      "doc": "deriveTitle reads the title from the first H1, stripping backticks (a heading like `# `fs``) so it reads as plain text in <title>, breadcrumb, pager, and search index. Frontmatter titles bypass this and are used verbatim.",
       "source": "docs/engine/meta.buzz:15",
       "attrs": {
         "exported": "true"
@@ -6928,7 +6928,7 @@
       "id": "function:docs/engine/meta.buzz:insertSinceBadge",
       "kind": "function",
       "label": "insertSinceBadge",
-      "doc": "insertSinceBadge places an \"Added in \u003cversion\u003e\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
+      "doc": "insertSinceBadge places an \"Added in <version>\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
       "source": "docs/engine/meta.buzz:121",
       "attrs": {
         "exported": "true"
@@ -6938,7 +6938,7 @@
       "id": "function:docs/engine/meta.buzz:insertSizeRatio",
       "kind": "function",
       "label": "insertSizeRatio",
-      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `\u003cprogress\u003e`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both colour schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
+      "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `<progress>`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both colour schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
       "source": "docs/engine/meta.buzz:159",
       "attrs": {
         "exported": "true"
@@ -6978,7 +6978,7 @@
       "id": "function:docs/engine/nav.buzz:keepGlossarySections",
       "kind": "function",
       "label": "keepGlossarySections",
-      "doc": "keepGlossarySections keeps only the \u003ch3 id=\"...\"\u003e term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own \u003ch3 id=\"\u003e to the next \u003ch3 id=\"\u003e or \u003ch2\u003e.",
+      "doc": "keepGlossarySections keeps only the <h3 id=\"...\"> term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own <h3 id=\"> to the next <h3 id=\"> or <h2>.",
       "source": "docs/engine/nav.buzz:240"
     },
     {
@@ -7064,7 +7064,7 @@
       "id": "function:docs/engine/nav.buzz:renderTocList",
       "kind": "function",
       "label": "renderTocList",
-      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc \u003caside\u003e, and toc.js adds scroll-spy + the collapse toggle.",
+      "doc": "renderTocList builds the \"On this page\" block from a page's h2/h3 headings (goldmark puts each on its own line with a slug id); h3s nest under their h2. Returns \"\" below three headings - too little for a sidebar. Returns just the title + list; renderPage() wraps it in the .toc <aside>, and toc.js adds scroll-spy + the collapse toggle.",
       "source": "docs/engine/nav.buzz:89",
       "attrs": {
         "exported": "true"
@@ -7074,14 +7074,14 @@
       "id": "function:docs/engine/page.buzz:injectDemoCallout",
       "kind": "function",
       "label": "injectDemoCallout",
-      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first \u003c/p\u003e), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
+      "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
       "source": "docs/engine/page.buzz:494"
     },
     {
       "id": "function:docs/engine/page.buzz:render404",
       "kind": "function",
       "label": "render404",
-      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/\u003cbasePath\u003e/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -\u003e \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
+      "doc": "render404 writes gen/404.html - the themed page GitHub Pages serves for any unmatched path. GH Pages keeps the deep 404 URL in the address bar, so ordinary relative paths would break; this page uses root-absolute paths (/<basePath>/site.css, etc.) - the one deliberate exception to the relative-link scheme. basePath comes from site.config.baseURL (https://eli.gladman.cc/magus/ -> \"/magus/\"), falling back to \"/\" when empty so the page still renders locally from the server root.",
       "source": "docs/engine/page.buzz:34",
       "attrs": {
         "exported": "true"
@@ -7212,7 +7212,7 @@
       "id": "function:docs/engine/route.buzz:climbFromDir",
       "kind": "function",
       "label": "climbFromDir",
-      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -\u003e \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
+      "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -> \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
       "source": "docs/engine/route.buzz:38",
       "attrs": {
         "exported": "true"
@@ -7261,7 +7261,7 @@
       "id": "function:docs/engine/route.buzz:sitePathPrefix",
       "kind": "function",
       "label": "sitePathPrefix",
-      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -\u003e \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
+      "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -> \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
       "source": "docs/engine/route.buzz:46",
       "attrs": {
         "exported": "true"
@@ -7336,7 +7336,7 @@
       "id": "function:docs/lib/conventions.buzz:injectConventionHints",
       "kind": "function",
       "label": "injectConventionHints",
-      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final \u003cp class=\"admonition-title\"\u003e / \u003cfigcaption\u003e markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
+      "doc": "injectConventionHints adds a \"?\" hint into each rendered convention marker: an admonition title and a code-block caption. It runs after the content transforms, so it sees the final <p class=\"admonition-title\"> / <figcaption> markup. The conventions page itself is skipped by the caller (it defines these). A marker whose section is missing from the corpus is left untouched.",
       "source": "docs/lib/conventions.buzz:85",
       "attrs": {
         "exported": "true"
@@ -7346,7 +7346,7 @@
       "id": "function:docs/lib/conventions.buzz:injectFirstPlaceholderHint",
       "kind": "function",
       "label": "injectFirstPlaceholderHint",
-      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline \u003ccode\u003e on the page that holds an angle-bracket placeholder (\u0026lt;...\u0026gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
+      "doc": "injectFirstPlaceholderHint appends a \"?\" hint after the FIRST inline <code> on the page that holds an angle-bracket placeholder (&lt;...&gt;), linking to the placeholders convention. First occurrence only - like the glossary linker - so a page that uses the syntax gets one quiet hint, never one per placeholder. Inline code is told from a fenced block by having no newline, so a multi-line code block is never hinted.",
       "source": "docs/lib/conventions.buzz:100"
     },
     {
@@ -7370,7 +7370,7 @@
       "id": "function:docs/lib/csp.buzz:computeCSP",
       "kind": "function",
       "label": "computeCSP",
-      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin \u003clink rel=prefetch\u003e hover-warm, and the service worker registration all fall back to default-src (via worker-src -\u003e child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
+      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
       "source": "docs/lib/csp.buzz:96",
       "attrs": {
         "exported": "true"
@@ -7380,7 +7380,7 @@
       "id": "function:docs/lib/csp.buzz:cspForRedirectStub",
       "kind": "function",
       "label": "cspForRedirectStub",
-      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline \u003cscript\u003e that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
+      "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline <script> that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
       "source": "docs/lib/csp.buzz:118",
       "attrs": {
         "exported": "true"
@@ -7390,7 +7390,7 @@
       "id": "function:docs/lib/csp.buzz:extractInlineScripts",
       "kind": "function",
       "label": "extractInlineScripts",
-      "doc": "extractInlineScripts pulls the text of every attribute-less `\u003cscript\u003e...\u003c/script\u003e` block out of html, in order. Matches only the literal \"\u003cscript\u003e\" open tag: a `\u003cscript src=...\u003e` is an external load already covered by script-src 'self', not a hash-source candidate.",
+      "doc": "extractInlineScripts pulls the text of every attribute-less `<script>...</script>` block out of html, in order. Matches only the literal \"<script>\" open tag: a `<script src=...>` is an external load already covered by script-src 'self', not a hash-source candidate.",
       "source": "docs/lib/csp.buzz:35",
       "attrs": {
         "exported": "true"
@@ -7410,7 +7410,7 @@
       "id": "function:docs/lib/csp.buzz:scriptHash",
       "kind": "function",
       "label": "scriptHash",
-      "doc": "scriptHash returns a CSP `sha256-\u003cbase64\u003e` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns raw digest bytes, so .hex() renders the lowercase hex this decodes; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
+      "doc": "scriptHash returns a CSP `sha256-<base64>` source for js's exact text (the same bytes a browser hashes against a hash-source script-src). crypto.hash returns raw digest bytes, so .hex() renders the lowercase hex this decodes; CSP hash-sources are base64, so hexDecode back to raw digest bytes before base64-encoding.",
       "source": "docs/lib/csp.buzz:27",
       "attrs": {
         "exported": "true"
@@ -7430,7 +7430,7 @@
       "id": "function:docs/lib/date.buzz:blogDateAttr",
       "kind": "function",
       "label": "blogDateAttr",
-      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in \u003ctime datetime\u003e.",
+      "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in <time datetime>.",
       "source": "docs/lib/date.buzz:30",
       "attrs": {
         "exported": "true"
@@ -7470,7 +7470,7 @@
       "id": "function:docs/lib/dom.buzz:el",
       "kind": "function",
       "label": "el",
-      "doc": "el wraps raw body in \u003ctag attrs\u003e...\u003c/tag\u003e. attrs is \"\" or a run of attr() calls.",
+      "doc": "el wraps raw body in <tag attrs>...</tag>. attrs is \"\" or a run of attr() calls.",
       "source": "docs/lib/dom.buzz:15",
       "attrs": {
         "exported": "true"
@@ -7480,7 +7480,7 @@
       "id": "function:docs/lib/dom.buzz:esc",
       "kind": "function",
       "label": "esc",
-      "doc": "esc escapes text for HTML element content (\u0026 \u003c \u003e).",
+      "doc": "esc escapes text for HTML element content (& < >).",
       "source": "docs/lib/dom.buzz:25",
       "attrs": {
         "exported": "true"
@@ -7490,7 +7490,7 @@
       "id": "function:docs/lib/dom.buzz:voidEl",
       "kind": "function",
       "label": "voidEl",
-      "doc": "voidEl is an unclosed element: \u003ctag attrs\u003e (meta, link, img).",
+      "doc": "voidEl is an unclosed element: <tag attrs> (meta, link, img).",
       "source": "docs/lib/dom.buzz:20",
       "attrs": {
         "exported": "true"
@@ -7500,7 +7500,7 @@
       "id": "function:docs/lib/feed.buzz:atomDate",
       "kind": "function",
       "label": "atomDate",
-      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -\u003e T00:00:00Z).",
+      "doc": "atomDate normalizes a frontmatter date to RFC3339 UTC (bare date -> T00:00:00Z).",
       "source": "docs/lib/feed.buzz:29",
       "attrs": {
         "exported": "true"
@@ -7510,7 +7510,7 @@
       "id": "function:docs/lib/feed.buzz:escapeXml",
       "kind": "function",
       "label": "escapeXml",
-      "doc": "escapeXml is escapeAttr's XML form (five entities, \u0026 last to avoid double-encoding).",
+      "doc": "escapeXml is escapeAttr's XML form (five entities, & last to avoid double-encoding).",
       "source": "docs/lib/feed.buzz:8",
       "attrs": {
         "exported": "true"
@@ -7520,7 +7520,7 @@
       "id": "function:docs/lib/feed.buzz:xmlAttribute",
       "kind": "function",
       "label": "xmlAttribute",
-      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (\u003cfeed\u003e, \u003curlset\u003e, \u003centry\u003e, \u003curl\u003e) stay written inline.",
+      "doc": "Minimal XML leaves; every body and value funnels through escapeXml. Container tags with their own namespaces (<feed>, <urlset>, <entry>, <url>) stay written inline.",
       "source": "docs/lib/feed.buzz:15",
       "attrs": {
         "exported": "true"
@@ -7564,7 +7564,7 @@
       "id": "function:docs/lib/glossary.buzz:applyLinks",
       "kind": "function",
       "label": "applyLinks",
-      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... \u003c/a\u003e, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link.",
+      "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... </a>, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link.",
       "source": "docs/lib/glossary.buzz:188"
     },
     {
@@ -7585,7 +7585,7 @@
       "id": "function:docs/lib/glossary.buzz:glossarySlug",
       "kind": "function",
       "label": "glossarySlug",
-      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -\u003e \"output-reference\"; \"MAGUS.md\" -\u003e \"magusmd\"; \"write_file\" -\u003e \"write-file\".",
+      "doc": "glossarySlug mirrors goldmark's heading-id slug: lowercase, spaces AND underscores to hyphens, drop any char that is not a-z, 0-9, or hyphen. \"Output reference\" -> \"output-reference\"; \"MAGUS.md\" -> \"magusmd\"; \"write_file\" -> \"write-file\".",
       "source": "docs/lib/glossary.buzz:31",
       "attrs": {
         "exported": "true"
@@ -7595,7 +7595,7 @@
       "id": "function:docs/lib/glossary.buzz:injectBacklinks",
       "kind": "function",
       "label": "injectBacklinks",
-      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next \u003ch3\u003e/\u003ch2\u003e heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
+      "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next <h3>/<h2> heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
       "source": "docs/lib/glossary.buzz:358",
       "attrs": {
         "exported": "true"
@@ -7605,7 +7605,7 @@
       "id": "function:docs/lib/glossary.buzz:isSkipContainer",
       "kind": "function",
       "label": "isSkipContainer",
-      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline \u003ccode\u003e is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
+      "doc": "isSkipContainer is true for tags whose text content must never be auto-linked: pre (fenced code always), a (no nested links), and headings. Inline <code> is skipped only in prose mode (glossary terms) - code entities (MGSxxxx codes, commands, mod\\method) DELIBERATELY link inside inline code, which is where those references appear.",
       "source": "docs/lib/glossary.buzz:112"
     },
     {
@@ -7618,7 +7618,7 @@
       "id": "function:docs/lib/glossary.buzz:linkCodeEntities",
       "kind": "function",
       "label": "linkCodeEntities",
-      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced \u003cpre\u003e block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
+      "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced <pre> block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
       "source": "docs/lib/glossary.buzz:285",
       "attrs": {
         "exported": "true"
@@ -7628,7 +7628,7 @@
       "id": "function:docs/lib/glossary.buzz:linkGlossaryTerms",
       "kind": "function",
       "label": "linkGlossaryTerms",
-      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"\u003c!-- magus-noglossary --\u003e\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
+      "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"<!-- magus-noglossary -->\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
       "source": "docs/lib/glossary.buzz:222",
       "attrs": {
         "exported": "true"
@@ -7638,14 +7638,14 @@
       "id": "function:docs/lib/glossary.buzz:lowerByte",
       "kind": "function",
       "label": "lowerByte",
-      "doc": "lowerByte lowercases an ASCII byte (A-Z -\u003e a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
+      "doc": "lowerByte lowercases an ASCII byte (A-Z -> a-z), leaving others untouched. Used to compare bytes case-insensitively WITHOUT allocating a lowercased substring per position - the hot path here runs over every character of every page for every term, so allocation-free byte comparison is what keeps a full-site render fast.",
       "source": "docs/lib/glossary.buzz:55"
     },
     {
       "id": "function:docs/lib/glossary.buzz:maskLinkable",
       "kind": "function",
       "label": "maskLinkable",
-      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (\u003c .. \u003e), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
+      "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (< .. >), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
       "source": "docs/lib/glossary.buzz:141"
     },
     {
@@ -7679,7 +7679,7 @@
       "id": "function:docs/lib/glossary.buzz:scanPastByte",
       "kind": "function",
       "label": "scanPastByte",
-      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(\u003cchar\u003e) + 1.",
+      "doc": "scanPastByte returns the index just past the next `target` byte at/after `from`, or the end of html. An allocation-free replacement for html.sub(from).indexOf(<char>) + 1.",
       "source": "docs/lib/glossary.buzz:62"
     },
     {
@@ -7710,7 +7710,7 @@
       "id": "function:docs/lib/glossary.buzz:tagNameLower",
       "kind": "function",
       "label": "tagNameLower",
-      "doc": "tagNameLower reads the tag name at a '\u003c' (skipping a leading '/'), lowercased.",
+      "doc": "tagNameLower reads the tag name at a '<' (skipping a leading '/'), lowercased.",
       "source": "docs/lib/glossary.buzz:92"
     },
     {
@@ -7724,7 +7724,7 @@
       "id": "function:docs/lib/html.buzz:aliasStub",
       "kind": "function",
       "label": "aliasStub",
-      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain \u003ca\u003e, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
+      "doc": "aliasStub is the redirect page written at each alias: meta-refresh + canonical + scripted replace + a plain <a>, so it works with or without JavaScript. csp is the caller-computed policy (cspForRedirectStub, hashing redirectScript(rel) - the page's only content, so default-src 'none' plus that one script hash suffices).",
       "source": "docs/lib/html.buzz:255",
       "attrs": {
         "exported": "true"
@@ -7764,7 +7764,7 @@
       "id": "function:docs/lib/html.buzz:lazyImages",
       "kind": "function",
       "label": "lazyImages",
-      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every \u003cimg\u003e without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
+      "doc": "lazyImages adds loading=\"lazy\" decoding=\"async\" to every <img> without a loading or fetchpriority attribute (author markup wins, so the hero stays eager).",
       "source": "docs/lib/html.buzz:131",
       "attrs": {
         "exported": "true"
@@ -7834,7 +7834,7 @@
       "id": "function:docs/lib/html.buzz:stripMdFromLinkText",
       "kind": "function",
       "label": "stripMdFromLinkText",
-      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between \u003e and \u003c/a\u003e). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before \u003c/a\u003e is touched, so bare path-named links are hit and other link text left alone.",
+      "doc": "stripMdFromLinkText drops a trailing \".md\" from LINK TEXT (between > and </a>). rewriteLinks cleans the href, but a path-named link (e.g. [workspace.md](workspace.md), common in the glossary) still shows a stale \".md\". Only \".md\" immediately before </a> is touched, so bare path-named links are hit and other link text left alone.",
       "source": "docs/lib/html.buzz:349",
       "attrs": {
         "exported": "true"
@@ -7844,7 +7844,7 @@
       "id": "function:docs/lib/html.buzz:tagAdmonition",
       "kind": "function",
       "label": "tagAdmonition",
-      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"\u003cblockquote\u003e\\n\u003cp\u003e[!TYPE]\\n...\") into \u003cdiv class=\"admonition admonition-\u003ctype\u003e\"\u003e callouts. Unknown types pass through.",
+      "doc": "tagAdmonition turns GitHub-alert blockquotes (\"<blockquote>\\n<p>[!TYPE]\\n...\") into <div class=\"admonition admonition-<type>\"> callouts. Unknown types pass through.",
       "source": "docs/lib/html.buzz:308",
       "attrs": {
         "exported": "true"
@@ -7854,7 +7854,7 @@
       "id": "function:docs/lib/html.buzz:tagCodeTitle",
       "kind": "function",
       "label": "tagCodeTitle",
-      "doc": "tagCodeTitle wraps the \u003cpre\u003e after a \"\u003c!-- magus-code-title: NAME --\u003e\" marker in a \u003cfigure class=\"code-block-titled\"\u003e with a \u003cfigcaption\u003e; drops the marker.",
+      "doc": "tagCodeTitle wraps the <pre> after a \"<!-- magus-code-title: NAME -->\" marker in a <figure class=\"code-block-titled\"> with a <figcaption>; drops the marker.",
       "source": "docs/lib/html.buzz:270",
       "attrs": {
         "exported": "true"
@@ -7864,7 +7864,7 @@
       "id": "function:docs/lib/html.buzz:tagMermaid",
       "kind": "function",
       "label": "tagMermaid",
-      "doc": "tagMermaid wraps each mermaid fence in a \u003cdiv class=\"mermaid-src\"\u003e carrying a no-JS caption (mermaid-init.js renders it to SVG when JS is on).",
+      "doc": "tagMermaid wraps each mermaid fence in a <div class=\"mermaid-src\"> carrying a no-JS caption (mermaid-init.js renders it to SVG when JS is on).",
       "source": "docs/lib/html.buzz:153",
       "attrs": {
         "exported": "true"
@@ -7874,7 +7874,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnable",
       "kind": "function",
       "label": "tagRunnable",
-      "doc": "tagRunnable swaps the \u003cpre\u003e after a \"\u003c!-- magus-run --\u003e\" / \"\u003c!-- magus-run-recorder --\u003e\" marker with a data-magus-run \u003cpre\u003e so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
+      "doc": "tagRunnable swaps the <pre> after a \"<!-- magus-run -->\" / \"<!-- magus-run-recorder -->\" marker with a data-magus-run <pre> so run-example.js can find opt-in blocks; drops the marker. Every magus-authored doc marker shares the \"magus-\" prefix (and mirrors to a \"data-magus-\" attribute) so generated hooks are obviously ours.",
       "source": "docs/lib/html.buzz:74",
       "attrs": {
         "exported": "true"
@@ -7884,7 +7884,7 @@
       "id": "function:docs/lib/html.buzz:tagRunnableMarker",
       "kind": "function",
       "label": "tagRunnableMarker",
-      "doc": "tagRunnableMarker replaces the \u003cpre\u003e following each marker with openTag; a marker not immediately before a fence is just dropped.",
+      "doc": "tagRunnableMarker replaces the <pre> following each marker with openTag; a marker not immediately before a fence is just dropped.",
       "source": "docs/lib/html.buzz:81",
       "attrs": {
         "exported": "true"
@@ -7894,7 +7894,7 @@
       "id": "function:docs/lib/html.buzz:wrapTables",
       "kind": "function",
       "label": "wrapTables",
-      "doc": "wrapTables wraps each \u003ctable\u003e in a \u003cfigure class=\"table-scroll\"\u003e so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare \u003ctable\u003e that Pico renders full-bleed with no overflow handling.",
+      "doc": "wrapTables wraps each <table> in a <figure class=\"table-scroll\"> so a wide table scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare <table> that Pico renders full-bleed with no overflow handling.",
       "source": "docs/lib/html.buzz:176",
       "attrs": {
         "exported": "true"
@@ -7924,7 +7924,7 @@
       "id": "function:docs/lib/text.buzz:decodeEntities",
       "kind": "function",
       "label": "decodeEntities",
-      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. \u0026amp; decodes LAST so \"\u0026amp;lt;\" is not double-decoded into \"\u003c\".",
+      "doc": "decodeEntities turns HTML entities back into characters for a plain-text description. &amp; decodes LAST so \"&amp;lt;\" is not double-decoded into \"<\".",
       "source": "docs/lib/text.buzz:132",
       "attrs": {
         "exported": "true"
@@ -7944,7 +7944,7 @@
       "id": "function:docs/lib/text.buzz:firstPathSegment",
       "kind": "function",
       "label": "firstPathSegment",
-      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -\u003e \"spells\").",
+      "doc": "firstPathSegment returns the leading segment of a clean URL (\"spells/go/\" -> \"spells\").",
       "source": "docs/lib/text.buzz:43",
       "attrs": {
         "exported": "true"
@@ -7994,7 +7994,7 @@
       "id": "function:docs/lib/text.buzz:strLess",
       "kind": "function",
       "label": "strLess",
-      "doc": "strLess is lexicographic byte ordering; buzz has no `\u003c` on str, so the sibling pager spells it out to sort filenames deterministically.",
+      "doc": "strLess is lexicographic byte ordering; buzz has no `<` on str, so the sibling pager spells it out to sort filenames deterministically.",
       "source": "docs/lib/text.buzz:90",
       "attrs": {
         "exported": "true"
@@ -8113,7 +8113,7 @@
       "id": "function:docs/magusfile.buzz:build_hljs",
       "kind": "function",
       "label": "build_hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
       "source": "docs/magusfile.buzz:290",
       "attrs": {
         "exported": "true"
@@ -8123,7 +8123,7 @@
       "id": "function:docs/magusfile.buzz:build_mermaid",
       "kind": "function",
       "label": "build_mermaid",
-      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
+      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
       "source": "docs/magusfile.buzz:277",
       "attrs": {
         "exported": "true"
@@ -8133,7 +8133,7 @@
       "id": "function:docs/magusfile.buzz:build_playground",
       "kind": "function",
       "label": "build_playground",
-      "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo \u003e= 0.40; the glue must come from the same TinyGo tha",
+      "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo tha",
       "source": "docs/magusfile.buzz:257",
       "attrs": {
         "exported": "true"
@@ -8312,7 +8312,7 @@
       "id": "function:docs/site/development.buzz:renderDevelopment",
       "kind": "function",
       "label": "renderDevelopment",
-      "doc": "renderDevelopment writes the /development/ section: one themed page per project rendering its target catalog and run-order graph, plus a /development/ landing linking to them and showing how the projects depend on each other. Retired /development/projects/ URLs redirect to the flattened locations.  The project set comes from magus itself (magus.ls, annotated `\u003e target\\Projects` for compile-checked field access), NOT from scanning the filesystem for MAGUS.md files. The scan it replaced looked only at site.ro",
+      "doc": "renderDevelopment writes the /development/ section: one themed page per project rendering its target catalog and run-order graph, plus a /development/ landing linking to them and showing how the projects depend on each other. Retired /development/projects/ URLs redirect to the flattened locations.  The project set comes from magus itself (magus.ls, annotated `> target\\Projects` for compile-checked field access), NOT from scanning the filesystem for MAGUS.md files. The scan it replaced looked only at site.ro",
       "source": "docs/site/development.buzz:224",
       "attrs": {
         "exported": "true"
@@ -8322,7 +8322,7 @@
       "id": "function:docs/site/development.buzz:renderDevelopmentPage",
       "kind": "function",
       "label": "renderDevelopmentPage",
-      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"\u003cdir\u003e/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
+      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
       "source": "docs/site/development.buzz:40"
     },
     {
@@ -8336,7 +8336,7 @@
       "id": "function:docs/site/development.buzz:slugifyProject",
       "kind": "function",
       "label": "slugifyProject",
-      "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -\u003e \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid node id with slashes still in it.",
+      "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -> \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid node id with slashes still in it.",
       "source": "docs/site/development.buzz:80"
     },
     {
@@ -8367,7 +8367,7 @@
       "id": "function:docs/site/public.buzz:renderPublic",
       "kind": "function",
       "label": "renderPublic",
-      "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/\u003cver\u003e/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
+      "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/<ver>/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
       "source": "docs/site/public.buzz:178",
       "attrs": {
         "exported": "true"
@@ -8387,7 +8387,7 @@
       "id": "function:docs/site/release.buzz:semverSortKey",
       "kind": "function",
       "label": "semverSortKey",
-      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -\u003e \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
+      "doc": "semverSortKey returns a zero-padded sort key: \"v0.10.0.yaml\" -> \"0000.0010.0000\", so lexicographic order matches numeric semver. Unknown formats fall through to the original name (safe: sort-only).",
       "source": "docs/site/release.buzz:12",
       "attrs": {
         "exported": "true"
@@ -8417,7 +8417,7 @@
       "id": "function:docs/site/sections.buzz:parentPrefixes",
       "kind": "function",
       "label": "parentPrefixes",
-      "doc": "parentPrefixes returns every ancestor directory URL of a page URL, each with a trailing slash: \"a/b/c/\" -\u003e [\"a/\", \"a/b/\"]. The page's own URL is excluded; a page is not its own parent.",
+      "doc": "parentPrefixes returns every ancestor directory URL of a page URL, each with a trailing slash: \"a/b/c/\" -> [\"a/\", \"a/b/\"]. The page's own URL is excluded; a page is not its own parent.",
       "source": "docs/site/sections.buzz:39"
     },
     {
@@ -8434,7 +8434,7 @@
       "id": "function:docs/site/sections.buzz:sectionTitle",
       "kind": "function",
       "label": "sectionTitle",
-      "doc": "sectionTitle turns a URL segment into a heading: \"targets\" -\u003e \"Targets\", \"ci-providers\" -\u003e \"Ci providers\". Deliberately dumb - a section that wants a better name should get a real authored page, which this then steps aside for.",
+      "doc": "sectionTitle turns a URL segment into a heading: \"targets\" -> \"Targets\", \"ci-providers\" -> \"Ci providers\". Deliberately dumb - a section that wants a better name should get a real authored page, which this then steps aside for.",
       "source": "docs/site/sections.buzz:30"
     },
     {
@@ -8465,7 +8465,7 @@
       "id": "function:docs/site/tour.buzz:renderPlayground",
       "kind": "function",
       "label": "renderPlayground",
-      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its \u003c!-- site-nav --\u003e placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
+      "doc": "renderPlayground writes gen/playground/index.html from the hand-authored playground.html, injecting the shared nav at its <!-- site-nav --> placeholder. The playground is standalone (custom head, wasm, own scripts), so it skips renderPage(); templating just the nav keeps it in lockstep with every other page. Its bottom chrome is the console status bar (in playground.html), not the docs footer.",
       "source": "docs/site/tour.buzz:50",
       "attrs": {
         "exported": "true"
@@ -8574,7 +8574,7 @@
       "id": "function:docs/tour/04-buzz.buzz:fact",
       "kind": "function",
       "label": "fact",
-      "doc": "Recursion again, building a product. `eval fact(10)` -\u003e 3628800.",
+      "doc": "Recursion again, building a product. `eval fact(10)` -> 3628800.",
       "source": "docs/tour/04-buzz.buzz:16"
     },
     {
@@ -8588,7 +8588,7 @@
       "id": "function:docs/tour/04-buzz.buzz:reduce",
       "kind": "function",
       "label": "reduce",
-      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -\u003e 20.",
+      "doc": "Higher-order: a function that takes a function, invoked with an inline closure. `eval sum([2, 4, 6, 8])` -> 20.",
       "source": "docs/tour/04-buzz.buzz:23"
     },
     {
@@ -8862,7 +8862,7 @@
       "id": "function:docs/tour/12-magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -\u003e generate -\u003e preflight spine and each run once. Try `run ci` to see the plan.",
+      "doc": "The conventional anchor `magus affected ci` keys off. It declares no work of its own; it fans out to lint, build, and test, which share the format -> generate -> preflight spine and each run once. Try `run ci` to see the plan.",
       "source": "docs/tour/12-magusfile.buzz:148",
       "attrs": {
         "exported": "true"
@@ -9690,7 +9690,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/config.buzz:parseRule",
       "kind": "function",
       "label": "parseRule",
-      "doc": "parseRule parses `app=X title=\"Some Name\" \u003ccommand\u003e`: any mix of the two criteria (bare or double-quoted values), then the command. Null when a criterion or the command is missing.",
+      "doc": "parseRule parses `app=X title=\"Some Name\" <command>`: any mix of the two criteria (bare or double-quoted values), then the command. Null when a criterion or the command is missing.",
       "source": "libs/gopherbuzz/examples/bubblegum/config.buzz:487",
       "attrs": {
         "exported": "true"
@@ -10439,7 +10439,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:consoleLines",
       "kind": "function",
       "label": "consoleLines",
-      "doc": "consoleLines is Retool's \"explore what's available\": every command the keymap, rules, config.buzz, and the buzz\u003e prompt can use — served by the live WM itself, so it can't go stale the way external docs do.",
+      "doc": "consoleLines is Retool's \"explore what's available\": every command the keymap, rules, config.buzz, and the buzz> prompt can use — served by the live WM itself, so it can't go stale the way external docs do.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:57",
       "attrs": {
         "exported": "true"
@@ -10449,7 +10449,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:inspectLines",
       "kind": "function",
       "label": "inspectLines",
-      "doc": "inspectLines is what the inspector overlay renders: the live objects — screens, trees (tagged with app names), the registry, the effective config. Everything here is also reachable from eval; the overlay is the read-only window, the buzz\u003e prompt is the write end.",
+      "doc": "inspectLines is what the inspector overlay renders: the live objects — screens, trees (tagged with app names), the registry, the effective config. Everything here is also reachable from eval; the overlay is the read-only window, the buzz> prompt is the write end.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/inspect.buzz:22",
       "attrs": {
         "exported": "true"
@@ -10807,7 +10807,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/rules.buzz:onWindowRule",
       "kind": "function",
       "label": "onWindowRule",
-      "doc": "onWindowRule registers a window hook written in Buzz -- the programmable half of window rules. rules.buzz (loaded into this very session, so this function is in its scope) calls it with a closure:  onWindowRule(fun (app: str, title: str, id: int) \u003e [any] { if (app == \"Music\") { return [floating()]; } return []; });  Return a list of typed command values (see helpers above); return [] for no action. Hooks accumulate in registration order, so `layout export`'s generated rules and hand-written ones coexist (ha",
+      "doc": "onWindowRule registers a window hook written in Buzz -- the programmable half of window rules. rules.buzz (loaded into this very session, so this function is in its scope) calls it with a closure:  onWindowRule(fun (app: str, title: str, id: int) > [any] { if (app == \"Music\") { return [floating()]; } return []; });  Return a list of typed command values (see helpers above); return [] for no action. Hooks accumulate in registration order, so `layout export`'s generated rules and hand-written ones coexist (ha",
       "source": "libs/gopherbuzz/examples/bubblegum/core/rules.buzz:67",
       "attrs": {
         "exported": "true"
@@ -11001,7 +11001,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/scan.buzz:started",
       "kind": "function",
       "label": "started",
-      "doc": "started reports whether the WM has finished its initial adopt. Exposed to rules hooks so a rule can bin-pack only at startup and defer interactive arrivals to the prompt, e.g.  if (ws \u003e 0 and !started()) { return \"move workspace {ws}\"; }",
+      "doc": "started reports whether the WM has finished its initial adopt. Exposed to rules hooks so a rule can bin-pack only at startup and defer interactive arrivals to the prompt, e.g.  if (ws > 0 and !started()) { return \"move workspace {ws}\"; }",
       "source": "libs/gopherbuzz/examples/bubblegum/core/scan.buzz:25",
       "attrs": {
         "exported": "true"
@@ -11144,7 +11144,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/session.buzz:maybeSaveSession",
       "kind": "function",
       "label": "maybeSaveSession",
-      "doc": "maybeSaveSession rewrites the session file only when the (window -\u003e workspace) mapping actually changed - the signature is plain struct reads, no AX, so it is cheap to call every reconcile. Driven from tick(), so the file survives a crash, not just a clean quit.",
+      "doc": "maybeSaveSession rewrites the session file only when the (window -> workspace) mapping actually changed - the signature is plain struct reads, no AX, so it is cheap to call every reconcile. Driven from tick(), so the file survives a crash, not just a clean quit.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/session.buzz:55",
       "attrs": {
         "exported": "true"
@@ -11174,7 +11174,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/session.buzz:saveSession",
       "kind": "function",
       "label": "saveSession",
-      "doc": "saveSession writes one \"\u003cws\u003e\\t\u003capp\u003e\" line per tiled window. Floating and scratchpad windows are skipped - they are ephemeral, not part of the layout.",
+      "doc": "saveSession writes one \"<ws>\\t<app>\" line per tiled window. Floating and scratchpad windows are skipped - they are ephemeral, not part of the layout.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/session.buzz:33",
       "attrs": {
         "exported": "true"
@@ -11651,7 +11651,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:gridCells",
       "kind": "function",
       "label": "gridCells",
-      "doc": "gridCells lays n cells out in the smallest near-square grid that fits the rect: cols is the smallest c with c*c \u003e= n, rows is ceil(n/cols). Pure geometry, no AX, so it is unit-tested directly. Returns one [x, y, w, h] per cell in row-major order.",
+      "doc": "gridCells lays n cells out in the smallest near-square grid that fits the rect: cols is the smallest c with c*c >= n, rows is ceil(n/cols). Pure geometry, no AX, so it is unit-tested directly. Returns one [x, y, w, h] per cell in row-major order.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:32",
       "attrs": {
         "exported": "true"
@@ -11661,7 +11661,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:layoutBackLayer",
       "kind": "function",
       "label": "layoutBackLayer",
-      "doc": "layoutBackLayer positions every inactive-workspace tiled window into the background grid on its own screen. Idempotent: a window keeps its cell across calls (same membership -\u003e same order -\u003e same frame), so re-running it on every switch and reconcile tick doesn't visibly move a settled window. Floating windows are left to parkLeaving (it minimizes them, preserving their hand- placed frame); user-minimized windows stay in the Dock.",
+      "doc": "layoutBackLayer positions every inactive-workspace tiled window into the background grid on its own screen. Idempotent: a window keeps its cell across calls (same membership -> same order -> same frame), so re-running it on every switch and reconcile tick doesn't visibly move a settled window. Floating windows are left to parkLeaving (it minimizes them, preserving their hand- placed frame); user-minimized windows stay in the Dock.",
       "source": "libs/gopherbuzz/examples/bubblegum/core/zlayer.buzz:60",
       "attrs": {
         "exported": "true"
@@ -11968,7 +11968,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/launcher.buzz:strLess",
       "kind": "function",
       "label": "strLess",
-      "doc": "strLess is lexicographic string ordering by code unit. Upstream buzz has no `\u003c` operator on str, so the alphabetical tie-break is spelled out here; both runtimes provide str.byte.",
+      "doc": "strLess is lexicographic string ordering by code unit. Upstream buzz has no `<` operator on str, so the alphabetical tie-break is spelled out here; both runtimes provide str.byte.",
       "source": "libs/gopherbuzz/examples/bubblegum/launcher.buzz:114"
     },
     {
@@ -13028,7 +13028,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/platform/macos/frameworks.buzz:dataSymAddr",
       "kind": "function",
       "label": "dataSymAddr",
-      "doc": "dataSymAddr returns a data symbol's own address (C's `\u0026name`) rather than the pointer it stores — for struct-valued globals (the CFDictionary callbacks) whose address, not contents, is what the C API wants.",
+      "doc": "dataSymAddr returns a data symbol's own address (C's `&name`) rather than the pointer it stores — for struct-valued globals (the CFDictionary callbacks) whose address, not contents, is what the C API wants.",
       "source": "libs/gopherbuzz/examples/bubblegum/platform/macos/frameworks.buzz:80"
     },
     {
@@ -13199,7 +13199,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/platform/macos/permissions.buzz:openAccessibilitySettings",
       "kind": "function",
       "label": "openAccessibilitySettings",
-      "doc": "openAccessibilitySettings deep-links System Settings to Privacy \u0026 Security → Accessibility — the exact pane with our toggle — via the public URL scheme.",
+      "doc": "openAccessibilitySettings deep-links System Settings to Privacy & Security → Accessibility — the exact pane with our toggle — via the public URL scheme.",
       "source": "libs/gopherbuzz/examples/bubblegum/platform/macos/permissions.buzz:65",
       "attrs": {
         "exported": "true"
@@ -13890,7 +13890,7 @@
       "id": "function:libs/gopherbuzz/examples/bubblegum/traymenu.buzz:menuHeight",
       "kind": "function",
       "label": "menuHeight",
-      "doc": "menuHeight is the panel height for n rows — the WM needs it to place the panel (it drops down from the tray icon) and to size the click target. With items present (n \u003e= 2) it reserves headerGap below the header for the divider + space.",
+      "doc": "menuHeight is the panel height for n rows — the WM needs it to place the panel (it drops down from the tray icon) and to size the click target. With items present (n >= 2) it reserves headerGap below the header for the divider + space.",
       "source": "libs/gopherbuzz/examples/bubblegum/traymenu.buzz:50",
       "attrs": {
         "exported": "true"
@@ -14092,7 +14092,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:upstream_pinned_sha",
       "kind": "function",
       "label": "upstream_pinned_sha",
-      "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -\u003e \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
+      "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -> \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
       "source": "libs/gopherbuzz/magusfile.buzz:111"
     },
     {
@@ -14411,8 +14411,8 @@
       "id": "function:magusfile.buzz:bindings_generate",
       "kind": "function",
       "label": "bindings_generate",
-      "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:185",
+      "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
+      "source": "magusfile.buzz:184",
       "attrs": {
         "exported": "true"
       }
@@ -14422,7 +14422,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:467",
+      "source": "magusfile.buzz:465",
       "attrs": {
         "exported": "true"
       }
@@ -14431,29 +14431,29 @@
       "id": "function:magusfile.buzz:build_date",
       "kind": "function",
       "label": "build_date",
-      "doc": "Commit record date (RFC3339) for reproducible builds; empty =\u003e \"unknown\".",
+      "doc": "Commit record date (RFC3339) for reproducible builds; empty => \"unknown\".",
       "source": "magusfile.buzz:81"
     },
     {
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line \u003casset\u003e.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 \u003e dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
-      "source": "magusfile.buzz:322"
+      "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix.",
+      "source": "magusfile.buzz:321"
     },
     {
       "id": "function:magusfile.buzz:build_variant",
       "kind": "function",
       "label": "build_variant",
-      "doc": "Builds one image variant; publish =\u003e multi-arch --push + cosign-sign, else single-arch --load.",
-      "source": "magusfile.buzz:111"
+      "doc": "Builds one image variant; publish => multi-arch --push + cosign-sign, else single-arch --load.",
+      "source": "magusfile.buzz:110"
     },
     {
       "id": "function:magusfile.buzz:buzz_check",
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:454",
+      "source": "magusfile.buzz:452",
       "attrs": {
         "exported": "true"
       }
@@ -14463,7 +14463,7 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:459",
+      "source": "magusfile.buzz:457",
       "attrs": {
         "exported": "true"
       }
@@ -14473,7 +14473,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:499",
+      "source": "magusfile.buzz:497",
       "attrs": {
         "exported": "true"
       }
@@ -14483,7 +14483,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:535",
+      "source": "magusfile.buzz:533",
       "attrs": {
         "exported": "true"
       }
@@ -14499,7 +14499,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:518",
+      "source": "magusfile.buzz:516",
       "attrs": {
         "exported": "true"
       }
@@ -14509,7 +14509,7 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:235",
+      "source": "magusfile.buzz:234",
       "attrs": {
         "exported": "true"
       }
@@ -14519,7 +14519,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:496",
+      "source": "magusfile.buzz:494",
       "attrs": {
         "exported": "true"
       }
@@ -14529,7 +14529,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = regeneration dirtied a previously-clean tree, via vcs.isDirty (not a raw git/porcelain shell-out), so uncommitted-but-current generated files pass; only a regeneration that changes a clean file fails (a generator input changed but its output was not re-run and committed).",
-      "source": "magusfile.buzz:305",
+      "source": "magusfile.buzz:304",
       "attrs": {
         "exported": "true"
       }
@@ -14549,7 +14549,7 @@
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:261",
+      "source": "magusfile.buzz:260",
       "attrs": {
         "exported": "true"
       }
@@ -14559,7 +14559,7 @@
       "kind": "function",
       "label": "image_build",
       "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally. Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default, or the static/no-libc variant (Dockerfile.static) under the `static` charm — the same default-cgo/opt-in-static convention as release_build() in this file.",
-      "source": "magusfile.buzz:137",
+      "source": "magusfile.buzz:136",
       "attrs": {
         "exported": "true"
       }
@@ -14569,7 +14569,7 @@
       "kind": "function",
       "label": "image_scan",
       "doc": "Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.",
-      "source": "magusfile.buzz:151",
+      "source": "magusfile.buzz:150",
       "attrs": {
         "exported": "true"
       }
@@ -14578,7 +14578,7 @@
       "id": "function:magusfile.buzz:image_tag",
       "kind": "function",
       "label": "image_tag",
-      "source": "magusfile.buzz:108"
+      "source": "magusfile.buzz:107"
     },
     {
       "id": "function:magusfile.buzz:ld_flags",
@@ -14591,7 +14591,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:482",
+      "source": "magusfile.buzz:480",
       "attrs": {
         "exported": "true"
       }
@@ -14601,7 +14601,7 @@
       "kind": "function",
       "label": "man_generate",
       "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/manpage registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
-      "source": "magusfile.buzz:177",
+      "source": "magusfile.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -14611,7 +14611,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:248",
+      "source": "magusfile.buzz:247",
       "attrs": {
         "exported": "true"
       }
@@ -14621,7 +14621,7 @@
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:205",
+      "source": "magusfile.buzz:204",
       "attrs": {
         "exported": "true"
       }
@@ -14631,7 +14631,7 @@
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. The final CI step; never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose; the host that sets it (the workflow) is what knows it's GitHub Actions and points it at $GITHUB_STEP_SUMMARY. The `gha` charm also opts the render into the safe Mermaid subset so older or partial renderers handle it.",
-      "source": "magusfile.buzz:280",
+      "source": "magusfile.buzz:279",
       "attrs": {
         "exported": "true"
       }
@@ -14641,7 +14641,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:464",
+      "source": "magusfile.buzz:462",
       "attrs": {
         "exported": "true"
       }
@@ -14651,14 +14651,14 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:593"
+      "source": "magusfile.buzz:591"
     },
     {
       "id": "function:magusfile.buzz:release_build",
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is dynamically-linked (cgo): internal/codec's zstd/xz fast path needs a real C toolchain + libzstd/liblzma for whatever (goos, goarch) you ask for, so cross-compiling this variant only works if you already have that toolchain around — CD never does, sticking to each native job's own platform. The `static` charm (`magus run release-build:static`) switches to a CGO_ENABLED=0 build instead: pure Go cross-compiles trivially, so unlike the cgo default it's ch",
-      "source": "magusfile.buzz:391",
+      "source": "magusfile.buzz:389",
       "attrs": {
         "exported": "true"
       }
@@ -14668,7 +14668,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:408",
+      "source": "magusfile.buzz:406",
       "attrs": {
         "exported": "true"
       }
@@ -14678,21 +14678,21 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:367"
+      "source": "magusfile.buzz:365"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:607"
+      "source": "magusfile.buzz:605"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:628",
+      "source": "magusfile.buzz:626",
       "attrs": {
         "exported": "true"
       }
@@ -14702,7 +14702,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is deliberately NOT declared.",
-      "source": "magusfile.buzz:222",
+      "source": "magusfile.buzz:221",
       "attrs": {
         "exported": "true"
       }
@@ -14712,7 +14712,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of them.",
-      "source": "magusfile.buzz:197",
+      "source": "magusfile.buzz:196",
       "attrs": {
         "exported": "true"
       }
@@ -14722,7 +14722,7 @@
       "kind": "function",
       "label": "test",
       "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:438",
+      "source": "magusfile.buzz:436",
       "attrs": {
         "exported": "true"
       }
@@ -14732,7 +14732,7 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:429"
+      "source": "magusfile.buzz:427"
     },
     {
       "id": "function:magusfile.buzz:version",
@@ -14745,7 +14745,7 @@
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:415",
+      "source": "magusfile.buzz:413",
       "attrs": {
         "exported": "true"
       }
@@ -14801,7 +14801,7 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:cache_key",
       "kind": "function",
       "label": "cache_key",
-      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-\u003chash\u003e-\u003cversion\u003e\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
+      "doc": "cache_key derives the object key from the spec hash (already unique per project; hex, so URL-safe — no extra encoding needed in the canonical URI). NOTE: cache-key format differs from spells/github/actions/spell.buzz on purpose: S3 folds CACHE_VERSION into the key string (\"magus-<hash>-<version>\"), while GHA keeps the version in a separate `version` request field. Do NOT change the emitted string here — it would invalidate every existing S3 artifact. Track the inconsistency for follow-up only.",
       "source": "spells/aws/s3-cache/spell.buzz:118"
     },
     {
@@ -17654,7 +17654,7 @@
       "id": "method:env.parse_dotenv",
       "kind": "method",
       "label": "env.parse_dotenv",
-      "doc": "Parse .env-format content into a name-\u003evalue map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
+      "doc": "Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \\n \\t \\\" \\\\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.",
       "attrs": {
         "buzz": "env\\parseDotenv(content) → map[string]string"
       }
@@ -17663,7 +17663,7 @@
       "id": "method:env.read_dotenv",
       "kind": "method",
       "label": "env.read_dotenv",
-      "doc": "Read a .env file and return its name-\u003evalue map (parse_dotenv over the file contents). Errors if the file cannot be read.",
+      "doc": "Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.",
       "attrs": {
         "buzz": "env\\readDotenv(path) → map[string]string"
       }
@@ -17960,7 +17960,7 @@
       "id": "method:http.server",
       "kind": "method",
       "label": "http.server",
-      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -\u003e dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
+      "doc": "Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {\"/\": \"docs/gen\", \"/console/\": \"console/gen\"}) serves multiple roots where a request routes to the LONGEST matching prefix, so \"/console/\" wins over \"/\" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the defau",
       "attrs": {
         "buzz": "http\\server(opts) → int"
       }
@@ -18005,7 +18005,7 @@
       "id": "method:magus.cmd",
       "kind": "method",
       "label": "magus.cmd",
-      "doc": "Escape hatch: run `magus \u003cargs\u003e` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Escape hatch: run `magus <args>` for any subcommand, in the target's project directory. Prefer the dedicated methods (run, describe, insight, doctor) when one exists - magus.cmd warns when args name a subcommand that has one. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\cmd(args, [opts]) → ExecResult"
       }
@@ -18014,7 +18014,7 @@
       "id": "method:magus.describe",
       "kind": "method",
       "label": "magus.describe",
-      "doc": "Run `magus describe \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+      "doc": "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
       "attrs": {
         "buzz": "magus\\describe(args, [opts]) → ExecResult"
       }
@@ -18023,7 +18023,7 @@
       "id": "method:magus.doctor",
       "kind": "method",
       "label": "magus.doctor",
-      "doc": "Run `magus doctor \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus doctor <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\doctor(args, [opts]) → ExecResult"
       }
@@ -18050,7 +18050,7 @@
       "id": "method:magus.insight",
       "kind": "method",
       "label": "magus.insight",
-      "doc": "Run `magus insight \u003cargs\u003e` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus insight <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\insight(args, [opts]) → ExecResult"
       }
@@ -18059,7 +18059,7 @@
       "id": "method:magus.ls",
       "kind": "method",
       "label": "magus.ls",
-      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `\u003e Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
+      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus/target) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
       "attrs": {
         "buzz": "magus\\ls() → ProjectsOutput"
       }
@@ -18068,7 +18068,7 @@
       "id": "method:magus.run",
       "kind": "method",
       "label": "magus.run",
-      "doc": "Run `magus run \u003cargs\u003e` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
+      "doc": "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.quiet captures the output without echoing it to the console.",
       "attrs": {
         "buzz": "magus\\run(args, [opts]) → ExecResult"
       }
@@ -18077,7 +18077,7 @@
       "id": "method:magus.targets",
       "kind": "method",
       "label": "magus.targets",
-      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `\u003e TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, an",
+      "doc": "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus/target) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, an",
       "attrs": {
         "buzz": "magus\\targets() → TargetGraphOutput"
       }
@@ -18302,7 +18302,7 @@
       "id": "method:semver.compare",
       "kind": "method",
       "label": "semver.compare",
-      "doc": "Compare two semver strings; op is \"==\", \"!=\", \"\u003c\", \"\u003c=\", \"\u003e\", or \"\u003e=\" - true when the relation holds.",
+      "doc": "Compare two semver strings; op is \"==\", \"!=\", \"<\", \"<=\", \">\", or \">=\" - true when the relation holds.",
       "attrs": {
         "buzz": "semver\\compare(a, op, b) → bool"
       }
@@ -18383,7 +18383,7 @@
       "id": "method:template.render",
       "kind": "method",
       "label": "template.render",
-      "doc": "Render a Mustache template against a context value (usually a name-\u003evalue map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
+      "doc": "Render a Mustache template against a context value (usually a name->value map; lists drive sections, absent/false keys hide them). Returns the filled string; errors on a malformed template.",
       "attrs": {
         "buzz": "template\\render(template, data) → string"
       }
@@ -18392,7 +18392,7 @@
       "id": "method:template.render_partials",
       "kind": "method",
       "label": "template.render_partials",
-      "doc": "Render a Mustache template that includes partials via {{\u003ename}}, resolving each name against the partials map (name-\u003etemplate string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
+      "doc": "Render a Mustache template that includes partials via {{>name}}, resolving each name against the partials map (name->template string). Partials may reference other partials. Same context and escaping rules as render; errors on a malformed template.",
       "attrs": {
         "buzz": "template\\renderPartials(template, data, partials) → string"
       }
@@ -19378,11 +19378,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:518:TODO",
+      "id": "rationale:magusfile.buzz:516:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:518"
+      "source": "magusfile.buzz:516"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",
@@ -19512,7 +19512,7 @@
       "id": "target:.:bindings-generate",
       "kind": "target",
       "label": "bindings-generate",
-      "doc": "Regenerates the Go host bindings (std -\u003e host/gen) from std.Module declarations.",
+      "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
       "source": ".",
       "attrs": {
         "declared_as": "bindings_generate",
@@ -19527,8 +19527,8 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out3d392e62",
-        "last_run_ok": "false"
+        "last_output_ref": "outb681e804",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19613,7 +19613,9 @@
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out935c614b",
+        "last_run_ok": "true"
       }
     },
     {
@@ -19625,7 +19627,7 @@
       "attrs": {
         "declared_as": "go_build",
         "engine": "buzz",
-        "last_output_ref": "out5b39563b",
+        "last_output_ref": "out4c2d32f6",
         "last_run_ok": "true"
       }
     },
@@ -19956,7 +19958,7 @@
       "id": "target:docs:build-hljs",
       "kind": "target",
       "label": "build-hljs",
-      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into the committed gen/assets/hljs.js.",
+      "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
       "source": "docs",
       "attrs": {
         "declared_as": "build_hljs",
@@ -19967,7 +19969,7 @@
       "id": "target:docs:build-mermaid",
       "kind": "target",
       "label": "build-mermaid",
-      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into the committed gen/assets/mermaid.js.",
+      "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
       "source": "docs",
       "attrs": {
         "declared_as": "build_mermaid",
@@ -20044,7 +20046,9 @@
       "doc": "generate is the full publication and drift gate.",
       "source": "docs",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out0c0c76ba",
+        "last_run_ok": "false"
       }
     },
     {
@@ -57173,12 +57177,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:518:TODO",
+      "source": "rationale:magusfile.buzz:516:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:518"
+      "provenance": "magusfile.buzz:516"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:118:NOTE",

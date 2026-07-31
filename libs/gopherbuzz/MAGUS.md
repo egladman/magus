@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2223 nodes** and **4938 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2228 nodes** and **4953 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 83 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
+| target | 84 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `ts`, `buf` |
 | op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
 | tool | 14 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
@@ -53,16 +53,16 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 159 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 231 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| doc | 234 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 130 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 220 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz`, `magusfile.buzz` |
-| function | 1115 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1114 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 119 | `magus query kind:import` | `std`, `magus`, `fs` |
-| rationale | 4 | `magus query kind:rationale` | `NOTE`, `NOTE`, `NOTE` |
+| rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 26 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
+| . | 27 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
@@ -87,9 +87,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-run` | Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz). |
 | `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats first, then golangci-lint, go vet, and markdownlint. |
+| `lint` | Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
+| `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |

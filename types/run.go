@@ -143,5 +143,3 @@ func (o SpellOp) Key() []string {
 	}
 	return key
 }
-
-
