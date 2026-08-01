@@ -28,15 +28,16 @@ magus\project({
 export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 
 // pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. A canceled install can leave a
+// node_modules directory that exists but is incomplete, so isDir alone is not a
+// valid readiness check.
 fun install() > void {
-    if (!fs\isDir("node_modules")) {
-        if (fs\isFile("pnpm-lock.yaml")) {
-            os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-        } else {
-            // The first bootstrap establishes the committed lock. Every later
-            // install is frozen, so CI cannot resolve a newer dependency graph.
-            os\exec("pnpm", ["install"], ".", {});
-        }
+    if (fs\isFile("pnpm-lock.yaml")) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    } else {
+        // The first bootstrap establishes the committed lock. Every later
+        // install is frozen, so CI cannot resolve a newer dependency graph.
+        os\exec("pnpm", ["install"], ".", {});
     }
 }
 
