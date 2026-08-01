@@ -20712,7 +20712,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outa6ed21a8",
+        "last_output_ref": "out273fbca4",
         "last_run_ok": "false"
       }
     },
@@ -20756,7 +20756,9 @@
       "doc": "Regenerates, then formats Go and tidies `go.mod`.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out5486ee80",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20767,7 +20769,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out782dcdad",
+        "last_output_ref": "out17de58d5",
         "last_run_ok": "true"
       }
     },
@@ -21104,7 +21106,7 @@
       "source": "docs/guides/integrations/agents",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outc809bd4e",
+        "last_output_ref": "out906367b2",
         "last_run_ok": "true"
       }
     },
@@ -21290,7 +21292,7 @@
       "source": "evals",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out8ddd849c",
+        "last_output_ref": "out73a22bb5",
         "last_run_ok": "true"
       }
     },

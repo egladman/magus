@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"go/format"
 	"reflect"
 	"strings"
 	"time"
@@ -45,7 +46,11 @@ func runBuzzObjects(args []string) error {
 	}
 	fmt.Fprintln(&b)
 	b.Write(methods.Bytes())
-	return emit.File(*outPath, b.Bytes())
+	formatted, err := format.Source(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("format generated Buzz object methods: %w", err)
+	}
+	return emit.File(*outPath, formatted)
 }
 
 type buzzObjectRenderer struct {
