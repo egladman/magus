@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
 )

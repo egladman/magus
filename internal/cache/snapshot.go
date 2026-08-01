@@ -15,8 +15,8 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/cache/reflink"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -65,7 +65,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, er
 		manifest.Outputs = append(manifest.Outputs, rec)
 		written = append(written, m.abs)
 	}
-	data, err := codec.MarshalIndent(manifest, "", "  ")
+	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, err
 	}

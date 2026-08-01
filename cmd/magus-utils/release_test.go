@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )

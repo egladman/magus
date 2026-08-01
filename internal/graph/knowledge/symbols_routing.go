@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -117,7 +117,7 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 		}
 		return nil
 	}
-	b, err := codec.MarshalIndent(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index}, "", "  ")
+	b, err := json.MarshalIndent(symbolRouting{ShardsKey: symbolShardsKey(&man), Index: index}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (s *Store) readXref() *symbolRouting {
 		return nil
 	}
 	var r symbolRouting
-	if err := codec.Unmarshal(b, &r); err != nil {
+	if err := json.Unmarshal(b, &r); err != nil {
 		return nil
 	}
 	return &r

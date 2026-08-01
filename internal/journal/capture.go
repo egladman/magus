@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"sync"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // eventAttr is the slog attribute key that carries the whole [Event] value through a

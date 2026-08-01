@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/spells"
 )
@@ -51,7 +51,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return 0, decodeWireError(er.Message)
 		}
 		return 0, fmt.Errorf("proc: forward: server error (undecodable)")
@@ -61,7 +61,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	}
 
 	var reply RunReply
-	if err := codec.Unmarshal(line, &reply); err != nil {
+	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: forward: decode reply: %w", err)
 	}
 	return reply.ExitCode, nil // reply.Err is informational; callers observe failure via ExitCode
@@ -97,7 +97,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return nil, fmt.Errorf("proc: query: server error: %s", er.Message)
 		}
 		return nil, fmt.Errorf("proc: query: server error (undecodable)")
@@ -107,7 +107,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	}
 
 	var reply StatusReply
-	if err := codec.Unmarshal(line, &reply); err != nil {
+	if err := json.Unmarshal(line, &reply); err != nil {
 		return nil, fmt.Errorf("proc: query: decode reply: %w", err)
 	}
 	return &reply, nil
@@ -154,7 +154,7 @@ func SubmitJob(ctx context.Context, addr string, args []string, version string) 
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return "", fmt.Errorf("proc: job: server error: %s", er.Message)
 		}
 		return "", fmt.Errorf("proc: job: server error (undecodable)")
@@ -163,7 +163,7 @@ func SubmitJob(ctx context.Context, addr string, args []string, version string) 
 		return "", fmt.Errorf("proc: job: unexpected reply type %q", typ)
 	}
 	var reply JobReply
-	if err := codec.Unmarshal(line, &reply); err != nil {
+	if err := json.Unmarshal(line, &reply); err != nil {
 		return "", fmt.Errorf("proc: job: decode reply: %w", err)
 	}
 	if reply.Err != "" {
@@ -196,7 +196,7 @@ func Shutdown(ctx context.Context, addr string) error {
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: shutdown: server error: %s", er.Message)
 		}
 		return fmt.Errorf("proc: shutdown: server error (undecodable)")
@@ -231,7 +231,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: service.acquire: server error: %s", er.Message)
 		}
 		return fmt.Errorf("proc: service.acquire: server error (undecodable)")
@@ -240,7 +240,7 @@ func AcquireService(ctx context.Context, addr, key string, svc spells.Service) e
 		return fmt.Errorf("proc: service.acquire: unexpected reply type %q", typ)
 	}
 	var reply ServiceAcquireReply
-	if err := codec.Unmarshal(line, &reply); err != nil {
+	if err := json.Unmarshal(line, &reply); err != nil {
 		return fmt.Errorf("proc: service.acquire: decode reply: %w", err)
 	}
 	if reply.Err != "" {
@@ -281,7 +281,7 @@ func ReleaseService(ctx context.Context, addr, key string) error {
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return fmt.Errorf("proc: service.release: server error: %s", er.Message)
 		}
 		return fmt.Errorf("proc: service.release: server error (undecodable)")
@@ -315,7 +315,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 	}
 	if typ == typeError {
 		var er ErrorReply
-		if e := codec.Unmarshal(line, &er); e == nil && er.Message != "" {
+		if e := json.Unmarshal(line, &er); e == nil && er.Message != "" {
 			return 0, fmt.Errorf("proc: service.stopall: server error: %s", er.Message)
 		}
 		return 0, fmt.Errorf("proc: service.stopall: server error (undecodable)")
@@ -324,7 +324,7 @@ func StopAllServices(ctx context.Context, addr string) (int, error) {
 		return 0, fmt.Errorf("proc: service.stopall: unexpected reply type %q", typ)
 	}
 	var reply ServiceStopAllReply
-	if err := codec.Unmarshal(line, &reply); err != nil {
+	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: service.stopall: decode reply: %w", err)
 	}
 	return reply.Count, nil

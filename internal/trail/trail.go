@@ -27,7 +27,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // dir is the base-dir subdirectory holding the trail, a sibling of the journal's runs/.

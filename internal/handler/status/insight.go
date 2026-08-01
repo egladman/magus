@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )

@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // OutputSource is the narrow repository contract the run-browser handlers need: list the stored run

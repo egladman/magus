@@ -12,7 +12,7 @@ import (
 
 	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -1184,22 +1184,22 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 const testBoundaryTypesPath = "test/boundary-types"
 
 var testBoundaryTypesSource = strings.Join([]string{
-	ispell.ExecResultSource,
-	ispell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-	ispell.CommitSource,
-	ispell.FileInfoSource,
-	ispell.HTTPResponseSource,
-	ispell.SemverVersionSource,
-	ispell.SemverNextSource,
-	ispell.URLSource,
-	ispell.TagSource, // Tag.version is SemverVersion, so it must follow that source
-	ispell.ProjectEntrySource,
-	ispell.ProjectsSource,
-	ispell.AffectedSource,
-	ispell.GraphSource,
-	ispell.ModuleFieldEntrySource,
-	ispell.ModuleMethodEntrySource,
-	ispell.ModuleSource,
+	spellruntime.ExecResultSource,
+	spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+	spellruntime.CommitSource,
+	spellruntime.FileInfoSource,
+	spellruntime.HTTPResponseSource,
+	spellruntime.SemverVersionSource,
+	spellruntime.SemverNextSource,
+	spellruntime.URLSource,
+	spellruntime.TagSource, // Tag.version is SemverVersion, so it must follow that source
+	spellruntime.ProjectEntrySource,
+	spellruntime.ProjectsSource,
+	spellruntime.AffectedSource,
+	spellruntime.GraphSource,
+	spellruntime.ModuleFieldEntrySource,
+	spellruntime.ModuleMethodEntrySource,
+	spellruntime.ModuleSource,
 }, "\n")
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a

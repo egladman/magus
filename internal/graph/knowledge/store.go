@@ -19,8 +19,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -401,7 +401,7 @@ func (s *Store) readManifestOrNil() *manifest {
 		return nil
 	}
 	var m manifest
-	if err := codec.Unmarshal(b, &m); err != nil {
+	if err := json.Unmarshal(b, &m); err != nil {
 		return nil // a corrupt manifest is treated as absent; a full rebuild follows
 	}
 	if m.SchemaVersion != types.KnowledgeSchemaVersion {
@@ -411,7 +411,7 @@ func (s *Store) readManifestOrNil() *manifest {
 }
 
 func (s *Store) writeManifest(m manifest) error {
-	b, err := codec.MarshalIndent(m, "", "  ")
+	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -466,7 +466,7 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 		Nodes:         g.Nodes(),
 		Edges:         g.Edges(),
 	}
-	b, err := codec.MarshalIndent(sf, "", "  ")
+	b, err := json.MarshalIndent(sf, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -502,7 +502,7 @@ func (s *Store) readShard(name string) (shardFile, error) {
 		return shardFile{}, err
 	}
 	var sf shardFile
-	if err := codec.Unmarshal(b, &sf); err != nil {
+	if err := json.Unmarshal(b, &sf); err != nil {
 		return shardFile{}, err
 	}
 	return sf, nil
@@ -588,7 +588,7 @@ func LoadRuntimeEvents(cacheDir string) []types.DiagnosticEvent {
 		return nil
 	}
 	var evs []types.DiagnosticEvent
-	if err := codec.Unmarshal(b, &evs); err != nil {
+	if err := json.Unmarshal(b, &evs); err != nil {
 		return nil
 	}
 	return evs
@@ -616,7 +616,7 @@ func RecordRuntimeEvents(cacheDir string, fresh []types.DiagnosticEvent) error {
 	if len(merged) > defaultRuntimeCap {
 		merged = merged[len(merged)-defaultRuntimeCap:]
 	}
-	b, err := codec.MarshalIndent(merged, "", "  ")
+	b, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return err
 	}

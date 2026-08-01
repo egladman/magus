@@ -1,6 +1,6 @@
 // Package playground is the browser front end for the Buzz playground: the terminal
 // Console (command dispatch, completion, history, rendering to HTML rows), editor
-// syntax Highlight, and the Share deep-link codec. It is the presentation layer over
+// syntax Highlight, and the Share deep-link json. It is the presentation layer over
 // internal/dry, which does the actual non-executing evaluation: every console
 // command dispatches into dry (LoadMagusfile / Run / EvalInContext) and this package
 // only formats the result. cmd/buzz-playground wires it to the DOM.

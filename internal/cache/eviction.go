@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // parseSizeMB reads MAGUS_CACHE_SIZE_MB and returns the value as an int.
@@ -157,7 +157,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 			return nil //nolint:nilerr // skip unreadable entries; abort would leave GC incomplete
 		}
 		var m Manifest
-		if codec.Unmarshal(data, &m) != nil {
+		if json.Unmarshal(data, &m) != nil {
 			return nil //nolint:nilerr // skip corrupt entries; abort would leave GC incomplete
 		}
 		blobs := make([]string, 0, len(m.Outputs))

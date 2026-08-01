@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	magus "github.com/egladman/magus"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -120,7 +120,7 @@ func diffBaseline(ctx context.Context, root, rev string, pos []string) (types.Kn
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: read baseline %q: %w", baselinePath, err)
 	}
 	var baseline types.KnowledgeGraphOutput
-	if err := codec.Unmarshal(raw, &baseline); err != nil {
+	if err := json.Unmarshal(raw, &baseline); err != nil {
 		return types.KnowledgeGraphOutput{}, "", fmt.Errorf("graph diff: decode baseline %q (expected `magus graph export -o json` output): %w", baselinePath, err)
 	}
 	return baseline, baselinePath, nil

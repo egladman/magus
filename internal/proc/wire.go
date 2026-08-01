@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // maxFrameBytes is the maximum size of a single JSONL frame. Requests from
@@ -15,14 +15,14 @@ import (
 // line from exhausting server memory before the args-count check fires.
 const maxFrameBytes = 4 << 20 // 4 MiB
 
-// writeFrame serialises body via codec.Marshal and writes a single JSONL line
+// writeFrame serialises body via json.Marshal and writes a single JSONL line
 // to w in the form {"type":"<typeName>",<body fields>}\n. body must marshal
 // to a JSON object; any other shape (array, scalar) is a programming error
 // and returns an error.
 //
 // This mirrors the splice pattern in internal/report/envelope.go.
 func writeFrame(w io.Writer, typeName string, body any) error {
-	raw, err := codec.Marshal(body)
+	raw, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("proc: marshal %T: %w", body, err)
 	}
@@ -70,7 +70,7 @@ func readFrame(r io.Reader) (typeName string, line []byte, err error) {
 	var head struct {
 		Type string `json:"type"`
 	}
-	if e := codec.Unmarshal(line, &head); e != nil {
+	if e := json.Unmarshal(line, &head); e != nil {
 		return "", nil, fmt.Errorf("proc: decode frame type: %w", e)
 	}
 	if head.Type == "" {

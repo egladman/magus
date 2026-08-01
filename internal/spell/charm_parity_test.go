@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/host"
-	json "github.com/egladman/magus/internal/codec"
-	"github.com/egladman/magus/internal/spell"
+	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"

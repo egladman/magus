@@ -13,7 +13,7 @@ import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	hostreg "github.com/egladman/magus/host/registry"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 )
 
 // SpellCatalog yields the built-in spell op surface (import name -> op names) the
@@ -31,7 +31,7 @@ type SpellCatalog interface {
 // source of truth.
 type builtinCatalog struct{}
 
-func (builtinCatalog) BuiltinOps() map[string][]string { return ispell.BuiltinOps() }
+func (builtinCatalog) BuiltinOps() map[string][]string { return spellruntime.BuiltinOps() }
 
 // WASMCompatibleMagusModules is the allowlist of magus modules the browser
 // playground registers: the WASMCompatible entries of the one host-module registry

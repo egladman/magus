@@ -24,9 +24,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/egladman/magus/internal/ci/annotate"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -979,7 +979,7 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 			return nil
 		}
 		var m Manifest
-		if jErr := codec.Unmarshal(data, &m); jErr != nil {
+		if jErr := json.Unmarshal(data, &m); jErr != nil {
 			c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("gc: corrupt manifest %s: %v", p, jErr)))
 			return nil
 		}

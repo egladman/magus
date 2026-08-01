@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/json"
 )
 
 // RemoteBackend is a pluggable remote backend for cache artifacts, keyed by (projectPath,
@@ -398,7 +398,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 		}
 	}
 	var m Manifest
-	if err := codec.Unmarshal(manifestBytes, &m); err != nil {
+	if err := json.Unmarshal(manifestBytes, &m); err != nil {
 		return fmt.Errorf("importArtifact: parse manifest: %w", err)
 	}
 	for _, out := range m.Outputs {

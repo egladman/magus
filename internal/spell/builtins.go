@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -35,7 +35,7 @@ var Builtins = sync.OnceValue(loadBuiltins)
 // keys). Hashing the resolved registry rather than the raw bytecode keeps it tied
 // to spell semantics, not the Buzz compiler's output.
 var BuiltinsHash = sync.OnceValue(func() string {
-	b, err := codec.Marshal(Builtins())
+	b, err := json.Marshal(Builtins())
 	if err != nil {
 		panic("magus/spell: marshal builtin spells: " + err.Error())
 	}

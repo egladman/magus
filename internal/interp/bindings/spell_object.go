@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/proc/run"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -178,7 +178,7 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 }
 
 // targetsToMap marshals resolved targets back to the nested ops map shape
-// ispell.Decode reads (a fork target unless it declares fn).
+// spellruntime.Decode reads (a fork target unless it declares fn).
 func targetsToMap(targets map[string]spells.Op) vm.Value {
 	ops := vm.NewMap()
 	for name, t := range targets {
@@ -204,7 +204,7 @@ func targetsToMap(targets map[string]spells.Op) vm.Value {
 }
 
 // patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records
-// list shape ispell.Decode reads.
+// list shape spellruntime.Decode reads.
 func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 	items := make([]vm.Value, len(ops))
 	for i, po := range ops {
@@ -228,7 +228,7 @@ func buzzSpellObject(name string) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("name", vm.StrValue(name))
 
-	spec, ok := ispell.Builtins()[name]
+	spec, ok := spellruntime.Builtins()[name]
 	if !ok {
 		return m
 	}

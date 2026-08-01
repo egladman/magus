@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	hostreg "github.com/egladman/magus/host/registry"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -39,16 +39,16 @@ const (
 // duplicate the (single, generated) source string into both bundles at assembly
 // time here, not to duplicate the generated file itself.
 var hostTypeModuleSources = map[string]string{
-	"os":       ispell.ExecResultSource,
-	"fs":       ispell.FileInfoSource,
-	"http":     ispell.HTTPResponseSource,
-	"encoding": ispell.URLSource,
-	"semver":   strings.Join([]string{ispell.SemverVersionSource, ispell.SemverNextSource}, "\n"),
+	"os":       spellruntime.ExecResultSource,
+	"fs":       spellruntime.FileInfoSource,
+	"http":     spellruntime.HTTPResponseSource,
+	"encoding": spellruntime.URLSource,
+	"semver":   strings.Join([]string{spellruntime.SemverVersionSource, spellruntime.SemverNextSource}, "\n"),
 	"vcs": strings.Join([]string{
-		ispell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-		ispell.CommitSource,
-		ispell.SemverVersionSource, // co-located dup, precedes Tag: Tag.version is SemverVersion
-		ispell.TagSource,
+		spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+		spellruntime.CommitSource,
+		spellruntime.SemverVersionSource, // co-located dup, precedes Tag: Tag.version is SemverVersion
+		spellruntime.TagSource,
 	}, "\n"),
 }
 
@@ -155,26 +155,26 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 // TargetGraphProject before TargetGraph; ModuleFieldEntry/ModuleMethodEntry before
 // Module.
 var magusOwnedTypeSource = strings.Join([]string{
-	ispell.ProjectEntrySource,
-	ispell.ProjectsSource,
-	ispell.AffectedSource,
-	ispell.GraphSource,
-	ispell.CrossTargetRefSource,
-	ispell.TargetSpellUseSource,
-	ispell.InputRefSource,
-	ispell.OutputRefSource,
-	ispell.TargetGraphNodeSource,
-	ispell.TargetGraphProjectSource,
-	ispell.TargetGraphSource,
-	ispell.ModuleFieldEntrySource,
-	ispell.ModuleMethodEntrySource,
-	ispell.ModuleSource,
+	spellruntime.ProjectEntrySource,
+	spellruntime.ProjectsSource,
+	spellruntime.AffectedSource,
+	spellruntime.GraphSource,
+	spellruntime.CrossTargetRefSource,
+	spellruntime.TargetSpellUseSource,
+	spellruntime.InputRefSource,
+	spellruntime.OutputRefSource,
+	spellruntime.TargetGraphNodeSource,
+	spellruntime.TargetGraphProjectSource,
+	spellruntime.TargetGraphSource,
+	spellruntime.ModuleFieldEntrySource,
+	spellruntime.ModuleMethodEntrySource,
+	spellruntime.ModuleSource,
 }, "\n")
 
 // RegisterSpellSourceModules installs every source-only Buzz module a spell (or
 // magusfile) imports for its value types:
 //
-//   - magus/spell (ispell.SpellModulePath): the canonical Target/Command/Service/
+//   - magus/spell (spellruntime.SpellModulePath): the canonical Target/Command/Service/
 //     Charm/PatchOp types a spell op WRITES. Kept separate from the base host-module
 //     surface because a plain script needs none of these until it imports a spell
 //     module.
@@ -189,8 +189,8 @@ var magusOwnedTypeSource = strings.Join([]string{
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
 func RegisterSpellSourceModules(sess *buzz.Session) {
-	sess.SetSourceModule(ispell.SpellModulePath, ispell.SpellModuleSource)
-	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
+	sess.SetSourceModule(spellruntime.SpellModulePath, spellruntime.SpellModuleSource)
+	sess.SetSourceModule(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 	sess.DeclareModuleTypes("magus", magusOwnedTypeSource)
 }
 

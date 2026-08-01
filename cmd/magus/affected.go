@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -490,7 +490,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
 	}
 
-	b, err := codec.MarshalIndent(out, "", "  ")
+	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return err
 	}

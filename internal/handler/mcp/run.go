@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -23,9 +23,9 @@ type runResult struct {
 	// workspace default_charms merged with any charm suffix on the target
 	// param. Omitted when empty. Lets the agent see whether writes (rw) were
 	// enabled and avoid redundantly re-invoking a :rw form.
-	Charms     []string           `json:"charms,omitempty"`
-	DurationMs int64              `json:"duration_ms"`
-	Events     []codec.RawMessage `json:"events"`
+	Charms     []string          `json:"charms,omitempty"`
+	DurationMs int64             `json:"duration_ms"`
+	Events     []json.RawMessage `json:"events"`
 }
 
 // effectiveCharms merges the workspace default_charms with the per-run charm
@@ -149,19 +149,19 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 var _ spells.Driver = (*runTargetTool)(nil)
 
 // parseRunEvents decodes the run report's JSONL buffer into a slice of raw JSON event objects.
-func parseRunEvents(buf *bytes.Buffer) []codec.RawMessage {
+func parseRunEvents(buf *bytes.Buffer) []json.RawMessage {
 	// Use a 1 MB scanner buffer — report lines can be large on wide workspaces.
 	scanner := bufio.NewScanner(buf)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20)
 
-	var events []codec.RawMessage
+	var events []json.RawMessage
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
 			continue
 		}
-		var raw codec.RawMessage
-		if err := codec.Unmarshal(line, &raw); err == nil {
+		var raw json.RawMessage
+		if err := json.Unmarshal(line, &raw); err == nil {
 			events = append(events, raw)
 		}
 	}
@@ -170,7 +170,7 @@ func parseRunEvents(buf *bytes.Buffer) []codec.RawMessage {
 	// caller via the events slice length.
 	if events == nil {
 		// ensure JSON encodes [] not null
-		events = []codec.RawMessage{}
+		events = []json.RawMessage{}
 	}
 	return events
 }

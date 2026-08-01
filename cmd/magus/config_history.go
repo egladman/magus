@@ -12,8 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 )
 
@@ -217,14 +217,14 @@ func readMisses(ctx context.Context, path string) ([]missBuild, error) {
 		var head struct {
 			Type string `json:"type"`
 		}
-		if err := codec.Unmarshal(line, &head); err != nil {
+		if err := json.Unmarshal(line, &head); err != nil {
 			continue
 		}
 		if head.Type != report.TypeTargetResult {
 			continue
 		}
 		var ev report.TargetResult
-		if err := codec.Unmarshal(line, &ev); err != nil {
+		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
 		}
 		// A "miss" is a fresh, successful run (not a cache replay) with a real duration.

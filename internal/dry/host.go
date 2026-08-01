@@ -13,7 +13,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/types"
 )
 
@@ -56,21 +56,21 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// resolvable without also having to fake functional os/fs/http/vcs bindings.
 	// The session's import lookup order (synthetic, then source, then resolver)
 	// means this is never shadowed by the catch-all resolver below.
-	sess.SetSourceModule(ispell.SpellModulePath, strings.Join([]string{
-		ispell.TargetModuleSource,
-		ispell.PatchOpSource,
-		ispell.CharmTypeSource,
-		ispell.CommandSource,
-		ispell.ServiceSource,
-		ispell.ExecResultSource,
-		ispell.CommitAuthorSource,
-		ispell.CommitSource,
-		ispell.FileInfoSource,
-		ispell.HTTPResponseSource,
-		ispell.SemverVersionSource,
-		ispell.URLSource,
+	sess.SetSourceModule(spellruntime.SpellModulePath, strings.Join([]string{
+		spellruntime.TargetModuleSource,
+		spellruntime.PatchOpSource,
+		spellruntime.CharmTypeSource,
+		spellruntime.CommandSource,
+		spellruntime.ServiceSource,
+		spellruntime.ExecResultSource,
+		spellruntime.CommitAuthorSource,
+		spellruntime.CommitSource,
+		spellruntime.FileInfoSource,
+		spellruntime.HTTPResponseSource,
+		spellruntime.SemverVersionSource,
+		spellruntime.URLSource,
 	}, "\n"))
-	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
+	sess.SetSourceModule(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation

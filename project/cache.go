@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
