@@ -2,7 +2,7 @@
 // magusfiles call into. Each module (os, fs, vcs, …) declares its
 // Methods here as a Module value with typed args, return types, and a Go
 // Impl. The magus-utils bindings tool consumes these declarations and emits the
-// Buzz trampolines into host/gen from the same Impl.
+// Buzz trampolines into internal/interp/bindings/gen from the same Impl.
 package std
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 // Callback is the host-side handle for a VM-side function value passed as
-// an argument. host/gen wraps a buzz.Session + function value.
+// an argument. The generated bindings layer wraps a buzz.Session + function value.
 // Impls invoke the callback via Call; args are marshalled per VM convention.
 type Callback interface {
 	Call(ctx context.Context, args ...any) ([]any, error)
@@ -84,12 +84,12 @@ type Arg struct {
 type Ret struct {
 	Name string
 	Type TypeTag
-	// Record names the Buzz object this return marshals to, for a method whose
-	// Impl returns a Go struct carrying ToMap (or a slice of them). Empty for a
+	// Object names the Buzz object this return marshals to, for a method whose
+	// Impl returns a Go struct carrying BuzzObject (or a slice of them). Empty for a
 	// scalar return.
 	//
 	// It is documentation the CHECKER and the reader can both use, not a
-	// marshalling instruction: the generator already recognises a record by
+	// marshalling instruction: the generator already recognises an object by
 	// reflecting on the Impl, so the bytes are correct either way. What was
 	// missing is the NAME. Without it a method's return types as {str: any}
 	// everywhere outside the generator, so `magus\cmd(...)` hands back a map
@@ -99,7 +99,7 @@ type Ret struct {
 	// The generator VALIDATES this against the reflected Impl and fails codegen on
 	// a mismatch or an omission, so it cannot drift from the struct it names. That
 	// is the whole reason it is safe to state twice.
-	Record string
+	Object string
 }
 
 // Method declares one host function bound into the VM.

@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module encoding -lang buzz -out ../host/gen/encoding.go
+//go:generate go run ../cmd/magus-utils bindings -module encoding -lang buzz -out ../internal/interp/bindings/gen/encoding.go
 
 func init() { Register(Encoding) }
 
@@ -85,7 +85,7 @@ var Encoding = Module{
 			Name:    "parse_url",
 			Doc:     "Parse a URL string into {scheme, host, port, path, query, fragment}; errors on malformed input.",
 			Args:    []Arg{{Name: "raw_url", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "URL"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "URL"}},
 			Impl:    EncodingParseURL,
 		},
 		{

@@ -8,6 +8,12 @@ development/projects/website/
 development/gopherbuzz/
 development/projects/gopherbuzz/
 
+# retired when libs/diag was renamed libs/diagnostics. Retired rather than
+# redirected, matching the development/gopherbuzz precedent above: a project page
+# under /development/ is derived from the project's directory name, so the old
+# slug has no page to alias to once the directory is gone.
+development/libs-diag/
+
 # retired by the concepts/guides/reference/migrating docs reorg (pre-1.0 URL break)
 affected/
 agents/

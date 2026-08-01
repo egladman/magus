@@ -95,7 +95,7 @@
           <li><a href="../../concepts/workspace/" title="Workspace and projects">Workspace and projects</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-an-operation-is" title="What an Operation is">What an Operation is</a></li><li><a href="#the-work-hierarchy" title="The work hierarchy">The work hierarchy</a></li><li><a href="#results-what-each-layer-produces" title="Results: what each layer produces">Results: what each layer produces</a></li><li><a href="#disambiguating-op-and-target" title="Disambiguating &quot;op&quot; and &quot;Target&quot;">Disambiguating &quot;op&quot; and &quot;Target&quot;</a><ul><li><a href="#naming-decision-done-ispelltarget--ispellop" title="Naming decision (done): ispell.Target → ispell.Op">Naming decision (done): ispell.Target → ispell.Op</a></li></ul></li><li><a href="#relationship-to-the-value-types" title="Relationship to the value types">Relationship to the value types</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
+        <ul><li><a href="#what-an-operation-is" title="What an Operation is">What an Operation is</a></li><li><a href="#the-work-hierarchy" title="The work hierarchy">The work hierarchy</a></li><li><a href="#results-what-each-layer-produces" title="Results: what each layer produces">Results: what each layer produces</a></li><li><a href="#disambiguating-op-and-target" title="Disambiguating &quot;op&quot; and &quot;Target&quot;">Disambiguating &quot;op&quot; and &quot;Target&quot;</a><ul><li><a href="#naming-decision-done-spellruntimetarget--spellruntimeop" title="Naming decision (done): spellruntime.Target → spellruntime.Op">Naming decision (done): spellruntime.Target → spellruntime.Op</a></li></ul></li><li><a href="#relationship-to-the-value-types" title="Relationship to the value types">Relationship to the value types</a></li><li><a href="#glossary" title="Glossary">Glossary</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -110,8 +110,8 @@ two words magus overloads, <em>op</em> and <em><a class="glossary-term" href="..
 <aside class="demo-callout"><span class="demo-callout-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></span><div class="demo-callout-body"><p class="demo-callout-title">Interactive demo</p><p class="demo-callout-desc">Step through this concept live in the guided tour.</p><a class="demo-callout-link" href="../../tour/#step-5">Open the demo <span class="oip-arrow" aria-hidden="true">&#x2197;</span></a></div></aside>
 
 <blockquote>
-<p><strong><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">Status</a>.</strong> The hierarchy, the <code>ExecResult</code> value type, and the <code>ispell.Op</code> (née
-<code>ispell.Target</code>) Operation type all exist today. A per-op <code>OpResult</code>/<code>TargetResult</code>
+<p><strong><a class="code-xref" href="../../reference/manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">Status</a>.</strong> The hierarchy, the <code>ExecResult</code> value type, and the <code>spellruntime.Op</code> (née
+<code>spellruntime.Target</code>) Operation type all exist today. A per-op <code>OpResult</code>/<code>TargetResult</code>
 consolidation was prototyped and removed as speculative (no consumer); the run
 <a class="code-xref" href="../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> reports at the <strong>target</strong> level only, via the <code>target.result</code> event
 (<code>internal/report</code>). The Operation-layer rows below are kept as the conceptual
@@ -282,16 +282,16 @@ operations. magus never names anything just <code>op</code> in the spell API, fo
 <ul>
 <li><strong><code>types.Target</code></strong>: the addressable <strong>work-unit</strong> <code>Path + Name</code>, plus charms
 and changed files. This is <em>the</em> Target (<a href="../targets/">targets</a>).</li>
-<li><strong><code>ispell.Op</code></strong> (formerly <code>ispell.Target</code>): &quot;a single dispatchable <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> of a
+<li><strong><code>spellruntime.Op</code></strong> (formerly <code>spellruntime.Target</code>): &quot;a single dispatchable <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> of a
 spell,&quot; i.e. an <strong>Operation</strong>. It was named <code>Target</code>, colliding with the
 work-unit above; renamed to <code>Op</code> to formalize this vocabulary.</li>
 </ul>
-<h3 id="naming-decision-done-ispelltarget--ispellop">Naming decision (done): <code>ispell.Target</code> → <code>ispell.Op</code></h3>
-<p><code>ispell.Target</code> <em>was</em> an Operation misnamed as a Target. It is now <code>ispell.Op</code>
+<h3 id="naming-decision-done-spellruntimetarget--spellruntimeop">Naming decision (done): <code>spellruntime.Target</code> → <code>spellruntime.Op</code></h3>
+<p><code>spellruntime.Target</code> <em>was</em> an Operation misnamed as a Target. It is now <code>spellruntime.Op</code>
 (<code>Spec.Ops</code>, <code>OpNames</code>, and the resolve/fork/bind paths followed), wire formats
 preserved. The docs warn against substituting &quot;Operation&quot; for a work-unit Target
 (<a href="../targets/">targets</a>); that warning is about <code>types.Target</code> and never
-protected <code>ispell.Target</code>, which was the actual offender.</p>
+protected <code>spellruntime.Target</code>, which was the actual offender.</p>
 <h2 id="relationship-to-the-value-types">Relationship to the value types</h2>
 <p>The serializable <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> value types model the <em>nouns</em> around this hierarchy:</p>
 <figure class="table-scroll"><table>

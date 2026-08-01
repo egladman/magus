@@ -19,7 +19,7 @@ func TestCryptoBytes(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	sess.SetSyntheticModule("crypto", registerCryptoBytes())
+	sess.SetNativeModule("crypto", registerCryptoBytes())
 
 	const src = `
 import "crypto" as xc;

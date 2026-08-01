@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	hostreg "github.com/egladman/magus/host/registry"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -23,14 +23,43 @@ const (
 	labelWASM  = "wasm"
 )
 
+// hostTypeModuleSources maps a host module's bare import name to the Buzz mirror
+// source of the value type(s) its methods return, so `import "<name>"` brings both
+// the callable methods AND their result types into scope with no second import -
+// the point of shipping each mirror with the module that returns it rather than a
+// single monolithic bundle. See internal/spellruntime/hosttypes.go for the generated
+// mirrors and why each lives where it does.
+//
+// vcs's entry duplicates SemverVersionSource (also assembled into "semver" below):
+// Tag.version is a SemverVersion, but a native module's declarations are only
+// ever COLLECTED (parsed for its declarations), never executed - so an
+// `import "semver";` line embedded in vcs's own bundle would parse but contribute
+// nothing (see Session.collectImportedModule, and DeclareModuleTypes's doc). A spell
+// doing only `import "vcs";` still needs SemverVersion declared, so the fix is to
+// duplicate the (single, generated) source string into both bundles at assembly
+// time here, not to duplicate the generated file itself.
+var hostTypeModuleSources = map[string]string{
+	"os":       spellruntime.ExecResultSource,
+	"fs":       spellruntime.FileInfoSource,
+	"http":     spellruntime.HTTPResponseSource,
+	"encoding": spellruntime.URLSource,
+	"semver":   strings.Join([]string{spellruntime.SemverVersionSource, spellruntime.SemverNextSource}, "\n"),
+	"vcs": strings.Join([]string{
+		spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+		spellruntime.CommitSource,
+		spellruntime.SemverVersionSource, // co-located dup, precedes Tag: Tag.version is SemverVersion
+		spellruntime.TagSource,
+	}, "\n"),
+}
+
 // magusModules expresses magus's own modules as buzz.Modules: each wraps its
-// host/gen register trampoline in a Bind that builds the module map (plus any
+// generated register trampoline in a Bind that builds the module map (plus any
 // byte-level companions) and layers it onto the stdlib module of the same name,
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
-func magusModules() []buzz.Module {
-	names := make([]string, 0, len(hostreg.Modules))
-	for name := range hostreg.Modules {
+func magusModules(modules bindinggen.Set) []buzz.Module {
+	names := make([]string, 0, len(modules))
+	for name := range modules {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -38,9 +67,9 @@ func magusModules() []buzz.Module {
 	mods := make([]buzz.Module, 0, len(names))
 	for _, name := range names {
 		name := name
-		reg := hostreg.Modules[name]
+		reg := modules[name]
 		labels := []string{labelMagus}
-		if reg.WASMCompatible {
+		if reg.Capabilities.Has(bindinggen.WASM) {
 			labels = append(labels, labelWASM)
 		}
 		mods = append(mods, buzz.Module{
@@ -57,14 +86,21 @@ func magusModules() []buzz.Module {
 				case "http":
 					mergeModuleMap(mod, registerHTTPBytes())
 				}
+				// Layer this module's return-type mirrors on as a source companion
+				// (see hostTypeModuleSources) - the same "native value + declaration
+				// source under one import path" mechanism crypto/io already use for
+				// their own signatures (see gopherbuzz/session.go's resolveImport).
+				if src, ok := hostTypeModuleSources[name]; ok {
+					s.SetModuleDecls(name, src)
+				}
 				// Buzz's stdlib may already own this bare name (os, fs, crypto):
 				// overlay the magus methods onto it so callers see the union (magus
 				// wins on the few shared keys, e.g. os.exit/fs.exists, its forms
 				// being sandbox- and context-aware). Otherwise install fresh.
-				if base, ok := s.SyntheticModule(name); ok {
+				if base, ok := s.NativeModule(name); ok {
 					mergeModuleMap(base, mod)
 				} else {
-					s.SetSyntheticModule(name, mod)
+					s.SetNativeModule(name, mod)
 				}
 				return nil
 			},
@@ -97,13 +133,29 @@ func mergeModuleMap(dst, src vm.Value) {
 // a standalone script sees, shared by the magusfile engine (which then adds the
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
-func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
+type moduleSurfaceConfig struct{ modules bindinggen.Set }
+
+// ModuleSurfaceOption configures one registration of the host module surface.
+type ModuleSurfaceOption func(*moduleSurfaceConfig)
+
+// WithModules replaces the default host-module set for one session. It is the
+// test seam for a fake fs/http/vcs module; callers use registry.Modules.With to
+// replace only the capability they need without mutating global state.
+func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
+	return func(c *moduleSurfaceConfig) { c.modules = modules }
+}
+
+func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...ModuleSurfaceOption) {
+	cfg := moduleSurfaceConfig{modules: bindinggen.Modules}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	// Buzz's stdlib provides the base modules; the magus modules then layer onto
 	// the same bare names (their Bind reads back and merges) or install fresh. One
 	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
 	buzzstd.Register(sess)
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules()...)
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
 }
 
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
@@ -111,57 +163,51 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterSpellSourceModules(sess)
 }
 
-// RegisterSpellSourceModules installs the `magus/target` and `magus/charm` source
-// modules a spell (or magusfile) imports: the canonical Target/Charm/Command value
-// types plus the pure-Buzz charm constructors. It is layered on top of
-// RegisterModuleSurface by the magusfile runtime and, deliberately, by `magus buzz`
-// so a spell file and its `test "..." {}` blocks run under `magus buzz -t` with the
-// same modules the engine loads them with. Kept separate from the base surface
-// because a plain script needs neither type until it imports a spell module.
+// magusOwnedTypeSource is the bundle of mirrors for magus.* methods that are not
+// bare-import host modules (magus.ls, magus.affected, magus.graph, magus.targets,
+// magus.modules/module) - so they can't ride along with a "os"/"vcs"/... import the
+// way hostTypeModuleSources's entries do. Declared in dependency order: ProjectEntry
+// before Projects; the four TargetGraph leaves before TargetGraphNode before
+// TargetGraphProject before TargetGraph; ModuleFieldEntry/ModuleMethodEntry before
+// Module.
+var magusOwnedTypeSource = strings.Join([]string{
+	spellruntime.ProjectEntrySource,
+	spellruntime.ProjectsSource,
+	spellruntime.AffectedSource,
+	spellruntime.GraphSource,
+	spellruntime.CrossTargetRefSource,
+	spellruntime.TargetSpellUseSource,
+	spellruntime.InputRefSource,
+	spellruntime.OutputRefSource,
+	spellruntime.TargetGraphNodeSource,
+	spellruntime.TargetGraphProjectSource,
+	spellruntime.TargetGraphSource,
+	spellruntime.ModuleFieldEntrySource,
+	spellruntime.ModuleMethodEntrySource,
+	spellruntime.ModuleSource,
+}, "\n")
+
+// RegisterSpellSourceModules installs every source-only Buzz module a spell (or
+// magusfile) imports for its value types:
+//
+//   - magus/spell (spellruntime.SpellModulePath): the canonical Target/Command/Service/
+//     Charm/PatchOp types a spell op WRITES. Kept separate from the base host-module
+//     surface because a plain script needs none of these until it imports a spell
+//     module.
+//   - magus/charm: the pure-Buzz patch constructors.
+//   - the magus namespace's own return types (magusOwnedTypeSource above), declared
+//     directly rather than behind an importable path: "magus" is bound as a session
+//     global (see registerAllBuzz), not a lazily-imported module, so the normal
+//     import-triggered collection (SetModuleDecls) never runs for it - see
+//     DeclareModuleTypes's doc for why.
+//
+// It is layered on top of RegisterModuleSurface by the magusfile runtime and,
+// deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
+// under `magus buzz -t` with the same modules the engine loads them with.
 func RegisterSpellSourceModules(sess *buzz.Session) {
-	// Canonical value types (Target/Charm) as a flat-importable source module, so
-	// a spell's mgs_listTargets can be typed {str: fun(Target, fun(any)) void/bool}
-	// instead of `any`. Single source of truth lives in the spell package.
-	sess.SetSourceModule(spellruntime.TargetModulePath, strings.Join([]string{
-		spellruntime.TargetModuleSource,
-		// Command value types (PatchOp < Charm < Command ordering: each references
-		// the prior). Inlined into built-ins too — see builtinModuleSources.
-		spellruntime.PatchOpSource,
-		spellruntime.CharmTypeSource,
-		spellruntime.CommandSource,
-		// Service must follow Command (its command/readiness/stop fields are typed
-		// Command), so a workspace-local spell can author a service op. The dry host
-		// registers the same bundle; keep the two in step.
-		spellruntime.ServiceSource,
-		spellruntime.ExecResultSource,
-		// Boundary mirrors of the host-method record shapes, so a magusfile can
-		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
-		// for compile-checked field access. CommitAuthor precedes Commit (Commit's
-		// author field is typed CommitAuthor).
-		spellruntime.CommitAuthorSource,
-		spellruntime.CommitSource,
-		spellruntime.FileInfoSource,
-		spellruntime.HTTPResponseSource,
-		spellruntime.SemverVersionSource,
-		spellruntime.URLSource,
-		// magus.ls's result. ProjectEntry precedes Projects (Projects.projects is
-		// [ProjectEntry]).
-		spellruntime.ProjectEntrySource,
-		spellruntime.ProjectsSource,
-		// The remaining host results: vcs.tags, magus.affected, magus.graph, and
-		// magus.modules / magus.module. The Module entries precede Module.
-		spellruntime.TagSource,
-		spellruntime.AffectedSource,
-		spellruntime.GraphSource,
-		spellruntime.ModuleFieldEntrySource,
-		spellruntime.ModuleMethodEntrySource,
-		spellruntime.ModuleSource,
-	}, "\n"))
-	// magus/charm: the pure-Buzz patch constructors, registered as its own source
-	// module so a handler op spell or a magusfile can `import "magus/charm"` and
-	// build charms with charm.after/set/… (the built-in generator inlines it for
-	// self-contained command spells; see SelfContainedBuiltinSource).
-	sess.SetSourceModule(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
+	sess.SetModuleDecls(spellruntime.SpellModulePath, spellruntime.SpellModuleSource)
+	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
+	sess.DeclareModuleTypes("magus", magusOwnedTypeSource)
 }
 
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes

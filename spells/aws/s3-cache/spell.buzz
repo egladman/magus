@@ -48,7 +48,7 @@
 
 import "http"
 import "time"
-import "magus/target"
+import "magus/spell"
 import "crypto"
 import "std"
 import "os"

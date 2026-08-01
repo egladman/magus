@@ -152,11 +152,11 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 // "the tree is untouchable".
 //
 // Lock files mirror the workspace project tree under a single central directory
-// (<cacheDir>/locks): project "libs/diag" locks <cacheDir>/locks/libs/diag/lock,
+// (<cacheDir>/locks): project "libs/diagnostics" locks <cacheDir>/locks/libs/diagnostics/lock,
 // and the root project locks <cacheDir>/locks/lock. Mirroring (rather than
 // flattening + sanitizing into one level) keeps the directory navigable and avoids
-// the collision a flattened name would create (e.g. "libs/diag" -> "libs-diag"
-// colliding with a real project named "libs-diag").
+// the collision a flattened name would create (e.g. "libs/diagnostics" -> "libs-diagnostics"
+// colliding with a real project named "libs-diagnostics").
 //
 // It is safe for concurrent use; each acquire opens its own OS lock handle.
 type projectLocker struct {

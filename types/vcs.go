@@ -58,31 +58,33 @@ type VCSDriver interface {
 	// An empty result means "no tags visible here", which is NOT "never
 	// released": a shallow or single-branch clone commonly fetches none, so a
 	// caller deciding what shipped must treat empty as unknown.
-	Tags(ctx context.Context, dir, pattern string) ([]Tag, error)
+	Tags(ctx context.Context, dir, pattern string) ([]VCSTag, error)
 }
 
-// Tag is a VCS-agnostic release marker: a name pinned to a revision. Only the
+// VCSTag is a VCS-agnostic release marker: a name pinned to a revision. Only the
 // facts every tagging backend agrees on are modeled - an annotated tag's tagger
 // and message are not, since a lightweight tag has neither. Reach for vcs.exe()
 // for backend-specific tag work.
-type Tag struct {
-	// Name is the tag as a user writes it ("v0.3.0"), without a refs/tags/ prefix.
+type VCSTag struct {
+	// Name is the tag as a user writes it ("v0.3.0", or "libs/gopherbuzz/v0.1.0"
+	// for a nested-module tag), without a refs/tags/ prefix.
 	Name string
+	// Prefix is everything through the final "/" of a nested-module tag
+	// ("libs/gopherbuzz/" for "libs/gopherbuzz/v0.1.0"); "" for a root tag with
+	// no "/" in its name.
+	Prefix string
+	// Version is Name's version portion (Name with Prefix stripped) parsed as
+	// semver. It is the zero value - test Version.Original == "" - when Name
+	// (or its portion after Prefix) is not a semver-shaped tag at all, or when
+	// parsing it failed: an annotated tag like "checkpoint" or "release-2026"
+	// is a legitimate, non-error case, not a reason to carry a separate
+	// IsSemver bool that could disagree with the zero value it's mirroring.
+	Version SemverVersion
 	// Date is when an annotated tag was created, else when its revision was
 	// recorded. Zero if the VCS reported no timestamp.
 	Date time.Time
 	// ID is the revision identifier the tag resolves to.
 	ID string `buzz:"id"`
-}
-
-// ToMap is the Buzz boundary map vcs.tags entries return: {name, date, id}.
-// date is RFC3339, empty when the VCS reported no timestamp.
-func (t Tag) ToMap() map[string]any {
-	date := ""
-	if !t.Date.IsZero() {
-		date = t.Date.Format(time.RFC3339)
-	}
-	return map[string]any{"name": t.Name, "date": date, "id": t.ID}
 }
 
 // Person identifies who authored a revision.
@@ -97,7 +99,7 @@ type Person struct {
 // vcs.exe() for VCS-specific work.
 type Commit struct {
 	// ID is the content/revision identifier: git SHA, hg node, jj commit_id.
-	ID    string
+	ID    string `buzz:"id"`
 	Short string // abbreviated ID
 	// Author wrote the change.
 	Author Person
@@ -112,18 +114,18 @@ type Commit struct {
 	Parents []string
 }
 
-// ToMap is the Buzz boundary map vcs.commit / vcs.history entries return:
+// BuzzObject is the Buzz boundary map vcs.commit / vcs.history entries return:
 // {id, short, author {name, email}, date, subject, body, parents}. date is
 // RFC3339, empty when the VCS reported no timestamp.
-func (c Commit) ToMap() map[string]any {
+func (c Commit) BuzzObject() BuzzObject {
 	date := ""
 	if !c.Date.IsZero() {
 		date = c.Date.Format(time.RFC3339)
 	}
-	return map[string]any{
+	return BuzzObject{
 		"id":      c.ID,
 		"short":   c.Short,
-		"author":  map[string]any{"name": c.Author.Name, "email": c.Author.Email},
+		"author":  BuzzObject{"name": c.Author.Name, "email": c.Author.Email},
 		"date":    date,
 		"subject": c.Subject,
 		"body":    c.Body,
@@ -131,7 +133,7 @@ func (c Commit) ToMap() map[string]any {
 	}
 }
 
-// CommitAuthor is the boundary mirror of the {name, email} author record a
+// CommitAuthor is the boundary mirror of the {name, email} author object a
 // vcs.commit / vcs.history result carries. The Buzz `object CommitAuthor` mirror
 // is generated from this struct by cmd/magus-utils types; keep them in lockstep.
 type CommitAuthor struct {
@@ -139,17 +141,22 @@ type CommitAuthor struct {
 	Email string
 }
 
-// CommitRecord is the boundary mirror of the record vcs.commit / vcs.history
-// return: the serializable, every-field-present view of a Commit (Date as an
-// RFC3339 string, not time.Time). A magusfile annotates `> Commit` to get
-// compile-checked field access on a commit record; the runtime value is the
-// matching map (see commitToMap). The Buzz `object Commit` mirror is generated
-// from this struct by cmd/magus-utils types (go:generate -type Commit).
+// CommitRecord is the boundary mirror of the object vcs.commit / vcs.history
+// return: the serializable, every-field-present view of a Commit. A magusfile
+// annotates `> Commit` to get compile-checked field access on a commit object;
+// the runtime value is the matching map (see Commit.BuzzObject), never this
+// struct directly - it exists so cmd/magus-utils types has something to
+// reflect over. Date stays time.Time, same as Commit.Date: buzzType (in
+// cmd/magus-utils/types.go) special-cases time.Time to the Buzz `str` type
+// mirroring Commit.BuzzObject's RFC3339 formatting, so the two can share a
+// type without the generated mirror changing shape. The Buzz `object Commit`
+// mirror is generated from this struct by cmd/magus-utils types
+// (go:generate -type Commit).
 type CommitRecord struct {
 	ID      string `buzz:"id"`
 	Short   string
 	Author  CommitAuthor
-	Date    string
+	Date    time.Time
 	Subject string
 	Body    string
 	Parents []string
@@ -157,9 +164,17 @@ type CommitRecord struct {
 
 // VCSMeta holds per-revision metadata for embedding in build artifacts.
 type VCSMeta struct {
-	ShortHash  string
-	Hash       string
-	Branch     string
+	ShortHash string
+	Hash      string
+	Branch    string
+	// CommitDate stays a string, deliberately not time.Time: each backend
+	// formats it with its own native command (git's `log --format=%ci`, hg's
+	// `{date|isodate}` template, jj's custom "%Y-%m-%d %H:%M:%S %z") and the
+	// formats do not even agree with each other (hg's isodate filter omits
+	// seconds; git and jj include them). It is opaque, backend-provided
+	// display text meant for a build banner, not a value any caller parses
+	// back into a time - forcing one shared layout here would mean discarding
+	// or reformatting what the VCS itself chose to report.
 	CommitDate string
 	IsDirty    bool
 }

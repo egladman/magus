@@ -10,9 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -43,7 +45,7 @@ func TestSupersetModules(t *testing.T) {
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
-		mod, ok := sess.SyntheticModule(module)
+		mod, ok := sess.NativeModule(module)
 		require.True(t, ok, "module %q not registered", module)
 		_, ok = mod.MapGet(key)
 		assert.True(t, ok, "module %q missing key %q", module, key)
@@ -75,16 +77,38 @@ func TestSupersetModules(t *testing.T) {
 
 	// The aggregate import and its byte-level siblings are gone.
 	for _, gone := range []string{"magus/extra", "magus/extra/http", "magus/extra/crypto"} {
-		_, ok := sess.SyntheticModule(gone)
+		_, ok := sess.NativeModule(gone)
 		assert.False(t, ok, "module %q should no longer be registered", gone)
 	}
 }
 
+func TestRegisterModuleSurfaceWithModules(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+
+	modules := bindinggen.Modules.With("json", bindinggen.ModuleReg{
+		Register: func(context.Context, *buzz.Session) vm.Value {
+			m := vm.NewMap()
+			m.MapSet("mocked", vm.StrValue("json"))
+			return m
+		},
+		Capabilities: bindinggen.Capabilities(bindinggen.WASM),
+	})
+	RegisterModuleSurface(ctx, sess, WithModules(modules))
+
+	json, ok := sess.NativeModule("json")
+	require.True(t, ok)
+	mocked, ok := json.MapGet("mocked")
+	require.True(t, ok)
+	assert.Equal(t, "json", mocked.String())
+}
+
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
-// toml, and uuid unreachable after they were added to std/ with host/gen
+// toml, and uuid unreachable after they were added to std/ with generated bindings
 // trampolines but omitted from magusModules. Every module std.All() reports, save
-// the hand-assembled "magus" namespace, must resolve as a synthetic module with
+// the hand-assembled "magus" namespace, must resolve as a native module with
 // its first declared method present.
 func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
@@ -98,14 +122,14 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 		if m.Name == "magus" {
 			continue
 		}
-		mod, ok := sess.SyntheticModule(m.Name)
+		mod, ok := sess.NativeModule(m.Name)
 		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.Name) {
 			continue
 		}
 		if len(m.Methods) == 0 {
 			continue
 		}
-		key := host.CamelCase(m.Methods[0].Name)
+		key := std.CamelCase(m.Methods[0].Name)
 		if bn := m.Methods[0].BuzzName; bn != "" {
 			key = bn
 		}
@@ -116,15 +140,15 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 
 // TestMagusModulesSharesDescribeCore is the parity lock for the native query
 // methods: magus.modules() (host) and `magus describe modules` (CLI) are two thin
-// adapters over the one typed core, host.ModulesOutput. This asserts the records
+// adapters over the one typed core, host.ModulesOutput. This asserts the objects
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := host.Modules("") // what `magus describe modules` formats
+	core := std.DescribeModules("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := host.ValueToAny(host.MapsVal(core)).([]any)
+	got, ok := bindinggen.ValueToAny(bindinggen.MapsVal(core)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -134,14 +158,14 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := host.Modules("fs")
+	fs := std.DescribeModules("fs")
 	require.Len(t, fs, 1)
 	require.NotEmpty(t, fs[0].Methods)
 	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
 }
 
 // TestMagusModulesEndToEnd drives the host methods from a real magusfile, proving
-// they're wired onto the magus namespace and return usable typed records.
+// they're wired onto the magus namespace and return usable typed objects.
 func TestMagusModulesEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -302,7 +326,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-utils bindings-emitted host/gen trampolines must decode a variadic
+// end-to-end: the magus-utils generated trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
@@ -817,11 +841,11 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestExecResultAnnotationChecksFields proves the typed-returns mechanism: a
-// magusfile may annotate an exec result `> ExecResult` (from `import
-// "magus/target"`), and because Buzz objects are structural the runtime map
-// satisfies the type while the checker validates field access against the
-// declared fields. A good field loads and runs; a typo'd field is a compile-time
-// error, not a silent runtime null.
+// magusfile may annotate an exec result `> ExecResult` (shipped with `import
+// "os"`, the module that returns it), and because Buzz objects are structural
+// the runtime map satisfies the type while the checker validates field access
+// against the declared fields. A good field loads and runs; a typo'd field is a
+// compile-time error, not a silent runtime null.
 func TestExecResultAnnotationChecksFields(t *testing.T) {
 	t.Run("good field type-checks and runs", func(t *testing.T) {
 		dir := t.TempDir()
@@ -829,7 +853,6 @@ func TestExecResultAnnotationChecksFields(t *testing.T) {
 import "magus";
 import "os";
 import "fs";
-import "magus/target";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final r: ExecResult = os.exec("echo", ["hi"]);
     fs.writeFile("ran", r.stdout);
@@ -843,7 +866,6 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 		writeMagusfile(t, dir, `
 import "magus";
 import "os";
-import "magus/target";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final r: ExecResult = os.exec("echo", ["hi"]);
     final x = r.stduot;
@@ -856,12 +878,13 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	})
 }
 
-// TestRecordAnnotationsCheckFields proves every host-record mirror shipped in
-// magus/target gives compile-checked field access: annotating a host result with
-// the object type makes a valid field compile and a typo'd field a compile error.
+// TestObjectAnnotationsCheckFields proves every host-object mirror, shipped with
+// the host module that returns it, gives compile-checked field access:
+// annotating a host result with the object type makes a valid field compile
+// and a typo'd field a compile error.
 // The annotated access lives in an unexecuted probe fn, so the file type-checks
 // without the test performing any network/git/exec — only build (a no-op) runs.
-func TestRecordAnnotationsCheckFields(t *testing.T) {
+func TestObjectAnnotationsCheckFields(t *testing.T) {
 	cases := []struct {
 		typ, expr, good, bad string
 		imports              string
@@ -878,7 +901,6 @@ func TestRecordAnnotationsCheckFields(t *testing.T) {
 		return fmt.Sprintf(`
 import "magus";
 import "fs";
-import "magus/target";
 %s
 fun probe() > void {
     final r: %s = %s;
@@ -1165,21 +1187,59 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 	})
 }
 
-// TestEveryBoundaryTypeHasAMirror is the completeness gate. A ToMap method on a
+// testBoundaryTypesPath is a private, test-only import path bundling every
+// boundary-type mirror (host-owned and magus-owned) into one compilable source
+// module, in declare-before-use order. It exists only for this file's
+// completeness/parity guards - production code reaches these types through their
+// real owning import (magus/spell for the spell-authored types, or the host
+// module that returns a given one: os, fs, http, encoding, semver, vcs).
+//
+// A synthetic host module's own import (`import "os";`) only binds its native
+// functions: the type-declaration companion registered alongside it
+// (hostTypeModuleSources) is collected by the CHECKER for annotation-checking
+// (`final r: ExecResult = os.exec(...)`), but it is never compiled and run, so it
+// can never bind an object literal's constructor into the runtime env - `Name{}`
+// needs `Name` bound as an objectDef VALUE, which only a compiled-and-run source
+// module provides (see vm.buildObjectVal). This bundle is that compiled-and-run
+// module, purpose-built so the tests below can construct and read every mirror
+// in one shot without depending on any one type's real (and, for the
+// synthetic-backed ones, construction-incapable) import path.
+const testBoundaryTypesPath = "test/boundary-types"
+
+var testBoundaryTypesSource = strings.Join([]string{
+	spellruntime.ExecResultSource,
+	spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+	spellruntime.CommitSource,
+	spellruntime.FileInfoSource,
+	spellruntime.HTTPResponseSource,
+	spellruntime.SemverVersionSource,
+	spellruntime.SemverNextSource,
+	spellruntime.URLSource,
+	spellruntime.TagSource, // Tag.version is SemverVersion, so it must follow that source
+	spellruntime.ProjectEntrySource,
+	spellruntime.ProjectsSource,
+	spellruntime.AffectedSource,
+	spellruntime.GraphSource,
+	spellruntime.ModuleFieldEntrySource,
+	spellruntime.ModuleMethodEntrySource,
+	spellruntime.ModuleSource,
+}, "\n")
+
+// TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a
 // types/ struct means "this value crosses into Buzz", so every one of them owes
-// the magus/target module an `object` mirror - otherwise a magusfile can only
-// index the result as an untyped map, and the checker has nothing to verify a
-// field name against.
+// its owning module an `object` mirror - otherwise a magusfile can only index
+// the result as an untyped map, and the checker has nothing to verify a field
+// name against.
 //
 // This is the test that would have caught the shipped `magus.ls` documentation
 // telling readers to annotate `> Projects` when no such type existed.
 func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 	t.Parallel()
-	// Every types/ struct carrying ToMap, paired with the Buzz object it mirrors.
+	// Every types/ struct carrying BuzzObject, paired with the Buzz object it mirrors.
 	// The names differ where the Buzz one reads better (ProjectsOutput -> Projects).
 	for _, tc := range []struct{ goType, buzzObject string }{
 		{"ExecResult", "ExecResult"},
-		// Commit owns ToMap; CommitRecord/CommitAuthor describe the map it emits.
+		// Commit owns BuzzObject; CommitRecord/CommitAuthor describe the map it emits.
 		{"CommitRecord", "Commit"},
 		{"CommitAuthor", "CommitAuthor"},
 		{"FileInfo", "FileInfo"},
@@ -1202,41 +1262,40 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 	}
 }
 
-// assertMirrorConstructs execs a bare `Name{}` against the real magus/target
-// bundle. Constructing it is the whole assertion: an object that is absent,
-// misordered relative to a type it references, or emitted with an unparseable
-// field name (a Go field named Type mirrors to the reserved word `type`) all
-// fail here.
+// assertMirrorConstructs execs a bare `Name{}` against testBoundaryTypesSource.
+// Constructing it is the whole assertion: an object that is absent, misordered
+// relative to a type it references, or emitted with an unparseable field name (a
+// Go field named Type mirrors to the reserved word `type`) all fail here.
 func assertMirrorConstructs(t *testing.T, object string) {
 	t.Helper()
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
-	RegisterSpellSourceModules(s)
-	require.NoError(t, s.Exec(ctx, `import "magus/target"; final __r = `+object+`{};`),
-		"%s{} must construct: the mirror is missing from the magus/target bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
+	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
+	require.NoError(t, s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{};`),
+		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
 	require.NotNil(t, s.GetGlobal("__r"), "%s{} produced nothing", object)
 }
 
-// TestMirrorFieldsMatchToMap pins each mirror against the map its Go type
+// TestMirrorFieldsMatchBuzzObject pins each mirror against the map its Go type
 // actually produces. A mirror that merely parses is not enough: a field the Buzz
 // value never carries (or one it carries under another name) is a type that lies,
 // and the checker would reject correct code or accept a typo.
-func TestMirrorFieldsMatchToMap(t *testing.T) {
+func TestMirrorFieldsMatchBuzzObject(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		object string
 		toMap  map[string]any
 	}{
-		{"Tag", types.Tag{}.ToMap()},
-		{"Affected", types.AffectedResult{}.ToMap()},
-		{"Graph", types.GraphView{}.ToMap()},
-		{"Projects", types.ProjectsOutput{}.ToMap()},
-		{"ProjectEntry", types.ProjectEntry{}.ToMap()},
-		{"Module", types.ModuleEntry{}.ToMap()},
-		{"ModuleFieldEntry", types.ModuleFieldEntry{}.ToMap()},
-		{"ModuleMethodEntry", types.ModuleMethodEntry{}.ToMap()},
-		{"ExecResult", types.ExecResult{}.ToMap()},
+		{"Tag", types.VCSTag{}.BuzzObject()},
+		{"Affected", types.AffectedResult{}.BuzzObject()},
+		{"Graph", types.GraphView{}.BuzzObject()},
+		{"Projects", types.ProjectsOutput{}.BuzzObject()},
+		{"ProjectEntry", types.ProjectEntry{}.BuzzObject()},
+		{"Module", types.ModuleEntry{}.BuzzObject()},
+		{"ModuleFieldEntry", types.ModuleFieldEntry{}.BuzzObject()},
+		{"ModuleMethodEntry", types.ModuleMethodEntry{}.BuzzObject()},
+		{"ExecResult", types.ExecResult{}.BuzzObject()},
 	} {
 		t.Run(tc.object, func(t *testing.T) {
 			t.Parallel()
@@ -1256,34 +1315,35 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
-	RegisterSpellSourceModules(s)
-	err := s.Exec(ctx, `import "magus/target"; final __r = `+object+`{}.`+field+`;`)
-	assert.NoError(t, err, "%s has no field %q, but %s's ToMap emits that key: the mirror and the boundary map disagree", object, field, object)
+	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
+	err := s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{}.`+field+`;`)
+	assert.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
 }
 
-// TestEveryToMapOwnerIsMirrored guards the LIST above rather than the mirrors.
-// ToMap is the marker that a value crosses into Buzz, so every type carrying one
-// owes the module a mirror; adding a ToMap without adding the mirror would leave
+// TestEveryBuzzObjectOwnerIsMirrored guards the LIST above rather than the mirrors.
+// BuzzObject is the marker that a value crosses into Buzz, so every type carrying one
+// owes the module a mirror; adding a BuzzObject without adding the mirror would leave
 // the gate above passing while the new type stayed untyped.
 //
-// A mirror is not always generated from the ToMap owner. Commit owns ToMap while
-// CommitRecord is a dedicated struct describing the map it emits (dates format to
-// RFC3339 strings, so the shape and the source differ). Either arrangement is
-// fine; what must hold is that each owner below has a Buzz object, which the
-// tests above check by construction.
-func TestEveryToMapOwnerIsMirrored(t *testing.T) {
+// A mirror is not always generated from the BuzzObject owner. Commit owns BuzzObject while
+// CommitRecord is a dedicated struct describing the map it emits (Author is
+// CommitAuthor, not Commit's own Person, so the generated Buzz type reads as
+// CommitAuthor rather than Person). Either arrangement is fine; what must hold
+// is that each owner below has a Buzz object, which the tests above check by
+// construction.
+func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 	t.Parallel()
 	owners := []any{
 		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
-		types.SemverVersion{}, types.URL{}, types.Tag{}, types.ProjectEntry{},
+		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
 		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}
 	for _, v := range owners {
 		rt := reflect.TypeOf(v)
-		_, ok := rt.MethodByName("ToMap")
-		assert.True(t, ok, "%s is listed as a boundary type but has no ToMap; drop it from this list", rt.Name())
+		_, ok := rt.MethodByName("BuzzObject")
+		assert.True(t, ok, "%s is listed as a boundary type but has no BuzzObject; drop it from this list", rt.Name())
 	}
 	assert.Len(t, owners, 14,
-		"a types/ struct gained or lost ToMap: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
+		"a types/ struct gained or lost BuzzObject: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
 }

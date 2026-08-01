@@ -1,0 +1,90 @@
+// magusfile.buzz for diagnostics, a standalone Go module (github.com/egladman/magus/libs/diagnostics) at
+// libs/diagnostics: the shared diagnostic-code framework both magus and gopherbuzz depend
+// on. Its own module (not part of the magus module) so gopherbuzz - a separate
+// module - can consume it without depending on magus. Set up as its own magus
+// project, scoped to its go.mod.
+//
+//   magus run build libs/diagnostics   compile the package
+//   magus run test libs/diagnostics    run the Go test suite
+//   magus run ci libs/diagnostics      lint, build, and test
+
+import "magus";
+
+// go spell claims **/*.go and the module files; magusfile spell makes this file's
+// export-fun targets runnable. Listed explicitly because "spells" below replaces the
+// default set.
+import "magus/spell/magusfile";
+import "magus/spell/go";
+import "../../spells/golang/gomod" as gomod;
+
+import "fs";
+import "vcs";
+
+magus\project({
+    "spells": [magusfile, go],
+    // Generated catalog; cached so a hit restores it without re-describing.
+    "outputs": ["MAGUS.md"],
+    "targets": {
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": true, "exclusive": true},
+    },
+});
+
+// A pure library, so the pipeline is the Go lifecycle plus md-generate. Each target
+// delegates to the go spell's ops. The Go-lifecycle targets take a magus\Context and
+// declare their dependencies through it (ctx.needs); generate/md_generate keep the
+// old global-magus form (per-target policy and fs/vcs side effects).
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    ctx.needs(mod_sync);
+    final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
+    ctx.needs(md_generate);
+    if (ctx.has_charm("rw")) { return; }
+
+    if (clean_before and vcs\isDirty(["MAGUS.md"])) {
+        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit";
+    }
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun md_generate(ctx: magus\Context, args: [str]) > void {
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
+}
+
+fun workspace_go_mods(ctx: magus\Context) > [any] {
+    final projects: Projects = magus\ls();
+    var modules: [any] = mut [<any>];
+    foreach (project in projects.projects) {
+        if (fs\exists(project.dir + "/go.mod")) {
+            final result = go["go-mod-json"](ctx.withCwd(project.dir));
+            modules.append({"dir": project.dir, "json": result.stdout});
+        }
+    }
+    return modules;
+}
+
+export fun mod_sync(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("go.mod");
+    final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        throw "MGS1016: go.mod has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements";
+    }
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate, mod_sync); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
+}

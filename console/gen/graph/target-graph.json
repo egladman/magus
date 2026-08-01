@@ -79,25 +79,41 @@
           ]
         },
         {
-          "name": "bindings-generate",
-          "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
+          "name": "types-generate",
+          "declared": "types_generate",
+          "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
           "outputs": [
             {
-              "glob": "host/gen/*.go"
+              "glob": "types/buzzobject_gen.go"
+            }
+          ]
+        },
+        {
+          "name": "bindings-generate",
+          "declared": "bindings_generate",
+          "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+          "dependencies": [
+            "types-generate"
+          ],
+          "outputs": [
+            {
+              "glob": "internal/interp/bindings/gen/*.go"
             }
           ]
         },
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.",
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen) and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven by the go:generate directives in internal/spellruntime.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
-              "glob": "internal/spell/gen/*.bo"
+              "glob": "internal/spellruntime/gen/*.bo"
             },
             {
-              "glob": "internal/spell/gen/types/*.buzz"
+              "glob": "internal/spellruntime/gen/types/*.buzz"
             }
           ]
         },
@@ -105,6 +121,9 @@
           "name": "mocks-generate",
           "declared": "mocks_generate",
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
               "glob": "**/gen/mocks/*.go"
@@ -131,6 +150,9 @@
           "name": "config-generate",
           "declared": "config_generate",
           "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
               "glob": "cmd/magus/gen/*.go"
@@ -167,6 +189,34 @@
           ]
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod.",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            },
+            {
+              "spell": "gomod",
+              "ops": [
+                "replaceArgs"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "postflight",
           "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
           "charms": [
@@ -177,7 +227,9 @@
           "name": "generate",
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
+            "mod-sync",
             "man-generate",
+            "types-generate",
             "bindings-generate",
             "spells-generate",
             "mocks-generate",
@@ -217,6 +269,17 @@
           "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos)."
         },
         {
+          "name": "release",
+          "charms": [
+            "cd"
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "watch",
           "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
           "spells": [
@@ -252,6 +315,11 @@
               "ops": [
                 "go-test"
               ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "assets/coverage.svg"
             }
           ],
           "exec_overrides": [
@@ -320,7 +388,7 @@
               ]
             },
             {
-              "spell": "md",
+              "spell": "markdown",
               "ops": [
                 "markdownlint"
               ]
@@ -564,6 +632,11 @@
           ],
           "charms": [
             "rw"
+          ],
+          "outputs": [
+            {
+              "glob": "active.urls.lock"
+            }
           ]
         },
         {
@@ -684,8 +757,8 @@
       ]
     },
     {
-      "path": "libs/diag",
-      "name": "libs/diag",
+      "path": "libs/diagnostics",
+      "name": "libs/diagnostics",
       "engine": "buzz",
       "nodes": [
         {
@@ -696,6 +769,7 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
+            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -708,9 +782,31 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {
@@ -788,6 +884,7 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
+            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -800,9 +897,31 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {
@@ -857,6 +976,22 @@
           ]
         },
         {
+          "name": "buzz-build",
+          "declared": "buzz_build",
+          "doc": "Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.",
+          "dependencies": [
+            "format"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ]
+        },
+        {
           "name": "ci",
           "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
           "dependencies": [
@@ -864,11 +999,6 @@
             "build",
             "test"
           ]
-        },
-        {
-          "name": "pgo-generate",
-          "declared": "pgo_generate",
-          "doc": "Regenerates default.pgo, the Buzz VM's PGO profile."
         },
         {
           "name": "conformance",

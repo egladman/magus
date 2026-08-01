@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module crypto -lang buzz -out ../host/gen/crypto.go
+//go:generate go run ../cmd/magus-utils bindings -module crypto -lang buzz -out ../internal/interp/bindings/gen/crypto.go
 
 func init() { Register(Crypto) }
 

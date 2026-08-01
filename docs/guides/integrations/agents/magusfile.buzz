@@ -47,6 +47,10 @@ magus\project({
         // walks every markdown file it finds. Skipping the cache is the honest answer for
         // two fast gates over five files.
         "lint": {"skip_cache": true},
+        // ci only composes the source-only lint gate, so it cannot produce a
+        // cache snapshot either. Marking just lint was insufficient: the ci
+        // wrapper still tried to snapshot this output-free project.
+        "ci": {"skip_cache": true},
     },
 });
 

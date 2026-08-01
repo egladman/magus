@@ -102,8 +102,9 @@ func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir) // the import resolves relative to the cwd
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetimport"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts"]; }
+	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "widgetimport"; }
+export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.ts"}]; }
 export fun mgs_listTargets() > any {
     return {"build": {"bin": "npm", "args": ["run", "build"]}};
 }
@@ -225,10 +226,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, "overridden", string(got))
 }
 
-// TestBuzzSpellCaptureReturnsRecord verifies a capture=true target returns the
-// {stdout, stderr, code, ok} record map, accessed with dot syntax the way a
+// TestBuzzSpellCaptureReturnsObject verifies a capture=true target returns the
+// {stdout, stderr, code, ok} object, accessed with dot syntax the way a
 // magusfile reads os.exec(...).stdout.
-func TestBuzzSpellCaptureReturnsRecord(t *testing.T) {
+func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -313,7 +314,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
-// fallback: outside any repository, vcs.commit() returns the zero record (every
+// fallback: outside any repository, vcs.commit() returns the zero object (every
 // field empty), not null — callers test a field (c.date == "") for "no commit".
 func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
@@ -322,24 +323,25 @@ func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void {
     final c = vcs.commit();
-    if (c == null) { magus.fatal("vcs.commit should be an empty record, not null, outside a repo"); }
+    if (c == null) { magus.fatal("vcs.commit should be an empty object, not null, outside a repo"); }
     if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
     if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
 }`)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
-	require.NoError(t, runErr, "vcs.commit empty-record case")
+	require.NoError(t, runErr, "vcs.commit empty-object case")
 }
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
 // declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Descriptor. It guards the resolver (internal/spell/resolve.go) against
+// expected Descriptor. It guards the resolver (internal/spellruntime/resolve.go) against
 // dropping fields — claims is asserted explicitly because that is the field that
 // previously regressed.
 func TestEngineDescriptorParity(t *testing.T) {
-	buzzSrc := `export fun mgs_getName() > str { return "parity_buzz"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; }
-export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }
-export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; }
+	buzzSrc := `import "magus/spell";
+export fun mgs_getName() > str { return "parity_buzz"; }
+export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.rb"}, Path{value = "Gemfile.lock"}]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**"}]; }
+export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = ".rubocop.yml"}, Path{value = "Gemfile"}]; }
 export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {

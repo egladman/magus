@@ -18,7 +18,7 @@ import (
 
 // TestOsExecTeesToOutputWriters verifies os.exec sends output through the run's
 // output writers (reusing the CLI's live+cached-log sink) while still capturing
-// it into the returned record.
+// it into the returned object.
 func TestOsExecTeesToOutputWriters(t *testing.T) {
 	var tee bytes.Buffer
 	ctx := run.WithOutputWriters(context.Background(), &tee, &tee)
@@ -327,7 +327,7 @@ func TestFsStatMapKeys(t *testing.T) {
 	info, err := FsStat(context.Background(), "os.go")
 	require.NoError(t, err)
 
-	m := info.ToMap()
+	m := info.BuzzObject()
 	require.Contains(t, m, "mtime", "serve's staleness stamp reads st[\"mtime\"]")
 	require.Contains(t, m, "size", "serve's staleness stamp reads st[\"size\"]")
 	assert.Contains(t, m, "mode")

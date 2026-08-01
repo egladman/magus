@@ -12,7 +12,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	hostreg "github.com/egladman/magus/host/registry"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
 )
 
@@ -26,7 +26,7 @@ type SpellCatalog interface {
 	BuiltinOps() map[string][]string
 }
 
-// builtinCatalog is the production SpellCatalog, backed by the real internal/spell
+// builtinCatalog is the production SpellCatalog, backed by the real internal/spellruntime
 // registry. spell.BuiltinOps() derives its result from Builtins(), so there is one
 // source of truth.
 type builtinCatalog struct{}
@@ -46,8 +46,8 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
-	for name, reg := range hostreg.Modules {
-		if reg.WASMCompatible {
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(bindinggen.WASM) {
 			out[name] = reg.Register
 		}
 	}
@@ -58,14 +58,15 @@ func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
 func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
 	for name, register := range WASMCompatibleMagusModules {
-		sess.SetSyntheticModule(name, register(ctx, sess))
+		sess.SetNativeModule(name, register(ctx, sess))
 	}
 }
 
 // PlaygroundHostModules names every magus host module the browser playground makes
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
-// installHost wires as a global (sess.SetGlobal("magus", ...)) rather than a registry
-// module. It is the single truth for what runs in the playground - kept next to the
+// installHost registers as a native module like the rest, so the playground is a
+// blank slate and every surface it offers is reached by an explicit import - the same
+// import a magusfile writes. It is the single truth for what runs in the playground - kept next to the
 // wiring so the two can't drift - and the langservice manifest diffs against it to
 // decide which modules are reference-only there. Because magus is listed here (it is
 // genuinely wired), it is never reported as excluded: no special-casing downstream.
@@ -217,11 +218,12 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, &out)
 	registerWASMCompatibleMagusModules(ctx, sess)
-	// The pure-compute half of the magus surface. Plain mode is the mode with a Run
-	// button, so a doc example calling magus\normalize has to resolve here or the
-	// page teaches nothing; before this, `import "magus"` failed outright in plain
-	// mode while PlaygroundHostModules() advertised it as wired.
-	sess.SetGlobal("magus", pureMagus())
+	// The pure-compute half of the magus surface, registered as a MODULE so plain
+	// mode resolves `import "magus"` the way a magusfile does. It was previously a
+	// global, which made the import optional here and only here: a snippet that ran
+	// under the Run button then failed when pasted into a magusfile, so the page
+	// taught a form the language rejects.
+	sess.SetNativeModule("magus", pureMagus())
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

@@ -84,7 +84,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/ebitengine/purego v0.10.2 // indirect
-	github.com/egladman/magus/libs/diag v0.0.0
+	github.com/egladman/magus/libs/diagnostics v0.0.0
 	github.com/egladman/magus/libs/gopherbuzz v0.0.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
@@ -124,6 +124,12 @@ tool (
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
 
-replace github.com/egladman/magus/libs/diag => ./libs/diag
+// These replace directives are LOCAL-DEV ONLY: replace is never transitive, so a
+// downstream consumer of this module never sees them - it resolves the two
+// requires above at their real tagged version instead. That is by design, the
+// standard Go pattern for a multi-module repo, and not something to "clean up":
+// deleting these would break every in-repo build (go run ./cmd/magus, magus run
+// build) against whatever v0.0.0 or stale tag the require lines happen to name.
+replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz

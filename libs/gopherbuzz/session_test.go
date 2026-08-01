@@ -43,20 +43,20 @@ func TestSession_EvalExpression(t *testing.T) {
 	assert.Equal(t, int64(3), v.AsInt(), "Eval(return sum()) = %v, want 3", v)
 }
 
-func TestSession_SyntheticModule(t *testing.T) {
+func TestSession_NativeModule(t *testing.T) {
 	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	mod := vm.NewMap()
 	mod.MapSet("answer", vm.IntValue(42))
 	// Host registers the module under an import path; it resolves with no file
 	// on disk and no include dirs configured.
-	s.SetSyntheticModule("example/demo", mod)
+	s.SetNativeModule("example/demo", mod)
 
 	require.NoError(t, s.Exec(context.Background(), `
 import "example/demo";
 var x = demo.answer;
 `), "Exec")
 	v, ok := s.Globals()["x"]
-	require.True(t, ok, "global 'x' not bound; synthetic import did not resolve")
+	require.True(t, ok, "global 'x' not bound; native import did not resolve")
 	require.True(t, v.IsInt(), "x = %v, want 42", v)
 	assert.Equal(t, int64(42), v.AsInt(), "x = %v, want 42", v)
 }
@@ -66,7 +66,7 @@ func TestSession_ModuleResolver(t *testing.T) {
 	mod := vm.NewMap()
 	mod.MapSet("answer", vm.IntValue(7))
 	// The resolver gets first refusal on a path-style import that is neither
-	// bound nor a synthetic module; it binds the returned module under the
+	// bound nor a native module; it binds the returned module under the
 	// path's basename.
 	var gotPath string
 	s.SetModuleResolver(func(importPath string) (vm.Value, bool) {
@@ -328,7 +328,7 @@ func newImporter(t *testing.T) *buzz.Session {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	s.SetPromoteTopLevel(true) // magusfile execution mode
-	s.SetSourceModule("mymod", importModuleSrc)
+	s.SetModuleDecls("mymod", importModuleSrc)
 	return s
 }
 
@@ -431,7 +431,7 @@ func TestPromoteSession_DefaultOffKeepsGlobals(t *testing.T) {
 func TestFlatImportBindsNamespaceObject(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("greet", `
+	s.SetModuleDecls("greet", `
 namespace greet;
 export fun hello(name: str) > str { return "hi " + name; }
 `)
@@ -456,7 +456,7 @@ export fun hello(name: str) > str { return "hi " + name; }
 func TestImportBindsDeclaredMultiSegmentNamespace(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("modx", `
+	s.SetModuleDecls("modx", `
 namespace alpha\beta;
 export fun hello(name: str) > str { return "hi " + name; }
 `)
@@ -474,11 +474,11 @@ export fun hello(name: str) > str { return "hi " + name; }
 func TestImportSiblingNamespacesSharePrefix(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("sib1", `
+	s.SetModuleDecls("sib1", `
 namespace shared\one;
 export final a = "A";
 `)
-	s.SetSourceModule("sib2", `
+	s.SetModuleDecls("sib2", `
 namespace shared\two;
 export final b = "B";
 `)
@@ -499,11 +499,11 @@ export final b = "B";
 func TestDuplicateNamespaceErrors(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("d1", `
+	s.SetModuleDecls("d1", `
 namespace dup;
 export final x = "1";
 `)
-	s.SetSourceModule("d2", `
+	s.SetModuleDecls("d2", `
 namespace dup;
 export final y = "2";
 `)
@@ -522,12 +522,12 @@ export final y = "2";
 func TestPrivateGlobalsDoNotCollideAcrossModules(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("moda", `
+	s.SetModuleDecls("moda", `
 namespace moda;
 var panel: int? = null;
 export fun setIt() > void { panel = 7; }
 `)
-	s.SetSourceModule("modb", `
+	s.SetModuleDecls("modb", `
 namespace modb;
 var panel: int? = null;
 var items = mut [<int>];
@@ -559,12 +559,12 @@ func TestPrivateFuncsDoNotCollideAcrossModules(t *testing.T) {
 	// The exported entry points have distinct names (whoOne/whoTwo) so the test
 	// isolates the PRIVATE `tag` collision; a shared export name would instead trip
 	// a separate namespace-object issue unrelated to this fix.
-	s.SetSourceModule("mone", `
+	s.SetModuleDecls("mone", `
 namespace mone;
 fun tag() > str { return "one"; }
 export fun whoOne() > str { return tag(); }
 `)
-	s.SetSourceModule("mtwo", `
+	s.SetModuleDecls("mtwo", `
 namespace mtwo;
 fun tag() > str { return "two"; }
 export fun whoTwo() > str { return tag(); }
@@ -588,11 +588,11 @@ export fun whoTwo() > str { return tag(); }
 func TestSharedExportNameAcrossModules(t *testing.T) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
-	s.SetSourceModule("alpha", `
+	s.SetModuleDecls("alpha", `
 namespace alpha;
 export fun who() > str { return "alpha"; }
 `)
-	s.SetSourceModule("beta", `
+	s.SetModuleDecls("beta", `
 namespace beta;
 export fun who() > str { return "beta"; }
 `)

@@ -1,5 +1,5 @@
 // Command magus-spelldocs generates Markdown reference documentation for every
-// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs: walk
+// built-in spell in the internal/spellruntime registry. It mirrors cmd/magus-docs: walk
 // the registry, emit one page per spell to docs/spells/<name>.md (injecting a
 // per-op example from spells/examples/<name>/<op>.buzz), and refresh the
 // built-in-spell table on the /spells/ landing (docs/spells.md) between its marker

@@ -66,7 +66,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 }
 
 // spellScaffold renders the starter spell.buzz for a handle. It is a complete,
-// self-contained built-in-style spell (it imports only the pure magus/target and
+// self-contained built-in-style spell (it imports only the pure magus/spell and
 // magus/charm modules, so it compiles without host bindings) plus a test block,
 // with teaching comments on every contract function.
 func spellScaffold(name string) string {
@@ -92,7 +92,7 @@ const spellScaffoldTemplate = `// spells/SPELLNAME/spell.buzz - a magus spell fo
 //
 // Test this file:  magus buzz -t --embedded spells/SPELLNAME/spell.buzz
 
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 import "assert";
 
@@ -102,22 +102,21 @@ export fun mgs_getName() > str { return "SPELLNAME"; }
 
 // mgs_listRequiredGlobs declares the inputs this spell's ops read (its "needs").
 // magus hashes every matching file into the cache key, so editing one busts the
-// cache and re-runs; a file no glob matches never triggers a rebuild. ` + "`root`" + ` is
-// the project directory, usually ignorable. Under-declare here and you replay a
-// stale build; see docs/cache.md.
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.SPELLNAME"];
+// cache and re-runs; a file no glob matches never triggers a rebuild.
+// Under-declare here and you replay a stale build; see docs/cache.md.
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.SPELLNAME"}];
 }
 
 // mgs_listProvidedGlobs declares the outputs an op writes (its "provides"). magus
 // snapshots these on a miss and replays them on a hit. Omit it (as here) for a
 // read-only tool - a linter or formatter check - that writes nothing.
-// export fun mgs_listProvidedGlobs() > [str] { return ["dist/**"]; }
+// export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "dist/**"}]; }
 
 // mgs_listClaimedGlobs declares files this spell OWNS, for affected-set
 // attribution (which project a changed file belongs to). Unlike needs, claims are
 // never hashed or snapshotted. Omit it when needs already covers your files.
-// export fun mgs_listClaimedGlobs() > [str] { return ["**/*.SPELLNAME"]; }
+// export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = "**/*.SPELLNAME"}]; }
 
 // An op is a function returning a Command: the bin and argv magus forks directly
 // (no shell, one process). It receives a Target but must NOT read or branch on it

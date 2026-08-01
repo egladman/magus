@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module env -lang buzz -out ../host/gen/env.go
+//go:generate go run ../cmd/magus-utils bindings -module env -lang buzz -out ../internal/interp/bindings/gen/env.go
 
 func init() { Register(Env) }
 

@@ -38,7 +38,7 @@ Set the level without flags via `log.level` in `magus.yaml` or
 
 Without flags you get the result of each target and little else:
 
-```
+```text
 [pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
@@ -51,7 +51,7 @@ out3a777178` replays them verbatim.
 
 A failure prints more, because more is actionable:
 
-```
+```text
 [fail] docs generate:rw (ran, 50s)
   cause: magus generate docs: 1 spell(s) failed
   output: out462efb79
@@ -84,8 +84,8 @@ count, tool versions, charms. `run.exec` fires once per subprocess with the
 command, its full arguments, and its directory, rendered as a shell line you can
 copy and run yourself:
 
-```
-  $ go test ./... -race
+```sh
+go test ./... -race
 ```
 
 Beyond that: cross-project dispatch, spell fan-out decisions, the derived
@@ -131,7 +131,7 @@ answer what a step is waiting on, without a profiler.
 **Why does magus take so long to start?** On exit, trace prints a phase timing
 table:
 
-```
+```text
 magus startup trace:
   startup.find_root_early              1.204ms
   startup.config_load                  3.881ms
@@ -161,7 +161,7 @@ preserved.
 **`--silent`** bounds the dump to the last 50 lines and prints the path to the
 complete log:
 
-```
+```text
 -- api (failed) --
 ... 812 earlier line(s) omitted; full log: .magus/logs/<hash>.log
 ```
@@ -173,7 +173,7 @@ complete log:
 echo "magus:notice: deployed api v1.2.3"
 ```
 
-```
+```text
 notice: api: deployed api v1.2.3
 ```
 

@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../host/gen/fs.go
+//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go
 
 func init() { Register(Fs) }
 
@@ -125,7 +125,7 @@ var Fs = Module{
 			Name:    "stat",
 			Doc:     "Return metadata for path as {size, mtime, mode, is_dir}: size in bytes, mtime as Unix millis, mode as the integer permission bits. Errors if path is missing.",
 			Args:    []Arg{{Name: "path", Type: TypeString}},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "FileInfo"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "FileInfo"}},
 			Impl:    FsStat,
 		},
 		{

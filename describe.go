@@ -20,11 +20,29 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DescribeSpells returns the catalog of registered spells, sorted by name.
-func (*Magus) DescribeSpells() []types.SpellEntry {
+// describeCancelled reports a Describe walk cut short by ctx, naming how far it got.
+// Returning it (rather than the truncated value alone) is the entire reason these
+// methods take a ctx: a partial inventory reporting Count: 3 is indistinguishable
+// from a workspace that genuinely has three projects, so the cancellation has to
+// travel as an error or it is a silent wrong answer. Wraps ctx.Err(), so
+// errors.Is(err, context.Canceled) and errors.Is(err, context.DeadlineExceeded)
+// both hold for the caller.
+func describeCancelled(ctx context.Context, walk string, done, total int) error {
+	return fmt.Errorf("describe %s: cancelled after %d of %d: %w", walk, done, total, ctx.Err())
+}
+
+// ListSpells returns the catalog of registered spells, sorted by name. A
+// package-level function, not a *Magus method: it reads only the global spell
+// registry (project.DefaultSpellRegistry), never the receiver, so it is not on
+// the Inspector interface - a workspace method that ignores its workspace is a
+// global query wearing a domain method's clothes.
+func ListSpells(ctx context.Context) ([]types.Spell, error) {
 	all := project.DefaultSpellRegistry().All()
-	entries := make([]types.SpellEntry, 0, len(all))
-	for _, p := range all {
+	entries := make([]types.Spell, 0, len(all))
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "spells", i, len(all))
+		}
 		var docs map[string]string
 		var opCommands map[string][]string
 		for _, t := range p.Targets() {
@@ -44,7 +62,7 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 				opCommands[t] = append([]string{cmd}, args...)
 			}
 		}
-		entries = append(entries, types.SpellEntry{
+		entries = append(entries, types.Spell{
 			Name:         p.Name(),
 			BuzzImport:   spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
@@ -56,32 +74,60 @@ func (*Magus) DescribeSpells() []types.SpellEntry {
 			VersionProbe: p.HasVersionProbe(),
 			TargetDocs:   docs,
 			OpCommands:   opCommands,
+			Toolchains:   spellToolchains(opCommands),
 		})
 	}
-	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
+	slices.SortFunc(entries, func(a, b types.Spell) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
-// DescribeCharms builds the inverse charm index: every charm name a target in the
-// workspace declares, plus the reserved built-ins and any workspace default, and for
-// each the project/target/spell declarations that give it a patch. defaults is the
-// workspace default_charms set, so the report can mark which charms apply to every
-// run without a :suffix. It is the transpose of DescribeTarget: one charm and
-// every target that declares it.
-func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
+func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {
+	byCommand := make(map[string][]string)
+	for target, argv := range opCommands {
+		if len(argv) == 0 || argv[0] == "" {
+			continue
+		}
+		byCommand[argv[0]] = append(byCommand[argv[0]], target)
+	}
+	if len(byCommand) == 0 {
+		return nil
+	}
+	commands := slices.Sorted(maps.Keys(byCommand))
+	out := make([]types.SpellToolchain, 0, len(commands))
+	for _, command := range commands {
+		operations := byCommand[command]
+		slices.Sort(operations)
+		out = append(out, types.SpellToolchain{Command: command, Operations: operations})
+	}
+	return out
+}
+
+// ListCharms builds the inverse charm index: every charm name a target in the
+// workspace declares, plus the reserved built-ins and the workspace's own
+// default_charms set (m.cfg.DefaultCharms), and for each the project/target/spell
+// declarations that give it a patch. Marking which charms apply to every run
+// without a :suffix is why this reads m.cfg directly rather than taking a
+// defaults parameter - a caller reaching this through the Inspector interface
+// (e.g. the MCP handler) has no other way to reach the workspace's own config, and
+// used to pass nil, so every charm silently reported Default: false over MCP even
+// when magus.yaml set defaults. It is the transpose of EvaluateTarget: one charm
+// and every target that declares it. ctx bounds the walk so a large workspace's
+// introspection stays cancellable - this is the most expensive Inspector method
+// (ExplainCommand per charm, per target, per spell, across every project).
+func (m *Magus) ListCharms(ctx context.Context) ([]types.Charm, error) {
 	defaultSet := map[string]struct{}{}
-	for _, c := range defaults {
+	for _, c := range m.cfg.DefaultCharms {
 		defaultSet[types.Normalize(c)] = struct{}{}
 	}
 
-	byName := map[string]*types.CharmEntry{}
-	ensure := func(name string) *types.CharmEntry {
+	byName := map[string]*types.Charm{}
+	ensure := func(name string) *types.Charm {
 		e, ok := byName[name]
 		if !ok {
 			_, isDefault := defaultSet[name]
-			e = &types.CharmEntry{
+			e = &types.Charm{
 				Name:    name,
 				Builtin: types.IsReservedCharm(name),
 				Default: isDefault,
@@ -101,7 +147,11 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 		ensure(name)
 	}
 
-	for _, p := range m.ws.All() {
+	projects := m.ws.All()
+	for i, p := range projects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "charms", i, len(projects))
+		}
 		for _, s := range p.ResolvedSpells {
 			for _, target := range s.Targets() {
 				for _, c := range s.Charms(target) {
@@ -121,7 +171,7 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 		}
 	}
 
-	entries := make([]types.CharmEntry, 0, len(byName))
+	entries := make([]types.Charm, 0, len(byName))
 	for _, e := range byName {
 		slices.SortFunc(e.Declarations, func(a, b types.CharmDeclaration) int {
 			if c := cmp.Compare(a.Project, b.Project); c != 0 {
@@ -134,14 +184,15 @@ func (m *Magus) DescribeCharms(defaults []string) []types.CharmEntry {
 		})
 		entries = append(entries, *e)
 	}
-	slices.SortFunc(entries, func(a, b types.CharmEntry) int {
+	slices.SortFunc(entries, func(a, b types.Charm) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
-// DescribeTargets enumerates targets known in the workspace.
-func (m *Magus) DescribeTargets() []types.TargetEntry {
+// ListTargets enumerates targets known in the workspace. ctx bounds each of
+// its three walks so a large workspace's introspection stays cancellable.
+func (m *Magus) ListTargets(ctx context.Context) ([]types.TargetEntry, error) {
 	type targetInfo struct {
 		spells   []string
 		projects []string
@@ -152,7 +203,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 	byName[types.TargetCI] = &targetInfo{kind: "canonical"}
 
 	spellInUse := map[string]bool{}
-	for _, p := range m.ws.All() {
+	usageProjects := m.ws.All()
+	for i, p := range usageProjects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (spell usage)", i, len(usageProjects))
+		}
 		for _, bp := range p.Spells {
 			spellInUse[bp] = true
 		}
@@ -160,7 +215,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 			spellInUse[p.Spell] = true
 		}
 	}
-	for _, spell := range project.DefaultSpellRegistry().All() {
+	registrySpells := project.DefaultSpellRegistry().All()
+	for i, spell := range registrySpells {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (spell registry)", i, len(registrySpells))
+		}
 		if !spellInUse[spell.Name()] {
 			continue
 		}
@@ -172,7 +231,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 		}
 	}
 
-	for _, p := range m.ws.All() {
+	policyProjects := m.ws.All()
+	for i, p := range policyProjects {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "targets (target policies)", i, len(policyProjects))
+		}
 		for target := range p.TargetPolicies {
 			if _, ok := byName[target]; !ok {
 				byName[target] = &targetInfo{kind: "custom"}
@@ -200,11 +263,11 @@ func (m *Magus) DescribeTargets() []types.TargetEntry {
 		}
 		return cmp.Compare(a.Name, b.Name)
 	})
-	return entries
+	return entries, nil
 }
 
 // gitRoot returns the nearest ancestor of dir (inclusive) holding a `.git` entry,
-// or "" if none. A lightweight walk rather than a `git` exec: DescribeGraph has no
+// or "" if none. A lightweight walk rather than a `git` exec: TargetGraph has no
 // reason to shell out, and all it needs is the directory to render a project's path
 // relative to. The `.git` entry is a directory in a normal clone
 // and a file in a worktree or submodule, so a bare existence check covers both.
@@ -223,7 +286,7 @@ func gitRoot(dir string) string {
 
 // collectTargetNodes returns src's target graph nodes, read statically from the
 // magusfile source by describe.Extract - the sole graph source. Both the cache-footprint
-// path (applyTargetDepsAndFootprint) and the graph render (DescribeGraph) read through
+// path (applyTargetDepsAndFootprint) and the graph render (TargetGraph) read through
 // here so a target's inputs/outputs/cross-deps reach the cache key and affected-tracking,
 // not only MAGUS.md. The static read is deterministic and side-effect free (it never runs
 // a target body) and sees both arms of a runtime branch, which a trace could not.
@@ -569,17 +632,18 @@ func concatSource(src *interp.Source) string {
 	return sb.String()
 }
 
-// DescribeGraph returns the target dependency graph of each project, read statically
+// TargetGraph returns the target dependency graph of each project, read statically
 // from the magusfile source (describe.Extract) - deterministic and side-effect free, so
 // introspection never runs a target body. Buzz magusfiles are supported; a project on
 // any other engine yields an engine-tagged entry with no nodes until that extractor
 // lands. ctx bounds the walk so a large workspace's introspection stays cancellable.
-func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
+func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error) {
 	out := types.TargetGraphOutput{Definition: types.TargetGraphDefinition}
 	repoRoot := gitRoot(m.ws.Root) // "" outside a repo; drives the repo-relative MAGUS.md heading
-	for _, p := range m.ws.All() {
+	projects := m.ws.All()
+	for i, p := range projects {
 		if ctx.Err() != nil {
-			break
+			return types.TargetGraphOutput{}, describeCancelled(ctx, "graph", i, len(projects))
 		}
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
@@ -610,7 +674,7 @@ func (m *Magus) DescribeGraph(ctx context.Context) types.TargetGraphOutput {
 			out.Projects = append(out.Projects, entry)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // resolveNodeRefs rewrites each node's cross-project dependency paths and its
@@ -657,54 +721,104 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 	}
 }
 
-// DescribeProjects returns the project inventory of the workspace.
-func (m *Magus) DescribeProjects() types.ProjectsOutput {
+// projectEntry builds the declared-facts view of p, shared by ListProjects and
+// EvaluateProjects (whose embedded ProjectEntry carries every field this builds,
+// Sources/Outputs excepted - see the field comment on ProjectEntry.Sources).
+func projectEntry(p *types.Project) types.ProjectEntry {
+	return types.ProjectEntry{
+		Path:      p.Path,
+		Name:      p.Name,
+		Dir:       p.Dir,
+		Spell:     p.Spell,
+		Spells:    p.Spells,
+		Sources:   p.Sources,
+		Outputs:   p.Outputs,
+		DependsOn: p.DependsOn,
+		Exclusive: p.Exclusive,
+		Manifests: projectManifests(p),
+	}
+}
+
+// projectManifests resolves p's spells' declared manifest candidates
+// (spells.Spell.Manifests) down to the ones that actually exist in p.Dir, in
+// declared order - a magusfile reading ProjectEntry.Manifests gets the file that
+// carries this project's version without walking the filesystem itself: the spell
+// already knows the candidate names for its ecosystem, only existence is a
+// per-project fact only the workspace can check. A project bound to more than one
+// manifest-declaring spell concatenates each spell's filtered list in spell order;
+// ordinary workspaces bind at most one language spell per project, so this is
+// almost always zero or one entry.
+func projectManifests(p *types.Project) []string {
+	var out []string
+	for _, name := range p.Spells {
+		sp, ok := project.DefaultSpellRegistry().Lookup(name)
+		if !ok {
+			continue
+		}
+		for _, f := range sp.Manifests() {
+			if _, err := os.Stat(filepath.Join(p.Dir, f)); err == nil {
+				out = append(out, f)
+			}
+		}
+	}
+	return out
+}
+
+// ListProjects returns the project inventory of the workspace.
+func (m *Magus) ListProjects(ctx context.Context) (types.ProjectsOutput, error) {
 	all := m.ws.All()
 	entries := make([]types.ProjectEntry, 0, len(all))
-	for _, p := range all {
-		entries = append(entries, types.ProjectEntry{
-			Path:      p.Path,
-			Name:      p.Name,
-			Dir:       p.Dir,
-			Spell:     p.Spell,
-			Spells:    p.Spells,
-			Sources:   p.Sources,
-			Outputs:   p.Outputs,
-			DependsOn: p.DependsOn,
-			Exclusive: p.Exclusive,
-		})
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return types.ProjectsOutput{}, describeCancelled(ctx, "projects", i, len(all))
+		}
+		entries = append(entries, projectEntry(p))
 	}
 	return types.ProjectsOutput{
 		Definition: types.ProjectDefinition,
 		Workspace:  m.ws.Root,
 		Count:      len(entries),
 		Projects:   entries,
-	}
+	}, nil
 }
 
-// DescribeWorkspaces returns the single-entry view of m's workspace. A *Magus is
-// always exactly one workspace; the CLI's `describe workspaces` merges these
-// across the daemon's declared roots when daemon.workspaces is set.
-func (m *Magus) DescribeWorkspaces(cfg types.WorkspaceConfig) []types.WorkspaceEntry {
-	entry := types.WorkspaceEntry{
+// Workspace returns the single-entry view of m's workspace. A *Magus is always
+// exactly one workspace; the CLI's `describe workspaces` merges these across the
+// daemon's declared roots when daemon.workspaces is set.
+func (m *Magus) Workspace(ctx context.Context, cfg types.WorkspaceConfig) (types.WorkspaceEntry, error) {
+	// No per-project walk here (only a length read), so there is nothing to name a
+	// done/total against; describeCancelled reads awkwardly with both pinned at 0,
+	// so this wraps ctx.Err() directly instead of going through the helper.
+	if err := ctx.Err(); err != nil {
+		return types.WorkspaceEntry{}, fmt.Errorf("describe workspaces: %w", err)
+	}
+	return types.WorkspaceEntry{
 		Root:         m.ws.Root,
 		VCSBaseRef:   m.ws.VCSOptions.BaseRef,
 		CacheDir:     cfg.CacheDir,
 		Concurrency:  cfg.Concurrency,
 		ProjectCount: len(m.ws.All()),
-	}
-	return []types.WorkspaceEntry{entry}
+	}, nil
 }
 
-// DescribeTarget returns the fully-evaluated dispatch plan for t.
-func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, error) {
+// EvaluateTarget returns the fully-evaluated dispatch plan for t. Like every other
+// Inspector method, a cancelled ctx is reported as an error rather than truncating
+// the plan silently: a partial dispatch plan is exactly the misleading result
+// describeCancelled exists to prevent.
+func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.EvaluatedTarget, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	expanded, err := m.ExpandPath(t)
 	if err != nil {
 		return nil, err
 	}
 
-	entries := make([]types.EvaluatedTargetEntry, 0, len(expanded))
-	for _, et := range expanded {
+	entries := make([]types.EvaluatedTarget, 0, len(expanded))
+	for i, et := range expanded {
+		if err := ctx.Err(); err != nil {
+			return nil, describeCancelled(ctx, "target", i, len(expanded))
+		}
 		p := m.Get(et.Path)
 		if p == nil {
 			continue
@@ -717,10 +831,10 @@ func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, er
 		// cache actually keys and snapshots.
 		step := m.buildStep(p, et.Name)
 
-		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
+		spellEntries := make([]types.EvaluatedSpell, 0, len(p.ResolvedSpells))
 		charmSet := map[string]struct{}{}
 		for i, s := range p.ResolvedSpells {
-			se := types.EvaluatedSpellEntry{
+			se := types.EvaluatedSpell{
 				Name:            s.Name(),
 				TargetSources:   s.TargetSources()[et.Name],
 				EffectiveClaims: project.EffectiveClaims(p, i),
@@ -774,7 +888,7 @@ func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, er
 		}
 		slices.Sort(charms)
 
-		entry := types.EvaluatedTargetEntry{
+		entry := types.EvaluatedTarget{
 			Project:   et.Path,
 			Target:    et.Name,
 			Dir:       p.Dir,
@@ -794,16 +908,20 @@ func (m *Magus) DescribeTarget(t types.Target) ([]types.EvaluatedTargetEntry, er
 	return entries, nil
 }
 
-// DescribeEvaluatedProjects returns the fully-evaluated project inventory.
-func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
+// EvaluateProjects returns the fully-evaluated project inventory. ctx bounds the
+// walk so a large workspace's introspection stays cancellable.
+func (m *Magus) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOutput, error) {
 	all := m.ws.All()
-	entries := make([]types.EvaluatedProjectEntry, 0, len(all))
-	for _, p := range all {
+	entries := make([]types.EvaluatedProject, 0, len(all))
+	for i, p := range all {
+		if ctx.Err() != nil {
+			return types.EvaluatedProjectsOutput{}, describeCancelled(ctx, "evaluated projects", i, len(all))
+		}
 		step := m.baseStep(p)
 
-		spellEntries := make([]types.EvaluatedSpellEntry, 0, len(p.ResolvedSpells))
+		spellEntries := make([]types.EvaluatedSpell, 0, len(p.ResolvedSpells))
 		for i, s := range p.ResolvedSpells {
-			se := types.EvaluatedSpellEntry{
+			se := types.EvaluatedSpell{
 				Name:            s.Name(),
 				EffectiveClaims: project.EffectiveClaims(p, i),
 			}
@@ -813,15 +931,15 @@ func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 			spellEntries = append(spellEntries, se)
 		}
 
-		entry := types.EvaluatedProjectEntry{
-			Path:      p.Path,
-			Dir:       p.Dir,
-			Sources:   step.Sources,
-			Outputs:   step.Outputs,
-			DependsOn: p.DependsOn,
-			Spells:    spellEntries,
-			Exclusive: p.Exclusive,
-		}
+		// The embedded ProjectEntry carries the same declared facts ListProjects
+		// builds - Name and Spell included, the bug this fixes - except Sources and
+		// Outputs, which are overwritten with the RESOLVED, workspace-rooted globs
+		// baseStep computes (see the field comment on ProjectEntry.Sources).
+		pe := projectEntry(p)
+		pe.Sources = step.Sources
+		pe.Outputs = step.Outputs
+
+		entry := types.EvaluatedProject{ProjectEntry: pe, ResolvedSpells: spellEntries}
 		if len(p.TargetPolicies) > 0 {
 			entry.TargetPolicies = p.TargetPolicies
 		}
@@ -832,7 +950,7 @@ func (m *Magus) DescribeEvaluatedProjects() types.EvaluatedProjectsOutput {
 		Workspace:  m.ws.Root,
 		Count:      len(entries),
 		Projects:   entries,
-	}
+	}, nil
 }
 
 func appendUniq(s []string, v string) []string {
@@ -844,13 +962,14 @@ func appendUniq(s []string, v string) []string {
 	return append(s, v)
 }
 
-// DescribeFiles classifies workspace-relative paths against every project's
+// ClassifyFiles classifies workspace-relative paths against every project's
 // declared source and output globs (the same workspace-rooted globs baseStep
 // feeds the cache), plus directory containment for ownership. It is pure
 // declaration lookup - no target evaluation, no VCS - so it is cheap enough to
 // run over a whole dirty tree. An absolute path is re-rooted onto the workspace;
-// a path outside it (or matching nothing) reports as unclaimed.
-func (m *Magus) DescribeFiles(paths []string) []types.FileEntry {
+// a path outside it (or matching nothing) reports as unclaimed. ctx bounds the
+// walk so classifying a large path list stays cancellable.
+func (m *Magus) ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error) {
 	all := m.ws.All()
 	// Longest project path first, so nested projects claim ownership before ".".
 	owners := slices.Clone(all)
@@ -862,10 +981,13 @@ func (m *Magus) DescribeFiles(paths []string) []types.FileEntry {
 	})
 
 	entries := make([]types.FileEntry, 0, len(paths))
-	for _, raw := range paths {
+	for i, raw := range paths {
+		if ctx.Err() != nil {
+			return nil, describeCancelled(ctx, "files", i, len(paths))
+		}
 		entries = append(entries, m.describeFile(raw, all, owners))
 	}
-	return entries
+	return entries, nil
 }
 
 func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.FileEntry {

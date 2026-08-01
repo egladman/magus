@@ -1,8 +1,6 @@
 package types
 
-import (
-	"context"
-)
+import "context"
 
 // Graph is the project dependency DAG; cycles are caught at construction. The
 // DepGraphRepository it wraps (the query engine) lives in repository.go.
@@ -87,7 +85,7 @@ func (g *Graph) Predecessors(path string) []string { return g.repo.Predecessors(
 func (g *Graph) Nodes() []string                   { return g.repo.Nodes() }
 func (g *Graph) Project(path string) *Project      { return g.projects[path] }
 
-// GraphView is the boundary record magus.graph returns: the project dependency
+// GraphView is the boundary object magus.graph returns: the project dependency
 // DAG flattened to plain data a magusfile can walk.
 //
 // Nodes are in topological order, so a caller that just iterates gets a valid
@@ -103,24 +101,7 @@ type GraphView struct {
 	BlastRadius map[string]int
 }
 
-// ToMap is the Buzz boundary map magus.graph returns.
-func (g GraphView) ToMap() map[string]any {
-	dependsOn := make(map[string]any, len(g.DependsOn))
-	for k, v := range g.DependsOn {
-		dependsOn[k] = v
-	}
-	blast := make(map[string]any, len(g.BlastRadius))
-	for k, v := range g.BlastRadius {
-		blast[k] = v
-	}
-	return map[string]any{
-		"nodes":       g.Nodes,
-		"dependsOn":   dependsOn,
-		"blastRadius": blast,
-	}
-}
-
-// View flattens the graph into the boundary record above.
+// View flattens the graph into the boundary object above.
 //
 // Edges in this graph run DEPENDENT -> DEPENDENCY, so Successors(web) is what web
 // depends on and TopoSort yields dependents before dependencies. A caller wanting a

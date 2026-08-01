@@ -259,7 +259,7 @@ func toSlashRel(root, p string) string {
 }
 
 func (*runner) checkJSONCodec() Check {
-	v := json.CodecVersion()
+	v := json.Version()
 	msg := "encoding/json " + v
 	if v == "v2" {
 		msg += " (GOEXPERIMENT=jsonv2; faster marshaling)"

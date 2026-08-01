@@ -26,7 +26,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("version_cmd", strSliceToBuzzList(m.VersionCmd))
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
-	h.MapSet("ops", targetsToBuzzMap(m.Ops))
+	h.MapSet("ops", targetsToMap(m.Ops))
 	bindBuzzTargetDispatch(h, m.Ops)
 	return h
 }
@@ -74,14 +74,14 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 			return vm.Null, err
 		}
 		if tgt.Capture {
-			return execRecordToBuzz(res.ToMap()), nil
+			return execRecordToBuzz(res.BuzzObject()), nil
 		}
 		return vm.Null, nil
 	}))
 }
 
-// execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec record to
-// a Buzz map, marshalled the same way os.exec's record is (see host.AnyVal):
+// execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec object to
+// a Buzz map, marshalled the same way os.exec's object is (see host.AnyVal):
 // string/bool direct, int as a Buzz int.
 func execRecordToBuzz(rec map[string]any) vm.Value {
 	m := vm.NewMap()
@@ -177,9 +177,9 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 	return opts, nil
 }
 
-// targetsToBuzzMap marshals resolved targets back to the nested ops map shape
+// targetsToMap marshals resolved targets back to the nested ops map shape
 // spellruntime.Decode reads (a fork target unless it declares fn).
-func targetsToBuzzMap(targets map[string]spells.Op) vm.Value {
+func targetsToMap(targets map[string]spells.Op) vm.Value {
 	ops := vm.NewMap()
 	for name, t := range targets {
 		op := vm.NewMap()

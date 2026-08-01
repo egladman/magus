@@ -27,6 +27,8 @@ type WorkspaceReader interface {
 	Root() string
 	All() []*Project
 	Get(path string) *Project
+	// Graph returns the PROJECT dependency graph (project -> project, from
+	// depends_on). See Inspector.TargetGraph for the target-level graph.
 	Graph() (*Graph, error)
 	VCSOptions() VCSOptions
 	Where(dir string) (*Project, bool)
@@ -50,17 +52,34 @@ type AffectedComputer interface {
 	AffectedFromPaths(ctx context.Context, paths []string) (*AffectedResult, error)
 }
 
-// Describer returns the structured inventory behind `magus describe`.
-type Describer interface {
-	DescribeSpells() []SpellEntry
-	DescribeCharms(defaults []string) []CharmEntry
-	DescribeTargets() []TargetEntry
-	DescribeGraph(ctx context.Context) TargetGraphOutput
-	DescribeProjects() ProjectsOutput
-	DescribeWorkspaces(cfg WorkspaceConfig) []WorkspaceEntry
-	DescribeTarget(t Target) ([]EvaluatedTargetEntry, error)
-	DescribeEvaluatedProjects() EvaluatedProjectsOutput
-	DescribeFiles(paths []string) []FileEntry
+// Inspector reads the structured facts of a workspace without evaluating anything:
+// what projects, targets, charms, and files exist, and how a specific target
+// resolves. Organized on one axis - List* enumerates a declaration (cheap), Evaluate*
+// resolves one (it costs), Classify* and TargetGraph say what they do.
+type Inspector interface {
+	// ListCharms builds the inverse charm index: every charm name a target in the
+	// workspace declares, plus the reserved built-ins and the workspace's own
+	// default_charms set (read from the receiver's config), and for each the
+	// project/target/spell declarations that give it a patch.
+	ListCharms(ctx context.Context) ([]Charm, error)
+	ListTargets(ctx context.Context) ([]TargetEntry, error)
+	ListProjects(ctx context.Context) (ProjectsOutput, error)
+	// EvaluateProjects returns the fully-resolved project inventory: every
+	// ListProjects fact plus each project's resolved spells and target policies.
+	EvaluateProjects(ctx context.Context) (EvaluatedProjectsOutput, error)
+	// EvaluateTarget returns the fully-evaluated dispatch plan for t.
+	EvaluateTarget(ctx context.Context, t Target) ([]EvaluatedTarget, error)
+	ClassifyFiles(ctx context.Context, paths []string) ([]FileEntry, error)
+	// TargetGraph returns the ctx.needs dependency DAG of each project's targets,
+	// read statically from the magusfile source. A different graph, at a different
+	// granularity, from WorkspaceReader.Graph: that one is the PROJECT dependency
+	// graph (project -> project, from depends_on); this one is the TARGET graph
+	// within and across projects (target -> target, from ctx.needs).
+	TargetGraph(ctx context.Context) (TargetGraphOutput, error)
+	// Workspace returns the single-entry view of this workspace: a *Magus is
+	// always exactly one workspace. The CLI's `describe workspaces` merges these
+	// across the daemon's declared roots when daemon.workspaces is set.
+	Workspace(ctx context.Context, cfg WorkspaceConfig) (WorkspaceEntry, error)
 }
 
 // WorkspaceRepository is the full domain interface for a discovered workspace.
@@ -69,5 +88,5 @@ type WorkspaceRepository interface {
 	WorkspaceReader
 	TargetExpander
 	AffectedComputer
-	Describer
+	Inspector
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/libs/diag"
+	"github.com/egladman/magus/libs/diagnostics"
 )
 
 // TestAllBZZCodesEnumerated guards allBZZCodes against the const block in diagnostics.go: every declared
@@ -24,11 +24,11 @@ func TestAllBZZCodesEnumerated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	declared := regexp.MustCompile(`diag\.Code = "(BZZ\d+)"`).FindAllStringSubmatch(string(src), -1)
+	declared := regexp.MustCompile(`diagnostics\.Code = "(BZZ\d+)"`).FindAllStringSubmatch(string(src), -1)
 	if len(declared) == 0 {
 		t.Fatal("no BZZ codes found in diagnostics.go")
 	}
-	enum := map[diag.Code]bool{}
+	enum := map[diagnostics.Code]bool{}
 	for _, c := range allBZZCodes {
 		if enum[c] {
 			t.Errorf("duplicate code %s in allBZZCodes", c)
@@ -36,7 +36,7 @@ func TestAllBZZCodesEnumerated(t *testing.T) {
 		enum[c] = true
 	}
 	for _, m := range declared {
-		if !enum[diag.Code(m[1])] {
+		if !enum[diagnostics.Code(m[1])] {
 			t.Errorf("%s is declared but missing from allBZZCodes", m[1])
 		}
 	}

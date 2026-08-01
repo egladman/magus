@@ -31,18 +31,32 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
 
-	sess.SetGlobal("magus", buildMagus(sess, tr))
+	// A native module, not a global: the playground must make you write
+	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
+	// without the import, so a snippet that ran here failed the moment it was pasted
+	// into a real magusfile - a Run button validating syntax the language rejects
+	// teaches worse than no Run button. Every other module beside it (the WASM set
+	// above, the spells below) is already registered this way.
+	sess.SetNativeModule("magus", buildMagus(sess, tr))
 	for name, ops := range spells {
-		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, tr))
+		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the canonical value-type modules as embedded SOURCE modules, mirroring
-	// the real runtime (internal/interp/bindings.registerMagusModules), so a SPELL
-	// buffer's `import "magus/target"` resolves the Target/Command/Service object types
-	// instead of failing with `undefined type "Service"`. The session's import lookup
-	// order (synthetic, then source, then resolver) means these are never shadowed by
-	// the catch-all resolver below.
-	sess.SetSourceModule(spellruntime.TargetModulePath, strings.Join([]string{
+	// Register the canonical value-type module as embedded declarations so a
+	// SPELL buffer's or magusfile's `import "magus/spell"` resolves the
+	// Target/Command/Service object types instead of failing with `undefined type
+	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
+	// host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
+	// vcs, ...) - but this sandbox never registers os/fs/http/vcs as real importable
+	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
+	// there is no owning-module import for a probed buffer to reach those types
+	// through. Bundling them here, under the one import path this sandbox does
+	// wire, is this dry-only host's deliberate simplification - it keeps every
+	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
+	// resolvable without also having to fake functional os/fs/http/vcs bindings.
+	// The session's import lookup order (native, then declarations, then resolver)
+	// means this is never shadowed by the catch-all resolver below.
+	sess.SetModuleDecls(spellruntime.SpellModulePath, strings.Join([]string{
 		spellruntime.TargetModuleSource,
 		spellruntime.PatchOpSource,
 		spellruntime.CharmTypeSource,
@@ -56,11 +70,11 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 		spellruntime.SemverVersionSource,
 		spellruntime.URLSource,
 	}, "\n"))
-	sess.SetSourceModule(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
+	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation
-	// with a file-not-found. The source modules above resolve first, so this never
+	// with a file-not-found. The declarations above resolve first, so this never
 	// shadows them.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		m := vm.NewMap()

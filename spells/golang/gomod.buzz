@@ -1,0 +1,108 @@
+// Workspace-local go.mod replacement policy. This is Buzz source beside the Go
+// spell rather than a magus host method: it is build policy, not runtime behavior.
+// The Go spell supplies the only two tool operations it needs: go-mod-json reads a
+// module and go-mod-edit renders or applies the returned flags.
+import "path";
+import "serialize";
+import "std";
+
+fun module_json(mod: any) > str {
+    return serialize\Boxed.init(mod).q("json").stringValue();
+}
+
+fun module_dir(mod: any) > str {
+    return serialize\Boxed.init(mod).q("dir").stringValue();
+}
+
+fun module_path(mod: any) > str {
+    return serialize\jsonDecode(module_json(mod)).q(["Module", "Path"]).stringValue();
+}
+
+fun replace_path(base: str, to: str) > str {
+    final rel = path\rel(base, target: to);
+    if (rel == "." or rel.startsWith("../") or rel.startsWith("./")) { return rel; }
+    return "./" + rel;
+}
+
+fun same_replace_path(dir: str, got: str, want: str) > bool {
+    return path\abs(dir + "/" + got) == path\abs(dir + "/" + want);
+}
+
+fun sorted_keys(values: {str: any}) > [str] {
+    var keys: [str] = mut [<str>];
+    foreach (key, _ in values) { keys.append(key); }
+    return keys.sort(fun (a: str, b: str) > bool { return a < b; });
+}
+
+// replaceArgs derives the go mod edit flags for the module described by currentJSON. Each GoMod is the exact
+// `go mod edit -json` result for a workspace module, captured by the go spell in the
+// caller's context. Only replacements whose old path names a workspace module are
+// touched; third-party replacements are deliberately preserved.
+export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
+	final currentName = serialize\jsonDecode(currentJSON).q(["Module", "Path"]).stringValue();
+    var current: any = null;
+    var byPath: {str: any} = mut {};
+    foreach (mod in modules) {
+        final name = module_path(mod);
+        if (name == "") { continue; }
+        byPath[name] = mod;
+        if (name == currentName) { current = mod; }
+    }
+    if (current == null) { throw "go-mod-sync: no workspace Go module named " + currentName; }
+
+    final parsed = serialize\jsonDecode(module_json(current));
+    var desired: {str: str} = mut {};
+    foreach (require in parsed.q("Require").listValue()) {
+        final name = require.q("Path").stringValue();
+        final provider = byPath[name];
+        if (provider != null and path\abs(module_dir(provider)) != path\abs(module_dir(current))) {
+            desired[name] = replace_path(module_dir(current), to: module_dir(provider));
+        }
+    }
+
+    var existing: {str: [str]} = mut {};
+    foreach (replace in parsed.q("Replace").listValue()) {
+        final oldPath = replace.q(["Old", "Path"]).stringValue();
+        if (byPath[oldPath] == null) { continue; }
+        var paths = existing[oldPath];
+        if (paths == null) { paths = mut [<str>]; }
+        paths.append(replace.q(["New", "Path"]).stringValue());
+        existing[oldPath] = paths;
+    }
+
+    var all: {str: bool} = mut {};
+    foreach (name, _ in desired) { all[name] = true; }
+    foreach (name, _ in existing) { all[name] = true; }
+
+    var drops: [str] = mut [<str>];
+    var replacements: [str] = mut [<str>];
+    foreach (name in sorted_keys(all)) {
+        final wanted = desired[name];
+        final found = existing[name];
+        final correct = wanted != null and found != null and found.len() == 1
+            and same_replace_path(module_dir(current), got: found[0], want: wanted);
+        if (found != null and correct == false) { drops.append("-dropreplace=" + name); }
+        if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
+    }
+    return drops + replacements;
+}
+
+test "derives a replacement and removes a stale workspace replacement" {
+    final root = `{"Module":{"Path":"example.com/root"},"Require":[{"Path":"example.com/lib"}],"Replace":[{"Old":{"Path":"example.com/lib"},"New":{"Path":"./stale"}}]}`;
+    final lib = `{"Module":{"Path":"example.com/lib"}}`;
+    final got = replaceArgs(root, modules: [
+        {"dir": "/repo", "json": root},
+        {"dir": "/repo/libs/lib", "json": lib},
+    ]);
+    std\assert(got.join("|") == "-dropreplace=example.com/lib|-replace=example.com/lib=./libs/lib", message: "reconcile workspace replacement");
+}
+
+test "keeps a correct parent replacement and ignores third-party replacements" {
+    final app = `{"Module":{"Path":"example.com/app"},"Require":[{"Path":"example.com/diag"}],"Replace":[{"Old":{"Path":"example.com/diag"},"New":{"Path":"../diag"}},{"Old":{"Path":"example.com/third-party"},"New":{"Path":"../fork"}}]}`;
+    final diag = `{"Module":{"Path":"example.com/diag"}}`;
+    final got = replaceArgs(app, modules: [
+        {"dir": "/repo/libs/app", "json": app},
+        {"dir": "/repo/libs/diag", "json": diag},
+    ]);
+    std\assert(got.join("|") == "", message: "preserve correct and external replacements");
+}

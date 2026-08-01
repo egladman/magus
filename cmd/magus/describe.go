@@ -130,7 +130,10 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	out := ws.DescribeGraph(ctx)
+	out, err := ws.TargetGraph(ctx)
+	if err != nil {
+		return err
+	}
 
 	// A trailing list of project paths scopes the graph to those projects; the
 	// cross-project edge pass in the renderer drops edges to projects left out.
@@ -255,15 +258,20 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	ws, err := inspectWorkspace(ctx, root)
-	if err != nil {
+	// Still required, even though ListSpells itself reads only the global spell
+	// registry: it preserves `describe spells`' existing behavior of failing outside
+	// a magus workspace, and probeSpellVersions below shells out relative to root.
+	if _, err := inspectWorkspace(ctx, root); err != nil {
 		return err
 	}
 
-	inventory := ws.DescribeSpells()
+	inventory, err := magus.ListSpells(ctx)
+	if err != nil {
+		return err
+	}
 	if len(pos) > 0 {
-		names := namesOf(inventory, func(s types.SpellEntry) string { return s.Name })
-		inventory = filterByName(inventory, pos[0], func(s types.SpellEntry) string { return s.Name })
+		names := namesOf(inventory, func(s types.Spell) string { return s.Name })
+		inventory = filterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
 		if len(inventory) == 0 {
 			return unknownEntity("spell", pos[0], names)
 		}
@@ -308,6 +316,9 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		}
 		if len(t.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))
+		}
+		for _, toolchain := range t.Toolchains {
+			fmt.Printf("    toolchain: %s (%s)\n", toolchain.Command, strings.Join(toolchain.Operations, ", "))
 		}
 		// Print each documented target's comment below the summary line; absent for
 		// undocumented targets and for spells whose docs aren't carried (built-ins).
@@ -415,12 +426,15 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	charms := ws.DescribeCharms(globalCfg.DefaultCharms)
+	charms, err := ws.ListCharms(ctx)
+	if err != nil {
+		return err
+	}
 	detail := len(pos) > 0
 	if detail {
 		name := types.Normalize(pos[0])
-		names := namesOf(charms, func(c types.CharmEntry) string { return c.Name })
-		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
+		names := namesOf(charms, func(c types.Charm) string { return c.Name })
+		charms = filterByName(charms, name, func(c types.Charm) string { return c.Name })
 		if len(charms) == 0 {
 			return unknownEntity("charm", pos[0], names)
 		}
@@ -429,7 +443,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		// The {definition, count, items} envelope is a RENDERING shape, built here
-		// rather than returned by DescribeCharms: definition is a constant and count
+		// rather than returned by ListCharms: definition is a constant and count
 		// is len(charms), so carrying them on the domain type meant re-deriving Count
 		// by hand after every filter - a denormalization one forgotten line ships as
 		// a wrong count.
@@ -538,7 +552,10 @@ func describeTargets(ctx context.Context, root string) error {
 		return err
 	}
 
-	targets := ws.DescribeTargets()
+	targets, err := ws.ListTargets(ctx)
+	if err != nil {
+		return err
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -597,10 +614,13 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 	}
 
 	if evaluated {
-		out := ws.DescribeEvaluatedProjects()
+		out, err := ws.EvaluateProjects(ctx)
+		if err != nil {
+			return err
+		}
 		if len(pos) > 0 {
-			names := namesOf(out.Projects, func(p types.EvaluatedProjectEntry) string { return p.Path })
-			out.Projects = filterByName(out.Projects, pos[0], func(p types.EvaluatedProjectEntry) string { return p.Path })
+			names := namesOf(out.Projects, func(p types.EvaluatedProject) string { return p.Path })
+			out.Projects = filterByName(out.Projects, pos[0], func(p types.EvaluatedProject) string { return p.Path })
 			out.Count = len(out.Projects)
 			if out.Count == 0 {
 				return unknownEntity("project", pos[0], names)
@@ -635,7 +655,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			if p.Exclusive {
 				fmt.Printf("  exclusive: true\n")
 			}
-			for _, s := range p.Spells {
+			for _, s := range p.ResolvedSpells {
 				fmt.Printf("  spell: %s", s.Name)
 				if s.ClaimWeight != 0 {
 					fmt.Printf("  weight=%d", s.ClaimWeight)
@@ -669,7 +689,10 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	out := ws.DescribeProjects()
+	out, err := ws.ListProjects(ctx)
+	if err != nil {
+		return err
+	}
 	if len(pos) > 0 {
 		names := namesOf(out.Projects, func(p types.ProjectEntry) string { return p.Path })
 		out.Projects = filterByName(out.Projects, pos[0], func(p types.ProjectEntry) string { return p.Path })
@@ -743,7 +766,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		return err
 	}
 
-	out, err := ws.DescribeTarget(t)
+	out, err := ws.EvaluateTarget(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -923,10 +946,14 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, err
 		}
-		return ws.DescribeWorkspaces(types.WorkspaceConfig{
+		entry, err := ws.Workspace(ctx, types.WorkspaceConfig{
 			CacheDir:    globalCfg.Cache.Dir,
 			Concurrency: globalCfg.Concurrency,
-		}), nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return []types.WorkspaceEntry{entry}, nil
 	}
 
 	entries := make([]types.WorkspaceEntry, 0, len(declared))
@@ -939,10 +966,14 @@ func describeWorkspacesOutput(ctx context.Context, root string) ([]types.Workspa
 		if err != nil {
 			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
 		}
-		entries = append(entries, w.DescribeWorkspaces(types.WorkspaceConfig{
+		entry, err := w.Workspace(ctx, types.WorkspaceConfig{
 			CacheDir:    cfg.Cache.Dir,
 			Concurrency: cfg.Concurrency,
-		})...)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("describe workspaces: %s: %w", wsRoot, err)
+		}
+		entries = append(entries, entry)
 	}
 	return entries, nil
 }
@@ -1039,7 +1070,10 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	files := ws.DescribeFiles(pos)
+	files, err := ws.ClassifyFiles(ctx, pos)
+	if err != nil {
+		return err
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

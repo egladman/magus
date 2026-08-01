@@ -55,7 +55,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint);
 }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};

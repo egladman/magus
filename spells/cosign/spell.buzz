@@ -13,7 +13,7 @@
 // tree, so it is imported and invoked explicitly rather than auto-bound to a
 // project's files.
 
-import "magus/target";
+import "magus/spell";
 
 export fun mgs_getName() > str { return "cosign"; }
 

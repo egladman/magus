@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/libs/diag"
+	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/types"
 )
@@ -14,7 +14,7 @@ import (
 // has not been given a specific code (which then renders as a plain message, no code, no docs link).
 type typeError struct {
 	Line, Col int
-	Code      diag.Code
+	Code      diagnostics.Code
 	Msg       string
 }
 
@@ -133,7 +133,7 @@ func (c *checker) errorf(p ast.Pos, format string, args ...any) {
 }
 
 // errorfc records a type error under a specific BZZ code.
-func (c *checker) errorfc(p ast.Pos, code diag.Code, format string, args ...any) {
+func (c *checker) errorfc(p ast.Pos, code diagnostics.Code, format string, args ...any) {
 	c.errors = append(c.errors, typeError{
 		Line: p.Line, Col: p.Col, Code: code,
 		Msg: fmt.Sprintf(format, args...),
@@ -201,7 +201,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				}
 				c.define(name, nt, false)
 			} else {
-				// No tracked function signatures (synthetic module or no exported funs):
+				// No tracked function signatures (native module or no exported funs):
 				// use Unknown so member access on the namespace doesn't fire E28.
 				c.define(name, types.Unknown, false)
 			}

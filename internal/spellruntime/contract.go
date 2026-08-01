@@ -1,0 +1,37 @@
+package spellruntime
+
+// ContractEntry describes one optional entry in the mgs_ spell contract. The
+// resolver (resolve.go) iterates OptionalContract, so the optional functions and
+// the decoder keys they map to live in one canonical list rather than being
+// spelled out at each call site.
+type ContractEntry struct {
+	Name  string // exported mgs_ function name
+	Field string // decoder field key the resolved value is stored under
+}
+
+// OptionalContract is the canonical list of optional mgs_ functions a spell
+// module may export (mgs_getName is required and handled separately by the
+// resolver). Resolve calls each present function and stores its result under
+// Field. Treat as read-only.
+//
+// MGS functions take no arguments. They run while Magus is discovering a spell,
+// before there is a selected target or execution context; a target's magus.Context
+// would therefore be fabricated data at this boundary. Per-invocation typed inputs
+// belong on ordinary exported spell functions instead. Every scalar and list
+// contribution (needs, provides, claims, version_cmd, opaque) resolves uniformly.
+// The "ops" entry (mgs_listTargets) is the exception:
+// resolveOps post-processes it to extract function-valued op handlers into
+// command records (the form the built-in spells use). Record-shaped ops pass
+// through unchanged. See docs/engines.md.
+var OptionalContract = []ContractEntry{
+	{Name: "mgs_listRequiredGlobs", Field: "needs"},
+	{Name: "mgs_listProvidedGlobs", Field: "provides"},
+	{Name: "mgs_listClaimedGlobs", Field: "claims"},
+	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs"},
+	{Name: "mgs_listManifests", Field: "manifests"},
+	{Name: "mgs_getVersionCommand", Field: "version_cmd"},
+	{Name: "mgs_getVersionCommands", Field: "version_cmds"},
+	{Name: "mgs_getLanguage", Field: "language"},
+	{Name: "mgs_isOpaque", Field: "opaque"},
+	{Name: "mgs_listTargets", Field: "ops"},
+}

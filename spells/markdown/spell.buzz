@@ -1,15 +1,15 @@
-import "magus/target";
+import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 
 export fun mgs_getName() > str { return "markdown"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}];
 }
 
-export fun mgs_listClaimedGlobs() > [str] {
-    return ["**/*.md", "**/*.mdx"];
+export fun mgs_listClaimedGlobs() > [Path] {
+    return [Path{value = "**/*.md"}, Path{value = "**/*.mdx"}];
 }
 
 fun markdownlint(target: Target) > Command {

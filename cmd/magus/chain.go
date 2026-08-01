@@ -151,13 +151,13 @@ func runChain(ctx context.Context, m *magus.Magus, opts OutputOptions, target st
 		return err
 	}
 	if plan.verb == "outputs" {
-		return chainOutputs(m, opts, artifacts, plan)
+		return chainOutputs(ctx, m, opts, artifacts, plan)
 	}
 	return chainFile(ctx, m, opts, artifacts, plan)
 }
 
 // chainOutputs implements `--then outputs [export --path <dir>]`.
-func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
+func chainOutputs(ctx context.Context, m *magus.Magus, opts OutputOptions, artifacts []magus.TargetArtifact, plan chainPlan) error {
 	if plan.action == "export" {
 		dir := plan.dst
 		for _, a := range artifacts {
@@ -173,7 +173,10 @@ func chainOutputs(m *magus.Magus, opts OutputOptions, artifacts []magus.TargetAr
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		out := make([]runArtifact, 0, len(artifacts))
-		roles := artifactRoles(m, artifacts)
+		roles, err := artifactRoles(ctx, m, artifacts)
+		if err != nil {
+			return err
+		}
 		for _, a := range artifacts {
 			out = append(out, runArtifact{Path: a.Path, Glob: a.Glob, Role: roles[a.Path]})
 		}
@@ -201,7 +204,7 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 		// Naming what the target DID produce turns a typo into a one-line fix; the
 		// alternative is "no such file", which is also true of a path that was never
 		// an artifact in the first place.
-		var have []string
+		have := make([]string, 0, len(artifacts))
 		for _, a := range artifacts {
 			have = append(have, a.Path)
 		}
@@ -243,8 +246,12 @@ func chainFile(ctx context.Context, m *magus.Magus, opts OutputOptions, artifact
 		return nil
 	}
 	if opts.Format == outputJSON || opts.Format == outputYAML || opts.Format == outputTemplate {
+		roles, err := artifactRoles(ctx, m, []magus.TargetArtifact{*match})
+		if err != nil {
+			return err
+		}
 		return emitFormatted(opts, runArtifact{
-			Path: match.Path, Glob: match.Glob, Role: artifactRoles(m, []magus.TargetArtifact{*match})[match.Path],
+			Path: match.Path, Glob: match.Glob, Role: roles[match.Path],
 		})
 	}
 	fmt.Println(abs)
@@ -275,20 +282,21 @@ func chainPathFlag(argv []string, verb string) (string, error) {
 	dst, seen := "", false
 	for i := 0; i < len(argv); i++ {
 		a := argv[i]
-		switch {
-		case isFlagNamed(a, "path"):
-			if i+1 >= len(argv) {
+		if isFlagNamed(a, "path") {
+			if len(argv) < i+2 {
 				return "", usagef("magus run: %s: --path needs a value", verb)
 			}
 			dst, seen = argv[i+1], true
 			i++
-		case flagValueOf(a, "path") != "":
-			dst, seen = flagValueOf(a, "path"), true
-		default:
-			chainUsage()
-			return "", usagef("magus run: %s: unexpected argument %q (want only --path <dir>; "+
-				"global flags go BEFORE --then)", verb, a)
+			continue
 		}
+		if v := flagValueOf(a, "path"); v != "" {
+			dst, seen = v, true
+			continue
+		}
+		chainUsage()
+		return "", usagef("magus run: %s: unexpected argument %q (want only --path <dir>; "+
+			"global flags go BEFORE --then)", verb, a)
 	}
 	if !seen {
 		chainUsage()
@@ -299,17 +307,20 @@ func chainPathFlag(argv []string, verb string) (string, error) {
 
 // artifactRoles classifies artifacts so a structured result says whether each file
 // is generated, which is the question that follows "where is it".
-func artifactRoles(m *magus.Magus, artifacts []magus.TargetArtifact) map[string]string {
+func artifactRoles(ctx context.Context, m *magus.Magus, artifacts []magus.TargetArtifact) (map[string]string, error) {
 	paths := make([]string, len(artifacts))
 	for i, a := range artifacts {
 		paths[i] = a.Path
 	}
-	roles := m.DescribeFiles(paths)
+	roles, err := m.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[string]string, len(roles))
 	for _, f := range roles {
 		out[f.Path] = f.Role
 	}
-	return out
+	return out, nil
 }
 
 // copyArtifact copies src to dst, creating parent directories.

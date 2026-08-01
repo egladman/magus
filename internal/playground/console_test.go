@@ -22,6 +22,7 @@ var testInfo = BuildInfo{
 // the dry package's copy; both are acceptance inputs, so a small duplication is
 // cheaper than a cross-package test dependency.
 const sampleMagusfile = `
+import "magus";
 import "magus/spell/go";
 
 magus.project({

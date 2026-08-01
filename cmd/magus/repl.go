@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/std"
 )
 
 func replCmd(ctx context.Context, _ string, args []string) error {
@@ -81,15 +81,20 @@ func replCandidates(ctx context.Context, cwd string) func() []string {
 		// available - and they are what a bare `magus repl` is mostly for. Each
 		// module contributes its own name plus every `mod.method`, which is the
 		// difference between completing "fs" and completing "fs.writeFile".
-		for _, mod := range host.Modules("") {
+		for _, mod := range std.DescribeModules("") {
 			cached = append(cached, mod.Name)
-			for _, meth := range host.Modules(mod.Name)[0].Methods {
+			for _, meth := range std.DescribeModules(mod.Name)[0].Methods {
 				cached = append(cached, mod.Name+"."+meth.Name)
 			}
 		}
 		if m, err := loadMagus(ctx, cwd); err == nil {
-			for _, t := range m.DescribeTargets() {
-				cached = append(cached, t.Name)
+			// Best-effort completion candidates: this closure has no error path of its
+			// own (it feeds a completer, not a command), so a cancelled ctx here just
+			// means fewer candidates offered, not a failed Tab press.
+			if targets, err := m.ListTargets(ctx); err == nil {
+				for _, t := range targets {
+					cached = append(cached, t.Name)
+				}
 			}
 			for _, p := range m.All() {
 				cached = append(cached, p.Path)

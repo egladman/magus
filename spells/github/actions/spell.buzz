@@ -35,7 +35,7 @@
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
 import "http"
-import "magus/target"
+import "magus/spell"
 import "serialize"
 import "os"
 import "std"

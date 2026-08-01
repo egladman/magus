@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	semver "github.com/Masterminds/semver/v3"
 	"github.com/egladman/magus/types"
 )
 
@@ -165,12 +166,12 @@ func claimsExist(root string, claims []string) bool {
 // malformed pattern is a caller bug and is returned, not silently treated as
 // "match nothing". A line missing a name is skipped; an unparseable date is left
 // zero rather than dropping the tag, since the name is what callers rely on.
-func parseTags(out, pattern string) ([]types.Tag, error) {
+func parseTags(out, pattern string) ([]types.VCSTag, error) {
 	if out == "" {
 		return nil, nil
 	}
 	lines := strings.Split(out, "\n")
-	tags := make([]types.Tag, 0, len(lines))
+	tags := make([]types.VCSTag, 0, len(lines))
 	for _, line := range lines {
 		name, rest, ok := strings.Cut(line, "\t")
 		if !ok || name == "" {
@@ -186,11 +187,39 @@ func parseTags(out, pattern string) ([]types.Tag, error) {
 			}
 		}
 		when, id, _ := strings.Cut(rest, "\t")
-		tag := types.Tag{Name: name, ID: id}
+		tag := types.VCSTag{Name: name, ID: id}
+		tag.Prefix, tag.Version = splitTagVersion(name)
 		if ts, err := time.Parse(time.RFC3339, when); err == nil {
 			tag.Date = ts
 		}
 		tags = append(tags, tag)
 	}
 	return tags, nil
+}
+
+// splitTagVersion splits a tag name into its module prefix and parsed
+// version: "libs/gopherbuzz/v0.1.0" -> ("libs/gopherbuzz/", 0.1.0), "v0.3.0"
+// -> ("", 0.3.0). A name with no "/" has an empty prefix. A version portion
+// that fails to parse (an annotated tag like "checkpoint", or a namespaced
+// non-release tag the pattern filter let through) is not an error - it
+// leaves Version at its zero value. Parses with Masterminds/semver, the same
+// library std/semver.go's SemverParse uses; the two can't share a call
+// because vcs can't import std (std already imports vcs).
+func splitTagVersion(name string) (prefix string, version types.SemverVersion) {
+	verPart := name
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		prefix, verPart = name[:i+1], name[i+1:]
+	}
+	sv, err := semver.NewVersion(verPart)
+	if err != nil {
+		return prefix, types.SemverVersion{}
+	}
+	return prefix, types.SemverVersion{
+		Major:      int(sv.Major()),
+		Minor:      int(sv.Minor()),
+		Patch:      int(sv.Patch()),
+		Prerelease: sv.Prerelease(),
+		Metadata:   sv.Metadata(),
+		Original:   sv.Original(),
+	}
 }

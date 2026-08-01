@@ -70,7 +70,7 @@ func TestMagusMdNotIngested(t *testing.T) {
 	writeFile(t, root, "MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
 	writeFile(t, root, "README.md", "The `go` spell.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.SpellEntry{{Name: "go"}}, nil)}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil)}).Output()
 
 	_, ok := nodeByID(out, "doc:MAGUS.md")
 	assert.False(t, ok, "generated MAGUS.md must not be ingested as a doc node")
@@ -93,7 +93,7 @@ func TestAssembleDocs(t *testing.T) {
 	writeFile(t, root, "docs/reference/buzz/fs.md", "# fs\nFilesystem module.\n")
 	writeFile(t, root, "README.md", "Uses the `go` spell; see MGS2010 when it fails.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.SpellEntry{{Name: "go"}}, nil)}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil)}).Output()
 
 	for _, id := range []string{"doc:docs/reference/codes/sandbox/MGS2010.md", "doc:docs/concepts/spells/go.md", "doc:docs/reference/buzz/fs.md", "doc:README.md"} {
 		_, ok := nodeByID(out, id)
@@ -133,7 +133,7 @@ func TestDocsPathResilience(t *testing.T) {
 	writeFile(t, root, "handbook/errors/MGS9998.md", "# MGS9998\n") // unregistered code
 	writeFile(t, root, "handbook/spells/notaspell.md", "# not\n")   // not a known spell
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.SpellEntry{{Name: "go"}}, nil)}).Output()
+	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil)}).Output()
 
 	assert.True(t, hasEdge(out, "doc:handbook/errors/MGS2001.md", "diagnostic:MGS2001", types.RelationDocuments), "code edge is directory-agnostic")
 	assert.True(t, hasEdge(out, "doc:handbook/spells/go.md", "spell:go", types.RelationDocuments), "spell edge anchors on the spells segment")

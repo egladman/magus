@@ -1,9 +1,9 @@
 package buzz
 
-import "github.com/egladman/magus/libs/diag"
+import "github.com/egladman/magus/libs/diagnostics"
 
 // This file is gopherbuzz's own diagnostic-code namespace: the BZZ#### family. It uses the SAME shared
-// mechanism as magus (github.com/egladman/magus/libs/diag) but declares an ENTIRELY SEPARATE catalog - no
+// mechanism as magus (github.com/egladman/magus/libs/diagnostics) but declares an ENTIRELY SEPARATE catalog - no
 // code is shared with magus's MGS codes, and the docs live in gopherbuzz's own tree, not magus's. The
 // codes give a buzz author the same lookupable, documented errors magus targets get. gopherbuzz's error
 // TEXT already differs from upstream buzz (only interpreter BEHAVIOR must match), so the codes render
@@ -16,7 +16,7 @@ import "github.com/egladman/magus/libs/diag"
 const bzzDocsBase = "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/"
 
 // bzz is gopherbuzz's diagnostic domain: every BZZ code maps to a doc page under bzzDocsBase.
-var bzz = diag.New(func(c diag.Code) string { return bzzDocsBase + string(c) + ".md" })
+var bzz = diagnostics.New(func(c diagnostics.Code) string { return bzzDocsBase + string(c) + ".md" })
 
 // BZZ diagnostic codes. Each names a distinct, documented buzz error kind. There is deliberately NO
 // catch-all code: a type error the checker has not classified carries NO code at all (just its message),
@@ -24,20 +24,20 @@ var bzz = diag.New(func(c diag.Code) string { return bzzDocsBase + string(c) + "
 // lookup handle for a documented failure, not a completeness checkbox.
 const (
 	// Type-check errors (checker.go).
-	UndefinedName    diag.Code = "BZZ1001" // reference to a variable or function that is not in scope
-	UndefinedType    diag.Code = "BZZ1002" // reference to a type name that is not defined
-	NonBoolCondition diag.Code = "BZZ1003" // an if/while/for condition whose type is not bool
-	ArgumentError    diag.Code = "BZZ1004" // a call with the wrong count, an unknown/duplicate name, or a missing argument
-	TypeMismatch     diag.Code = "BZZ1005" // an assignment, return, yield, or operand whose type does not match what is expected
+	UndefinedName    diagnostics.Code = "BZZ1001" // reference to a variable or function that is not in scope
+	UndefinedType    diagnostics.Code = "BZZ1002" // reference to a type name that is not defined
+	NonBoolCondition diagnostics.Code = "BZZ1003" // an if/while/for condition whose type is not bool
+	ArgumentError    diagnostics.Code = "BZZ1004" // a call with the wrong count, an unknown/duplicate name, or a missing argument
+	TypeMismatch     diagnostics.Code = "BZZ1005" // an assignment, return, yield, or operand whose type does not match what is expected
 
 	// Session / runtime errors (session.go).
-	UnresolvedImport diag.Code = "BZZ2001" // an import that cannot be resolved to a module or file
-	FiberMisuse      diag.Code = "BZZ2002" // resume/resolve called wrong: not a fiber, missing argument, or a running fiber
+	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
+	FiberMisuse      diagnostics.Code = "BZZ2002" // resume/resolve called wrong: not a fiber, missing argument, or a running fiber
 )
 
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
 // TestAllBZZCodesEnumerated; it is the source of truth for the doc-coverage drift test.
-var allBZZCodes = []diag.Code{
+var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch,
 	UnresolvedImport, FiberMisuse,
 }

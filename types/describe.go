@@ -3,6 +3,14 @@ package types
 import "github.com/egladman/magus/spells"
 
 // Describe-output types and the concept definitions printed by "magus describe".
+//
+// Naming rule for this file: a type carries the `Entry` suffix (CharmEntry -> now
+// Charm is the exception that PROVES it; see below) only when a bare name of that
+// type already exists and would collide - ProjectEntry (types.Project),
+// TargetEntry (types.Target), WorkspaceEntry (types.Workspace), and FileEntry
+// (types.File is reserved for a future promoted path type). Where no such collision
+// exists, the bare name wins: Spell, Charm,
+// EvaluatedProject, EvaluatedTarget, EvaluatedSpell.
 
 // SpellDefinition is the human-readable description of a spell shown by "magus describe spells".
 const SpellDefinition = "A spell is a language/runtime adapter that " +
@@ -20,8 +28,16 @@ type SpellVersion struct {
 	Error    string `json:"error,omitempty" yaml:"error,omitempty"`
 }
 
-// SpellEntry is the structured view of a single spell.
-type SpellEntry struct {
+// SpellToolchain is a derived executable inventory for one spell. It reports
+// the base command Magus has already resolved from static operations and the
+// operations that use it; it adds no spell-authoring contract.
+type SpellToolchain struct {
+	Command    string   `json:"command" yaml:"command"`
+	Operations []string `json:"operations" yaml:"operations"`
+}
+
+// Spell is the structured view of a single spell.
+type Spell struct {
 	Name string `json:"name"              yaml:"name"`
 	// BuzzImport is the module path a magusfile writes to bind this spell's handle:
 	// "magus/spell/go", for `import "magus/spell/go"`. See spells.ModulePath.
@@ -77,6 +93,9 @@ type SpellEntry struct {
 	// body) has no entry. It lets the knowledge graph link an op to the tool it runs
 	// without re-rendering, so `explain tool:go` reaches every op that runs go.
 	OpCommands map[string][]string `json:"op_commands,omitempty" yaml:"op_commands,omitempty"`
+	// Toolchains groups OpCommands by their base executable. It is derived rather
+	// than declared, so a spell cannot misreport the commands it implements.
+	Toolchains []SpellToolchain `json:"toolchains,omitempty" yaml:"toolchains,omitempty"`
 }
 
 // CharmDefinition is the human-readable description of a charm shown by "magus describe charms".
@@ -84,10 +103,10 @@ const CharmDefinition = "A charm is a named, shared execution modifier applied a
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
 	"never which target or project runs. See docs/charms.md."
 
-// CharmEntry is one charm in the inverse index: its name, whether it is a reserved
+// Charm is one charm in the inverse index: its name, whether it is a reserved
 // built-in or a workspace default, its built-in doc (empty for a spell-defined
 // charm), and every target that declares a patch for it.
-type CharmEntry struct {
+type Charm struct {
 	Name         string             `json:"name"                   yaml:"name"`
 	Builtin      bool               `json:"builtin,omitempty"      yaml:"builtin,omitempty"`
 	Default      bool               `json:"default,omitempty"      yaml:"default,omitempty"`
@@ -172,7 +191,12 @@ type TargetGraphNode struct {
 	// Updates are the per-target ctx.updates(...) refs: files the target edits in place
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
 	// UpdateRef for why magus must neither delete nor restore one.
-	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty"`
+	//
+	// buzz:"-": TargetGraphNode.BuzzObject() does not emit an "updates" key
+	// (JSON/YAML carry it; the Buzz boundary map does not), so a generated mirror
+	// field would promise a key the runtime value never has. Same reasoning as
+	// TargetGraphOutput.Definition / TargetGraphProject.RelPath just below.
+	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty" buzz:"-"`
 	// ExecOverrides are the canonical per-op execution overrides this target declares
 	// via ctx.withEnv / ctx.withCwd, as "env:K=V" / "cwd:V" strings in declaration
 	// order (hash.go sorts a copy at hash time; nothing sorts the stored value). They fold into the target's
@@ -202,66 +226,12 @@ type TargetGraphNode struct {
 	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
 }
 
-// buzzList is the Buzz boundary form of an optional []string: never nil.
-//
-// Every list below is `omitempty` on the wire, where absent and empty are the same
-// thing. On the Buzz boundary they are NOT: a nil slice arrives as null, and null is
-// not a list - `deps.len()` on it raises "null is not callable" at render time, far
-// from the field that was empty. The mirrors generated from these structs default
-// every list field to `[]`, so returning one is also what the annotation promises.
-func buzzList(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
-// ToMap is the Buzz boundary map for one target. Keys are the camelCase names the
-// generated mirror declares, not the snake_case JSON ones.
-func (n TargetGraphNode) ToMap() map[string]any {
-	spells := make([]any, len(n.Spells))
-	for i, s := range n.Spells {
-		spells[i] = s.ToMap()
-	}
-	cross := make([]any, len(n.CrossDependencies))
-	for i, c := range n.CrossDependencies {
-		cross[i] = c.ToMap()
-	}
-	inputs := make([]any, len(n.Inputs))
-	for i, in := range n.Inputs {
-		inputs[i] = in.ToMap()
-	}
-	outputs := make([]any, len(n.Outputs))
-	for i, o := range n.Outputs {
-		outputs[i] = o.ToMap()
-	}
-	return map[string]any{
-		"name":              n.Name,
-		"declared":          n.Declared,
-		"doc":               n.Doc,
-		"dependencies":      buzzList(n.Dependencies),
-		"charms":            buzzList(n.Charms),
-		"spells":            spells,
-		"crossDependencies": cross,
-		"inputs":            inputs,
-		"outputs":           outputs,
-	}
-}
-
 // CrossTargetRef names one target in another project: a target-level cross-project
 // dependency. Project is workspace-relative (resolved from the dot-/repo-relative
 // path written in the magusfile); Target is the kebab-normalized target name.
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
-}
-
-// ToMap is the Buzz boundary map for one cross-project target reference.
-func (c CrossTargetRef) ToMap() map[string]any {
-	return map[string]any{
-		"project": c.Project,
-		"target":  c.Target,
-	}
 }
 
 // InputRef names one file input a target declares via ctx.inputs, in a single shape
@@ -277,14 +247,6 @@ func (c CrossTargetRef) ToMap() map[string]any {
 type InputRef struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Glob    string `json:"glob" yaml:"glob"`
-}
-
-// ToMap is the Buzz boundary map for one declared file input.
-func (r InputRef) ToMap() map[string]any {
-	return map[string]any{
-		"project": r.Project,
-		"glob":    r.Glob,
-	}
 }
 
 // OutputRef names one file output a target declares via ctx.outputs, in the same shape
@@ -323,14 +285,6 @@ type UpdateRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// ToMap is the Buzz boundary map for one declared file output.
-func (r OutputRef) ToMap() map[string]any {
-	return map[string]any{
-		"project": r.Project,
-		"glob":    r.Glob,
-	}
-}
-
 // CrossFileMember is the reserved member on a project-import handle
 // (`<alias>.file("rel")`) that resolves a cross-project file to a workspace-relative
 // path. The static extractor (internal/describe) and the runtime resolver
@@ -342,14 +296,6 @@ const CrossFileMember = "file"
 type TargetSpellUse struct {
 	Spell string   `json:"spell"         yaml:"spell"`
 	Ops   []string `json:"ops,omitempty" yaml:"ops,omitempty"`
-}
-
-// ToMap is the Buzz boundary map for one spell a target drives.
-func (u TargetSpellUse) ToMap() map[string]any {
-	return map[string]any{
-		"spell": u.Spell,
-		"ops":   buzzList(u.Ops),
-	}
 }
 
 // TargetGraphProject is one project's target graph, plus a detected cycle (a path
@@ -383,44 +329,16 @@ func (p TargetGraphProject) Label() string {
 	return ProjectDisplayName(p.Path, name, "")
 }
 
-// ToMap is the Buzz boundary map for one project's target graph. RelPath is dropped:
-// it exists for Label(), which a Go render site calls, and mirroring it would put a
-// field on the Buzz value that the value never carries.
-func (p TargetGraphProject) ToMap() map[string]any {
-	nodes := make([]any, len(p.Nodes))
-	for i, n := range p.Nodes {
-		nodes[i] = n.ToMap()
-	}
-	return map[string]any{
-		"path":      p.Path,
-		"name":      p.Name,
-		"engine":    p.Engine,
-		"nodes":     nodes,
-		"cycle":     buzzList(p.Cycle),
-		"dependsOn": buzzList(p.DependsOn),
-	}
-}
-
 // TargetGraphOutput is the top-level result for "describe graph".
 //
 // The Buzz `object TargetGraph` mirror is generated from this struct by
 // cmd/magus-utils types, so magus.targets's result can be annotated `> TargetGraph`
 // for compile-checked field access. Definition carries `buzz:"-"` for the same reason
-// ProjectsOutput's does: ToMap drops it, so a mirrored field would be one the Buzz
+// ProjectsOutput's does: BuzzObject drops it, so a mirrored field would be one the Buzz
 // value never has.
 type TargetGraphOutput struct {
 	Definition string               `json:"definition" yaml:"definition" buzz:"-"`
 	Projects   []TargetGraphProject `json:"projects"   yaml:"projects"`
-}
-
-// ToMap is the Buzz boundary map magus.targets returns. Definition is dropped: it is
-// prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o TargetGraphOutput) ToMap() map[string]any {
-	projects := make([]any, len(o.Projects))
-	for i, p := range o.Projects {
-		projects[i] = p.ToMap()
-	}
-	return map[string]any{"projects": projects}
 }
 
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
@@ -430,7 +348,7 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 	"and are the basic unit of caching, scheduling, and dependency tracking."
 
 // ProjectEntry is the structured view of a single project. Its Buzz mirror is
-// generated alongside Projects; DependsOn is tagged because ToMap emits the
+// generated alongside Projects; DependsOn is tagged because BuzzObject emits the
 // camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
 // JSON name.
 type ProjectEntry struct {
@@ -440,29 +358,28 @@ type ProjectEntry struct {
 	// human label has to prefer it over the directory basename - without it,
 	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
 	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
-	Name      string   `json:"name,omitempty"      yaml:"name,omitempty"`
-	Dir       string   `json:"dir"                 yaml:"dir"`
-	Spell     string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
-	Spells    []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
+	Name   string   `json:"name,omitempty"      yaml:"name,omitempty"`
+	Dir    string   `json:"dir"                 yaml:"dir"`
+	Spell  string   `json:"spell,omitempty"     yaml:"spell,omitempty"`
+	Spells []string `json:"spells,omitempty"    yaml:"spells,omitempty"`
+	// Sources and Outputs are the DECLARED globs, project-relative (as written in
+	// the magusfile/spell). EvaluatedProject populates these same fields (via its
+	// embedded ProjectEntry) with the RESOLVED, workspace-rooted globs instead
+	// (joined against the project path, plus the magusfile's own globs folded into
+	// Sources) - the same name, a different representation, because the evaluated
+	// view answers "what does the cache key actually see" rather than "what was
+	// written".
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty" buzz:"dependsOn"`
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
-}
-
-// ToMap is the Buzz boundary map for one project (magus.ls's entries).
-func (p ProjectEntry) ToMap() map[string]any {
-	return map[string]any{
-		"path":      p.Path,
-		"name":      p.Name,
-		"dir":       p.Dir,
-		"spell":     p.Spell,
-		"spells":    p.Spells,
-		"sources":   p.Sources,
-		"outputs":   p.Outputs,
-		"dependsOn": p.DependsOn,
-		"exclusive": p.Exclusive,
-	}
+	// Manifests lists this project's spells' version-manifest candidates
+	// (spells.Spell.Manifests), filtered to the ones that actually exist in Dir and
+	// kept in declared order - so element 0, when present, is "the" manifest under
+	// the first-existing-file-wins rule. A project with no manifest-declaring spell,
+	// or none of whose candidates exist, has an empty list: it carries no version of
+	// its own.
+	Manifests []string `json:"manifests,omitempty" yaml:"manifests,omitempty"`
 }
 
 // ProjectsOutput is the top-level result for "describe projects".
@@ -470,27 +387,13 @@ func (p ProjectEntry) ToMap() map[string]any {
 // The Buzz `object Projects` mirror is generated from this struct by
 // cmd/magus-utils types, so magus.ls's result can be annotated `> Projects` for
 // compile-checked field access. Definition carries `buzz:"-"` to keep the mirror
-// honest: ToMap drops it, so a mirrored field would be one the Buzz value never
+// honest: BuzzObject drops it, so a mirrored field would be one the Buzz value never
 // has.
 type ProjectsOutput struct {
 	Definition string         `json:"definition" yaml:"definition" buzz:"-"`
 	Workspace  string         `json:"workspace"  yaml:"workspace"`
 	Count      int            `json:"count"      yaml:"count"`
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`
-}
-
-// ToMap is the Buzz boundary map magus.ls returns. Definition is dropped: it is
-// prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o ProjectsOutput) ToMap() map[string]any {
-	projects := make([]any, len(o.Projects))
-	for i, p := range o.Projects {
-		projects[i] = p.ToMap()
-	}
-	return map[string]any{
-		"workspace": o.Workspace,
-		"count":     o.Count,
-		"projects":  projects,
-	}
 }
 
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
@@ -508,21 +411,11 @@ type ModuleMethodEntry struct {
 	BuzzStdlib string `json:"buzz_stdlib,omitempty" yaml:"buzz_stdlib,omitempty"`
 }
 
-// ToMap is the Buzz boundary map for a method entry (magus.module's methods).
-func (m ModuleMethodEntry) ToMap() map[string]any {
-	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "buzzStdlib": m.BuzzStdlib}
-}
-
 // ModuleFieldEntry is one static, table-level value on a module (e.g. vcs.name).
 type ModuleFieldEntry struct {
 	Name string `json:"name"          yaml:"name"`
 	Type string `json:"type"          yaml:"type"`
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
-}
-
-// ToMap is the Buzz boundary map for a field entry (magus.module's fields).
-func (f ModuleFieldEntry) ToMap() map[string]any {
-	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
 // ModuleEntry is a module's summary; Fields/Methods are populated only for the detail view.
@@ -533,21 +426,6 @@ type ModuleEntry struct {
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
 }
 
-// ToMap is the Buzz boundary map magus.modules / magus.module return:
-// {name, doc, fields, methods}. fields/methods are always present (empty in the
-// summary view). The generated/hand-written bindings marshal it via host.Mapper.
-func (e ModuleEntry) ToMap() map[string]any {
-	fields := make([]any, len(e.Fields))
-	for i, f := range e.Fields {
-		fields[i] = f.ToMap()
-	}
-	methods := make([]any, len(e.Methods))
-	for i, m := range e.Methods {
-		methods[i] = m.ToMap()
-	}
-	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
-}
-
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
@@ -555,8 +433,8 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"target-specific sources and effective claims after weight/add/remove resolution), " +
 	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
-// EvaluatedSpellEntry is one spell's contribution to an evaluated target.
-type EvaluatedSpellEntry struct {
+// EvaluatedSpell is one spell's contribution to an evaluated target.
+type EvaluatedSpell struct {
 	Name            string   `json:"name"                        yaml:"name"`
 	TargetSources   []string `json:"target_sources,omitempty"    yaml:"target_sources,omitempty"`
 	EffectiveClaims []string `json:"effective_claims,omitempty"  yaml:"effective_claims,omitempty"`
@@ -584,38 +462,88 @@ type EvaluatedSpellEntry struct {
 	Service *spells.ServiceView `json:"service,omitempty" yaml:"service,omitempty"`
 }
 
-// EvaluatedTargetEntry is the fully-resolved view of a single path:target pair.
-type EvaluatedTargetEntry struct {
-	Project   string                `json:"project"             yaml:"project"`
-	Target    string                `json:"target"              yaml:"target"`
-	Dir       string                `json:"dir"                 yaml:"dir"`
-	Sources   []string              `json:"sources,omitempty"    yaml:"sources,omitempty"`
-	Outputs   []string              `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
-	DependsOn []string              `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	Charms    []string              `json:"charms,omitempty"     yaml:"charms,omitempty"`
-	Spells    []EvaluatedSpellEntry `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target               `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
-	Exclusive bool                  `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
+// EvaluatedTarget is the fully-resolved view of a single path:target pair.
+type EvaluatedTarget struct {
+	Project   string           `json:"project"             yaml:"project"`
+	Target    string           `json:"target"              yaml:"target"`
+	Dir       string           `json:"dir"                 yaml:"dir"`
+	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
+	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
+	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`
+	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
+	Exclusive bool             `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 
-// EvaluatedProjectEntry is the fully-resolved view of a project.
-type EvaluatedProjectEntry struct {
-	Path           string                `json:"path"                       yaml:"path"`
-	Dir            string                `json:"dir"                        yaml:"dir"`
-	Sources        []string              `json:"sources,omitempty"          yaml:"sources,omitempty"`
-	Outputs        []string              `json:"outputs,omitempty"          yaml:"outputs,omitempty"`
-	DependsOn      []string              `json:"depends_on,omitempty"       yaml:"depends_on,omitempty"`
-	Spells         []EvaluatedSpellEntry `json:"spells,omitempty"           yaml:"spells,omitempty"`
-	TargetPolicies map[string]Target     `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
-	Exclusive      bool                  `json:"exclusive,omitempty"        yaml:"exclusive,omitempty"`
+// EvaluatedProject is the fully-resolved view of a project: every ProjectEntry
+// fact (Name and Spell included - embedding rather than restating them makes
+// "evaluated = declared + resolution" a compile-time fact) plus the resolution
+// fields resolving it adds. ResolvedSpells is deliberately not named Spells: that
+// name means DECLARED spell names on ProjectEntry.Spells and would mean RESOLVED
+// spell steps here - one field name for two different facts.
+//
+// The embedded ProjectEntry's Sources/Outputs are populated with the RESOLVED,
+// workspace-rooted globs (see the field comment on ProjectEntry.Sources), not the
+// declared project-relative ones ListProjects reports - the one deliberate
+// exception to "same values ListProjects builds" for the rest of the embed.
+type EvaluatedProject struct {
+	ProjectEntry
+	ResolvedSpells []EvaluatedSpell  `json:"resolved_spells,omitempty" yaml:"resolved_spells,omitempty"`
+	TargetPolicies map[string]Target `json:"target_policies,omitempty"  yaml:"target_policies,omitempty"`
+}
+
+// BuzzObject is the Buzz boundary map for one evaluated project. Written explicitly
+// rather than left to the BuzzObject ProjectEntry promotes: an embedded ProjectEntry's
+// BuzzObject is promoted onto EvaluatedProject too, which would satisfy host's boundary view
+// (host/helpers.go) while emitting only the declared half and silently dropping
+// ResolvedSpells/TargetPolicies. EvaluatedProject is not on the Buzz mirror
+// allowlist and no std/ host method returns it today, so nothing calls this yet -
+// it exists to keep that latent trap from going live if one ever does. Neither
+// EvaluatedSpell nor Target (whose zero value serves double duty as a per-target
+// policy - see Target's identity-fields comment) has its own BuzzObject, so their
+// fields are read directly rather than through a promoted-in-the-same-way call.
+func (p EvaluatedProject) BuzzObject() BuzzObject {
+	m := BuzzObject{
+		"path":      p.Path,
+		"name":      p.Name,
+		"dir":       p.Dir,
+		"spell":     p.Spell,
+		"spells":    p.Spells,
+		"sources":   p.Sources,
+		"outputs":   p.Outputs,
+		"dependsOn": p.DependsOn,
+		"exclusive": p.Exclusive,
+		"manifests": p.Manifests,
+	}
+	spells := make([]any, len(p.ResolvedSpells))
+	for i, s := range p.ResolvedSpells {
+		spells[i] = map[string]any{
+			"name":            s.Name,
+			"targetSources":   s.TargetSources,
+			"effectiveClaims": s.EffectiveClaims,
+			"claimWeight":     s.ClaimWeight,
+		}
+	}
+	policies := make(map[string]any, len(p.TargetPolicies))
+	for name, t := range p.TargetPolicies {
+		policies[name] = map[string]any{
+			"skipCache": t.SkipCache,
+			"exclusive": t.Exclusive,
+			"slots":     t.Slots,
+		}
+	}
+	m["resolvedSpells"] = spells
+	m["targetPolicies"] = policies
+	return m
 }
 
 // EvaluatedProjectsOutput is the top-level result for "describe projects --evaluated".
 type EvaluatedProjectsOutput struct {
-	Definition string                  `json:"definition" yaml:"definition"`
-	Workspace  string                  `json:"workspace"  yaml:"workspace"`
-	Count      int                     `json:"count"      yaml:"count"`
-	Projects   []EvaluatedProjectEntry `json:"projects"   yaml:"projects"`
+	Definition string             `json:"definition" yaml:"definition"`
+	Workspace  string             `json:"workspace"  yaml:"workspace"`
+	Count      int                `json:"count"      yaml:"count"`
+	Projects   []EvaluatedProject `json:"projects"   yaml:"projects"`
 }
 
 // WorkspaceDefinition is the human-readable description of a workspace shown by "magus describe workspaces".
@@ -633,7 +561,7 @@ type WorkspaceEntry struct {
 	ProjectCount int    `json:"project_count"           yaml:"project_count"`
 }
 
-// WorkspaceConfig carries infrastructure details for DescribeWorkspaces
+// WorkspaceConfig carries infrastructure details for Inspector.Workspace
 // that are not part of the WorkspaceRepository interface (cache path,
 // concurrency).
 type WorkspaceConfig struct {
@@ -671,13 +599,13 @@ type FileEntry struct {
 }
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
-// count, items} envelope `magus describe ... -o json` emits. The Describer method
+// count, items} envelope `magus describe ... -o json` emits. The Inspector method
 // hands back a plain slice and the caller that is actually serializing wraps it
 // here, so both the CLI and the MCP handler emit the same JSON without either of
 // them owning the shape.
 //
 // Two methods are NOT on this pattern, and it is worth knowing which before adding
-// a third: DescribeProjects and DescribeEvaluatedProjects still return
+// a third: ListProjects and EvaluateProjects still return
 // ProjectsOutput / EvaluatedProjectsOutput. Both carry a real Workspace field, so
 // their envelope is not purely derivable the way {constant, len(), items} is, and
 // converting them would mean returning a slice plus an out-of-band workspace root.
@@ -702,16 +630,16 @@ type FileReport struct {
 
 // CharmReport is the "describe charm[s]" envelope.
 type CharmReport struct {
-	Definition string       `json:"definition" yaml:"definition"`
-	Count      int          `json:"count"      yaml:"count"`
-	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
+	Definition string  `json:"definition" yaml:"definition"`
+	Count      int     `json:"count"      yaml:"count"`
+	Charms     []Charm `json:"charms"     yaml:"charms"`
 }
 
 // EvaluatedTargetReport is the "describe target <path:target>" envelope.
 type EvaluatedTargetReport struct {
-	Definition string                 `json:"definition" yaml:"definition"`
-	Count      int                    `json:"count"      yaml:"count"`
-	Targets    []EvaluatedTargetEntry `json:"targets"    yaml:"targets"`
+	Definition string            `json:"definition" yaml:"definition"`
+	Count      int               `json:"count"      yaml:"count"`
+	Targets    []EvaluatedTarget `json:"targets"    yaml:"targets"`
 }
 
 // TargetReport is the "describe target[s]" envelope.
@@ -737,7 +665,7 @@ type ModuleReport struct {
 
 // SpellReport is the "describe spell[s]" envelope.
 type SpellReport struct {
-	Definition string       `json:"definition" yaml:"definition"`
-	Count      int          `json:"count"      yaml:"count"`
-	Spells     []SpellEntry `json:"spells"     yaml:"spells"`
+	Definition string  `json:"definition" yaml:"definition"`
+	Count      int     `json:"count"      yaml:"count"`
+	Spells     []Spell `json:"spells"     yaml:"spells"`
 }

@@ -36,6 +36,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithSources(spec.Needs...),
 			spells.WithClaims(spec.Claims...),
 			spells.WithIgnoreDirs(spec.IgnoreDirs...),
+			spells.WithManifests(spec.Manifests...),
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
@@ -361,6 +362,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 		spells.WithSources(m.Needs...),
 		spells.WithClaims(m.Claims...),
 		spells.WithIgnoreDirs(m.IgnoreDirs...),
+		spells.WithManifests(m.Manifests...),
 		spells.WithOutputs(m.Provides...),
 		spells.WithTargets(m.OpNames()...),
 		spells.WithServiceTargets(m.ServiceOpNames()...),
@@ -432,7 +434,7 @@ func checkSpellImports(handles []string) error {
 
 // isRegisteredSpell reports whether name is a handle reachable as
 // `import "magus/spell/<name>"`: a compiled built-in or a host-registered spell.
-// This mirrors the synthetic modules registerAllBuzz installs, so the check can
+// This mirrors the native modules registerAllBuzz installs, so the check can
 // never reject a handle the import would actually resolve.
 func isRegisteredSpell(name string) bool {
 	if _, ok := spellruntime.Builtins()[name]; ok {

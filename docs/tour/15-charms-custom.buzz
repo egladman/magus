@@ -6,7 +6,7 @@
 // with a colon suffix. Try `run lint` for the bare command, then `run lint:fix`
 // and `run lint:fix,verbose` to watch the argv grow.
 
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 
 export fun mgs_getName() > str { return "linter"; }

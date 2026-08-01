@@ -10,8 +10,7 @@ import "crypto";
 import "serialize";
 import "io";
 import "std";
-// Value-type mirrors (ExecResult, Commit, etc.) for compile-checked field access.
-import "magus/target";
+import "semver";
 
 import "magus/spell/magusfile";
 import "magus/spell/go";
@@ -22,6 +21,14 @@ import "magus/spell/markdown";
 import "magus/spell/bash";
 
 import "badge" as badge;
+
+// Version-selection rules for the `release` target below. ALIASED deliberately:
+// an unaliased import flat-merges the module's exports into this file's scope,
+// where magus reads every exported fun as a target and rejects the ones without a
+// magus\Context first parameter (MGS1008). Aliasing keeps them namespaced, which
+// is the same reason docs/magusfile.buzz aliases its renderer.
+import "releaser" as releaser;
+import "spells/golang/gomod" as gomod;
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
@@ -60,6 +67,10 @@ magus\project({
         // per invocation.
         "release-build": {"skip_cache": true},
         "release-sign": {"skip_cache": true},
+        // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
+        // order-sensitive side effect, never a cache replay. exclusive: nothing
+        // else should be touching go.mod or the tag namespace while it runs.
+        "release": {"skip_cache": true, "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
         "test": {"skip_cache": true},
     },
@@ -180,28 +191,39 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
-// Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
+// Regenerates the runtime BuzzObject maps before anything imports a host binding.
+// Its reflection lives only in magus-utils while writing this Go file; the emitted
+// methods use direct field access, so Magus never reflects at a Buzz boundary.
+export fun types_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("types/buzzobject_gen.go");
+    os\exec("go", ["generate", "./types"]);
+}
+
+// Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("host/gen/*.go");
+    ctx.needs(types_generate);
+    ctx.outputs("internal/interp/bindings/gen/*.go");
     os\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the
-// Buzz value-type mirrors (internal/spell/gen/types), both driven by the
-// go:generate directives in internal/spell.
+// Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen)
+// and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven
+// by the go:generate directives in internal/spellruntime.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz");
-    os\exec("go", ["generate", "./internal/spell/..."]);
+    ctx.needs(types_generate);
+    ctx.outputs("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz");
+    os\exec("go", ["generate", "./internal/spellruntime/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
 // interface's gen/ subdir. Mocks are committed and drift-gated like every other
 // generated tree; mockery is pinned in the go.mod tool block.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("**/gen/mocks/*.go");
     os\exec("go", ["tool", "mockery"]);
 }
@@ -232,6 +254,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void {
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
     os\exec("go", ["generate", "./cmd/magus/..."]);
@@ -270,6 +293,34 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
+// workspace_go_mods gathers the Go spell's structured view for every workspace
+// module. The policy that compares those records lives beside that spell in
+// spells/golang/gomod.buzz; Magus core only supplies the typed project inventory.
+fun workspace_go_mods(ctx: magus\Context) > [any] {
+    final projects: Projects = magus\ls();
+    var modules: [any] = mut [<any>];
+    foreach (project in projects.projects) {
+        if (fs\exists(project.dir + "/go.mod")) {
+            final result = go["go-mod-json"](ctx.withCwd(project.dir));
+            modules.append({"dir": project.dir, "json": result.stdout});
+        }
+    }
+    return modules;
+}
+
+// The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or
+// writes go.mod. Without rw, Go's -print mode must equal the checked-in file.
+export fun mod_sync(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("go.mod");
+    final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        throw "MGS1016: go.mod has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements";
+    }
+}
+
 // Renders the insight report (hotspots, affinity, ownership, trend) and, with the
 // `gha` charm, appends it to a host output path supplied via env. The final CI step;
 // never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
@@ -303,6 +354,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 // but its output was not re-run and committed).
 export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty() == false;
+    ctx.needs(mod_sync);
     ctx.needs(ctx.glob("*-generate"));
     if (ctx.has_charm("rw")) { return; }
 
@@ -409,6 +461,168 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void {
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
 }
 
+// release cuts a version across the workspace in the order Go's multi-module
+// convention requires - the part that is easy to get wrong by hand:
+//
+//   1. tag each nested module (libs/<name>/vX.Y.Z) - each has to be
+//      independently `go get`-able before anything downstream can require it
+//      at a real version instead of v0.0.0.
+//   2. rewrite root go.mod's `require .../libs/<name> v0.0.0` lines to the
+//      real vX.Y.Z, now that those tags exist to resolve to.
+//   3. tag root vX.Y.Z last - only now does the root tag's own go.mod
+//      resolve its nested requires to something `go get` can fetch, instead
+//      of the unreleased v0.0.0 that makes `go get github.com/egladman/magus`
+//      fail for everyone outside this repo (see docs/reference/go-sdk.md).
+//
+// go.mod's `replace` directives are left exactly as they are: they are
+// ignored by any downstream consumer (replace is never transitive) and are
+// the standard pattern for local development inside the same repo - go.mod
+// carries a comment saying so, precisely so nobody "cleans them up" later.
+//
+// Dry run by default, and PER MODULE. `magus run release` with no arguments
+// surveys every module - its current version and the three legal next ones - and
+// releases nothing. Name a module to release it:
+//
+//      magus run release -- magus=0.4.0
+//      magus run release -- libs/gopherbuzz=0.2.0
+//      magus run release:cd -- magus=0.4.0 libs/gopherbuzz=0.2.0
+//
+// A module you do NOT name is not released. That is the point: these modules
+// version INDEPENDENTLY, each on its own cadence, because Go already gives each
+// its own tag namespace. Deriving every tag from one number would chain
+// gopherbuzz's public API to magus's release schedule for no reason.
+//
+// The three candidates are COMPUTED, never chosen. Deciding which one a change
+// deserves is a judgement about what breaks for a consumer; that belongs to the
+// developer. magus supplies the mechanism and stops there.
+//
+// Neither path ever pushes - a human reviews the tags and pushes deliberately.
+
+export fun release(ctx: magus\Context, args: [str]) > void {
+    // `cd` rather than a release-only charm: image_build above already uses it to
+    // mean "this is the real delivery path, do the side-effectful thing" (push and
+    // sign, there; tag and rewrite go.mod, here). One word for one concept beats a
+    // second one that has to be learned separately.
+    final deliver = ctx.has_charm("cd");
+    final dirty = vcs\isDirty();
+    final modules = releaser\releasableModules(magus\ls().projects);
+
+    // Parse `key=version`. Anything unnamed is surveyed, never released.
+    var wanted = mut {};
+    foreach (a in args) {
+        if (a == "") { continue; }
+        final eq = a.indexOf("=");
+        if (eq == null) {
+            throw "release: expected <module>=<version>, got `" + a
+                + "` - run `magus run release` with no arguments to list the modules";
+        }
+        final key = a.sub(0, eq);
+        var v = a.sub(eq + 1);
+        if (v.startsWith("v")) { v = v.sub(1); }
+        semver\parse(v); // raises with a clear message on anything not valid semver
+        wanted[key] = v;
+    }
+
+    // Survey ALWAYS, before anything else: it is the whole interface for choosing
+    // a version, and printing it up front means the numbers you act on are the
+    // numbers you just read.
+    foreach (m in modules) {
+        final cur = releaser\currentVersion(m["prefix"]);
+        final n = releaser\nextFor(cur);
+        var at = "at " + cur;
+        if (cur == "") { at = "unreleased"; }
+        magus\info("release: " + m["key"] + " - " + at
+            + ", next: patch " + n.patch + " | minor " + n.minor + " | major " + n.major);
+    }
+
+    if (wanted.keys().len() == 0) {
+        magus\info("release: nothing named, nothing released - e.g. `magus run release -- magus=0.4.0`");
+        return;
+    }
+
+    // Reject an unknown key BEFORE doing anything: a typo must not quietly release
+    // nothing while reporting success.
+    foreach (key in wanted.keys()) {
+        var known = false;
+        foreach (m in modules) {
+            if (m["key"] == key) { known = true; }
+        }
+        if (!known) {
+            throw "release: unknown module `" + key
+                + "` - run `magus run release` with no arguments to list them";
+        }
+    }
+
+    if (deliver and dirty) { throw "release: tree is dirty; commit before releasing"; }
+
+    // Refuse a version that is not one of the three offered. Cutting a release is
+    // tedious precisely because a wrong number is silent - nothing catches a typo
+    // that lands v0.40.0 instead of v0.4.0 until someone tries to depend on it, and
+    // a tag is the one artifact you cannot quietly take back. The candidates are
+    // computed from the current stable release, so the only way to reach a distant
+    // version is to release your way there deliberately.
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null) { continue; }
+        final cur = releaser\currentVersion(m["prefix"]);
+        if (!releaser\isCandidate(v, cur)) {
+            final n = releaser\nextFor(cur);
+            throw "release: " + m["key"] + " v" + v + " is not a legal next version from "
+                + cur + " - choose " + n.patch + ", " + n.minor + " or " + n.major
+                + " (a prerelease or +metadata build of one of those is fine)";
+        }
+    }
+
+    // Refuse an existing tag before creating ANY of them, so a partial release
+    // cannot leave half the modules tagged.
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null) { continue; }
+        final tag = m["prefix"] + "v" + v;
+        if (vcs\tags(pattern: tag).len() > 0) {
+            throw "release: tag " + tag + " already exists";
+        }
+    }
+
+    if (!deliver) {
+        magus\info("release: DRY RUN - add the cd charm to execute");
+        if (dirty) { magus\info("release: NOTE - tree is dirty; cd will refuse until it is clean"); }
+    }
+
+    // 1. Nested modules first: the root's go.mod must require a version that
+    // already exists as a tag by the time the root itself is tagged.
+    ctx.outputs("go.mod");
+    var gomod = fs\readFile("go.mod");
+    var rewrote = false;
+    foreach (m in modules) {
+        final v = wanted[m["key"]];
+        if (v == null or m["root"] != "") { continue; }
+        magus\info("release: tag " + m["prefix"] + "v" + v);
+        if (deliver) { os\exec(vcs\exe(), ["tag", m["prefix"] + "v" + v]); }
+        // Only a Go module is required by the root's go.mod; a library in another
+        // language is tag-only, so there is nothing to repoint.
+        if (m["gomodule"] != "") {
+            magus\info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
+            gomod = releaser\rewriteRequire(gomod, m["gomodule"], "v" + v);
+            rewrote = true;
+        }
+    }
+    if (deliver and rewrote) { fs\writeFile("go.mod", gomod); }
+
+    // 2. Root tag LAST, so it captures the go.mod rewrite above.
+    final rootV = wanted["magus"];
+    if (rootV != null) {
+        magus\info("release: tag v" + rootV);
+        if (deliver) { os\exec(vcs\exe(), ["tag", "v" + rootV]); }
+    }
+
+    if (deliver) {
+        magus\info("release: done - nothing was pushed. Push the tags deliberately when ready.");
+    } else {
+        magus\info("release: dry run only - nothing was tagged or written");
+    }
+}
+
 // Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.
 export fun watch(ctx: magus\Context, args: [str]) > void {
     magus\info("watching cmd/ and internal/ — rebuilding on change (Ctrl-C to stop)");
@@ -434,6 +648,11 @@ fun total_coverage(func_out: str) > str {
 
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
+    // Declared because this target WRITES the badge below and gates on its drift.
+    // Undeclared, `magus vcs add` skipped it as unclaimed while ci still failed on
+    // it being stale - the workspace's account of itself disagreeing with what a
+    // target actually does, which is the disagreement declarations exist to end.
+    ctx.outputs("assets/coverage.svg");
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
     ctx.needs(format);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});

@@ -447,8 +447,8 @@ func TestParseTagLines(t *testing.T) {
 		"name-only", "")
 	require.NoError(t, err)
 
-	want := []types.Tag{
-		{Name: "v0.3.0", Date: time.Date(2026, 7, 25, 10, 14, 5, 0, time.FixedZone("", -4*60*60)), ID: "abc123"},
+	want := []types.VCSTag{
+		{Name: "v0.3.0", Version: types.SemverVersion{Major: 0, Minor: 3, Patch: 0, Original: "v0.3.0"}, Date: time.Date(2026, 7, 25, 10, 14, 5, 0, time.FixedZone("", -4*60*60)), ID: "abc123"},
 		{Name: "no-date", ID: "def456"},
 		{Name: "bad-date", ID: "ghi789"},
 	}
@@ -456,8 +456,41 @@ func TestParseTagLines(t *testing.T) {
 	for i := range want {
 		require.Equal(t, want[i].Name, got[i].Name)
 		require.Equal(t, want[i].ID, got[i].ID)
+		require.Equal(t, want[i].Version, got[i].Version, "tag %q version", want[i].Name)
 		require.True(t, want[i].Date.Equal(got[i].Date), "tag %q date", want[i].Name)
 	}
+}
+
+// TestParseTagsSplitsVersion is the dedicated Prefix/Version coverage the
+// table above only samples: a nested-module tag splits its module path from
+// the version, a root tag has no prefix, and a non-semver tag (a legitimate
+// annotation, not an error) leaves Version at its zero value.
+func TestParseTagsSplitsVersion(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseTags("libs/gopherbuzz/v0.1.0\t\ta\n"+
+		"v0.3.0\t\tb\n"+
+		"checkpoint\t\tc\n", "")
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	assert.Equal(t, types.VCSTag{
+		Name:    "libs/gopherbuzz/v0.1.0",
+		Prefix:  "libs/gopherbuzz/",
+		Version: types.SemverVersion{Major: 0, Minor: 1, Patch: 0, Original: "v0.1.0"},
+		ID:      "a",
+	}, got[0], "nested-module tag: prefix through the final /, version is the remainder")
+
+	assert.Equal(t, types.VCSTag{
+		Name:    "v0.3.0",
+		Version: types.SemverVersion{Major: 0, Minor: 3, Patch: 0, Original: "v0.3.0"},
+		ID:      "b",
+	}, got[1], "root tag: empty prefix")
+
+	assert.Equal(t, types.VCSTag{
+		Name: "checkpoint",
+		ID:   "c",
+	}, got[2], "non-semver tag: zero Version, not an error")
 }
 
 func TestParseTagLinesEmpty(t *testing.T) {

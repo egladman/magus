@@ -123,6 +123,34 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-mod-edit
+
+**Command:** `go mod edit -print`
+
+### rw
+
+Drops `-print`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "remove",
+    "path": "/2"
+  }
+]
+```
+
+</details>
+
+## go-mod-json
+
+Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.
+
+**Command:** `go mod edit -json`
+
 ## go-mod-tidy
 
 **Command:** `go mod tidy --diff`

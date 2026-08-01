@@ -7,7 +7,7 @@
 // needs the same config, keeping it warm between invocations. Try `ls` to see the
 // spell's ops, then `run serve` for the plan.
 
-import "magus/target";
+import "magus/spell";
 
 // A spell announces its name...
 export fun mgs_getName() > str { return "postgres"; }

@@ -74,7 +74,7 @@ import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {
     return Command{bin = "acme", args = ["lint", "."]};
@@ -86,14 +86,14 @@ import "spells/beta" as beta;
 magus.project({ "spells": [beta] });
 export fun lint(ctx: magus\Context, args: [str]) > void { beta.lint(ctx); }
 -- proj-b/spells/beta/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "beta"; }
 fun lint(target: Target) > Command {
     return Command{bin = "beta", args = ["lint", "."]};
 }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }
 -- proj-b/spells/beta/spell.buzz.v2 --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "beta"; }
 // touched so affected's VCS diff has something to select
 fun lint(target: Target) > Command {

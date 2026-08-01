@@ -212,21 +212,21 @@ func TestCompileObserverPhases(t *testing.T) {
 	}, obs.phases)
 }
 
-// TestCompileObserverImportSynthetic verifies an import resolving to a host
-// synthetic module is reported with ImportSynthetic.
-func TestCompileObserverImportSynthetic(t *testing.T) {
+// TestCompileObserverImportNative verifies an import resolving to a host
+// native module is reported with ImportNative.
+func TestCompileObserverImportNative(t *testing.T) {
 	ctx := context.Background()
 	s := NewSession(ctx, WithEmbedded())
 	defer func() { _ = s.Close() }()
 
-	s.SetSyntheticModule("widget", vmpackage.NewMap())
+	s.SetNativeModule("widget", vmpackage.NewMap())
 	obs := &compileObserverStub{}
 	s.SetCompileObserver(obs)
 
 	require.NoError(t, s.Exec(ctx, `import "widget";`))
 
 	require.Len(t, obs.imports, 1)
-	assert.Equal(t, importRecord{path: "widget", outcome: ImportSynthetic}, obs.imports[0])
+	assert.Equal(t, importRecord{path: "widget", outcome: ImportNative}, obs.imports[0])
 }
 
 // --- Session fault hook ---

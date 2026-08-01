@@ -29,7 +29,7 @@ func TestAssembleIO(t *testing.T) {
 		Path: "docs",
 		Nodes: []types.TargetGraphNode{
 			// Inputs carry the owning project's workspace-relative path (as resolved in
-			// DescribeGraph); a same-project input's owner is this project ("docs").
+			// TargetGraph); a same-project input's owner is this project ("docs").
 			{Name: "gen", Outputs: []types.OutputRef{{Glob: "spells/*.md"}}, Inputs: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
 			{Name: "ghost", Outputs: []types.OutputRef{{Glob: "nowhere/*.md"}}}, // matches no node
 			{Name: "wide", Outputs: []types.OutputRef{{Glob: "**/*.md"}}},       // too broad -> guard drops it
@@ -64,7 +64,7 @@ func TestAssembleIOCrossInputs(t *testing.T) {
 		Path: "consumer",
 		Nodes: []types.TargetGraphNode{
 			// A cross-project input carries the owning project's workspace-relative path
-			// (as resolved in DescribeGraph), so the file node lives in "lib", not "consumer".
+			// (as resolved in TargetGraph), so the file node lives in "lib", not "consumer".
 			{Name: "build", Inputs: []types.InputRef{{Project: "lib", Glob: "go.mod"}}},
 		},
 	}}

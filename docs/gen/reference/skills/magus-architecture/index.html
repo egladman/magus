@@ -85,6 +85,7 @@
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
           <li><a href="../../../reference/skills/magus-run/" title="magus-run">magus-run</a></li>
+          <li><a href="../../../reference/skills/magus-sdk/" title="magus-sdk">magus-sdk</a></li>
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
@@ -127,7 +128,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>20</code></td>
+<td><code>21</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -135,7 +136,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>c34815650c30</code></td>
+<td><code>351a7800dc11</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -407,7 +408,7 @@ browser graph tool.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-architecture%22">magus-architecture</a></div>
-    <small>Last updated <time datetime="2026-07-30T19:19:13Z">July 30, 2026, 7:19 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b" data-tooltip="b419ddd272c4be167280f17377a838a44936900b" title="b419ddd272c4be167280f17377a838a44936900b">b419ddd2</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li><li><a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b"><code>b419ddd2</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface, display flags, ctx-first fixtures</li><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-architecture.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

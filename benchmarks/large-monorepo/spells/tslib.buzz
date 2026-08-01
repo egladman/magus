@@ -2,12 +2,12 @@
 // Non-opaque so the lib's TS sources are hashed; a no-op build (true) gives the
 // lib a target handle an app can magus.needs, propagating the lib's cache key
 // into the app. The 5 real next builds dominate the wall-clock.
-import "magus/target";
+import "magus/spell";
 
 export fun mgs_getName() > str { return "tslib"; }
 
-export fun mgs_listRequiredGlobs(dir: str) > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"}, Path{value = "**/*.json"}, Path{value = "package.json"}];
 }
 
 fun noop(t: Target, cb: fun(any)) > bool {

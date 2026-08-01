@@ -58,7 +58,7 @@ func TestSameProjectExclusiveSerializes(t *testing.T) {
 func TestDifferentProjectsNoContention(t *testing.T) {
 	locker := newProjectLocker(t.TempDir(), false)
 
-	relA, err := locker.acquire(context.Background(), "libs/diag")
+	relA, err := locker.acquire(context.Background(), "libs/diagnostics")
 	if err != nil {
 		t.Fatalf("acquire A: %v", err)
 	}
@@ -258,11 +258,11 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 func TestLockPathMirrorsProjectTree(t *testing.T) {
 	l := newProjectLocker("/cache", false)
 	cases := map[string]string{
-		"":                filepath.Join("/cache", "locks", "lock"),
-		".":               filepath.Join("/cache", "locks", "lock"),
-		"docs":            filepath.Join("/cache", "locks", "docs", "lock"),
-		"libs/diag":       filepath.Join("/cache", "locks", "libs", "diag", "lock"),
-		"libs/textsearch": filepath.Join("/cache", "locks", "libs", "textsearch", "lock"),
+		"":                 filepath.Join("/cache", "locks", "lock"),
+		".":                filepath.Join("/cache", "locks", "lock"),
+		"docs":             filepath.Join("/cache", "locks", "docs", "lock"),
+		"libs/diagnostics": filepath.Join("/cache", "locks", "libs", "diagnostics", "lock"),
+		"libs/textsearch":  filepath.Join("/cache", "locks", "libs", "textsearch", "lock"),
 	}
 	for in, want := range cases {
 		if got := l.lockPath(in); got != want {

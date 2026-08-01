@@ -180,7 +180,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
 // ci lives in the magusfile (composed via magus.needs), never in a spell, so it
 // extracts each project's declared target nodes statically (the same AST extractor
-// DescribeGraph uses, never a raw text scan, so `ci` in a comment or string can't
+// TargetGraph uses, never a raw text scan, so `ci` in a comment or string can't
 // false-positive) and short-circuits on the first ci found. The returned error is
 // non-nil if a source couldn't be located, so a (false, err) result means "couldn't
 // determine", not "definitely no ci" - the caller must not block on it.

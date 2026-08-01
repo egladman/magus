@@ -31,6 +31,7 @@ func TestEval_errorPosition(t *testing.T) {
 }
 
 const sampleMagusfile = `
+import "magus";
 import "magus/spell/go";
 
 magus.project({
@@ -92,6 +93,7 @@ func TestRun_orderAndTrace(t *testing.T) {
 
 func TestRun_charmBranch(t *testing.T) {
 	const src = `
+import "magus";
 import "magus/spell/docker";
 magus.project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
@@ -145,6 +147,7 @@ export fun regen(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob("p
 
 func TestRun_magusRunInvocation(t *testing.T) {
 	const src = `
+import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
 export fun release(ctx: magus\Context, args: [str]) > void { magus.run(["image-build:cd"]); }
 `

@@ -43,7 +43,7 @@ func argStrMap(args []vm.Value, i int) map[string]string {
 }
 
 // Go → Buzz: the inverse direction, turning typed Go values back into Buzz values.
-// The richer Go→Buzz marshalers (execRecordToBuzz, targetsToBuzzMap, …) live next
+// The richer Go→Buzz marshalers (execRecordToBuzz, targetsToMap, …) live next
 // to the spell handles they build; these two are the generic primitives shared
 // across every namespace.
 

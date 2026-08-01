@@ -104,12 +104,12 @@ func (p CompilePhase) String() string {
 type ImportOutcome int
 
 const (
-	ImportBound     ImportOutcome = iota // already bound or already loaded; skipped
-	ImportSynthetic                      // a host synthetic module value
-	ImportSource                         // a host embedded-source module
-	ImportResolver                       // resolved by the host module resolver
-	ImportFile                           // a .buzz file on the search path
-	ImportNotFound                       // nothing resolved the import (an error)
+	ImportBound    ImportOutcome = iota // already bound or already loaded; skipped
+	ImportNative                        // a host-native module value
+	ImportDecls                         // host-supplied embedded declarations
+	ImportResolver                      // resolved by the host module resolver
+	ImportFile                          // a .buzz file on the search path
+	ImportNotFound                      // nothing resolved the import (an error)
 )
 
 // String names the import outcome for logs and metric labels (plain ASCII).
@@ -117,10 +117,10 @@ func (o ImportOutcome) String() string {
 	switch o {
 	case ImportBound:
 		return "bound"
-	case ImportSynthetic:
-		return "synthetic"
-	case ImportSource:
-		return "source"
+	case ImportNative:
+		return "native"
+	case ImportDecls:
+		return "declarations"
 	case ImportResolver:
 		return "resolver"
 	case ImportFile:

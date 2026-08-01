@@ -21,7 +21,7 @@ magus.project({ "spells": [pg, acme] });
 export fun serve(ctx: magus\Context, args: [str]) > void { pg.serve(); }
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/pg/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "pg"; }
 fun serve(t: Target) > Service {
     return Service{
@@ -32,7 +32,7 @@ fun serve(t: Target) > Service {
 }
 export fun mgs_listTargets() > {str: fun(Target) Service} { return {"serve": serve}; }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(t: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

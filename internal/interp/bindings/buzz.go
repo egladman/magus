@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/egladman/magus/host"
-	buzzgen "github.com/egladman/magus/host/gen"
 	"github.com/egladman/magus/internal/interp"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -22,7 +22,7 @@ func init() {
 
 // registerAllBuzz installs the magus.* host API into a Buzz session.
 //
-// These bindings (and the magus-utils bindings-emitted ones in host/gen) are written
+// These bindings (and the magus-utils bindings-emitted ones in bindings/gen) are written
 // directly against the concrete magus/gopherbuzz value system - NewMap, DirectValue,
 // StrValue, and friends - rather than behind the generic engine.Value /
 // engine.Session abstraction. That is deliberate, not a layering gap:
@@ -62,28 +62,28 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// unbound. Merged onto the hand-built magus map above, which carries only the
 	// VM-infra members (project/cache/pry/log, plus the magus.Context) that can't
 	// share a Go Impl across the boundary.
-	mergeModuleMap(magus, buzzgen.RegisterMagus(ctx, sess))
+	mergeModuleMap(magus, bindinggen.RegisterMagus(ctx, sess))
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
 	// module registry - the same host.ModulesOutput core `magus describe module[s]`
-	// formats, marshalled straight to Buzz records instead of scraping a subprocess's
+	// formats, marshalled straight to Buzz objects instead of scraping a subprocess's
 	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
 	// which std can't import.
 	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return host.MapsVal(host.Modules("")), nil
+		return bindinggen.MapsVal(std.DescribeModules("")), nil
 	}))
 	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := host.Modules(name)
+		out := std.DescribeModules(name)
 		if len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
 		}
-		return host.AnyMapVal(out[0].ToMap()), nil
+		return bindinggen.AnyMapVal(out[0].BuzzObject()), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name - a target, a
@@ -99,7 +99,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if len(args) == 0 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
 		}
-		return host.StrVal(types.Normalize(args[0].AsString())), nil
+		return bindinggen.StrVal(types.Normalize(args[0].AsString())), nil
 	}))
 
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one
@@ -147,7 +147,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// its basename.
 	builtins := spellruntime.Builtins()
 	for name := range builtins {
-		sess.SetSyntheticModule(spells.ModulePath(name), buzzSpellObject(name))
+		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
 	}
 	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
 	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
@@ -158,7 +158,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
 			continue
 		}
-		sess.SetSyntheticModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
+		sess.SetNativeModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
 	}
 	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
 	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),

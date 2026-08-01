@@ -66,7 +66,15 @@ type Descriptor struct {
 	// them per-project instead of the engine hardcoding language-specific names.
 	// Dot-directories are already skipped structurally, so only non-dot names belong
 	// here. Declared by mgs_listIgnoreDirs.
-	IgnoreDirs  []string            `json:"ignore_dirs,omitempty"`
+	IgnoreDirs []string `json:"ignore_dirs,omitempty"`
+	// Manifests is the ordered list of candidate filenames that carry this spell's
+	// ecosystem's project-version metadata (go.mod, package.json, Cargo.toml,
+	// pyproject.toml). Ordered because some ecosystems have genuine alternatives -
+	// the first one present in a project directory is its manifest. Declared by
+	// mgs_listManifests. Distinct from Needs (cache/affected input globs), from a
+	// spell's DeclarationFiles (project discovery, not exposed on Descriptor), and
+	// from VersionCmd (the toolchain's own version, not the project's).
+	Manifests   []string            `json:"manifests,omitempty"`
 	Opaque      bool                `json:"opaque,omitempty"`
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
 	Ops         map[string]Op       `json:"targets,omitempty"`

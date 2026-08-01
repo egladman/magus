@@ -184,19 +184,6 @@ type ExecResult struct {
 	OK     bool `buzz:"ok"`
 }
 
-// ToMap is the Buzz boundary map os.exec / os.exec_sh / magus.cmd return:
-// {stdout, stderr, code, ok}. The exec surfaces space-trim Stdout/Stderr before
-// building the struct (the captured-output convention), so this is a plain field
-// map.
-func (r ExecResult) ToMap() map[string]any {
-	return map[string]any{
-		"stdout": r.Stdout,
-		"stderr": r.Stderr,
-		"code":   r.Code,
-		"ok":     r.OK,
-	}
-}
-
 // MagusfileSpellName is the spell a project's own magusfile is bound as. It is matched
 // by name because that spell is a single global instance standing in for every
 // project's magusfile - see Project.MagusfileTargets for why it cannot answer for one.

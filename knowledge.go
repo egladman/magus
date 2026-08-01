@@ -16,12 +16,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"golang.org/x/mod/modfile"
@@ -122,10 +122,10 @@ func cacheImmutable(cfg config.Config) bool {
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.
 func allModuleEntries() []types.ModuleEntry {
-	summary := host.Modules("")
+	summary := std.DescribeModules("")
 	out := make([]types.ModuleEntry, 0, len(summary))
 	for _, m := range summary {
-		out = append(out, host.Modules(m.Name)...)
+		out = append(out, std.DescribeModules(m.Name)...)
 	}
 	return out
 }
@@ -136,16 +136,25 @@ func allModuleEntries() []types.ModuleEntry {
 // outputs the graph is composed from, resolves the cache dir, and runs the
 // cache-first build. ws is any workspace view that can describe itself (the
 // read-only Inspect result or a full *Magus).
-func BuildKnowledgeGraph(ctx context.Context, ws types.Describer, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
+func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, log *slog.Logger) (*knowledge.Graph, error) {
 	if log == nil {
 		// The loaders below log best-effort; a nil logger (some callers, e.g. describe,
 		// pass one) would panic on the first miss. Normalize once here.
 		log = slog.Default()
 	}
 	cacheDir := resolveCacheDir(root, cfg)
-	spells := ws.DescribeSpells()
-	graph := ws.DescribeGraph(ctx)
-	projects := ws.DescribeProjects()
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return nil, err
+	}
+	graph, err := ws.TargetGraph(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projects, err := ws.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	// The @vcs shard is produced by an expensive git-history scan. Fingerprint its inputs
 	// (HEAD + window) and, when unchanged, SKIP the scan entirely: Sync reuses the shard
@@ -294,7 +303,7 @@ func loadKnowledgeOutputRefs(cacheDir string) []types.KnowledgeOutputRef {
 // symbolStore opens the same store BuildKnowledgeGraph writes, so the symbol shards a
 // build just persisted (and the derived xref routing index) are available for a
 // lazy merge.
-func symbolStore(ws types.Describer, root string, cfg config.Config, log *slog.Logger) *knowledge.Store {
+func symbolStore(ws types.Inspector, root string, cfg config.Config, log *slog.Logger) *knowledge.Store {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -304,7 +313,7 @@ func symbolStore(ws types.Describer, root string, cfg config.Config, log *slog.L
 // MergeWorkspaceSymbols pulls every persisted per-project @symbols shard into g, for
 // a symbol-seeded query (the default graph excludes them for scale). Best-effort: no
 // store or no symbol shards is a no-op.
-func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
+func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, log *slog.Logger) error {
 	return symbolStore(ws, root, cfg, log).MergeSymbolShards(ctx, g)
 }
 
@@ -312,7 +321,7 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Describer, root string,
 // the shards that mention ref (via the xref routing index) when ref is an exact symbol
 // ID - the scale-safe reverse lookup - or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
-func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Describer, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
+func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
 	store := symbolStore(ws, root, cfg, log)
 	// An exact symbol ID can route to just its shards; a fuzzy name (or any non-exact
 	// symbol: ref) yields no routing hit and MergeSymbolShardsByID falls back to loading
@@ -377,7 +386,7 @@ type symbolIngestInputs struct {
 	root     string
 	cacheDir string
 	projects types.ProjectsOutput
-	spells   []types.SpellEntry
+	spells   []types.Spell
 	log      *slog.Logger
 }
 
@@ -638,7 +647,7 @@ func (a remoteShardAdapter) PutShard(ctx context.Context, key string, r io.Reade
 // remoteShardsFor returns the shard backing for a workspace: the build cache's
 // remote backend when ws is a cache-backed *Magus, else nil (local-only). An
 // Inspect-constructed *Magus has no cache, so it stays local.
-func remoteShardsFor(ws types.Describer) knowledge.RemoteShards {
+func remoteShardsFor(ws types.Inspector) knowledge.RemoteShards {
 	m, ok := ws.(*Magus)
 	if !ok || m.cache == nil {
 		return nil

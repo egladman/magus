@@ -44,7 +44,7 @@ func TestInitSpellCmd(t *testing.T) {
 			`export fun mgs_getName() > str { return "acme"; }`,
 			"mgs_listRequiredGlobs",
 			"mgs_listTargets",
-			`import "magus/target"`,
+			`import "magus/spell"`,
 			`import "magus/charm"`,
 			`test "build op forks the expected command"`,
 		} {

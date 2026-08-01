@@ -16,7 +16,7 @@ import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command {

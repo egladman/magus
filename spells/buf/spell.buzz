@@ -10,19 +10,19 @@
 // your buf.gen.yaml: under-declare and the cache won't replay codegen; over-declare
 // and every replay snapshots more than necessary.
 
-import "magus/target";
+import "magus/spell";
 // charm constructors derive argv patches from an anchor arg, not a counted index.
 import "magus/charm";
 
 export fun mgs_getName() > str { return "buf"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.proto"}, Path{value = "buf.yaml"}, Path{value = "buf.gen.yaml"}, Path{value = "buf.work.yaml"}, Path{value = "buf.lock"}];
 }
 
 // Generated code buf writes. Adjust to match the `out:` directories in your
 // buf.gen.yaml; "gen/**" is the buf convention.
-export fun mgs_listProvidedGlobs() > [str] { return ["gen/**"]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "gen/**"}]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 

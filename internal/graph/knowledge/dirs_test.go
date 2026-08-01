@@ -45,12 +45,12 @@ func TestContainsChain(t *testing.T) {
 	})
 
 	t.Run("sub-project chain starts at the project, not the workspace root", func(t *testing.T) {
-		nodes, edges := containsChain("libs/diag", "libs/diag/sub/foo.go", "file:libs/diag/sub/foo.go")
+		nodes, edges := containsChain("libs/diagnostics", "libs/diagnostics/sub/foo.go", "file:libs/diagnostics/sub/foo.go")
 		require.Len(t, nodes, 1)
-		assert.Equal(t, "dir:libs/diag/sub", nodes[0].ID)
+		assert.Equal(t, "dir:libs/diagnostics/sub", nodes[0].ID)
 		tr := edgeTriples(edges)
-		assert.True(t, tr[[3]string{"project:libs/diag", "dir:libs/diag/sub", types.RelationContains}])
-		assert.True(t, tr[[3]string{"dir:libs/diag/sub", "file:libs/diag/sub/foo.go", types.RelationContains}])
+		assert.True(t, tr[[3]string{"project:libs/diagnostics", "dir:libs/diagnostics/sub", types.RelationContains}])
+		assert.True(t, tr[[3]string{"dir:libs/diagnostics/sub", "file:libs/diagnostics/sub/foo.go", types.RelationContains}])
 	})
 
 	t.Run("two files in one directory share the dir node ID (dedup by identity)", func(t *testing.T) {

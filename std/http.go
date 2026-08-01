@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module http -lang buzz -out ../host/gen/http.go
+//go:generate go run ../cmd/magus-utils bindings -module http -lang buzz -out ../internal/interp/bindings/gen/http.go
 
 func init() { Register(HTTP) }
 
@@ -53,7 +53,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "HTTPResponse"}},
 			Impl:    HTTPGet,
 		},
 		{
@@ -65,7 +65,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "HTTPResponse"}},
 			Impl:    HTTPPost,
 		},
 		{
@@ -78,7 +78,7 @@ var HTTP = Module{
 				{Name: "headers", Type: TypeStringMap, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "HTTPResponse"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "HTTPResponse"}},
 			Impl:    HTTPRequest,
 		},
 		{

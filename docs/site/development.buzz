@@ -3,7 +3,6 @@
 // or renderDevelopmentPageRaw (pre-rendered HTML).
 namespace development;
 
-import "magus/target" as _;
 import "markdown";
 import "fs";
 import "io";
@@ -144,7 +143,7 @@ fun workspaceDependencies(graph: Graph) > str {
 // A Mermaid block draws the run order from each node's declared dependencies, so the
 // arrows are the real ctx.needs edges and not a hand-maintained picture.
 fun projectCatalog(proj: TargetGraphProject) > str {
-    // No `?? []` guards below: TargetGraphOutput.ToMap normalizes every optional list to
+    // No `?? []` guards below: TargetGraphOutput.BuzzObject normalizes every optional list to
     // an empty one, so a field the Go struct tagged `omitempty` still arrives as a list
     // rather than null. That is what makes the annotation worth having - the field names
     // are compile-checked AND the values have the shape the mirror declares.
@@ -208,7 +207,7 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 // linking to them and showing how the projects depend on each other. Retired
 // /development/projects/ URLs redirect to the flattened locations.
 //
-// The project set comes from magus itself (magus.ls, annotated `> target\Projects` for
+// The project set comes from magus itself (magus.ls, annotated `> Projects` for
 // compile-checked field access), NOT from scanning the filesystem for MAGUS.md files.
 // The scan it replaced looked only at site.root and its immediate subdirectories, so it
 // found 2 of this workspace's 9 projects: the three under libs/ sit one level too deep,

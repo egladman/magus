@@ -37,7 +37,7 @@ func TestBytecodeRoundTrip(t *testing.T) {
 			// Only round-trip programs that compile and run cleanly with an
 			// expected value; error fixtures have nothing to serialize.
 			// Skip fixtures that use `import "std"` since newSession does not
-			// register the std synthetic module (use TestConformance for that).
+			// register the std native module (use TestConformance for that).
 			if meta.errStr != "" || meta.expect == "" || containsStdImport(string(src)) {
 				t.Skip("not a value-producing fixture or requires std import")
 			}

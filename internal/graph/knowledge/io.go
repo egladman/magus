@@ -74,7 +74,7 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 			}
 			linkPat(tID, p.Path, types.RelationProduces, outPats)
 			// Every input carries its OWNING project's workspace-relative path (resolved
-			// in DescribeGraph): a same-project input's owner is this project, a
+			// in TargetGraph): a same-project input's owner is this project, a
 			// cross-project input's is the other one. path.Join(Project, Glob) yields the
 			// workspace-relative file path uniformly, matched against the file node in the
 			// owning project directly - never re-anchored to the consumer's path.

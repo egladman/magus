@@ -33,7 +33,7 @@ The human format is allowed to change; the JSON shape is the contract.
 
 `magus ls` enumerates the projects magus discovered, with what each declares:
 
-```
+```text
 workspace: /Users/you/repo (8 projects)
 
 project: magus
@@ -50,7 +50,7 @@ rebuilding when you did not expect it is usually explained here.
 `magus describe <thing>` does two jobs in one command, which is its main
 quirk: it **defines** the concept, then **lists** every instance.
 
-```
+```text
 $ magus describe targets
 definition: A target is a named operation (e.g. build, test, lint) declared as
 an exported function in a project's magusfile ...
@@ -99,7 +99,7 @@ picker. It requires a TTY and will not work in a pipeline.
 
 Every run prints an output reference, on success and failure alike:
 
-```
+```text
 [pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
@@ -109,7 +109,7 @@ summary: 2 cached, 5 ran, 0 failed (1m46s)
 `magus query output out3a777178` replays exactly what that run printed. A
 failure adds the reproduce command and an inspect hint:
 
-```
+```text
 [fail] docs generate:rw (ran, 50s)
   cause: magus generate docs: 1 spell(s) failed
   output: out462efb79
@@ -132,7 +132,7 @@ of "why":
 
 `graph stats` is the one to run when you have inherited a repository:
 
-```
+```text
 graph: 2137 nodes, 4665 edges
 connectivity: 2 component(s), largest holds 2136, 0 isolated node(s)
 

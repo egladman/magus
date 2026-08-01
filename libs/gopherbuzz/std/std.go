@@ -1,4 +1,4 @@
-// Package std provides Buzz's standard library modules as synthetic modules
+// Package std provides Buzz's standard library modules as native modules
 // for the magus/buzz interpreter.
 //
 // Call [Register] once after creating a session to make all modules available
@@ -37,7 +37,7 @@ import (
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.
 var Modules = []buzz.Module{
 	{Name: "std", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
-		s.SetSyntheticModule("std", coreModule(env.Out)) // std.print targets env.Out
+		s.SetNativeModule("std", coreModule(env.Out)) // std.print targets env.Out
 		return nil
 	}},
 	{Name: "math", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("math", mathModule)},
@@ -50,19 +50,19 @@ var Modules = []buzz.Module{
 	// resolve. See resolveImport.
 	{Name: "cryptocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: synthetic("cryptocore", cryptoCoreModule)},
 	{Name: "crypto", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule("crypto", cryptoCoreModule())
-		s.SetSourceModule("crypto", cryptoSource)
+		s.SetNativeModule("crypto", cryptoCoreModule())
+		s.SetModuleDecls("crypto", cryptoSource)
 		return nil
 	}},
 	{Name: "gc", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("gc", gcModule)},
 	{Name: "debug", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("debug", debugModule)},
 	{Name: "iocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule("iocore", ioCoreModule(s)) // io binds against the session
+		s.SetNativeModule("iocore", ioCoreModule(s)) // io binds against the session
 		return nil
 	}},
 	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule("io", ioCoreModule(s))
-		s.SetSourceModule("io", ioSource)
+		s.SetNativeModule("io", ioCoreModule(s))
+		s.SetModuleDecls("io", ioSource)
 		return nil
 	}},
 	{Name: "serialize", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("serialize", serializeModule)},
@@ -85,15 +85,15 @@ var Modules = []buzz.Module{
 // make -- the common case, where the module needs nothing from the ModuleEnv.
 func synthetic(name string, make func() vm.Value) func(*buzz.Session, buzz.ModuleEnv) error {
 	return func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSyntheticModule(name, make())
+		s.SetNativeModule(name, make())
 		return nil
 	}
 }
 
-// source returns a Bind that installs an embedded .buzz source module.
+// source returns a Bind that installs an embedded .buzz declaration module.
 func source(name, src string) func(*buzz.Session, buzz.ModuleEnv) error {
 	return func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetSourceModule(name, src)
+		s.SetModuleDecls(name, src)
 		return nil
 	}
 }

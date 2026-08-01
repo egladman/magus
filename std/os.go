@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../host/gen/os.go
+//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../internal/interp/bindings/gen/os.go
 
 func init() { Register(Os) }
 
@@ -76,7 +76,7 @@ var Os = Module{
 				{Name: "dir", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    OsExec,
 		},
 		{
@@ -87,7 +87,7 @@ var Os = Module{
 				{Name: "dir", Type: TypeString, Optional: true},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Record: "ExecResult"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Impl:    OsExecSh,
 		},
 		{
@@ -297,10 +297,10 @@ func optStringDefault(opts map[string]any, key, def string) string {
 
 // runResult forks name+args through run.Exec (sharing the fork/sandbox/env/cancel
 // core with fork spell targets), capturing output for the returned {stdout,
-// stderr} record while still streaming it to `magus tail` and the report. Per-call
+// stderr} object while still streaming it to `magus tail` and the report. Per-call
 // os.with_env overrides ride ctx (withEnvKey). label/cmd name the command in the
 // raise message. A non-zero exit raises unless opts.allow_failure is true, which
-// returns the record instead; a sandbox exec denial always propagates.
+// returns the object instead; a sandbox exec denial always propagates.
 func runResult(ctx context.Context, name string, args []string, dir, label, cmd string, opts map[string]any) (types.ExecResult, error) {
 	overrides, _ := ctx.Value(withEnvKey{}).([]string)
 	res, err := run.Exec(ctx, name, args, run.ExecOptions{

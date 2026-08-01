@@ -709,23 +709,23 @@ event=$(cat)
 
 case "$event" in
 *'"file_path"'*)
-	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
-	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-		exit 0
-	fi
-	# -o name prints the bare decision word, which is all this needs. magus
-	# re-roots the absolute path Cursor sends onto the workspace itself.
-	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
-	[ "$verdict" = "advise" ] || exit 0
-	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
-	# prose rather than as a verdict it would not read.
-	printf '%s\n' \
-		"magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
-		"The edit you just made will be overwritten by the next run of its producing target." \
-		"Change the SOURCE instead, then regenerate and commit both together." \
-		"Cursor has no pre-write hook, so this could only be reported after the fact." >&2
-	exit 0
-	;;
+    # afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+    if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+        exit 0
+    fi
+    # -o name prints the bare decision word, which is all this needs. magus
+    # re-roots the absolute path Cursor sends onto the workspace itself.
+    verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
+    [ "$verdict" = "advise" ] || exit 0
+    # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+    # prose rather than as a verdict it would not read.
+    printf '%s\n' \
+        "magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
+        "The edit you just made will be overwritten by the next run of its producing target." \
+        "Change the SOURCE instead, then regenerate and commit both together." \
+        "Cursor has no pre-write hook, so this could only be reported after the fact." >&2
+    exit 0
+    ;;
 esac
 
 # beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
@@ -733,12 +733,12 @@ esac
 # otherwise would give false assurance. For strict behaviour, set failClosed on
 # the hook and change this to a deny.
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-	printf '%s' '{"permission":"allow"}'
-	exit 0
+    printf '%s' '{"permission":"allow"}'
+    exit 0
 fi
 
 printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --from-json command \
-	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+    -o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
 #### `opencode-plugin.ts`

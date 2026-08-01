@@ -807,23 +807,23 @@ event=$(cat)
 
 case &quot;$event&quot; in
 *'&quot;file_path&quot;'*)
-	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
-	if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
-		exit 0
-	fi
-	# -o name prints the bare decision word, which is all this needs. magus
-	# re-roots the absolute path Cursor sends onto the workspace itself.
-	verdict=$(printf '%s' &quot;$event&quot; | &quot;$GUARD_MAGUS_BIN&quot; agent hook --path --from-json file_path -o name 2&gt;/dev/null)
-	[ &quot;$verdict&quot; = &quot;advise&quot; ] || exit 0
-	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
-	# prose rather than as a verdict it would not read.
-	printf '%s\n' \
-		&quot;magus: that file is a DECLARED OUTPUT of a magus target - it is generated.&quot; \
-		&quot;The edit you just made will be overwritten by the next run of its producing target.&quot; \
-		&quot;Change the SOURCE instead, then regenerate and commit both together.&quot; \
-		&quot;Cursor has no pre-write hook, so this could only be reported after the fact.&quot; &gt;&amp;2
-	exit 0
-	;;
+    # afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+    if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
+        exit 0
+    fi
+    # -o name prints the bare decision word, which is all this needs. magus
+    # re-roots the absolute path Cursor sends onto the workspace itself.
+    verdict=$(printf '%s' &quot;$event&quot; | &quot;$GUARD_MAGUS_BIN&quot; agent hook --path --from-json file_path -o name 2&gt;/dev/null)
+    [ &quot;$verdict&quot; = &quot;advise&quot; ] || exit 0
+    # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+    # prose rather than as a verdict it would not read.
+    printf '%s\n' \
+        &quot;magus: that file is a DECLARED OUTPUT of a magus target - it is generated.&quot; \
+        &quot;The edit you just made will be overwritten by the next run of its producing target.&quot; \
+        &quot;Change the SOURCE instead, then regenerate and commit both together.&quot; \
+        &quot;Cursor has no pre-write hook, so this could only be reported after the fact.&quot; &gt;&amp;2
+    exit 0
+    ;;
 esac
 
 # beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
@@ -831,12 +831,12 @@ esac
 # otherwise would give false assurance. For strict behaviour, set failClosed on
 # the hook and change this to a deny.
 if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ]; then
-	printf '%s' '{&quot;permission&quot;:&quot;allow&quot;}'
-	exit 0
+    printf '%s' '{&quot;permission&quot;:&quot;allow&quot;}'
+    exit 0
 fi
 
 printf '%s' &quot;$event&quot; | &quot;$GUARD_MAGUS_BIN&quot; agent hook --from-json command \
-	-o 'template={{if eq .decision &quot;deny&quot;}}{&quot;permission&quot;:&quot;deny&quot;,&quot;user_message&quot;:{{toJson .reason}},&quot;agent_message&quot;:{{toJson .reason}}}{{else}}{&quot;permission&quot;:&quot;allow&quot;}{{end}}'
+    -o 'template={{if eq .decision &quot;deny&quot;}}{&quot;permission&quot;:&quot;deny&quot;,&quot;user_message&quot;:{{toJson .reason}},&quot;agent_message&quot;:{{toJson .reason}}}{{else}}{&quot;permission&quot;:&quot;allow&quot;}{{end}}'
 </code></pre>
 <h4 id="opencode-plugints"><code>opencode-plugin.ts</code></h4>
 <p>OpenCode plugin. OpenCode has no shell-hook config, so this is a plugin covering both surfaces.

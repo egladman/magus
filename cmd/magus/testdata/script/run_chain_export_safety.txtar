@@ -57,7 +57,7 @@ export fun bundle(ctx: magus\Context, args: [str]) > void {
     os\exec("sh", ["-c", "mkdir -p dist && echo PRECIOUS-ARTIFACT-DATA > dist/a.txt && chmod 755 dist/a.txt"]);
 }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

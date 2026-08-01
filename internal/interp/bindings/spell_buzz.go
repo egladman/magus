@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -41,6 +41,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 		spells.WithSources(spec.Needs...),
 		spells.WithClaims(spec.Claims...),
 		spells.WithIgnoreDirs(spec.IgnoreDirs...),
+		spells.WithManifests(spec.Manifests...),
 		spells.WithOutputs(spec.Provides...),
 		spells.WithTargets(spec.OpNames()...),
 		spells.WithServiceTargets(spec.ServiceOpNames()...),
@@ -175,7 +176,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	// cb delivers the op's inputs by copying req.Params into the map the handler
 	// hands it. Buzz maps are pointer-backed, so the handler sees the writes after
 	// cb(io) returns. A handler that needs no inputs simply never calls cb.
-	params := host.AnyToValue(req.Params)
+	params := bindinggen.AnyToValue(req.Params)
 	tgt := targetValue(ctx, req)
 	cb := vm.DirectValue("magus.cb", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsMap() && params.IsMap() {
@@ -193,7 +194,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	if err != nil {
 		return nil, fmt.Errorf("spell handler op %q: %w", fn, err)
 	}
-	return host.ValueToAny(rv), nil
+	return bindinggen.ValueToAny(rv), nil
 }
 
 // targetValue builds the Buzz Target value a spell handler receives as its first

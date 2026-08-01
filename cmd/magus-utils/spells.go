@@ -1,5 +1,5 @@
 // Subcommand `spells` compiles each built-in spell's Buzz source
-// (spells/<dir>/spell.buzz) to bytecode and writes internal/spell/gen/<name>.bo,
+// (spells/<dir>/spell.buzz) to bytecode and writes internal/spellruntime/gen/<name>.bo,
 // named by the spell's runtime name (mgs_getName, e.g. "go" for spells/golang) so
 // the source directory never enters the runtime registry. The spell package embeds
 // the blobs at build time; the runtime loader recovers each with UnmarshalChunk and
@@ -54,7 +54,7 @@ func runSpells(args []string) error {
 		if err != nil {
 			continue // not a spell dir
 		}
-		// A built-in may import only the pure-types magus/target module; we
+		// A built-in may import only the pure-types magus/spell module; we
 		// inline its source so the compiled chunk is self-contained (imports
 		// leave no bytecode, so the type would otherwise be absent at load).
 		// A spell importing any host module (e.g. spells/github) can't be a

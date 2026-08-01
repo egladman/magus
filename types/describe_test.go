@@ -18,49 +18,49 @@ func TestTargetGraphProjectLabel(t *testing.T) {
 	assert.Equal(t, "(workspace root)", TargetGraphProject{Path: "."}.Label())
 }
 
-func TestModuleMethodEntryToMap(t *testing.T) {
+func TestModuleMethodEntryBuzzObject(t *testing.T) {
 	m := ModuleMethodEntry{Name: "glob", Doc: "list files", Buzz: "fs.glob(pat)", BuzzStdlib: "glob(pat)"}
-	assert.Equal(t, map[string]any{
+	assert.Equal(t, BuzzObject{
 		"name":       "glob",
 		"doc":        "list files",
 		"buzz":       "fs.glob(pat)",
 		"buzzStdlib": "glob(pat)",
-	}, m.ToMap())
+	}, m.BuzzObject())
 }
 
-func TestModuleFieldEntryToMap(t *testing.T) {
+func TestModuleFieldEntryBuzzObject(t *testing.T) {
 	f := ModuleFieldEntry{Name: "name", Type: "string", Doc: "repo name"}
-	assert.Equal(t, map[string]any{
+	assert.Equal(t, BuzzObject{
 		"name": "name",
 		"type": "string",
 		"doc":  "repo name",
-	}, f.ToMap())
+	}, f.BuzzObject())
 }
 
-func TestModuleEntryToMap(t *testing.T) {
-	// fields/methods are always present, nested as []any of each entry's ToMap.
+func TestModuleEntryBuzzObject(t *testing.T) {
+	// fields/methods are always present, nested as []any of each entry's BuzzObject.
 	e := ModuleEntry{
 		Name:    "vcs",
 		Doc:     "version control",
 		Fields:  []ModuleFieldEntry{{Name: "name", Type: "string"}},
 		Methods: []ModuleMethodEntry{{Name: "commit", Buzz: "vcs.commit()"}},
 	}
-	assert.Equal(t, map[string]any{
+	assert.Equal(t, BuzzObject{
 		"name": "vcs",
 		"doc":  "version control",
 		"fields": []any{
-			map[string]any{"name": "name", "type": "string", "doc": ""},
+			BuzzObject{"name": "name", "type": "string", "doc": ""},
 		},
 		"methods": []any{
-			map[string]any{"name": "commit", "doc": "", "buzz": "vcs.commit()", "buzzStdlib": ""},
+			BuzzObject{"name": "commit", "doc": "", "buzz": "vcs.commit()", "buzzStdlib": ""},
 		},
-	}, e.ToMap())
+	}, e.BuzzObject())
 }
 
-func TestModuleEntryToMapEmpty(t *testing.T) {
+func TestModuleEntryBuzzObjectEmpty(t *testing.T) {
 	// Empty (summary) view: fields/methods are present but empty, never nil.
-	got := ModuleEntry{Name: "fs"}.ToMap()
-	assert.Equal(t, map[string]any{
+	got := ModuleEntry{Name: "fs"}.BuzzObject()
+	assert.Equal(t, BuzzObject{
 		"name":    "fs",
 		"doc":     "",
 		"fields":  []any{},

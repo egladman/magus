@@ -82,7 +82,7 @@ func buzzCmd(ctx context.Context, args []string) error {
 	// `magus buzz` and magusfile execution in lock-step: any module a script or test
 	// imports resolves the same way in both, with no per-surface module list.
 	bindings.RegisterModuleSurface(ctx, sess)
-	// Install the magus/target and magus/charm source modules too, so a spell file
+	// Install the magus/spell and magus/charm source modules too, so a spell file
 	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
 	// is the spell test harness.
 	bindings.RegisterSpellSourceModules(sess)

@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../host/gen/archive.go
+//go:generate go run ../cmd/magus-utils bindings -module archive -lang buzz -out ../internal/interp/bindings/gen/archive.go
 
 func init() { Register(Archive) }
 

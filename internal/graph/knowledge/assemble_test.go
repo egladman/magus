@@ -41,7 +41,7 @@ func sampleInputs() Inputs {
 				},
 			},
 		},
-		Spells: []types.SpellEntry{
+		Spells: []types.Spell{
 			{Name: "go", Targets: []string{"go-build", "go-test"}, TargetDocs: map[string]string{"go-build": "Compile."}},
 		},
 		Modules: []types.ModuleEntry{{

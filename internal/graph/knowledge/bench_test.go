@@ -38,9 +38,9 @@ func syntheticInputs(nProjects, targetsPerProject int) Inputs {
 		projects[p] = pr
 	}
 
-	spells := make([]types.SpellEntry, 20)
+	spells := make([]types.Spell, 20)
 	for s := range spells {
-		spells[s] = types.SpellEntry{
+		spells[s] = types.Spell{
 			Name:    fmt.Sprintf("spell%02d", s),
 			Targets: []string{"build", "test", "lint", "format"},
 		}

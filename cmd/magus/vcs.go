@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -101,7 +102,11 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 
 	// One classification call for every path: the same declared-glob answer
 	// `magus describe file` gives, so the two can never disagree.
-	sources, outputs, undeclared := classifyForStaging(ws.DescribeFiles(paths))
+	files, err := ws.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return err
+	}
+	sources, outputs, undeclared := classifyForStaging(files)
 
 	stage := append(append([]string(nil), sources...), outputs...)
 	if untracked {
@@ -154,9 +159,11 @@ func statusPaths(lines []string) []string {
 // them. Committing the source alone is what makes CI fail on drift.
 //
 // Undeclared paths are the actual hazard `git add -A` poses. No target claims
-// them, so they affect nothing and are usually build residue or a scratch file -
-// but they are also where a genuinely new, not-yet-declared source file lives, so
-// they are reported rather than dropped.
+// them, so they are usually build residue or a scratch file - but they are also
+// where a genuinely new, not-yet-declared source file lives, and where a file
+// magus's own core writes directly (see vcsMaintainedFiles) shows up, since
+// neither has a target's declared-output glob to match against. They are
+// reported rather than dropped or assumed inert.
 func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
 	for _, f := range out {
 		switch f.Role {
@@ -198,20 +205,80 @@ func reportStaging(sources, outputs, undeclared []string, untracked, dryRun bool
 		}
 		return
 	}
-	fmt.Printf("SKIPPED %d undeclared file(s) - no target claims them, so they affect nothing:\n", len(undeclared))
-	for _, p := range undeclared {
-		fmt.Printf("  %s\n", p)
+	maintained, unclaimed := splitMaintained(undeclared)
+	if len(unclaimed) > 0 {
+		fmt.Printf("SKIPPED %d undeclared file(s) - no target claims them:\n", len(unclaimed))
+		for _, p := range unclaimed {
+			fmt.Printf("  %s\n", p)
+		}
+		fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
+		fmt.Println("  if it is build residue, add it to your VCS ignore rules")
 	}
-	fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
-	fmt.Println("  if it is build residue, add it to your VCS ignore rules")
+	if len(maintained) > 0 {
+		fmt.Printf("SKIPPED %d file(s) magus itself maintains outside any target's declared outputs:\n", len(maintained))
+		for _, p := range maintained {
+			fmt.Printf("  %s\n", p)
+		}
+		fmt.Println("  these are not residue - name them explicitly or pass --untracked to stage them")
+	}
+}
+
+// vcsMaintainedFiles are paths magus's own core writes directly, rather than a
+// target through a declared output glob - so ClassifyFiles has nothing to match
+// them against and they land in "undeclared" alongside genuine residue. Calling
+// them undeclared is accurate; claiming they "affect nothing" is not, so they
+// get their own report line instead of being folded into the blanket message.
+//
+// .gitattributes is written by gitVCS.InstallMergeDriver (vcs/git.go) to
+// register magus's own merge driver for generated-output conflicts.
+var vcsMaintainedFiles = map[string]bool{
+	".gitattributes": true,
+}
+
+// splitMaintained separates paths magus's own core maintains from everything
+// else undeclared, so reportStaging can describe each group accurately instead
+// of asserting every undeclared path "affects nothing".
+func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
+	for _, p := range undeclared {
+		if vcsMaintainedFiles[p] {
+			maintained = append(maintained, p)
+		} else {
+			unclaimed = append(unclaimed, p)
+		}
+	}
+	return maintained, unclaimed
 }
 
 // stagePaths shells out to git for the index write itself.
 //
+// A declared output (or source) whose path no longer exists on disk - a
+// directory renamed out from under it, a stale declaration nobody updated -
+// makes `git add` fail on that ONE pathspec with "did not match any files".
+// `git add` does not skip the bad pathspec and keep going: it aborts the whole
+// invocation before staging anything, so one stale path silently loses every
+// other path handed to the same call. filterStageable splits paths first so
+// that never happens: a path that exists on disk is always staged; a path
+// that is gone from disk but still known to git is ALSO staged, because that
+// is precisely how a deletion or a rename gets recorded - dropping it would
+// make `vcs add` unable to ever commit a removal. Only a path that is neither
+// on disk nor tracked - a declaration that no longer corresponds to anything
+// real - is dropped, and reported rather than silently discarded.
+//
 // Paths are passed after `--` so one that begins with a dash, or collides with a
 // revision name, is unambiguously a path.
 func stagePaths(ctx context.Context, root string, paths []string) error {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"add", "--"}, paths...)...)
+	stageable, dropped, err := filterStageable(ctx, root, paths)
+	if err != nil {
+		return err
+	}
+	for _, p := range dropped {
+		fmt.Printf("skipping %s: declared but missing from disk and not tracked by git\n", p)
+	}
+	if len(stageable) == 0 {
+		return nil
+	}
+
+	cmd := exec.CommandContext(ctx, "git", append([]string{"add", "--"}, stageable...)...)
 	cmd.Dir = root
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -219,4 +286,54 @@ func stagePaths(ctx context.Context, root string, paths []string) error {
 	}
 	fmt.Printf("\nreview before committing: git diff --cached --stat\n")
 	return nil
+}
+
+// filterStageable separates paths git add can actually act on from ones that
+// would abort the whole `git add` call. See stagePaths for why a missing-but-
+// tracked path (a deletion or the old half of a rename) must still be staged.
+func filterStageable(ctx context.Context, root string, paths []string) (stageable, dropped []string, err error) {
+	var maybeGone []string
+	for _, p := range paths {
+		if _, statErr := os.Stat(filepath.Join(root, p)); statErr == nil {
+			stageable = append(stageable, p)
+			continue
+		}
+		maybeGone = append(maybeGone, p)
+	}
+	if len(maybeGone) == 0 {
+		return stageable, nil, nil
+	}
+
+	tracked, err := gitTrackedPaths(ctx, root, maybeGone)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range maybeGone {
+		if tracked[p] {
+			stageable = append(stageable, p)
+		} else {
+			dropped = append(dropped, p)
+		}
+	}
+	return stageable, dropped, nil
+}
+
+// gitTrackedPaths reports which of paths git already has in its index. That
+// index listing is unaffected by whether the file still exists on disk, which
+// is exactly the property filterStageable needs: a tracked-but-deleted path
+// must still be staged so the deletion gets recorded.
+func gitTrackedPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"ls-files", "-z", "--"}, paths...)...)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("vcs add: git ls-files: %w", err)
+	}
+	tracked := make(map[string]bool)
+	for _, p := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
+		if p != "" {
+			tracked[p] = true
+		}
+	}
+	return tracked, nil
 }

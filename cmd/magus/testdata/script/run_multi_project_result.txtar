@@ -68,7 +68,7 @@ export fun bundle(ctx: magus\Context, args: [str]) > str {
     return "api-v1";
 }
 -- spells/acme/spell.buzz --
-import "magus/target";
+import "magus/spell";
 export fun mgs_getName() > str { return "acme"; }
 fun lint(target: Target) > Command { return Command{bin = "acme", args = ["lint", "."]}; }
 export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

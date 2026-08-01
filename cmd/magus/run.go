@@ -403,9 +403,15 @@ func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target s
 		}
 		set[name] = true
 	}
-	for _, p := range m.DescribeGraph(ctx).Projects {
-		for _, n := range p.Nodes {
-			add(p.Path, n.Name)
+	// buildDefinesTarget returns a bare predicate closure with no error path of its
+	// own; a cancelled ctx here just drops the graph-derived entries from the
+	// predicate (the spell-derived ones added below still make it usable), rather
+	// than failing a caller that never signed up to handle this.
+	if graph, err := m.TargetGraph(ctx); err == nil {
+		for _, p := range graph.Projects {
+			for _, n := range p.Nodes {
+				add(p.Path, n.Name)
+			}
 		}
 	}
 	for _, p := range m.All() {
@@ -556,7 +562,10 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		for i, a := range artifacts {
 			paths[i] = a.Path
 		}
-		roles := m.DescribeFiles(paths)
+		roles, err := m.ClassifyFiles(ctx, paths)
+		if err != nil {
+			return err
+		}
 		roleOf := make(map[string]string, len(roles))
 		for _, f := range roles {
 			roleOf[f.Path] = f.Role
