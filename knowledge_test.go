@@ -71,7 +71,7 @@ func TestBuildGlobalKnowledgeGraphSkipsUnreachable(t *testing.T) {
 }
 
 // ingest builds the symbolIngestInputs the loaders take, with a default logger.
-func ingest(cfg config.Config, root, cacheDir string, projects types.ProjectsOutput, spells []types.SpellEntry) symbolIngestInputs {
+func ingest(cfg config.Config, root, cacheDir string, projects types.ProjectsOutput, spells []types.Spell) symbolIngestInputs {
 	return symbolIngestInputs{cfg: cfg, root: root, cacheDir: cacheDir, projects: projects, spells: spells, log: slog.Default()}
 }
 
@@ -92,11 +92,11 @@ func writeSCIP(t *testing.T, path string) {
 
 // goWorkspace describes a workspace whose "go" spell is symbol-capable (it exposes the
 // reserved scip op) and one project bound to it - the auto-enable inputs, no config.
-func goWorkspace(project string) (types.ProjectsOutput, []types.SpellEntry) {
+func goWorkspace(project string) (types.ProjectsOutput, []types.Spell) {
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
 		{Path: project, Spell: "go", Spells: []string{"go"}},
 	}}
-	spells := []types.SpellEntry{
+	spells := []types.Spell{
 		{Name: "go", Targets: []string{"go-build", symbols.IndexOp}},
 	}
 	return projects, spells
@@ -125,7 +125,7 @@ func TestLoadKnowledgeSymbolsSkipsUnbuilt(t *testing.T) {
 func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
 	root := t.TempDir()
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
-	spells := []types.SpellEntry{{Name: "ts", Targets: []string{"tsc"}}} // no scip op
+	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}}} // no scip op
 	got := loadKnowledgeSymbols(ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
 	assert.Nil(t, got, "a project whose spell exposes no scip op is not ingested")
 }

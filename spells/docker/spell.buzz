@@ -2,8 +2,8 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "docker"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["Dockerfile", ".dockerignore", "**/*"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "Dockerfile"}, Path{value = ".dockerignore"}, Path{value = "**/*"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["docker", "--version"]; }

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"io"
 	"os"
 	"path/filepath"

@@ -31,7 +31,7 @@ Until those get their own tags, clone the repository (or vendor
 `libs/gopherbuzz` and `libs/diagnostics` out of it) and add matching `replace`
 directives to your own `go.mod`:
 
-```
+```go
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
@@ -74,30 +74,30 @@ before either constructor runs.
 package main
 
 import (
-	"context"
-	"fmt"
-	"log"
+    "context"
+    "fmt"
+    "log"
 
-	magus "github.com/egladman/magus"
+    magus "github.com/egladman/magus"
 )
 
 func main() {
-	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, "/path/to/workspace")
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("workspace root:", ws.Root())
-	for _, p := range ws.All() {
-		fmt.Printf("project %s (spell=%q, resolved spells=%d)\n", p.Path, p.Spell, len(p.ResolvedSpells))
-	}
+    ctx := context.Background()
+    ws, err := magus.Inspect(ctx, "/path/to/workspace")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println("workspace root:", ws.Root())
+    for _, p := range ws.All() {
+        fmt.Printf("project %s (spell=%q, resolved spells=%d)\n", p.Path, p.Spell, len(p.ResolvedSpells))
+    }
 }
 ```
 
 Against a workspace whose only project is a bare `magusfile.buzz` declaring
 one `export fun build`, this prints:
 
-```
+```text
 workspace root: /path/to/workspace
 project . (spell="", resolved spells=0)
 ```
@@ -124,7 +124,7 @@ not the full repository:
 
 ```go
 func printProjectCount(r types.WorkspaceReader) {
-	fmt.Println("project count:", len(r.All()))
+    fmt.Println("project count:", len(r.All()))
 }
 
 // Both a read-only Inspect result and an Open'd *magus.Magus satisfy this.
@@ -160,9 +160,9 @@ resolved, err := ws.EvaluateProjects(ctx) // slower: what it resolves to
 classified, err := ws.ClassifyFiles(ctx, []string{"magusfile.buzz"})
 graph, err := ws.TargetGraph(ctx)
 for _, proj := range graph.Projects {
-	for _, n := range proj.Nodes {
-		fmt.Printf("target %s/%s depends on %v\n", proj.Path, n.Name, n.Dependencies)
-	}
+    for _, n := range proj.Nodes {
+        fmt.Printf("target %s/%s depends on %v\n", proj.Path, n.Name, n.Dependencies)
+    }
 }
 ```
 
@@ -227,7 +227,7 @@ a magusfile, using the exported wire API in the root package -
 `WithRegisteredSpell`, `WithTarget`, `WithClaim`, and friends, composed via
 a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
-`internal/spell`, which the exported wrapper functions can reach on your
+`internal/spellruntime`, which the exported wrapper functions can reach on your
 behalf even though you cannot import that package directly. This path gets
 you real spell execution without a magusfile; it does not get you
 arbitrary Buzz-authored targets.

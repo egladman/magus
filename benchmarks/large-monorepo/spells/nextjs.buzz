@@ -6,14 +6,14 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "nextjs"; }
 
-export fun mgs_listRequiredGlobs(dir: str) > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json",
-            "package.json",
-            "next.config.js", "next.config.mjs", "next.config.ts",
-            "package-lock.json"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"}, Path{value = "**/*.json"},
+            Path{value = "package.json"},
+            Path{value = "next.config.js"}, Path{value = "next.config.mjs"}, Path{value = "next.config.ts"},
+            Path{value = "package-lock.json"}];
 }
 
-export fun mgs_listProvidedGlobs() > [str] { return [".next/**"]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = ".next/**"}]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 

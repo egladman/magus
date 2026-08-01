@@ -118,7 +118,7 @@ func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 // Tags reports none. jj models named pointers as bookmarks, not tags, and its
 // Describe already answers tag questions with "" - returning bookmarks here
 // would quietly answer a different question than the caller asked.
-func (v jjVCS) Tags(_ context.Context, _, _ string) ([]types.Tag, error) {
+func (v jjVCS) Tags(_ context.Context, _, _ string) ([]types.VCSTag, error) {
 	return nil, nil
 }
 

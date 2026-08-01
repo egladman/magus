@@ -109,7 +109,7 @@ reading its output, reach for that first instead of parsing the human format.
 The human format is allowed to change; the JSON shape is the contract.</p>
 <h2 id="what-is-in-this-workspace">What is in this workspace?</h2>
 <p><code><a class="code-xref" href="../manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> enumerates the projects magus discovered, with what each declares:</p>
-<pre><code>workspace: /Users/you/repo (8 projects)
+<pre><code class="language-text">workspace: /Users/you/repo (8 projects)
 
 project: magus
   dir:  /Users/you/repo
@@ -122,7 +122,7 @@ project: magus
 rebuilding when you did not expect it is usually explained here.</p>
 <p><code><a class="code-xref" href="../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> &lt;thing&gt;</code> does two jobs in one command, which is its main
 quirk: it <strong>defines</strong> the concept, then <strong>lists</strong> every instance.</p>
-<pre><code>$ magus describe targets
+<pre><code class="language-text">$ magus describe targets
 definition: A target is a named operation (e.g. build, test, lint) declared as
 an exported function in a project's magusfile ...
 
@@ -155,14 +155,14 @@ one would exit 0 having gated nothing.</p>
 picker. It requires a TTY and will not work in a pipeline.</p>
 <h2 id="why-did-that-happen">Why did that happen?</h2>
 <p>Every run prints an <a class="glossary-term" href="../../glossary/#output-reference" data-def="A short, shareable id (ref1a2b3c, &quot;ref" for short) for one target execution's captured output; it appears on each target's line, and magus query output ref1a2b3c prints those exact bytes. In OpenTelemetry terms it corresponds to a **span** (one target execution) within its **trace** (the whole magus invocation).">output reference</a>, on success and failure alike:</p>
-<pre><code>[pass] docs (ran, 1m36s)
+<pre><code class="language-text">[pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
 summary: 2 cached, 5 ran, 0 failed (1m46s)
 </code></pre>
 <p><code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output out3a777178</code> replays exactly what that run printed. A
 failure adds the reproduce command and an inspect hint:</p>
-<pre><code>[fail] docs generate:rw (ran, 50s)
+<pre><code class="language-text">[fail] docs generate:rw (ran, 50s)
   cause: magus generate docs: 1 spell(s) failed
   output: out462efb79
   inspect: magus query output out462efb79
@@ -181,7 +181,7 @@ of &quot;why&quot;:</p>
 <li><code><a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">magus graph</a> stats</code> - where the <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> concentrates and where it is neglected</li>
 </ul>
 <p><code><a class="code-xref" href="../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> stats</code> is the one to run when you have inherited a repository:</p>
-<pre><code>graph: 2137 nodes, 4665 edges
+<pre><code class="language-text">graph: 2137 nodes, 4665 edges
 connectivity: 2 component(s), largest holds 2136, 0 isolated node(s)
 
 god nodes (most connected):

@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../host/gen/os.go
+//go:generate go run ../cmd/magus-utils bindings -module os -lang buzz -out ../internal/interp/bindings/gen/os.go
 
 func init() { Register(Os) }
 

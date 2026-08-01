@@ -36,9 +36,9 @@ func describeCancelled(ctx context.Context, walk string, done, total int) error 
 // registry (project.DefaultSpellRegistry), never the receiver, so it is not on
 // the Inspector interface - a workspace method that ignores its workspace is a
 // global query wearing a domain method's clothes.
-func ListSpells(ctx context.Context) ([]types.SpellEntry, error) {
+func ListSpells(ctx context.Context) ([]types.Spell, error) {
 	all := project.DefaultSpellRegistry().All()
-	entries := make([]types.SpellEntry, 0, len(all))
+	entries := make([]types.Spell, 0, len(all))
 	for i, p := range all {
 		if ctx.Err() != nil {
 			return nil, describeCancelled(ctx, "spells", i, len(all))
@@ -62,7 +62,7 @@ func ListSpells(ctx context.Context) ([]types.SpellEntry, error) {
 				opCommands[t] = append([]string{cmd}, args...)
 			}
 		}
-		entries = append(entries, types.SpellEntry{
+		entries = append(entries, types.Spell{
 			Name:         p.Name(),
 			BuzzImport:   spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
@@ -74,12 +74,34 @@ func ListSpells(ctx context.Context) ([]types.SpellEntry, error) {
 			VersionProbe: p.HasVersionProbe(),
 			TargetDocs:   docs,
 			OpCommands:   opCommands,
+			Toolchains:   spellToolchains(opCommands),
 		})
 	}
-	slices.SortFunc(entries, func(a, b types.SpellEntry) int {
+	slices.SortFunc(entries, func(a, b types.Spell) int {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries, nil
+}
+
+func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {
+	byCommand := make(map[string][]string)
+	for target, argv := range opCommands {
+		if len(argv) == 0 || argv[0] == "" {
+			continue
+		}
+		byCommand[argv[0]] = append(byCommand[argv[0]], target)
+	}
+	if len(byCommand) == 0 {
+		return nil
+	}
+	commands := slices.Sorted(maps.Keys(byCommand))
+	out := make([]types.SpellToolchain, 0, len(commands))
+	for _, command := range commands {
+		operations := byCommand[command]
+		slices.Sort(operations)
+		out = append(out, types.SpellToolchain{Command: command, Operations: operations})
+	}
+	return out
 }
 
 // ListCharms builds the inverse charm index: every charm name a target in the

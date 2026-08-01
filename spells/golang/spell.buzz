@@ -9,8 +9,8 @@ export fun mgs_getName() > str { return "go"; }
 // Without it a .txtar was unclaimed - editing one invalidated no cache key and pulled
 // no project into the affected set, so a CI run keyed on `magus affected` could not
 // see a behavior test change at all, and a stale pass would replay from cache.
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
@@ -29,13 +29,13 @@ export fun mgs_getVersionCommands() > {str: [str]} {
 
 export fun mgs_getLanguage() > str { return "go"; }
 
-export fun mgs_listIgnoreDirs() > [str] { return ["vendor"]; }
+export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
 // the toolchain's (that's mgs_getVersionCommand) and not a cache input (go.mod is
 // separately listed in mgs_listRequiredGlobs above, because it also feeds the
 // cache key). A Go module has exactly one candidate.
-export fun mgs_listManifests() > [str] { return ["go.mod"]; }
+export fun mgs_listManifests() > [Path] { return [Path{value = "go.mod"}]; }
 
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"]}; }
 fun goClean(target: Target) > Command { return Command{bin = "go", args = ["clean", "./..."]}; }
@@ -73,6 +73,18 @@ fun goModTidy(target: Target) > Command {
         "rw": drop(args, "--diff"),
     }};
 }
+fun goModEdit(target: Target) > Command {
+    final args = ["mod", "edit", "-print"];
+    return Command{bin = "go", args = args, capture = true, charms = {
+        "rw": drop(args, "-print"),
+    }};
+}
+// Captures Go's structured module view for the spell's higher-level Buzz helper.
+// This is deliberately a separate read-only op: `-json` and `-print` are distinct
+// Go modes, while go-mod-edit remains the one command that applies derived edits.
+fun goModJSON(target: Target) > Command {
+    return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
+}
 fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
 fun goVulncheck(target: Target) > Command { return Command{bin = "go", args = ["tool", "govulncheck", "./..."]}; }
 fun scipGo(target: Target) > Command {
@@ -89,6 +101,8 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "golangci-lint": golangCILint,
         "go-test": goTest,
         "go-mod-tidy": goModTidy,
+        "go-mod-edit": goModEdit,
+        "go-mod-json": goModJSON,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
         "scip": scipGo,

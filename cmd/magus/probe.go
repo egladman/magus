@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/clihint"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )

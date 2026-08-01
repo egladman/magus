@@ -1,0 +1,160 @@
+package spellruntime
+
+import (
+	_ "embed"
+	"strings"
+)
+
+// SpellModulePath is the import path of the canonical spell-authored value-types
+// module: the shapes a spell op WRITES (Target, Command, Service, Charm, PatchOp),
+// as opposed to the shapes a host method RETURNS (ExecResult, Tag, Projects, ...),
+// which now ship with the host module that returns them (see hosttypes.go and
+// internal/interp/bindings/modules.go). A spell does `import "magus/spell";` to
+// bring Target into scope so its mgs_listTargets can be typed as a map of
+// fun(Target, fun(any)) handlers instead of `any`. The runtime registers the
+// module as embedded source (see the buzz bindings' registerMagusModules); the
+// built-in spell generator inlines it so each compiled built-in is
+// self-contained.
+//
+// "magus/spell" does not collide with the "magus/spell/<name>" path each built-in
+// spell handle is reachable under (spells.ModulePrefix): those are different exact
+// map keys in the session's native-module/declaration tables, and a bare "magus/spell"
+// import reads naturally as "the types a spell is built from".
+const SpellModulePath = "magus/spell"
+
+// PathSource is the generated lexical filesystem-reference type used by spell
+// metadata. It belongs in magus/spell because declarations such as inputs and
+// manifests are authored by spells before any host module is invoked.
+//
+//go:embed gen/types/path.buzz
+var PathSource string
+
+// TargetModuleSource is the generated Buzz `object Target` mirror of types.Target
+// (see cmd/magus-utils types), the canonical work-unit value type. It is consumed
+// both at runtime (as part of the magus/spell declarations) and at built-in
+// generation time (inlined into each built-in via SelfContainedBuiltinSource).
+//
+//go:embed gen/types/target.buzz
+var TargetModuleSource string
+
+// PatchOpSource / CharmTypeSource / CommandSource are the generated Buzz `object`
+// mirrors of spells.PatchOp, spells.Charm, and types.Run: the {cmd, args, charms}
+// command a command target's handler hands to its cb callback, down to the RFC 6902
+// ops. Unlike the other object mirrors they are inlined into self-contained
+// built-ins (every command spell references Run), so they ship in the magus/spell
+// bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
+// Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
+//
+//go:embed gen/types/patchop.buzz
+var PatchOpSource string
+
+//go:embed gen/types/charm.buzz
+var CharmTypeSource string
+
+//go:embed gen/types/command.buzz
+var CommandSource string
+
+// ServiceSource is the generated Buzz `object Service` mirror of spells.Service: the
+// {command, readiness, stop} a service op returns, each field a Command (command is the
+// process; readiness/stop are optional). It ships in the magus/spell bundle so a spell
+// can author a service op; it must follow CommandSource there (Service's fields are
+// typed Command).
+//
+//go:embed gen/types/service.buzz
+var ServiceSource string
+
+// CharmModulePath is the import path of the pure-Buzz charm module.
+const CharmModulePath = "magus/charm"
+
+// CharmModuleSource is the pure-Buzz mirror of the charm host module
+// (std/charm.go), shipped as the magus/charm declarations. Unlike the
+// type mirrors it is hand-written (charm's constructors are logic, not a struct),
+// kept in lockstep with the Go module by charm_parity_test. A self-contained
+// built-in command spell imports it (`import "magus/charm"`) to build patches with
+// charm.after / charm.set / ... instead of hand-written positional pointers; it is
+// pure Buzz with no host calls, so it compiles into a bare built-in.
+//
+//go:embed charm.buzz
+var CharmModuleSource string
+
+// SpellModuleSource is the magus/spell bundle: the spell-authored value types in
+// their declare-before-use order (PatchOp before Charm before Command before
+// Service, each referencing the prior; Target has no cross-references so its
+// position is free). Shared by the runtime registration (modules.go) and the
+// built-in inliner (builtinModuleSources) below, so the two can't drift apart.
+var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource, ServiceSource}, "\n")
+
+// builtinModuleSources maps an import path a self-contained built-in may use to
+// the module source prepended in its place (imports emit no bytecode, so an
+// imported symbol would be missing when the built-in runs from .bo). magus/charm
+// carries the pure-Buzz patch constructors. Any other import means the spell needs
+// host bindings and is not a built-in.
+var builtinModuleSources = map[string]string{
+	SpellModulePath: SpellModuleSource,
+	CharmModulePath: CharmModuleSource,
+}
+
+// SelfContainedBuiltinSource prepares a spell source for a bare compile into an
+// embedded built-in. A built-in may import only the inlinable pure-Buzz modules
+// (magus/spell, magus/charm): each such import is stripped and the
+// module's source prepended, so the compiled chunk carries the symbols itself.
+// Returns ok=false if the source imports any other module - such a spell needs
+// host bindings a bare compile can't provide and is not a built-in. Shared by the
+// built-in generator and the bytecode-parity test so both compile built-ins
+// identically.
+func SelfContainedBuiltinSource(src string) (string, bool) {
+	body, prepend, ok := inlineBuiltinImports(src, map[string]bool{})
+	if !ok {
+		return "", false
+	}
+	if len(prepend) > 0 {
+		return strings.Join(prepend, "\n") + "\n" + body, true
+	}
+	return body, true
+}
+
+// inlineBuiltinImports strips every inlinable import from src and returns src's
+// remaining body plus the ordered, deduped module sources to prepend in their
+// place. It recurses (an inlinable module may itself import another: magus/charm
+// imports magus/spell for the Charm type), expanding a module's own imports
+// before the module, so a dependency is always defined before its dependent. seen
+// carries the dedup set across the recursion; ok is false if src imports a
+// non-inlinable host module.
+func inlineBuiltinImports(src string, seen map[string]bool) (body string, prepend []string, ok bool) {
+	var kept []string
+	for _, line := range strings.Split(src, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "import ") {
+			kept = append(kept, line)
+			continue
+		}
+		path := importPath(line)
+		modSrc, inlinable := builtinModuleSources[path]
+		if !inlinable {
+			return "", nil, false // imports a host module, not a built-in
+		}
+		if seen[path] {
+			continue // already prepended; strip the duplicate import
+		}
+		seen[path] = true
+		innerBody, innerPrepend, ok := inlineBuiltinImports(modSrc, seen)
+		if !ok {
+			return "", nil, false
+		}
+		prepend = append(prepend, innerPrepend...) // the module's deps, first
+		prepend = append(prepend, innerBody)       // then the module itself
+	}
+	return strings.Join(kept, "\n"), prepend, true
+}
+
+// importPath extracts the quoted module path from an import line, or "" if none.
+func importPath(line string) string {
+	i := strings.IndexByte(line, '"')
+	if i < 0 {
+		return ""
+	}
+	j := strings.IndexByte(line[i+1:], '"')
+	if j < 0 {
+		return ""
+	}
+	return line[i+1 : i+1+j]
+}

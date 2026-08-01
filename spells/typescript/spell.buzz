@@ -16,26 +16,26 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "typescript"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [Path] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below
     // already matches it - self-documenting rather than riding along by accident.
-    return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx",
-            "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json",
-            ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json",
-            "yarn.lock", "bun.lockb"];
+    return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"},
+            Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
+            Path{value = ".npmrc"}, Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
+            Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
 }
 
-export fun mgs_listClaimedGlobs() > [str] {
-    return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs",
-            "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx",
-            "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"];
+export fun mgs_listClaimedGlobs() > [Path] {
+    return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.mjs"},
+            Path{value = "**/*.cjs"}, Path{value = "**/*.jsx"}, Path{value = "**/*.json"}, Path{value = "**/*.jsonc"}, Path{value = "**/*.md"}, Path{value = "**/*.mdx"},
+            Path{value = "**/*.yaml"}, Path{value = "**/*.yml"}, Path{value = "**/*.css"}, Path{value = "**/*.scss"}, Path{value = "**/*.html"}];
 }
 
 export fun mgs_isOpaque() > bool { return true; }
 
 // Generated output tsc --build writes. Adjust to match your tsconfig's outDir;
 // "dist/**" is the TS convention.
-export fun mgs_listProvidedGlobs() > [str] { return ["dist/**"]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "dist/**"}]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
@@ -47,13 +47,13 @@ export fun mgs_getLanguage() > str { return "typescript"; }
 // mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned
 // from the input-hashing walk. dist is already excluded as a declared output, and
 // .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
-export fun mgs_listIgnoreDirs() > [str] { return ["node_modules"]; }
+export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
 // the toolchain's (that's mgs_getVersionCommand) and not a cache input (package.json
 // is separately listed in mgs_listRequiredGlobs above, because it also feeds the
 // cache key). A node project has exactly one candidate.
-export fun mgs_listManifests() > [str] { return ["package.json"]; }
+export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}]; }
 
 // biome-check is biome's lint/analyze pass (eslint's role, if your project
 // chose Biome over eslint+prettier - the magusfile decides which composes

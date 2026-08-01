@@ -118,6 +118,76 @@ func TestListSpells_ShapeAndOrder(t *testing.T) {
 		"ListSpells: expected test spell as last entry (zzz-prefix sorts last)")
 }
 
+func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
+	got := spellToolchains(map[string][]string{
+		"test":    {"go", "test", "./..."},
+		"build":   {"go", "build", "./..."},
+		"format":  {"gofmt", "-w", "."},
+		"dynamic": nil,
+		"broken":  {""},
+	})
+	assert.Equal(t, []types.SpellToolchain{
+		{Command: "go", Operations: []string{"build", "test"}},
+		{Command: "gofmt", Operations: []string{"format"}},
+	}, got)
+	assert.Nil(t, spellToolchains(nil), "no static operations means no toolchain inventory")
+}
+
+func TestListSpells_DescribesTypedSpell(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const name = "zzz-spell-inventory-test"
+	spell := spells.NewSpell(name,
+		spells.WithSources("**/*.demo"),
+		spells.WithClaims("demo.config"),
+		spells.WithOutputs("out/**"),
+		spells.WithTargets("build", "check", "dynamic"),
+		spells.WithLanguage("demo"),
+		spells.WithOpaque(),
+		spells.WithVersionProbe(func(context.Context, string) (string, error) { return "v1", nil }),
+		spells.WithTargetDocs(map[string]string{"build": "Build the demo."}),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+			switch target {
+			case "build":
+				return "democ", []string{"build"}, true, nil
+			case "check":
+				return "democ", []string{"check"}, true, nil
+			default:
+				return "", nil, false, nil // function operation: no static argv
+			}
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+
+	inventory, err := ListSpells(context.Background())
+	require.NoError(t, err, "ListSpells")
+
+	var got *types.Spell
+	for i := range inventory {
+		if inventory[i].Name == name {
+			got = &inventory[i]
+			break
+		}
+	}
+	require.NotNil(t, got, "registered spell missing from inventory")
+	assert.Equal(t, "magus/spell/"+name, got.BuzzImport)
+	assert.Equal(t, []string{"**/*.demo"}, got.Sources)
+	assert.Equal(t, []string{"demo.config"}, got.Claims)
+	assert.Equal(t, []string{"out/**"}, got.Outputs)
+	assert.Equal(t, []string{"build", "check", "dynamic"}, got.Targets)
+	assert.Equal(t, "demo", got.Language)
+	assert.True(t, got.Opaque)
+	assert.True(t, got.VersionProbe)
+	assert.Equal(t, map[string]string{"build": "Build the demo."}, got.TargetDocs)
+	assert.Equal(t, map[string][]string{
+		"build": {"democ", "build"},
+		"check": {"democ", "check"},
+	}, got.OpCommands, "dynamic operations must not pretend to have static argv")
+	assert.Equal(t, []types.SpellToolchain{
+		{Command: "democ", Operations: []string{"build", "check"}},
+	}, got.Toolchains)
+}
+
 func TestListTargets_CanonicalCIFirst(t *testing.T) {
 	// Not parallel: mutates global spell registry.
 	const spellName = "zzz-targets-spell"

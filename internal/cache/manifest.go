@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 )
 
 // Manifest is the on-disk record of a single cache entry.
@@ -70,7 +70,7 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 		return nil, err
 	}
 	var m Manifest
-	if err := codec.Unmarshal(data, &m); err != nil {
+	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
 	// Detect manifests copied/renamed onto the wrong key; treat as miss on mismatch.

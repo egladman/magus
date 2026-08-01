@@ -270,8 +270,8 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		names := namesOf(inventory, func(s types.SpellEntry) string { return s.Name })
-		inventory = filterByName(inventory, pos[0], func(s types.SpellEntry) string { return s.Name })
+		names := namesOf(inventory, func(s types.Spell) string { return s.Name })
+		inventory = filterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
 		if len(inventory) == 0 {
 			return unknownEntity("spell", pos[0], names)
 		}
@@ -316,6 +316,9 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		}
 		if len(t.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(t.Targets, ", "))
+		}
+		for _, toolchain := range t.Toolchains {
+			fmt.Printf("    toolchain: %s (%s)\n", toolchain.Command, strings.Join(toolchain.Operations, ", "))
 		}
 		// Print each documented target's comment below the summary line; absent for
 		// undocumented targets and for spells whose docs aren't carried (built-ins).

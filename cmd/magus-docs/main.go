@@ -15,13 +15,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/dry"
 	"github.com/egladman/magus/std"
-
-	// Blank imports so all module init() functions run, populating std.All().
-	_ "github.com/egladman/magus/std"
 )
 
 // repoBlob is the GitHub source base for inline type links. Pinned to the default
@@ -147,7 +143,7 @@ func typeMarkdown(t std.TypeTag) string {
 // the Signature line, not the heading: a link in the heading would fold into the
 // auto-generated slug and break the in-page #method anchors.
 func methodSourceLink(meth std.Method) string {
-	src, line := host.MethodSource(meth, repoRoot)
+	src, line := std.MethodSource(meth, repoRoot)
 	if src == "" {
 		return ""
 	}
@@ -282,7 +278,7 @@ func renderModule(m std.Module) string {
 			// Heading stays plain text so its auto-generated slug (the #method
 			// anchor) stays clean; the source link and stdlib footnote both ride
 			// the Signature line instead.
-			fmt.Fprintf(&b, "### %s\n\n", host.BuzzMethodName(meth))
+			fmt.Fprintf(&b, "### %s\n\n", std.BuzzMethodName(meth))
 
 			if meth.Doc != "" {
 				fmt.Fprintf(&b, "%s\n\n", meth.Doc)
@@ -291,8 +287,8 @@ func renderModule(m std.Module) string {
 			// A footnote reference after the signature marks methods that are also
 			// in Buzz's own stdlib; the Footnote extension renders it as a linked
 			// superscript and gathers the notes at the foot of the page.
-			sig := fmt.Sprintf("**Signature:** `%s`", host.BuzzSignature(m, meth))
-			if equiv, dup := host.BuzzStdlibEquiv(m.Name, meth.Name); dup {
+			sig := fmt.Sprintf("**Signature:** `%s`", std.BuzzSignature(m, meth))
+			if equiv, dup := std.BuzzStdlibEquiv(m.Name, meth.Name); dup {
 				label := "buzz-stdlib-" + m.Name + "-" + meth.Name
 				sig += fmt.Sprintf("[^%s]", label)
 				notes = append(notes, stdlibNote{label, buzzMethodName(m, meth), equiv})
@@ -366,7 +362,7 @@ func renderModule(m std.Module) string {
 // buzzMethodName renders the module-qualified camelCase call (e.g. "fs.delete")
 // for a footnote, matching the form used in signatures.
 func buzzMethodName(m std.Module, meth std.Method) string {
-	return m.Name + `\` + host.BuzzMethodName(meth)
+	return m.Name + `\` + std.BuzzMethodName(meth)
 }
 
 func writeIndex(dir string, modules []std.Module) error {

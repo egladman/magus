@@ -489,15 +489,15 @@ export final got = build().inner.v;
 	assert.Equal(t, int64(3), v.AsInt(), "got = %v, want 3", v.String())
 }
 
-// TestSourceModule_ExportsTypes verifies a host-registered source module
+// TestModuleDeclsExportTypes verifies host-supplied module declarations
 // (embedded .buzz, no file on the include path) exposes its exported object/enum
 // types to the importer — including object-typed and list field defaults, which
 // the canonical magus/spell module relies on.
-func TestSourceModule_ExportsTypes(t *testing.T) {
+func TestModuleDeclsExportTypes(t *testing.T) {
 	ctx := context.Background()
 	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
-	sess.SetSourceModule("magus/lib", `
+	sess.SetModuleDecls("magus/lib", `
 export object Strategy { name: str = "" }
 export object Charm { name: str = "", args: [str] = [], strategy: Strategy = Strategy{} }
 export object Target { name: str = "", charms: [Charm] = [] }
@@ -510,15 +510,15 @@ fun pick() > Target {
 }
 export final tname = pick().name;
 `
-	require.NoError(t, sess.Exec(ctx, src), "exec with source-module types")
+	require.NoError(t, sess.Exec(ctx, src), "exec with module declarations")
 	v, ok := sess.Exports()["tname"]
 	require.True(t, ok, "tname not exported")
 	require.True(t, v.IsStr(), "tname = %v, want \"build\"", v.String())
 	assert.Equal(t, "build", v.AsString(), "tname")
 }
 
-// TestSourceModule_TypesReachAnAliasedSubSession covers the case where the
-// importer of a source module is not the top-level chunk but a file imported
+// TestModuleDeclsReachAnAliasedSubSession covers the case where the importer of
+// module declarations is not the top-level chunk but a file imported
 // under an alias, which runs in its own sub-session.
 //
 // The sub-session shares the parent's loadedPaths, so the parent's earlier
@@ -532,7 +532,7 @@ export final tname = pick().name;
 // collapses to any, the foreach binding degrades with it, and the failure finally
 // surfaces as "`any` is not field accessible" at the first field read - several
 // lines below, and in a different file from, the import that was actually wrong.
-func TestSourceModule_TypesReachAnAliasedSubSession(t *testing.T) {
+func TestModuleDeclsReachAnAliasedSubSession(t *testing.T) {
 	// page.buzz is flat-imported BY the aliased module, not by the top-level chunk:
 	// that is the docs SSG's own shape (magusfile -> `import "render" as renderer` ->
 	// `import "site/development" as _`), and the extra hop is what puts the annotated
@@ -554,19 +554,19 @@ export fun run(p: Proj) > str { return catalog(p); }
 	sess := NewSession(ctx, WithEmbedded())
 	defer sess.Close()
 	sess.SetIncludeDirs([]string{dir})
-	sess.SetSourceModule("magus/lib", `
+	sess.SetModuleDecls("magus/lib", `
 export object Node { name: str = "" }
 export object Proj { nodes: [Node] = [] }
 `)
 
-	// The parent imports the source module FIRST; that ordering is what armed the
+	// The parent imports the module declarations FIRST; that ordering is what armed the
 	// loadedPaths guard before the aliased import below ran.
 	src := `
 import "magus/lib";
 import "render" as renderer;
 export final got = renderer\run(Proj{ nodes = [Node{ name = "build" }] });
 `
-	require.NoError(t, sess.Exec(ctx, src), "exec with source-module types used inside an aliased import")
+	require.NoError(t, sess.Exec(ctx, src), "exec with module declarations used inside an aliased import")
 	v, ok := sess.Exports()["got"]
 	require.True(t, ok, "got not exported")
 	require.True(t, v.IsStr(), "got = %v, want \"build\"", v.String())

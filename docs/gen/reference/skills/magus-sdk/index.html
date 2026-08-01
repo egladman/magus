@@ -97,7 +97,7 @@
     <small class="reading-time" title="Estimated reading time">14 min read</small>
     <article>
 <h1 id="magus-sdk">magus-sdk</h1>
-<p><progress value="12620" max="13286" aria-label="The --simple permutation is 5% smaller: 12620 of 13286 bytes."></progress><small>The --simple permutation is 5% smaller: 12620 of 13286 bytes.</small></p>
+<p><progress value="12650" max="13316" aria-label="The --simple permutation is 5% smaller: 12650 of 13316 bytes."></progress><small>The --simple permutation is 5% smaller: 12650 of 13316 bytes.</small></p>
 <p>Help a Go developer consume magus as a library (import &quot;github.com/egladman/magus&quot;) instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/<a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> from their own Go program, embed magus's <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> model in another tool, or asks &quot;can I use magus without the binary&quot;. Also use to audit the SDK <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a>) or for editing magus's own source (magus-architecture).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -136,7 +136,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>064275bc9429</code></td>
+<td><code>351a7800dc11</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -174,7 +174,7 @@ Until those nested modules get their own tags, the only working install is:
 clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
-```
+```go
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
@@ -337,9 +337,9 @@ The one escape hatch: build the workspace programmatically instead of via a
 magusfile, using the exported `Option`/`ProjectOption`/`BindingOption` wire
 API (`register.go`: `WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
 Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode
-through `internal/spell`, which IS reachable this way because the exported
+through `internal/spellruntime`, which IS reachable this way because the exported
 `register.go` functions live inside this module and call into it on the
-caller's behalf - the caller never imports `internal/spell` directly, they
+caller's behalf - the caller never imports `internal/spellruntime` directly, they
 call the exported wrapper. This path gets a caller real spell execution
 without a magusfile; it does not get them arbitrary Buzz-authored targets.
 
@@ -359,12 +359,12 @@ naming:
 3. **Is a boundary deliberate or accidental?** Read the package doc comment
    first (`doc.go` or the top of the main file) before proposing a merge -
    `spells/doc.go` documents that `spells` (exported: the Buzz sources plus
-   `Op`/`Driver`/`Descriptor`) and `internal/spell` (unexported: the bytecode
+   `Op`/`Driver`/`Descriptor`) and `internal/spellruntime` (unexported: the bytecode
    decoder) used to be three packages telling the same story from different
    angles, and were deliberately collapsed to two, with the dependency
    direction (`spells` imports nothing from `types`; `types` imports
    `spells`) called out as load-bearing so the two cannot cycle. That is a
-   documented, deliberate split - proposing to merge `internal/spell` into
+   documented, deliberate split - proposing to merge `internal/spellruntime` into
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -
@@ -407,7 +407,7 @@ Until those nested modules get their own tags, the only working install is:
 clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
-```
+```go
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
@@ -560,9 +560,9 @@ The one escape hatch: build the workspace programmatically instead of via a
 magusfile, using the exported `Option`/`ProjectOption`/`BindingOption` wire
 API (`register.go`: `WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
 Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode
-through `internal/spell`, which IS reachable this way because the exported
+through `internal/spellruntime`, which IS reachable this way because the exported
 `register.go` functions live inside this module and call into it on the
-caller's behalf - the caller never imports `internal/spell` directly, they
+caller's behalf - the caller never imports `internal/spellruntime` directly, they
 call the exported wrapper. This path gets a caller real spell execution
 without a magusfile; it does not get them arbitrary Buzz-authored targets.
 
@@ -582,12 +582,12 @@ naming:
 3. **Is a boundary deliberate or accidental?** Read the package doc comment
    first (`doc.go` or the top of the main file) before proposing a merge -
    `spells/doc.go` documents that `spells` (exported: the Buzz sources plus
-   `Op`/`Driver`/`Descriptor`) and `internal/spell` (unexported: the bytecode
+   `Op`/`Driver`/`Descriptor`) and `internal/spellruntime` (unexported: the bytecode
    decoder) used to be three packages telling the same story from different
    angles, and were deliberately collapsed to two, with the dependency
    direction (`spells` imports nothing from `types`; `types` imports
    `spells`) called out as load-bearing so the two cannot cycle. That is a
-   documented, deliberate split - proposing to merge `internal/spell` into
+   documented, deliberate split - proposing to merge `internal/spellruntime` into
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -
@@ -619,7 +619,7 @@ specific that has to be.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-sdk%22">magus-sdk</a></div>
-    <small>Last updated <time datetime="2026-07-31T14:02:03Z">July 31, 2026, 2:02 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760" data-tooltip="3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760" title="3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760">3f7517ec</a>)</small>
+    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-sdk.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-sdk.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

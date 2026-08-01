@@ -3,7 +3,7 @@
 // subcommand per source→artifact mapping, invoked by `go generate`:
 //
 //	//go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
-//	//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../host/gen/fs.go
+//	//go:generate go run ../cmd/magus-utils bindings -module fs -lang buzz -out ../internal/interp/bindings/gen/fs.go
 //	//go:generate go run ../magus-utils config -config ../../internal/config/config.go -out gen/config_flags.go
 //	//go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 //
@@ -20,6 +20,7 @@ import (
 // and writes the derived artifact; see the per-subcommand file for the details.
 var scribes = map[string]func(args []string) error{
 	"types":              runTypes,
+	"buzzobjects":        runBuzzObjects,
 	"bindings":           runBindings,
 	"completions":        runCompletions,
 	"config":             runConfig,
@@ -52,5 +53,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
 }

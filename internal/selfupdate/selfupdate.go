@@ -32,7 +32,7 @@ import (
 	"io"
 	"net/http"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"os"
 	"path/filepath"
 	"runtime"

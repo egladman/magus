@@ -143,7 +143,7 @@ them change behavior beyond filtering.</p>
 <code>MAGUS_LOG_LEVEL</code>. See <a href="../config/">Configuration</a> for the full key list.</p>
 <h2 id="default-the-scoreboard">Default: the scoreboard</h2>
 <p>Without flags you get the result of each target and little else:</p>
-<pre><code>[pass] docs (ran, 1m36s)
+<pre><code class="language-text">[pass] docs (ran, 1m36s)
   magus run generate:rw docs
 out3a777178
 [summary] 2 cached, 5 ran, 0 failed (1m44s)
@@ -151,7 +151,7 @@ out3a777178
 <p>Each result carries an <a href="../../concepts/cache/output-refs/">output reference</a> - the short
 <code>out...</code> id addressing the exact bytes that run produced. <code><a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output out3a777178</code> replays them verbatim.</p>
 <p>A failure prints more, because more is actionable:</p>
-<pre><code>[fail] docs generate:rw (ran, 50s)
+<pre><code class="language-text">[fail] docs generate:rw (ran, 50s)
   cause: magus generate docs: 1 spell(s) failed
   output: out462efb79
   inspect: magus query output out462efb79
@@ -176,7 +176,7 @@ with the derived hash and the inputs that produced it - source count, dependency
 count, tool versions, charms. <code>run.exec</code> fires once per subprocess with the
 command, its full arguments, and its directory, rendered as a shell line you can
 copy and run yourself:</p>
-<pre><code>  $ go test ./... -race
+<pre><code class="language-sh">go test ./... -race
 </code></pre>
 <p>Beyond that: cross-<a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> dispatch, <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> fan-out decisions, the derived
 <a class="glossary-term" href="../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set with the full project list, and breadcrumbs for best-effort
@@ -208,7 +208,7 @@ with its <a class="glossary-term" href="../../glossary/#slot" data-def="One unit
 answer what a step is waiting on, without a profiler.</p>
 <p><strong>Why does magus take so long to start?</strong> On exit, trace prints a phase timing
 table:</p>
-<pre><code>magus startup trace:
+<pre><code class="language-text">magus startup trace:
   startup.find_root_early              1.204ms
   startup.config_load                  3.881ms
   startup.flag_parse                   0.442ms
@@ -228,14 +228,14 @@ intend to read the whole failure, and in a pipeline where you want the raw log
 preserved.</p>
 <p><strong><code>--silent</code></strong> bounds the dump to the last 50 lines and prints the <a class="code-xref" href="../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> to the
 complete log:</p>
-<pre><code>-- api (failed) --
+<pre><code class="language-text">-- api (failed) --
 ... 812 earlier line(s) omitted; full log: .magus/logs/&lt;hash&gt;.log
 </code></pre>
 <p><code>--silent</code> also <strong>bubbles up notices</strong>. Any line a target prints beginning with
 <code>magus:notice:</code> is re-emitted to stderr, on success as well as failure:</p>
 <pre><code class="language-sh">echo &quot;magus:notice: deployed api v1.2.3&quot;
 </code></pre>
-<pre><code>notice: api: deployed api v1.2.3
+<pre><code class="language-text">notice: api: deployed api v1.2.3
 </code></pre>
 <p>That is the only output an otherwise-silent passing run produces, which makes
 <code>--silent</code> the right choice for a scheduled or unattended run: near-zero noise,

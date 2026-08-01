@@ -37,6 +37,10 @@ type Command struct {
 	Bin    string           `json:"bin,omitempty"`
 	Args   []string         `json:"args,omitempty"`
 	Charms map[string]Charm `json:"charms,omitempty"`
+	// Capture makes this command's spell method return its exec record. The field
+	// belongs on Command because it is declared by a Command-returning handler;
+	// Op carries the resolved copy that dispatch reads.
+	Capture bool `json:"capture,omitempty"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command

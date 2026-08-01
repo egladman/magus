@@ -12,8 +12,8 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	hostreg "github.com/egladman/magus/host/registry"
-	ispell "github.com/egladman/magus/internal/spell"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/spellruntime"
 )
 
 // SpellCatalog yields the built-in spell op surface (import name -> op names) the
@@ -26,12 +26,12 @@ type SpellCatalog interface {
 	BuiltinOps() map[string][]string
 }
 
-// builtinCatalog is the production SpellCatalog, backed by the real internal/spell
+// builtinCatalog is the production SpellCatalog, backed by the real internal/spellruntime
 // registry. spell.BuiltinOps() derives its result from Builtins(), so there is one
 // source of truth.
 type builtinCatalog struct{}
 
-func (builtinCatalog) BuiltinOps() map[string][]string { return ispell.BuiltinOps() }
+func (builtinCatalog) BuiltinOps() map[string][]string { return spellruntime.BuiltinOps() }
 
 // WASMCompatibleMagusModules is the allowlist of magus modules the browser
 // playground registers: the WASMCompatible entries of the one host-module registry
@@ -46,8 +46,8 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
-	for name, reg := range hostreg.Modules {
-		if reg.WASMCompatible {
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(bindinggen.WASM) {
 			out[name] = reg.Register
 		}
 	}
@@ -58,13 +58,13 @@ func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session
 // on sess, so `import "strings"; strings.camelCase("hi")` etc. run in-browser.
 func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session) {
 	for name, register := range WASMCompatibleMagusModules {
-		sess.SetSyntheticModule(name, register(ctx, sess))
+		sess.SetNativeModule(name, register(ctx, sess))
 	}
 }
 
 // PlaygroundHostModules names every magus host module the browser playground makes
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
-// installHost registers as a synthetic module like the rest, so the playground is a
+// installHost registers as a native module like the rest, so the playground is a
 // blank slate and every surface it offers is reached by an explicit import - the same
 // import a magusfile writes. It is the single truth for what runs in the playground - kept next to the
 // wiring so the two can't drift - and the langservice manifest diffs against it to
@@ -223,7 +223,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 	// global, which made the import optional here and only here: a snippet that ran
 	// under the Run button then failed when pasted into a magusfile, so the page
 	// taught a form the language rejects.
-	sess.SetSyntheticModule("magus", pureMagus())
+	sess.SetNativeModule("magus", pureMagus())
 
 	v, err := sess.Eval(ctx, src)
 	if err != nil {

@@ -60,13 +60,13 @@ type Session struct {
 	// loadedPaths tracks absolute paths already loaded to prevent re-execution
 	// and break import cycles.
 	loadedPaths map[string]bool
-	// syntheticModules maps an import path (e.g. "magus/extra") to a host-built
+	// nativeModules maps an import path (e.g. "magus/extra") to a host-built
 	// module value. An `import "<path>"` binds it under the path's basename
 	// (or alias) without touching the filesystem; see loadFileImports. The host
-	// registers these via SetSyntheticModule.
-	syntheticModules map[string]vmpackage.Value
+	// registers these via SetNativeModule.
+	nativeModules map[string]vmpackage.Value
 	// moduleResolver, if set, is consulted for an import path that is neither
-	// already bound nor a synthetic module, before the includeDirs file search.
+	// already bound nor a native module, before the includeDirs file search.
 	// It lets the host resolve a path-style import to a prebuilt module value
 	// on demand (e.g. a magus spell handle for `import "spells/hello"`). A false
 	// return falls through to the file search. Set via SetModuleResolver.
@@ -88,13 +88,13 @@ type Session struct {
 	// types, registered under their bare names); this keeps the per-module grouping a
 	// namespace object needs, so `io\File` resolves as well as a bare `File`.
 	importedModuleTypes map[string][]ast.Node
-	// sourceModules maps an import path to embedded .buzz source. Unlike a
-	// synthetic module (a host Value carrying functions), a source module is
+	// moduleDecls maps an import path to embedded .buzz source. Unlike a
+	// native module (a host Value carrying functions), a declaration module is
 	// real Buzz source, so its exported object/enum *types* are visible to the
 	// importer's checker. It flat-merges like a file import. Set via
-	// SetSourceModule; used for shipped Buzz library modules (e.g. canonical
+	// SetModuleDecls; used for shipped Buzz library modules (e.g. canonical
 	// magus types) that have no .buzz file on the include path.
-	sourceModules map[string]string
+	moduleDecls map[string]string
 	// promoteTopLevel opts this session's compiles into top-level slot promotion
 	// (CompileOptions.PromoteTopLevel). The magusfile execution path enables it for
 	// faster top-level hot code; the REPL leaves it off, since a later prompt line
@@ -119,53 +119,53 @@ type Session struct {
 	declaredNamespaces map[string]string
 }
 
-// SetSyntheticModule registers v as the module imported by `import "<importPath>"`.
+// SetNativeModule registers v as the module imported by `import "<importPath>"`.
 // The import binds v under the path's basename (e.g. "util" for "magus/extra"),
 // or under an explicit alias. Host-provided modules resolve before any file
 // search, so they need no .buzz file on disk.
-func (s *Session) SetSyntheticModule(importPath string, v vmpackage.Value) {
-	if s.syntheticModules == nil {
-		s.syntheticModules = map[string]vmpackage.Value{}
+func (s *Session) SetNativeModule(importPath string, v vmpackage.Value) {
+	if s.nativeModules == nil {
+		s.nativeModules = map[string]vmpackage.Value{}
 	}
-	s.syntheticModules[importPath] = v
+	s.nativeModules[importPath] = v
 }
 
-// SyntheticModule returns the value registered for importPath via
-// SetSyntheticModule, or ok=false if none is registered. It lets a host that
+// NativeModule returns the value registered for importPath via
+// SetNativeModule, or ok=false if none is registered. It lets a host that
 // layers its own methods onto a stdlib module under a shared name (e.g. magus
 // merging host methods onto Buzz's bare "os"/"fs"/"crypto") read the registered
 // module back so it can be extended in place rather than replaced.
-func (s *Session) SyntheticModule(importPath string) (vmpackage.Value, bool) {
-	v, ok := s.syntheticModules[importPath]
+func (s *Session) NativeModule(importPath string) (vmpackage.Value, bool) {
+	v, ok := s.nativeModules[importPath]
 	return v, ok
 }
 
-// SetSourceModule registers src as the embedded Buzz source imported by
+// SetModuleDecls registers src as the embedded Buzz source imported by
 // `import "<importPath>"`. It resolves before the includeDirs file search and
 // flat-merges (its exported object/enum types become visible to the importer's
-// checker, which a synthetic value module cannot provide). Use it for shipped
+// checker, which a native value module cannot provide). Use it for shipped
 // Buzz library modules that have no file on the include path.
-func (s *Session) SetSourceModule(importPath, src string) {
-	if s.sourceModules == nil {
-		s.sourceModules = map[string]string{}
+func (s *Session) SetModuleDecls(importPath, src string) {
+	if s.moduleDecls == nil {
+		s.moduleDecls = map[string]string{}
 	}
-	s.sourceModules[importPath] = src
+	s.moduleDecls[importPath] = src
 }
 
 // DeclareModuleTypes parses src and registers its exported object/enum types under
 // boundName's namespace immediately, without waiting for a matching `import`
-// statement to trigger it (contrast SetSourceModule, whose src is only collected
+// statement to trigger it (contrast SetModuleDecls, whose src is only collected
 // lazily, when resolveImport processes a real `import "<importPath>";`).
 //
-// Every synthetic module (crypto, io, os, vcs, ...) can use the lazy path, because
+// Every native module (crypto, io, os, vcs, ...) can use the lazy path, because
 // nothing binds its name into the session env before the import runs. It does NOT
 // work for a module whose native value a host binds some OTHER way before any
 // import is processed - e.g. a namespace meant to be callable without an explicit
 // import, via SetGlobal. resolveImport's "already bound" check fires before it ever
-// consults sourceModules, so a SetSourceModule registered under that same name would
+// consults moduleDecls, so a SetModuleDecls registered under that same name would
 // never be collected. Call DeclareModuleTypes directly instead, once, when setting
 // up such a namespace, to get the same "import this path, get its types" outcome
-// SetSourceModule gives every other module.
+// SetModuleDecls gives every other module.
 func (s *Session) DeclareModuleTypes(boundName, src string) {
 	s.collectImportedModule(boundName, src)
 }
@@ -404,7 +404,7 @@ func NewSession(ctx context.Context, opts ...Option) *Session {
 }
 
 // NewChild creates an isolated session that inherits this session's import
-// resolution (search paths, include dirs, synthetic modules, module resolver)
+// resolution (search paths, include dirs, native modules, module resolver)
 // but starts with a fresh top-level scope and its own loaded-path set. io.runFile
 // uses it so a run file cannot see or mutate the caller's globals — parity with
 // upstream buzz, whose runFile executes the file in its own scope, not the caller's.
@@ -413,7 +413,7 @@ func (s *Session) NewChild() *Session {
 	c.embedded = s.embedded // inherit the parent session's parse mode
 	c.searchPaths = s.searchPaths
 	c.includeDirs = s.includeDirs
-	c.syntheticModules = s.syntheticModules
+	c.nativeModules = s.nativeModules
 	c.moduleResolver = s.moduleResolver
 	return c
 }
@@ -758,7 +758,7 @@ func (s *Session) loadFileImports(prog *ast.Program) error {
 // resolveImport resolves one import statement, binding whatever it names into the
 // session and returning how it resolved (for a CompileObserver). It preserves the
 // exact resolution order loadFileImports drove inline before instrumentation: an
-// already-bound name, then a synthetic module, a source module, the host module
+// already-bound name, then a native module, a declaration module, the host module
 // resolver, and finally a .buzz file on the search path. Every `continue` in the
 // old loop is a `return <outcome>, nil` here; every error return carries the
 // outcome it failed under.
@@ -786,9 +786,9 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		return ImportBound, nil
 	}
 
-	// Host-provided synthetic modules (e.g. "magus/extra") resolve before
+	// Host-provided native modules (e.g. "magus/extra") resolve before
 	// any filesystem search and bind directly under the import's name.
-	if v, ok := s.syntheticModules[resolvePath]; ok {
+	if v, ok := s.nativeModules[resolvePath]; ok {
 		// A module may register BOTH a native value and a Buzz declaration source under
 		// one name (crypto, io). The native value is what runs -- and what a host
 		// overlays its own methods onto -- while the source exists only to be read for
@@ -796,7 +796,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		// (`hash(.Md5, ...)`, `File.open(p, mode: .read)`) resolve. Collect it here and
 		// do NOT execute it: executing would redefine at runtime what the native module
 		// already provides.
-		if src, hasDecls := s.sourceModules[resolvePath]; hasDecls {
+		if src, hasDecls := s.moduleDecls[resolvePath]; hasDecls {
 			key := "decls:" + resolvePath
 			if !s.loadedPaths[key] {
 				s.loadedPaths[key] = true
@@ -810,11 +810,11 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 			for _, name := range imp.Only {
 				member, has := v.MapGet(name)
 				if !has {
-					return ImportSynthetic, bzz.Errorf(UnresolvedImport, "buzz: import %q: module has no member %q", imp.Path, name)
+					return ImportNative, bzz.Errorf(UnresolvedImport, "buzz: import %q: module has no member %q", imp.Path, name)
 				}
 				s.env.Define(name, member)
 			}
-			return ImportSynthetic, nil
+			return ImportNative, nil
 		}
 		if imp.Alias == "_" {
 			// `import "buzz:crypto" as _` is upstream's FLAT import: the module's members
@@ -828,17 +828,17 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 					s.env.Define(k, member)
 				}
 			}
-			return ImportSynthetic, nil
+			return ImportNative, nil
 		}
 		s.env.Define(boundName, v)
-		return ImportSynthetic, nil
+		return ImportNative, nil
 	}
 
-	// Host-provided source modules ship as embedded .buzz source so the
+	// Host-provided declaration modules ship as embedded .buzz source so the
 	// importer can use their exported object/enum types. They flat-merge
 	// like a file import; the loadedPaths guard (keyed by import path)
 	// prevents a second exec.
-	if src, ok := s.sourceModules[resolvePath]; ok {
+	if src, ok := s.moduleDecls[resolvePath]; ok {
 		key := "source:" + resolvePath
 		if s.loadedPaths[key] {
 			return ImportBound, nil
@@ -847,15 +847,15 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 		s.collectImportedModule(boundName, src)
 		exports, err := s.execImport(s.ctx, src)
 		if err != nil {
-			return ImportSource, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
+			return ImportDecls, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
 		}
 		s.bindNamespaceObject(boundName, exports)
 		if ns := s.declaredNamespace(src); ns != nil {
 			if err := s.bindNamespacePath(ns, exports, imp.Path); err != nil {
-				return ImportSource, err
+				return ImportDecls, err
 			}
 		}
-		return ImportSource, nil
+		return ImportDecls, nil
 	}
 
 	// A host module resolver (e.g. local magus spells: `import "spells/hello"`)
@@ -870,7 +870,7 @@ func (s *Session) resolveImport(imp *ast.ImportStmt) (ImportOutcome, error) {
 	path := s.findIncludeFile(resolvePath)
 	if path == "" {
 		// Nothing resolved this import: not an already-bound name, a synthetic
-		// or source module, the host module resolver, or a .buzz file on the
+		// or declaration module, the host module resolver, or a .buzz file on the
 		// search path. Binding nothing would let the unresolved name surface
 		// later as a disconnected "undefined" error, or silently no-op if it is
 		// never referenced, so fail here at the import that is actually wrong.
@@ -1073,8 +1073,8 @@ func (s *Session) loadImportAsAlias(importPath, src, alias string) error {
 	sub.searchPaths = s.searchPaths
 	sub.SetIncludeDirs(s.includeDirs)
 	sub.loadedPaths = s.loadedPaths
-	sub.syntheticModules = s.syntheticModules
-	sub.sourceModules = s.sourceModules
+	sub.nativeModules = s.nativeModules
+	sub.moduleDecls = s.moduleDecls
 	sub.moduleResolver = s.moduleResolver
 
 	// Inherit what the parent has already collected from its own flat imports.

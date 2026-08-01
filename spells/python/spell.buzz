@@ -4,9 +4,9 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "python"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt",
-            "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.py"}, Path{value = "pyproject.toml"}, Path{value = "requirements.txt"}, Path{value = "requirements-*.txt"},
+            Path{value = "Pipfile"}, Path{value = "Pipfile.lock"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}, Path{value = "uv.lock"}, Path{value = "poetry.lock"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
@@ -19,7 +19,7 @@ export fun mgs_getLanguage() > str { return "python"; }
 // mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned
 // from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache) are
 // dot-dirs skipped structurally, so only __pycache__ belongs here.
-export fun mgs_listIgnoreDirs() > [str] { return ["__pycache__"]; }
+export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
 // the toolchain's (that's mgs_getVersionCommand) and not a cache input (these three
@@ -27,7 +27,7 @@ export fun mgs_listIgnoreDirs() > [str] { return ["__pycache__"]; }
 // cache key). Python genuinely has alternatives, unlike the other built-ins: a
 // pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so
 // this is ORDERED and the first candidate present in a project directory wins.
-export fun mgs_listManifests() > [str] { return ["pyproject.toml", "setup.py", "setup.cfg"]; }
+export fun mgs_listManifests() > [Path] { return [Path{value = "pyproject.toml"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}]; }
 
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.

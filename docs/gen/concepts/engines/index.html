@@ -145,8 +145,8 @@ stock magus binary is <code>buzz</code>.</p>
 <p>A <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> exports a fixed set of <code>mgs_</code>-prefixed functions (see
 <a href="../spells/#authoring-a-custom-spell">spells</a>). The list of optional functions
 and the decoder keys they map to is <strong>single-sourced</strong> in
-<a href="../../internal/spell/contract.go"><code>internal/spell/contract.go</code></a> as
-<code>OptionalContract</code>, and the Buzz resolver (<code>internal/spell/resolve.go</code>) iterates
+<a href="../../internal/spellruntime/contract.go"><code>internal/spellruntime/contract.go</code></a> as
+<code>OptionalContract</code>, and the Buzz resolver (<code>internal/spellruntime/resolve.go</code>) iterates
 that one list. A spell's <code>mgs_</code> functions decode to a <code>Spec</code> for every scalar and
 list contribution (<code>needs</code>, <code>provides</code>, <code>claims</code>, <code><a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a>_cmd</code>, <code>opaque</code>) and
 for record-shaped ops (<code>{bin, args, charms}</code>).</p>

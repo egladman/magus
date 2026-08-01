@@ -93,12 +93,12 @@
           <li><a href="../../../concepts/spells/typescript/" title="typescript spell">typescript spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-1" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-run" title="go-run">go-run</a><ul><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-9" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
+        <ul><li><a href="#passing-arguments-to-ops" title="Passing arguments to ops">Passing arguments to ops</a></li><li><a href="#go-build" title="go-build">go-build</a><ul><li><a href="#example" title="Example">Example</a></li></ul></li><li><a href="#go-clean" title="go-clean">go-clean</a><ul><li><a href="#example-1" title="Example">Example</a></li></ul></li><li><a href="#go-fmt" title="go-fmt">go-fmt</a><ul><li><a href="#rw" title="rw">rw</a></li><li><a href="#example-2" title="Example">Example</a></li></ul></li><li><a href="#go-generate" title="go-generate">go-generate</a><ul><li><a href="#example-3" title="Example">Example</a></li></ul></li><li><a href="#go-mod-edit" title="go-mod-edit">go-mod-edit</a><ul><li><a href="#rw-1" title="rw">rw</a></li></ul></li><li><a href="#go-mod-json" title="go-mod-json">go-mod-json</a></li><li><a href="#go-mod-tidy" title="go-mod-tidy">go-mod-tidy</a><ul><li><a href="#rw-2" title="rw">rw</a></li><li><a href="#example-4" title="Example">Example</a></li></ul></li><li><a href="#go-run" title="go-run">go-run</a><ul><li><a href="#example-5" title="Example">Example</a></li></ul></li><li><a href="#go-test" title="go-test">go-test</a><ul><li><a href="#cd" title="cd">cd</a></li><li><a href="#debug" title="debug">debug</a></li><li><a href="#example-6" title="Example">Example</a></li></ul></li><li><a href="#go-vet" title="go-vet">go-vet</a><ul><li><a href="#example-7" title="Example">Example</a></li></ul></li><li><a href="#golangci-lint" title="golangci-lint">golangci-lint</a><ul><li><a href="#debug-1" title="debug">debug</a></li><li><a href="#rw-3" title="rw">rw</a></li><li><a href="#example-8" title="Example">Example</a></li></ul></li><li><a href="#govulncheck" title="govulncheck">govulncheck</a><ul><li><a href="#example-9" title="Example">Example</a></li></ul></li><li><a href="#scip" title="scip">scip</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <small class="reading-time" title="Estimated reading time">7 min read</small>
     <article>
 <h1 id="go">go</h1>
 <p>The <code>go</code> <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> wires the Go toolchain into a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>: each op forks a <code>go</code> (or <code>gofmt</code>) subcommand directly, with no shell. Lint and vulnerability scanning <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> as <code>go tool</code> invocations so they resolve from the <a class="glossary-term" href="../../../glossary/#module" data-def="A magus stdlib namespace a magusfile imports for host capabilities: filesystem, exec, vcs, and more.">module</a>'s tool block rather than <a class="code-xref" href="../../knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">PATH</a>.</p>
@@ -203,9 +203,26 @@ export fun generate(ctx: magus\Context, args: [str]) &gt; void {
     go[&quot;go-generate&quot;](ctx);
 }
 </code></pre>
+<h2 id="go-mod-edit">go-mod-edit</h2>
+<p><strong>Command:</strong> <code>go mod edit -print</code></p>
+<h3 id="rw-1">rw</h3>
+<p>Drops <code>-print</code>.</p>
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+<pre><code class="language-json">[
+  {
+    &quot;op&quot;: &quot;remove&quot;,
+    &quot;path&quot;: &quot;/2&quot;
+  }
+]
+</code></pre>
+</details>
+<h2 id="go-mod-json">go-mod-json</h2>
+<p>Captures Go's structured module view for the spell's higher-level <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> helper. This is deliberately a separate read-only op: <code>-json</code> and <code>-print</code> are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.</p>
+<p><strong>Command:</strong> <code>go mod edit -json</code></p>
 <h2 id="go-mod-tidy">go-mod-tidy</h2>
 <p><strong>Command:</strong> <code>go mod tidy --diff</code></p>
-<h3 id="rw-1">rw</h3>
+<h3 id="rw-2">rw</h3>
 <p>Drops <code>--diff</code>.</p>
 <details class="charm-patch">
 <summary>JSON Patch</summary>
@@ -325,7 +342,7 @@ export fun lint(ctx: magus\Context, args: [str]) &gt; void {
 ]
 </code></pre>
 </details>
-<h3 id="rw-2">rw</h3>
+<h3 id="rw-3">rw</h3>
 <p>Inserts <code>--fix</code>.</p>
 <details class="charm-patch">
 <summary>JSON Patch</summary>

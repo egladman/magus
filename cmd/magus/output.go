@@ -12,7 +12,7 @@ import (
 	sprig "github.com/Masterminds/sprig/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // outputDst returns the writer for structured output; mirrors to --tee file when set.
@@ -41,7 +41,7 @@ func emitFormatted(opts OutputOptions, v any) error {
 }
 
 func writeJSON(w io.Writer, v any) error {
-	b, err := codec.MarshalIndent(v, "", "  ")
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func writeYAML(w io.Writer, v any) error {
 
 // writeJSONL writes each element of the single slice field of v as a JSON line; falls back to one line.
 func writeJSONL(w io.Writer, v any) error {
-	enc := codec.NewEncoder(w)
+	enc := json.NewEncoder(w)
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer {
 		rv = rv.Elem()
@@ -177,12 +177,12 @@ func writeTemplate(w io.Writer, v any, body string) error {
 // -o template renders against this so its field names match -o json exactly, under
 // whichever codec build (encoding/json or json/v2) is active.
 func jsonShape(v any) (any, error) {
-	b, err := codec.Marshal(v)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
 	var shaped any
-	if err := codec.Unmarshal(b, &shaped); err != nil {
+	if err := json.Unmarshal(b, &shaped); err != nil {
 		return nil, err
 	}
 	return shaped, nil

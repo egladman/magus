@@ -16,7 +16,7 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -436,7 +436,7 @@ func (l *projectLocker) recordOwner(projectPath string) {
 // "skip the sidecar": failing to say who we are must never fail the run.
 func selfRecord() []byte {
 	dir, _ := os.Getwd()
-	data, err := codec.Marshal(processRecord{
+	data, err := json.Marshal(processRecord{
 		PID:     os.Getpid(),
 		Command: strings.Join(os.Args, " "),
 		Dir:     dir,
@@ -561,7 +561,7 @@ func heldLocks(cacheDir string) []types.StatusLock {
 			return nil //nolint:nilerr // one unreadable sidecar must not abort the whole report
 		}
 		var o processRecord
-		if uerr := codec.Unmarshal(data, &o); uerr != nil || o.PID == 0 {
+		if uerr := json.Unmarshal(data, &o); uerr != nil || o.PID == 0 {
 			return nil //nolint:nilerr // a malformed sidecar is skipped, not fatal to the report
 		}
 		rel, rerr := filepath.Rel(dir, filepath.Dir(path))
@@ -604,7 +604,7 @@ func (l *projectLocker) readOwner(projectPath string) processRecord {
 		return processRecord{}
 	}
 	var o processRecord
-	if uerr := codec.Unmarshal(data, &o); uerr != nil {
+	if uerr := json.Unmarshal(data, &o); uerr != nil {
 		return processRecord{}
 	}
 	return o
@@ -653,7 +653,7 @@ func readWaiters(dir string) []types.StatusLockWaiter {
 			continue
 		}
 		var o processRecord
-		if codec.Unmarshal(data, &o) != nil || o.PID == 0 {
+		if json.Unmarshal(data, &o) != nil || o.PID == 0 {
 			continue
 		}
 		w := types.StatusLockWaiter{PID: o.PID, Command: o.Command, Dir: o.Dir}

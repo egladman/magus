@@ -97,7 +97,7 @@ This is the ordinary shape for a bytecode VM rather than an invention -- CPython
 `.pyc`, the JVM's `.class`, `luac` and Lua's `string.dump`, and Erlang's `.beam` are
 all the same idea, and the split debug file mirrors a PDB or a DWARF `.dwo`. It is
 also load-bearing here: magus ships every built-in spell as a prebuilt `.bo`
-(`internal/spell/gen/*.bo`), so a spell loads without a compiler on the critical
+(`internal/spellruntime/gen/*.bo`), so a spell loads without a compiler on the critical
 path.
 
 Because it is ours and not upstream's, it is ours to keep whole. Every constant kind
@@ -305,7 +305,7 @@ No cgo, no external toolchain. Pure-Go deps:
 [`golang-asm`](https://github.com/twitchyliquid64/golang-asm) (JIT codegen, amd64).
 
 After bumping `BytecodeVersion`, run `go generate` in
-[`../internal/spell`](../internal/spell) to rebuild the embedded spell bytecode.
+[`../internal/spellruntime`](../internal/spellruntime) to rebuild the embedded spell bytecode.
 
 ## CLI
 

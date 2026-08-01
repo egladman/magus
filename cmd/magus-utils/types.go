@@ -1,8 +1,8 @@
 // Subcommand `types` emits the Buzz `object` mirror of a Go value type in
 // github.com/egladman/magus/types, so the Go struct stays the single source of
 // truth and the two shapes can never drift. The emitted file is shipped as part
-// of the source module for whichever host import path returns the type - os for
-// ExecResult, vcs for Tag, magus for TargetGraph, and so on (see internal/spell
+// of the declarations for whichever host import path returns the type - os for
+// ExecResult, vcs for Tag, magus for TargetGraph, and so on (see internal/spellruntime
 // and internal/interp/bindings/modules.go) - so importing that path already
 // brings the type into a magusfile's or spell's scope for annotations and
 // literals, with no separate import required.
@@ -18,57 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/generate/emit"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
-	"github.com/egladman/magus/spells"
-	"github.com/egladman/magus/types"
 )
-
-// registry maps a -type name to the Go struct whose fields the Buzz object mirrors.
-// Add an entry here to generate another value type.
-var registry = map[string]reflect.Type{
-	"Target":        reflect.TypeOf(types.Target{}),
-	"Command":       reflect.TypeOf(spells.Command{}),
-	"Service":       reflect.TypeOf(spells.Service{}),
-	"Charm":         reflect.TypeOf(spells.Charm{}),
-	"PatchOp":       reflect.TypeOf(spells.PatchOp{}),
-	"ExecResult":    reflect.TypeOf(types.ExecResult{}),
-	"CommitAuthor":  reflect.TypeOf(types.CommitAuthor{}),
-	"Commit":        reflect.TypeOf(types.CommitRecord{}),
-	"FileInfo":      reflect.TypeOf(types.FileInfo{}),
-	"HttpResponse":  reflect.TypeOf(types.HTTPResponse{}),
-	"SemverVersion": reflect.TypeOf(types.SemverVersion{}),
-	"SemverNext":    reflect.TypeOf(types.SemverNext{}),
-	"URL":           reflect.TypeOf(types.URL{}),
-	"Tag":           reflect.TypeOf(types.Tag{}),
-	// magus.affected and magus.graph, the in-process verbs beside ls.
-	"Affected": reflect.TypeOf(types.AffectedResult{}),
-	"Graph":    reflect.TypeOf(types.GraphView{}),
-	// magus.modules / magus.module. Field and method entries precede the module
-	// entry that lists them.
-	"ModuleFieldEntry":  reflect.TypeOf(types.ModuleFieldEntry{}),
-	"ModuleMethodEntry": reflect.TypeOf(types.ModuleMethodEntry{}),
-	"Module":            reflect.TypeOf(types.ModuleEntry{}),
-	// magus.ls's result. ProjectEntry keeps its Go name because a struct-valued
-	// field mirrors as t.Name(), so the element type of Projects.projects has to
-	// resolve under that spelling; only the top-level name, which nothing
-	// references, is free to read better as `Projects`.
-	"ProjectEntry": reflect.TypeOf(types.ProjectEntry{}),
-	"Projects":     reflect.TypeOf(types.ProjectsOutput{}),
-	// magus.targets's result (TargetGraphOutput -> "TargetGraph", same reasoning as
-	// Projects/ProjectsOutput). The rest of this family keeps its Go name: each is
-	// only ever reached as a nested struct-valued field (TargetGraphOutput.projects
-	// is [TargetGraphProject], .nodes is [TargetGraphNode], and so on), which mirrors
-	// via t.Name() and so has no freedom to rename. Register in dependency order -
-	// CrossTargetRef/TargetSpellUse/InputRef/OutputRef before TargetGraphNode before
-	// TargetGraphProject before TargetGraph - matching the order the module source
-	// must declare them in.
-	"CrossTargetRef":     reflect.TypeOf(types.CrossTargetRef{}),
-	"TargetSpellUse":     reflect.TypeOf(types.TargetSpellUse{}),
-	"InputRef":           reflect.TypeOf(types.InputRef{}),
-	"OutputRef":          reflect.TypeOf(types.OutputRef{}),
-	"TargetGraphNode":    reflect.TypeOf(types.TargetGraphNode{}),
-	"TargetGraphProject": reflect.TypeOf(types.TargetGraphProject{}),
-	"TargetGraph":        reflect.TypeOf(types.TargetGraphOutput{}),
-}
 
 func runTypes(args []string) error {
 	fs := flag.NewFlagSet("types", flag.ExitOnError)
@@ -78,12 +28,12 @@ func runTypes(args []string) error {
 		return err
 	}
 
-	rt, ok := registry[*typeName]
+	entry, ok := boundaryTypeNamed(*typeName)
 	if !ok || *outPath == "" {
 		return fmt.Errorf("usage: magus-utils types -type <Name> -out <path.buzz>")
 	}
 
-	out, err := renderBuzzMirror(*typeName, rt)
+	out, err := renderBuzzMirror(*typeName, entry.Type)
 	if err != nil {
 		return err
 	}
@@ -104,7 +54,7 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// and a header that names a type the reader cannot find defeats its purpose.
 	fmt.Fprintf(&b, "// Buzz mirror of github.com/egladman/magus/types.%s, bundled into\n", rt.Name())
 	fmt.Fprintln(&b, "// whichever module owns it (magus/spell, or the host module that returns it -")
-	fmt.Fprintln(&b, "// see internal/spell/target.go and hosttypes.go). Edit the Go struct and rerun")
+	fmt.Fprintln(&b, "// see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun")
 	fmt.Fprintln(&b, "// `go generate`, never this file.")
 	fmt.Fprintln(&b)
 	fmt.Fprintf(&b, "export object %s {\n", name)

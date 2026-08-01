@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#conformance" title="conformance">conformance</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
+        <ul><li><a href="#generate" title="generate">generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#buzz-build" title="buzz-build">buzz-build</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#conformance" title="conformance">conformance</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -97,7 +97,7 @@
 </tr>
 <tr>
 <td><code>generate</code></td>
-<td><code>preflight</code>, <code>md-generate</code></td>
+<td><code>preflight</code>, <code>mod-sync</code>, <code>md-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -106,8 +106,13 @@
 <td>-</td>
 </tr>
 <tr>
+<td><code>mod-sync</code></td>
+<td>-</td>
+<td>go</td>
+</tr>
+<tr>
 <td><code>format</code></td>
-<td><code>generate</code></td>
+<td><code>generate</code>, <code>mod-sync</code></td>
 <td>go</td>
 </tr>
 <tr>
@@ -122,6 +127,11 @@
 </tr>
 <tr>
 <td><code>test</code></td>
+<td><code>format</code></td>
+<td>go</td>
+</tr>
+<tr>
+<td><code>buzz-build</code></td>
 <td><code>format</code></td>
 <td>go</td>
 </tr>
@@ -141,6 +151,8 @@
 <p>Regenerates MAGUS.md and fails on drift.</p>
 <h3 id="md-generate"><code>md-generate</code></h3>
 <p>Renders MAGUS.md (target catalog plus graph) from this magusfile.</p>
+<h3 id="buzz-build"><code>buzz-build</code></h3>
+<p>Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.</p>
 <h3 id="ci"><code>ci</code></h3>
 <p>The anchor <code>magus affected ci</code> keys off; fans out lint/build/test after format.</p>
 <h3 id="conformance"><code>conformance</code></h3>
@@ -148,11 +160,14 @@
 <h2 id="run-order">Run order</h2>
 <div class="mermaid-src"><pre><code class="language-mermaid">graph LR
     preflight --&gt; generate
+    mod-sync --&gt; generate
     md-generate --&gt; generate
     generate --&gt; format
+    mod-sync --&gt; format
     format --&gt; lint
     format --&gt; build
     format --&gt; test
+    format --&gt; buzz-build
     lint --&gt; ci
     build --&gt; ci
     test --&gt; ci

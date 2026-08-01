@@ -1,5 +1,5 @@
 // Subcommand `spells` compiles each built-in spell's Buzz source
-// (spells/<dir>/spell.buzz) to bytecode and writes internal/spell/gen/<name>.bo,
+// (spells/<dir>/spell.buzz) to bytecode and writes internal/spellruntime/gen/<name>.bo,
 // named by the spell's runtime name (mgs_getName, e.g. "go" for spells/golang) so
 // the source directory never enters the runtime registry. The spell package embeds
 // the blobs at build time; the runtime loader recovers each with UnmarshalChunk and
@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/generate/emit"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/libs/gopherbuzz"
 )
 
@@ -59,7 +59,7 @@ func runSpells(args []string) error {
 		// leave no bytecode, so the type would otherwise be absent at load).
 		// A spell importing any host module (e.g. spells/github) can't be a
 		// bare-compiled built-in and is skipped.
-		combined, ok := ispell.SelfContainedBuiltinSource(string(src))
+		combined, ok := spellruntime.SelfContainedBuiltinSource(string(src))
 		if !ok {
 			continue
 		}
@@ -76,7 +76,7 @@ func runSpells(args []string) error {
 			_ = sess.Close()
 			return fmt.Errorf("exec %s: %w", srcPath, err)
 		}
-		spec, err := ispell.Resolve(ctx, sess)
+		spec, err := spellruntime.Resolve(ctx, sess)
 		if err != nil {
 			_ = sess.Close()
 			return fmt.Errorf("resolve %s: %w", srcPath, err)

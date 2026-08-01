@@ -19,8 +19,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -48,7 +48,7 @@ func toolLogger(ctx context.Context) *slog.Logger {
 
 // jsonResult marshals v as compact JSON and wraps it in a text CallToolResult.
 func jsonResult(v any) (*mcplib.CallToolResult, error) {
-	b, err := codec.Marshal(v)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: marshal result: %w", err)
 	}
@@ -305,7 +305,7 @@ func argsJSON(args map[string]any) []byte {
 	if len(args) == 0 {
 		return nil
 	}
-	raw, err := codec.Marshal(args)
+	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil
 	}

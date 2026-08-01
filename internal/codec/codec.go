@@ -1,23 +1,12 @@
-// Package codec provides the serialization and compression primitives magus
-// uses for cache manifests and report streams: pluggable streaming JSON
-// encoders/decoders and zstd/xz compressors. The compressors have cgo fast
-// paths (libzstd, liblzma) selected by build tag, with pure-Go fallbacks so
-// the module builds and runs without a C toolchain.
+// Package codec provides the streaming compression primitives Magus uses for
+// cache artifacts and archives. The compressors have cgo fast paths (libzstd,
+// liblzma) selected by build tag, with pure-Go fallbacks so the module builds
+// and runs without a C toolchain.
 package codec
 
 import "io"
 
-// Encoder is the common interface for streaming JSON encoders.
-type Encoder interface {
-	Encode(v any) error
-}
-
-// Decoder is the common interface for streaming JSON decoders.
-type Decoder interface {
-	Decode(v any) error
-}
-
-// codec.go owns the exported surface of the streaming compression codecs. Each
+// json.go owns the exported surface of the streaming compression codecs. Each
 // codec has two implementations selected at build time: a cgo path backed by
 // libzstd/liblzma (zstd_cgo.go, xz_cgo.go) and a pure-Go fallback
 // (zstd_other.go, xz_other.go). The wrappers below delegate to whichever

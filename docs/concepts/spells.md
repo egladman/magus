@@ -23,7 +23,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`buzz`](spells/buzz.md) | Buzz | 3 | Buzz spell: check and test .buzz sources, plus run them through the magus interpreter. |
 | [`cosign`](spells/cosign.md) | - | 3 | Cosign spell: keyless sign, attest, and verify for container artifacts. |
 | [`docker`](spells/docker.md) | Docker | 4 | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting. |
-| [`go`](spells/go.md) | Go | 11 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
+| [`go`](spells/go.md) | Go | 13 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
 | [`markdown`](spells/markdown.md) | Markdown | 3 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
 | [`python`](spells/python.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
 | [`rust`](spells/rust.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
@@ -211,21 +211,27 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 
 A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listClaimedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionCommand`, `mgs_isOpaque`, and `mgs_listTargets`.
 
+MGS functions are discovery-time declarations: they take no arguments and must be
+pure, because Magus calls them before it has selected a target or started an
+execution. File metadata uses generated `Path` values, not strings. Put
+per-invocation inputs and calls to other spell operations on ordinary typed spell
+functions, then compose those functions explicitly from a magusfile target.
+
 A spell is the layer that carries logic, so it is also the layer worth testing -
 unlike the magusfile that binds it, which should stay thin enough that the
 question never arises. See [Testing](../guides/testing.md) for where that line
 sits and how to write in-file `test "..." {}` blocks.
 
-`mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `["target"]`; a Node spell, `["node_modules"]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
+`mgs_listIgnoreDirs` names the non-source directories your ecosystem generates (a Rust spell returns `[Path{value = "target", isDir = true}]`; a Node spell, `[Path{value = "node_modules", isDir = true}]`). magus prunes them from the input-hashing walk of any project this spell resolves, so a build tree never counts toward the cache key. Dot-directories are always skipped, so only non-dot names belong here.
 
 Buzz (`spells/ruby.buzz`):
 
 ```buzz
 export fun mgs_getName() > str { return "ruby"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] {
-    return ["**/*.rb", "Gemfile", "Gemfile.lock", "*.gemspec", ".rubocop.yml"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.rb"}, Path{value = "Gemfile"}, Path{value = "Gemfile.lock"}, Path{value = "*.gemspec"}, Path{value = ".rubocop.yml"}];
 }
-export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**/*"]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**/*"}]; }
 export fun mgs_listTargets() > any {
     return {
         "bundle-install": { "cmd": "bundle", "args": ["install"] },

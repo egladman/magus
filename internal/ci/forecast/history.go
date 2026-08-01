@@ -35,8 +35,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/json"
 )
 
 // HistoryVersion is the on-disk schema version.
@@ -422,7 +422,7 @@ func (h *History) Load(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := codec.Unmarshal(b, h); err != nil {
+	if err := json.Unmarshal(b, h); err != nil {
 		return fmt.Errorf("forecast: decode history %q: %w", path, err)
 	}
 	if h.Version > HistoryVersion {
@@ -440,7 +440,7 @@ func (h *History) Save(ctx context.Context, path string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	b, err := codec.MarshalIndent(h, "", "  ")
+	b, err := json.MarshalIndent(h, "", "  ")
 	if err != nil {
 		return fmt.Errorf("forecast: encode history: %w", err)
 	}

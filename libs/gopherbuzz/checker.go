@@ -201,7 +201,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				}
 				c.define(name, nt, false)
 			} else {
-				// No tracked function signatures (synthetic module or no exported funs):
+				// No tracked function signatures (native module or no exported funs):
 				// use Unknown so member access on the namespace doesn't fire E28.
 				c.define(name, types.Unknown, false)
 			}

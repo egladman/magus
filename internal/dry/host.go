@@ -13,7 +13,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/types"
 )
 
@@ -31,18 +31,18 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	buzzstd.RegisterWithOutput(sess, &tr.out)
 	registerWASMCompatibleMagusModules(ctx, sess)
 
-	// A synthetic MODULE, not a global: the playground must make you write
+	// A native module, not a global: the playground must make you write
 	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
 	// without the import, so a snippet that ran here failed the moment it was pasted
 	// into a real magusfile - a Run button validating syntax the language rejects
 	// teaches worse than no Run button. Every other module beside it (the WASM set
 	// above, the spells below) is already registered this way.
-	sess.SetSyntheticModule("magus", buildMagus(sess, tr))
+	sess.SetNativeModule("magus", buildMagus(sess, tr))
 	for name, ops := range spells {
-		sess.SetSyntheticModule("magus/spell/"+name, buildSpell(name, ops, tr))
+		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
 	}
 
-	// Register the canonical value-type module as an embedded SOURCE module so a
+	// Register the canonical value-type module as embedded declarations so a
 	// SPELL buffer's or magusfile's `import "magus/spell"` resolves the
 	// Target/Command/Service object types instead of failing with `undefined type
 	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
@@ -54,27 +54,27 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// wire, is this dry-only host's deliberate simplification - it keeps every
 	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
 	// resolvable without also having to fake functional os/fs/http/vcs bindings.
-	// The session's import lookup order (synthetic, then source, then resolver)
+	// The session's import lookup order (native, then declarations, then resolver)
 	// means this is never shadowed by the catch-all resolver below.
-	sess.SetSourceModule(ispell.SpellModulePath, strings.Join([]string{
-		ispell.TargetModuleSource,
-		ispell.PatchOpSource,
-		ispell.CharmTypeSource,
-		ispell.CommandSource,
-		ispell.ServiceSource,
-		ispell.ExecResultSource,
-		ispell.CommitAuthorSource,
-		ispell.CommitSource,
-		ispell.FileInfoSource,
-		ispell.HTTPResponseSource,
-		ispell.SemverVersionSource,
-		ispell.URLSource,
+	sess.SetModuleDecls(spellruntime.SpellModulePath, strings.Join([]string{
+		spellruntime.TargetModuleSource,
+		spellruntime.PatchOpSource,
+		spellruntime.CharmTypeSource,
+		spellruntime.CommandSource,
+		spellruntime.ServiceSource,
+		spellruntime.ExecResultSource,
+		spellruntime.CommitAuthorSource,
+		spellruntime.CommitSource,
+		spellruntime.FileInfoSource,
+		spellruntime.HTTPResponseSource,
+		spellruntime.SemverVersionSource,
+		spellruntime.URLSource,
 	}, "\n"))
-	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
+	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation
-	// with a file-not-found. The source modules above resolve first, so this never
+	// with a file-not-found. The declarations above resolve first, so this never
 	// shadows them.
 	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
 		m := vm.NewMap()

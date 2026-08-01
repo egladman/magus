@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,7 +82,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		}
 		return spells.InvokeResponse{Data: out}, nil
 	case "modules":
-		mods := host.Modules(name) // name empty = the whole catalog, matching the CLI
+		mods := std.DescribeModules(name) // name empty = the whole catalog, matching the CLI
 		if name != "" && len(mods) == 0 {
 			return spells.InvokeResponse{}, fmt.Errorf("mcp: no module named %q", name)
 		}
@@ -99,7 +99,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 // spellReport wraps the inventory in the wire envelope. Count is derived here, at
 // the one place that serializes, rather than carried on the inventory itself - the
 // narrowing below used to have to remember to set it.
-func spellReport(entries []types.SpellEntry) types.SpellReport {
+func spellReport(entries []types.Spell) types.SpellReport {
 	return types.SpellReport{Definition: types.SpellDefinition, Count: len(entries), Spells: entries}
 }
 
@@ -107,10 +107,10 @@ func spellReport(entries []types.SpellEntry) types.SpellReport {
 // returning a report of one so the wire shape matches the unfiltered list. An
 // unknown name is a clear error naming every valid spell, so the agent can correct
 // without a second list call.
-func describeSpellByName(entries []types.SpellEntry, name string) (spells.InvokeResponse, error) {
+func describeSpellByName(entries []types.Spell, name string) (spells.InvokeResponse, error) {
 	for _, s := range entries {
 		if s.Name == name {
-			return spells.InvokeResponse{Data: spellReport([]types.SpellEntry{s})}, nil
+			return spells.InvokeResponse{Data: spellReport([]types.Spell{s})}, nil
 		}
 	}
 	names := make([]string, len(entries))

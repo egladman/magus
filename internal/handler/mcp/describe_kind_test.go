@@ -11,7 +11,7 @@ import (
 )
 
 func TestDescribeSpellByName(t *testing.T) {
-	out := []types.SpellEntry{{Name: "go"}, {Name: "typescript"}}
+	out := []types.Spell{{Name: "go"}, {Name: "typescript"}}
 
 	t.Run("hit narrows to one entry", func(t *testing.T) {
 		resp, err := describeSpellByName(out, "go")

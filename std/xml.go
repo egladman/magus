@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module xml -lang buzz -out ../host/gen/xml.go
+//go:generate go run ../cmd/magus-utils bindings -module xml -lang buzz -out ../internal/interp/bindings/gen/xml.go
 
 func init() { Register(XML) }
 

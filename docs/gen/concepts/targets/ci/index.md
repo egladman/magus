@@ -80,7 +80,7 @@ anything.
 **magus:** this is an error, not a warning. `magus affected ci` refuses to run
 when no project in scope declares a `ci` target.
 
-```
+```text
 no "ci" target defined in the selected project(s); it is the anchor
 "magus affected ci" and "magus affected --plan" key off, so this run
 would do nothing

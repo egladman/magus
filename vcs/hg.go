@@ -168,7 +168,7 @@ func (v hgVCS) Describe(ctx context.Context, dir string) (string, error) {
 // Tags lists tags newest-first. hg always reports a synthetic "tip" tag - a
 // moving pointer at the newest revision rather than a marker anyone set - so it
 // is filtered out; leaving it in would make every repository look freshly tagged.
-func (v hgVCS) Tags(ctx context.Context, dir, pattern string) ([]types.Tag, error) {
+func (v hgVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, error) {
 	out, err := vcsOutput(ctx, dir, "hg", "tags", "--template", "{tag}\t{date|rfc3339date}\t{node}\n")
 	if err != nil {
 		return nil, err

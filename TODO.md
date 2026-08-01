@@ -133,7 +133,7 @@ The three buckets mean different things:
 
 RESOLVED, no action: spell ops do NOT need the threaded ctx. A fork op handler is
 a declaration called once at resolve time with a null Target
-(`internal/spell/resolve.go:150-162`), and no built-in spell reads its `Target`
+(`internal/spellruntime/resolve.go:150-162`), and no built-in spell reads its `Target`
 at all, so a Buzz-level ctx argument would reach nothing. Everything it would
 carry already arrives per-invocation on the Go ctx via `vm.ctx`
 (`libs/gopherbuzz/vm/vm.go:940`), freshly built per call by `NewVM(ctx)`

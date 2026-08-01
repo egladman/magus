@@ -210,7 +210,7 @@ test "the two that surprise people" {
 }
 ```
 
-```
+```text
 ok    test "every spelling of a name reaches one canonical form"
 ok    test "the two that surprise people"
 ---
@@ -280,7 +280,7 @@ or `snake_case` op, it now works instead of silently never running.
 - **Spell names.** A spell's own name is matched byte-for-byte. A spell named
   `Go` and one named `go` are two different spells, not one; the registry will
   hold both.
-- **Lookups by literal key.** Normalization canonicalizes what gets *stored*, not
+- **Lookups by literal key.** Normalization canonicalizes what gets _stored_, not
   how a literal subscript is spelled. `ts["tsc"]` is an ordinary map-key lookup
   into the value `import "magus/spell/ts"` binds, so it must name the canonical
   (kebab) key. Likewise `go::lint` is still a graceful no-op - the go spell's

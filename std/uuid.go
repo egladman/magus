@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module uuid -lang buzz -out ../host/gen/uuid.go
+//go:generate go run ../cmd/magus-utils bindings -module uuid -lang buzz -out ../internal/interp/bindings/gen/uuid.go
 
 func init() { Register(UUID) }
 

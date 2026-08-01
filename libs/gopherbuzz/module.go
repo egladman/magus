@@ -29,7 +29,7 @@ type Module struct {
 	// (e.g. "host", "wasm").
 	Labels []string
 	// Bind wires the module onto sess. It may install a fresh module (via
-	// Session.SetSyntheticModule / SetSourceModule) or read back and extend one an
+	// Session.SetNativeModule / SetModuleDecls) or read back and extend one an
 	// earlier Module already provided under Name (host methods over the stdlib).
 	Bind func(sess *Session, env ModuleEnv) error
 }

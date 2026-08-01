@@ -8,8 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	// Importing the host package triggers all host/*.go init() calls, which
-	// register every module (Sh, Fs, Vcs, …) with std.Register.
+	// Importing std triggers every module's init registration.
 	"github.com/egladman/magus/std"
 )
 
@@ -18,10 +17,10 @@ var buzzModules = []string{
 	"os", "vcs", "fs", "archive", "env", "json", "http", "charm",
 }
 
-// TestBuzzFilesUpToDate verifies that the checked-in host/gen/<module>.go files
+// TestBuzzFilesUpToDate verifies that the checked-in bindings/gen/<module>.go files
 // are byte-for-byte identical to what `magus-utils bindings -lang buzz` would emit today.
 func TestBuzzFilesUpToDate(t *testing.T) {
-	genBuzzDir := filepath.Join("..", "..", "host", "gen")
+	genBuzzDir := filepath.Join("..", "..", "internal", "interp", "bindings", "gen")
 
 	for _, name := range buzzModules {
 		t.Run(name, func(t *testing.T) {

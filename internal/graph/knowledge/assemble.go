@@ -27,7 +27,7 @@ const RegistryShardName = "@registry"
 // host, or spell packages itself.
 type Inputs struct {
 	Graph       types.TargetGraphOutput // TargetGraph(): projects, targets, deps, charms, spell ops
-	Spells      []types.SpellEntry      // ListSpells(): spell + op nodes
+	Spells      []types.Spell           // ListSpells(): spell + op nodes
 	Modules     []types.ModuleEntry     // host modules, each with Methods populated
 	Diagnostics []types.DiagnosticCode  // AllDiagnosticCodes()
 	// Root is the absolute workspace root, used by the docs and buzz-source

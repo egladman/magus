@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/interp"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -33,7 +33,7 @@ export fun helper() > str { return text.value(); }`)
 
 	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
 	_, _, err := loadBuzzSpell(ctx, path)
-	assert.ErrorIs(t, err, ispell.ErrNotASpell)
+	assert.ErrorIs(t, err, spellruntime.ErrNotASpell)
 }
 
 // TestProjectImportFileResolver exercises the reserved `.file(rel)` member on a
@@ -102,8 +102,9 @@ func TestBuzzLocalSpellImport(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir) // the import resolves relative to the cwd
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetimport"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts"]; }
+	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "widgetimport"; }
+export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.ts"}]; }
 export fun mgs_listTargets() > any {
     return {"build": {"bin": "npm", "args": ["run", "build"]}};
 }
@@ -332,14 +333,15 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
 // declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Descriptor. It guards the resolver (internal/spell/resolve.go) against
+// expected Descriptor. It guards the resolver (internal/spellruntime/resolve.go) against
 // dropping fields — claims is asserted explicitly because that is the field that
 // previously regressed.
 func TestEngineDescriptorParity(t *testing.T) {
-	buzzSrc := `export fun mgs_getName() > str { return "parity_buzz"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; }
-export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }
-export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; }
+	buzzSrc := `import "magus/spell";
+export fun mgs_getName() > str { return "parity_buzz"; }
+export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.rb"}, Path{value = "Gemfile.lock"}]; }
+export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "vendor/bundle/**"}]; }
+export fun mgs_listClaimedGlobs() > [Path] { return [Path{value = ".rubocop.yml"}, Path{value = "Gemfile"}]; }
 export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }
 export fun mgs_isOpaque() > bool { return false; }
 export fun mgs_listTargets() > any {

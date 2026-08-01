@@ -7,7 +7,7 @@ import (
 	"github.com/cbroglie/mustache"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module template -lang buzz -out ../host/gen/template.go
+//go:generate go run ../cmd/magus-utils bindings -module template -lang buzz -out ../internal/interp/bindings/gen/template.go
 
 func init() { Register(Template) }
 

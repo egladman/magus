@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/config"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 

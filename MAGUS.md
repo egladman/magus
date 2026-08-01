@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2545 nodes** and **5013 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2581 nodes** and **5125 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,30 +45,30 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 84 | `magus query kind:target` | `content-generate`, `skills-generate`, `bindings-generate` |
-| spell | 12 | `magus query kind:spell` | `go`, `markdown`, `rust` |
-| op | 53 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-tidy` |
-| tool | 14 | `magus query kind:tool` | `sh`, `pnpm`, `go` |
+| target | 89 | `magus query kind:target` | `content-generate`, `skills-generate`, `bindings-generate` |
+| spell | 13 | `magus query kind:spell` | `go`, `markdown`, `rust` |
+| op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
+| tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
 | method | 160 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 46 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
-| doc | 243 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 426 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 221 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1124 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 119 | `magus query kind:import` | `std`, `magus`, `fs` |
+| diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS4001` |
+| doc | 252 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 421 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 222 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1143 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 121 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 28 | `magus query project:.` | `skills-generate`, `bindings-generate`, `generate` |
+| . | 30 | `magus query project:.` | `skills-generate`, `bindings-generate`, `generate` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
-| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
-| libs/gopherbuzz | 9 | `magus query project:libs/gopherbuzz` | `build`, `format`, `generate` |
+| libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
+| libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
@@ -77,6 +77,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
+| `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
+| `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen) and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven by the go:generate directives in internal/spellruntime. |
+| `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
+| `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
 | `release-build` | Builds one release binary for one platform. |
@@ -97,13 +101,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Under the cd charm, build+push+sign both static and CGO images unconditionally. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
-| `bindings-generate` | Regenerates the Go host bindings (std -> host/gen) from std.Module declarations. |
-| `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell. |
-| `mocks-generate` | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. |
+| `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in cmd/magus/skills. |
-| `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
+| `mod-sync` | The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod. |
 
 ## Project: cmd/magus/starter
 
@@ -167,6 +169,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `mod-sync` |  |
 
 ## Project: libs/gopherbuzz
 
@@ -177,10 +180,12 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `lint` |  |
 | `build` |  |
 | `test` |  |
+| `buzz-build` | Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version. |
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `conformance` | Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+| `mod-sync` |  |
 
 ## Project: libs/textsearch
 

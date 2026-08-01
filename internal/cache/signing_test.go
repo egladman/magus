@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +71,7 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
-	env, _ := codec.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
+	env, _ := json.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
 	assert.Error(t, v.verify(env, []byte("m")), "verify accepted a non-ed25519 algorithm")
 }
 

@@ -71,10 +71,10 @@ magus\project({
                 // built-in spell or its example, or the CLI/manpage registry must mark this
                 // project affected so content-generate re-runs and the drift gate catches an
                 // unregenerated page. Data sources are ../std + ../host (module ref), ../spells
-                // + ../internal/spell (spell docs), and ../internal/manpage + ../internal/config
+                // + ../internal/spellruntime (spell docs), and ../internal/manpage + ../internal/config
                 // (manpages); the tools themselves live under ../cmd/magus-{docs,spelldocs,manpage}.
                 "../std/**/*.go", "../host/**/*.go",
-                "../spells/**/*.buzz", "../internal/spell/**/*.go",
+                "../spells/**/*.buzz", "../internal/spellruntime/**/*.go",
                 "../internal/manpage/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/knowledge/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",

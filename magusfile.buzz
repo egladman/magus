@@ -28,6 +28,7 @@ import "badge" as badge;
 // magus\Context first parameter (MGS1008). Aliasing keeps them namespaced, which
 // is the same reason docs/magusfile.buzz aliases its renderer.
 import "releaser" as releaser;
+import "spells/golang/gomod" as gomod;
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
@@ -190,28 +191,39 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
-// Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
+// Regenerates the runtime BuzzObject maps before anything imports a host binding.
+// Its reflection lives only in magus-utils while writing this Go file; the emitted
+// methods use direct field access, so Magus never reflects at a Buzz boundary.
+export fun types_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("types/buzzobject_gen.go");
+    os\exec("go", ["generate", "./types"]);
+}
+
+// Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("host/gen/*.go");
+    ctx.needs(types_generate);
+    ctx.outputs("internal/interp/bindings/gen/*.go");
     os\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the
-// Buzz value-type mirrors (internal/spell/gen/types), both driven by the
-// go:generate directives in internal/spell.
+// Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen)
+// and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven
+// by the go:generate directives in internal/spellruntime.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz");
-    os\exec("go", ["generate", "./internal/spell/..."]);
+    ctx.needs(types_generate);
+    ctx.outputs("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz");
+    os\exec("go", ["generate", "./internal/spellruntime/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
 // interface's gen/ subdir. Mocks are committed and drift-gated like every other
 // generated tree; mockery is pinned in the go.mod tool block.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("**/gen/mocks/*.go");
     os\exec("go", ["tool", "mockery"]);
 }
@@ -242,6 +254,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void {
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
     os\exec("go", ["generate", "./cmd/magus/..."]);
@@ -280,6 +293,34 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
+// workspace_go_mods gathers the Go spell's structured view for every workspace
+// module. The policy that compares those records lives beside that spell in
+// spells/golang/gomod.buzz; Magus core only supplies the typed project inventory.
+fun workspace_go_mods(ctx: magus\Context) > [any] {
+    final projects: Projects = magus\ls();
+    var modules: [any] = mut [<any>];
+    foreach (project in projects.projects) {
+        if (fs\exists(project.dir + "/go.mod")) {
+            final result = go["go-mod-json"](ctx.withCwd(project.dir));
+            modules.append({"dir": project.dir, "json": result.stdout});
+        }
+    }
+    return modules;
+}
+
+// The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or
+// writes go.mod. Without rw, Go's -print mode must equal the checked-in file.
+export fun mod_sync(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("go.mod");
+    final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        throw "MGS1016: go.mod has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements";
+    }
+}
+
 // Renders the insight report (hotspots, affinity, ownership, trend) and, with the
 // `gha` charm, appends it to a host output path supplied via env. The final CI step;
 // never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
@@ -313,6 +354,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 // but its output was not re-run and committed).
 export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty() == false;
+    ctx.needs(mod_sync);
     ctx.needs(ctx.glob("*-generate"));
     if (ctx.has_charm("rw")) { return; }
 

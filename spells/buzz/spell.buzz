@@ -21,8 +21,8 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "buzz"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.buzz"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.buzz"}];
 }
 
 // No mgs_getVersionCommand: there's no useful Buzz-toolchain version to probe here.

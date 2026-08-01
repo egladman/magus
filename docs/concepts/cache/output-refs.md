@@ -166,7 +166,7 @@ magus run build --then file dist/app diff      # compare it against the last cac
 `history` answers a question the VCS answers badly for generated files. Git tells you
 when someone committed a regeneration; this tells you when the **bytes** changed:
 
-```
+```text
 2026-07-30T00:35:44Z  81db67b6a570      412  build
 2026-07-30T00:12:09Z  2d27fbdf4e8c      412  build
 ```

@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // attentionEvent is the neutral shape of "an agent needs a human".

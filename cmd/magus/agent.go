@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/interactive"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )

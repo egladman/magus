@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/types"
 )
@@ -274,7 +274,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	switch typ {
 	case typeRun:
 		var req RunRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode run request: "+err.Error())
 			return
 		}
@@ -287,7 +287,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeJob:
 		var req JobRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode job request: "+err.Error())
 			return
 		}
@@ -300,7 +300,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeStatus:
 		var req StatusRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode status request: "+err.Error())
 			return
 		}
@@ -313,7 +313,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeShutdown:
 		var req ShutdownRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode shutdown request: "+err.Error())
 			return
 		}
@@ -326,7 +326,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeServiceAcquire:
 		var req ServiceAcquireRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.acquire request: "+err.Error())
 			return
 		}
@@ -336,7 +336,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeServiceRelease:
 		var req ServiceReleaseRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.release request: "+err.Error())
 			return
 		}
@@ -345,7 +345,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 
 	case typeServiceStopAll:
 		var req ServiceStopAllRequest
-		if err := codec.Unmarshal(line, &req); err != nil {
+		if err := json.Unmarshal(line, &req); err != nil {
 			writeErr(conn, "proc: decode service.stopall request: "+err.Error())
 			return
 		}

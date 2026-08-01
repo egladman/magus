@@ -166,12 +166,12 @@ func claimsExist(root string, claims []string) bool {
 // malformed pattern is a caller bug and is returned, not silently treated as
 // "match nothing". A line missing a name is skipped; an unparseable date is left
 // zero rather than dropping the tag, since the name is what callers rely on.
-func parseTags(out, pattern string) ([]types.Tag, error) {
+func parseTags(out, pattern string) ([]types.VCSTag, error) {
 	if out == "" {
 		return nil, nil
 	}
 	lines := strings.Split(out, "\n")
-	tags := make([]types.Tag, 0, len(lines))
+	tags := make([]types.VCSTag, 0, len(lines))
 	for _, line := range lines {
 		name, rest, ok := strings.Cut(line, "\t")
 		if !ok || name == "" {
@@ -187,7 +187,7 @@ func parseTags(out, pattern string) ([]types.Tag, error) {
 			}
 		}
 		when, id, _ := strings.Cut(rest, "\t")
-		tag := types.Tag{Name: name, ID: id}
+		tag := types.VCSTag{Name: name, ID: id}
 		tag.Prefix, tag.Version = splitTagVersion(name)
 		if ts, err := time.Parse(time.RFC3339, when); err == nil {
 			tag.Date = ts

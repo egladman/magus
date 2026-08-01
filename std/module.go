@@ -2,7 +2,7 @@
 // magusfiles call into. Each module (os, fs, vcs, …) declares its
 // Methods here as a Module value with typed args, return types, and a Go
 // Impl. The magus-utils bindings tool consumes these declarations and emits the
-// Buzz trampolines into host/gen from the same Impl.
+// Buzz trampolines into internal/interp/bindings/gen from the same Impl.
 package std
 
 import (
@@ -12,7 +12,7 @@ import (
 )
 
 // Callback is the host-side handle for a VM-side function value passed as
-// an argument. host/gen wraps a buzz.Session + function value.
+// an argument. The generated bindings layer wraps a buzz.Session + function value.
 // Impls invoke the callback via Call; args are marshalled per VM convention.
 type Callback interface {
 	Call(ctx context.Context, args ...any) ([]any, error)

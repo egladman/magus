@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // syntheticManifest builds a Manifest with n output records — representative
@@ -38,7 +38,7 @@ func BenchmarkManifestRead(b *testing.B) {
 	c := &Cache{dir: dir}
 	m := syntheticManifest(20)
 
-	data, err := codec.MarshalIndent(m, "", "  ")
+	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func BenchmarkManifestWrite(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		data, err := codec.MarshalIndent(m, "", "  ")
+		data, err := json.MarshalIndent(m, "", "  ")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -214,7 +214,7 @@ func BenchmarkMtimeStoreGzipRoundTrip(b *testing.B) {
 			b.Fatal(err)
 		}
 		gz := gzip.NewWriter(f)
-		if err := codec.NewEncoder(gz).Encode(shard); err != nil {
+		if err := json.NewEncoder(gz).Encode(shard); err != nil {
 			b.Fatal(err)
 		}
 		if err := gz.Close(); err != nil {
@@ -231,7 +231,7 @@ func BenchmarkMtimeStoreGzipRoundTrip(b *testing.B) {
 			b.Fatal(err)
 		}
 		var out map[string]mtimeEntry
-		_ = codec.NewDecoder(gz2).Decode(&out)
+		_ = json.NewDecoder(gz2).Decode(&out)
 		gz2.Close()
 		f.Close()
 	}

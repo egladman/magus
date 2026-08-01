@@ -22,7 +22,7 @@ func TestCommitBuzzObject(t *testing.T) {
 	want := BuzzObject{
 		"id":      "deadbeef",
 		"short":   "dead",
-		"author":  map[string]any{"name": "Eli", "email": "eli@example.com"},
+		"author":  BuzzObject{"name": "Eli", "email": "eli@example.com"},
 		"date":    "2026-01-02T03:04:05Z",
 		"subject": "fix",
 		"body":    "the details",
@@ -40,7 +40,7 @@ func TestCommitBuzzObjectZeroDate(t *testing.T) {
 // TestTagBuzzObject covers the Buzz boundary map, including the nested
 // SemverVersion record and the RFC3339 date formatting.
 func TestTagBuzzObject(t *testing.T) {
-	tag := Tag{
+	tag := VCSTag{
 		Name:    "libs/gopherbuzz/v0.1.0",
 		Prefix:  "libs/gopherbuzz/",
 		Version: SemverVersion{Major: 0, Minor: 1, Patch: 0, Original: "0.1.0"},
@@ -64,7 +64,7 @@ func TestTagBuzzObject(t *testing.T) {
 // Version.Original == "" rather than a separate bool, and BuzzObject must nest
 // that zero value rather than omitting the key.
 func TestTagBuzzObjectNonSemver(t *testing.T) {
-	got := Tag{Name: "checkpoint", ID: "x"}.BuzzObject()
+	got := VCSTag{Name: "checkpoint", ID: "x"}.BuzzObject()
 	assert.Equal(t, SemverVersion{}.BuzzObject(), got["version"])
 	assert.Equal(t, "", got["prefix"])
 }

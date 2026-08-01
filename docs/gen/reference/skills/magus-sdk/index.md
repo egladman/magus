@@ -2,8 +2,8 @@
 title: magus-sdk
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13286
-skill_simple_bytes: 12620
+skill_full_bytes: 13316
+skill_simple_bytes: 12650
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `21` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `064275bc9429` |
+| `skill-content` | `351a7800dc11` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -67,7 +67,7 @@ Until those nested modules get their own tags, the only working install is:
 clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
-```
+```go
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
@@ -230,9 +230,9 @@ The one escape hatch: build the workspace programmatically instead of via a
 magusfile, using the exported `Option`/`ProjectOption`/`BindingOption` wire
 API (`register.go`: `WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
 Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode
-through `internal/spell`, which IS reachable this way because the exported
+through `internal/spellruntime`, which IS reachable this way because the exported
 `register.go` functions live inside this module and call into it on the
-caller's behalf - the caller never imports `internal/spell` directly, they
+caller's behalf - the caller never imports `internal/spellruntime` directly, they
 call the exported wrapper. This path gets a caller real spell execution
 without a magusfile; it does not get them arbitrary Buzz-authored targets.
 
@@ -252,12 +252,12 @@ naming:
 3. **Is a boundary deliberate or accidental?** Read the package doc comment
    first (`doc.go` or the top of the main file) before proposing a merge -
    `spells/doc.go` documents that `spells` (exported: the Buzz sources plus
-   `Op`/`Driver`/`Descriptor`) and `internal/spell` (unexported: the bytecode
+   `Op`/`Driver`/`Descriptor`) and `internal/spellruntime` (unexported: the bytecode
    decoder) used to be three packages telling the same story from different
    angles, and were deliberately collapsed to two, with the dependency
    direction (`spells` imports nothing from `types`; `types` imports
    `spells`) called out as load-bearing so the two cannot cycle. That is a
-   documented, deliberate split - proposing to merge `internal/spell` into
+   documented, deliberate split - proposing to merge `internal/spellruntime` into
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -
@@ -305,7 +305,7 @@ Until those nested modules get their own tags, the only working install is:
 clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it), and add
 matching replace directives to the consumer's own `go.mod`:
 
-```
+```go
 require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz => /path/to/magus/libs/gopherbuzz
@@ -458,9 +458,9 @@ The one escape hatch: build the workspace programmatically instead of via a
 magusfile, using the exported `Option`/`ProjectOption`/`BindingOption` wire
 API (`register.go`: `WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
 Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode
-through `internal/spell`, which IS reachable this way because the exported
+through `internal/spellruntime`, which IS reachable this way because the exported
 `register.go` functions live inside this module and call into it on the
-caller's behalf - the caller never imports `internal/spell` directly, they
+caller's behalf - the caller never imports `internal/spellruntime` directly, they
 call the exported wrapper. This path gets a caller real spell execution
 without a magusfile; it does not get them arbitrary Buzz-authored targets.
 
@@ -480,12 +480,12 @@ naming:
 3. **Is a boundary deliberate or accidental?** Read the package doc comment
    first (`doc.go` or the top of the main file) before proposing a merge -
    `spells/doc.go` documents that `spells` (exported: the Buzz sources plus
-   `Op`/`Driver`/`Descriptor`) and `internal/spell` (unexported: the bytecode
+   `Op`/`Driver`/`Descriptor`) and `internal/spellruntime` (unexported: the bytecode
    decoder) used to be three packages telling the same story from different
    angles, and were deliberately collapsed to two, with the dependency
    direction (`spells` imports nothing from `types`; `types` imports
    `spells`) called out as load-bearing so the two cannot cycle. That is a
-   documented, deliberate split - proposing to merge `internal/spell` into
+   documented, deliberate split - proposing to merge `internal/spellruntime` into
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -

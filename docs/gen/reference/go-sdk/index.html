@@ -119,7 +119,7 @@ inherits none of that and hits <code>unknown revision libs/gopherbuzz/v0.0.0</co
 <p>Until those get their own tags, clone the repository (or vendor
 <code>libs/gopherbuzz</code> and <code>libs/diagnostics</code> out of it) and add matching <code>replace</code>
 directives to your own <code>go.mod</code>:</p>
-<pre><code>require github.com/egladman/magus v0.3.0
+<pre><code class="language-go">require github.com/egladman/magus v0.3.0
 
 replace github.com/egladman/magus/libs/gopherbuzz =&gt; /path/to/magus/libs/gopherbuzz
 replace github.com/egladman/magus/libs/diagnostics =&gt; /path/to/magus/libs/diagnostics
@@ -151,28 +151,28 @@ before either constructor runs.</p>
 <pre><code class="language-go">package main
 
 import (
-	&quot;context&quot;
-	&quot;fmt&quot;
-	&quot;log&quot;
+    &quot;context&quot;
+    &quot;fmt&quot;
+    &quot;log&quot;
 
-	magus &quot;github.com/egladman/magus&quot;
+    magus &quot;github.com/egladman/magus&quot;
 )
 
 func main() {
-	ctx := context.Background()
-	ws, err := magus.Inspect(ctx, &quot;/path/to/workspace&quot;)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(&quot;workspace root:&quot;, ws.Root())
-	for _, p := range ws.All() {
-		fmt.Printf(&quot;project %s (spell=%q, resolved spells=%d)\n&quot;, p.Path, p.Spell, len(p.ResolvedSpells))
-	}
+    ctx := context.Background()
+    ws, err := magus.Inspect(ctx, &quot;/path/to/workspace&quot;)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&quot;workspace root:&quot;, ws.Root())
+    for _, p := range ws.All() {
+        fmt.Printf(&quot;project %s (spell=%q, resolved spells=%d)\n&quot;, p.Path, p.Spell, len(p.ResolvedSpells))
+    }
 }
 </code></pre>
 <p>Against a workspace whose only project is a bare <code>magusfile.buzz</code> declaring
 one <code>export fun build</code>, this prints:</p>
-<pre><code>workspace root: /path/to/workspace
+<pre><code class="language-text">workspace root: /path/to/workspace
 project . (spell=&quot;&quot;, resolved spells=0)
 </code></pre>
 <p><code>resolved spells=0</code> is not a bug in the example - see
@@ -216,7 +216,7 @@ house rule outright: prefer the narrowest one your code actually uses.</p>
 <p>A function that only reads project facts should take <code>types.WorkspaceReader</code>,
 not the full repository:</p>
 <pre><code class="language-go">func printProjectCount(r types.WorkspaceReader) {
-	fmt.Println(&quot;project count:&quot;, len(r.All()))
+    fmt.Println(&quot;project count:&quot;, len(r.All()))
 }
 
 // Both a read-only Inspect result and an Open'd *magus.Magus satisfy this.
@@ -283,9 +283,9 @@ resolved, err := ws.EvaluateProjects(ctx) // slower: what it resolves to
 classified, err := ws.ClassifyFiles(ctx, []string{&quot;magusfile.buzz&quot;})
 graph, err := ws.TargetGraph(ctx)
 for _, proj := range graph.Projects {
-	for _, n := range proj.Nodes {
-		fmt.Printf(&quot;target %s/%s depends on %v\n&quot;, proj.Path, n.Name, n.Dependencies)
-	}
+    for _, n := range proj.Nodes {
+        fmt.Printf(&quot;target %s/%s depends on %v\n&quot;, proj.Path, n.Name, n.Dependencies)
+    }
 }
 </code></pre>
 <p>One naming trap on this axis: <code>ProjectEntry.Sources</code> (from <code>ListProjects</code>)
@@ -340,7 +340,7 @@ a magusfile, using the exported wire API in the root package -
 <code>WithRegisteredSpell</code>, <code>WithTarget</code>, <code>WithClaim</code>, and friends, composed via
 a <code>WorkspaceRegistry</code> passed to <code>Open</code>/<code>Inspect</code> as an <code>Option</code>. Built-in
 spells (<code>go</code>, <code>ts</code>, <code>rust</code>, ...) decode from embedded bytecode through
-<code>internal/spell</code>, which the exported wrapper functions can reach on your
+<code>internal/spellruntime</code>, which the exported wrapper functions can reach on your
 behalf even though you cannot import that package directly. This path gets
 you real spell execution without a magusfile; it does not get you
 arbitrary Buzz-authored targets.</p>

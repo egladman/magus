@@ -4,7 +4,7 @@
 // embedded in the binary, and the Go types the engine speaks about any spell.
 //
 // There used to be three packages spelling "spell" and three representations of
-// one: a live driver in types, a decoded Descriptor in internal/spell, and a
+// one: a live driver in types, a decoded Descriptor in internal/spellruntime, and a
 // describe-time view in types again, the last two carrying the same facts reached
 // from opposite directions. Collapsing them here is what lets the names drop their
 // prefix - the package carries the noun, so it is spells.Op and spells.Driver

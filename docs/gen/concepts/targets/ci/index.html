@@ -150,7 +150,7 @@ the contract, <code>ci</code> resolves to nothing, and the pipeline passes witho
 anything.</p>
 <p><strong>magus:</strong> this is an error, not a warning. <code><a class="code-xref" href="../../../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> refuses to <a class="code-xref" href="../../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>
 when no <a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in scope declares a <code>ci</code> target.</p>
-<pre><code>no &quot;ci&quot; target defined in the selected project(s); it is the anchor
+<pre><code class="language-text">no &quot;ci&quot; target defined in the selected project(s); it is the anchor
 &quot;magus affected ci&quot; and &quot;magus affected --plan&quot; key off, so this run
 would do nothing
 </code></pre>

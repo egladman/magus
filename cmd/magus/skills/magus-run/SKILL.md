@@ -69,7 +69,9 @@ CORRECT: `magus run test`, then `magus affected ci` once the change is done.
 <!-- why -->You are a machine reader; no news is good news. Shape the output instead of
 truncating it after the fact:
 
-<!-- /why -->- `-s` / `--silent`: the default for every CLI run.<!-- why --> Progress is dropped; a pass
+<!-- /why -->
+
+- `-s` / `--silent`: the default for every CLI run.<!-- why --> Progress is dropped; a pass
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.<!-- /why --><!-- terse --> A pass prints a
   result line plus an output ref; a failure adds a bounded tail.<!-- /terse -->

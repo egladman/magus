@@ -31,6 +31,14 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
+// Build metadata is injected by the gopherbuzz module's buzz-build target.
+// Defaults preserve useful output for `go run` and unreleased local builds.
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
+)
+
 // init pins the interpreter to the process's main OS thread. Scripts that
 // zdef() into single-thread-affine C frameworks (macOS AppKit above all)
 // must issue those calls from the main thread; without the lock the main
@@ -69,7 +77,7 @@ func run(argv []string) error {
 		return nil
 	}
 	if o.showVer {
-		fmt.Printf("buzz %s (gopherbuzz, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, buzz.UpstreamRef, vm.BytecodeVersion)
+		fmt.Printf("buzz %s (gopherbuzz %s, commit %s, built %s, upstream %s, bytecode v%d)\n", buzz.LanguageVersion, version, commit, buildDate, buzz.UpstreamRef, vm.BytecodeVersion)
 		return nil
 	}
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"

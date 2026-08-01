@@ -22,7 +22,7 @@
 // (internal/proc) forks processes - both pull in os/exec, syscall, and platform
 // build tags. Compiling to js/wasm means it MUST NOT import internal/proc,
 // internal/cache, or the root magus engine; one such import would break that build.
-// It stays a leaf over the pure, shared logic (internal/spell, internal/ward, types).
+// It stays a leaf over the pure, shared logic (internal/spellruntime, internal/ward, types).
 package dry
 
 import (

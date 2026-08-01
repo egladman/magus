@@ -10,10 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
-	ispell "github.com/egladman/magus/internal/spell"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +45,7 @@ func TestSupersetModules(t *testing.T) {
 
 	hasKey := func(t *testing.T, module, key string) {
 		t.Helper()
-		mod, ok := sess.SyntheticModule(module)
+		mod, ok := sess.NativeModule(module)
 		require.True(t, ok, "module %q not registered", module)
 		_, ok = mod.MapGet(key)
 		assert.True(t, ok, "module %q missing key %q", module, key)
@@ -76,16 +77,38 @@ func TestSupersetModules(t *testing.T) {
 
 	// The aggregate import and its byte-level siblings are gone.
 	for _, gone := range []string{"magus/extra", "magus/extra/http", "magus/extra/crypto"} {
-		_, ok := sess.SyntheticModule(gone)
+		_, ok := sess.NativeModule(gone)
 		assert.False(t, ok, "module %q should no longer be registered", gone)
 	}
 }
 
+func TestRegisterModuleSurfaceWithModules(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+
+	modules := bindinggen.Modules.With("json", bindinggen.ModuleReg{
+		Register: func(context.Context, *buzz.Session) vm.Value {
+			m := vm.NewMap()
+			m.MapSet("mocked", vm.StrValue("json"))
+			return m
+		},
+		Capabilities: bindinggen.Capabilities(bindinggen.WASM),
+	})
+	RegisterModuleSurface(ctx, sess, WithModules(modules))
+
+	json, ok := sess.NativeModule("json")
+	require.True(t, ok)
+	mocked, ok := json.MapGet("mocked")
+	require.True(t, ok)
+	assert.Equal(t, "json", mocked.String())
+}
+
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
-// toml, and uuid unreachable after they were added to std/ with host/gen
+// toml, and uuid unreachable after they were added to std/ with generated bindings
 // trampolines but omitted from magusModules. Every module std.All() reports, save
-// the hand-assembled "magus" namespace, must resolve as a synthetic module with
+// the hand-assembled "magus" namespace, must resolve as a native module with
 // its first declared method present.
 func TestEveryHostModuleIsWired(t *testing.T) {
 	ctx := context.Background()
@@ -99,14 +122,14 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 		if m.Name == "magus" {
 			continue
 		}
-		mod, ok := sess.SyntheticModule(m.Name)
+		mod, ok := sess.NativeModule(m.Name)
 		if !assert.Truef(t, ok, "host module %q is declared in std but not wired into a Buzz session; add it to magusModules", m.Name) {
 			continue
 		}
 		if len(m.Methods) == 0 {
 			continue
 		}
-		key := host.CamelCase(m.Methods[0].Name)
+		key := std.CamelCase(m.Methods[0].Name)
 		if bn := m.Methods[0].BuzzName; bn != "" {
 			key = bn
 		}
@@ -121,11 +144,11 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := host.Modules("") // what `magus describe modules` formats
+	core := std.DescribeModules("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := host.ValueToAny(host.MapsVal(core)).([]any)
+	got, ok := bindinggen.ValueToAny(bindinggen.MapsVal(core)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -135,7 +158,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := host.Modules("fs")
+	fs := std.DescribeModules("fs")
 	require.Len(t, fs, 1)
 	require.NotEmpty(t, fs[0].Methods)
 	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
@@ -303,7 +326,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 
 // TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
-// end-to-end: the magus-utils bindings-emitted host/gen trampolines must decode a variadic
+// end-to-end: the magus-utils generated trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
 // charm.append), with camelCase methods (Buzz's convention).
@@ -1184,22 +1207,22 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 const testBoundaryTypesPath = "test/boundary-types"
 
 var testBoundaryTypesSource = strings.Join([]string{
-	ispell.ExecResultSource,
-	ispell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-	ispell.CommitSource,
-	ispell.FileInfoSource,
-	ispell.HTTPResponseSource,
-	ispell.SemverVersionSource,
-	ispell.SemverNextSource,
-	ispell.URLSource,
-	ispell.TagSource, // Tag.version is SemverVersion, so it must follow that source
-	ispell.ProjectEntrySource,
-	ispell.ProjectsSource,
-	ispell.AffectedSource,
-	ispell.GraphSource,
-	ispell.ModuleFieldEntrySource,
-	ispell.ModuleMethodEntrySource,
-	ispell.ModuleSource,
+	spellruntime.ExecResultSource,
+	spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+	spellruntime.CommitSource,
+	spellruntime.FileInfoSource,
+	spellruntime.HTTPResponseSource,
+	spellruntime.SemverVersionSource,
+	spellruntime.SemverNextSource,
+	spellruntime.URLSource,
+	spellruntime.TagSource, // Tag.version is SemverVersion, so it must follow that source
+	spellruntime.ProjectEntrySource,
+	spellruntime.ProjectsSource,
+	spellruntime.AffectedSource,
+	spellruntime.GraphSource,
+	spellruntime.ModuleFieldEntrySource,
+	spellruntime.ModuleMethodEntrySource,
+	spellruntime.ModuleSource,
 }, "\n")
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a
@@ -1248,7 +1271,7 @@ func assertMirrorConstructs(t *testing.T, object string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
-	s.SetSourceModule(testBoundaryTypesPath, testBoundaryTypesSource)
+	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	require.NoError(t, s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{};`),
 		"%s{} must construct: the mirror is missing from the bundle, ordered after a type it references, or emitted with a field name that does not parse", object)
 	require.NotNil(t, s.GetGlobal("__r"), "%s{} produced nothing", object)
@@ -1264,7 +1287,7 @@ func TestMirrorFieldsMatchBuzzObject(t *testing.T) {
 		object string
 		toMap  map[string]any
 	}{
-		{"Tag", types.Tag{}.BuzzObject()},
+		{"Tag", types.VCSTag{}.BuzzObject()},
 		{"Affected", types.AffectedResult{}.BuzzObject()},
 		{"Graph", types.GraphView{}.BuzzObject()},
 		{"Projects", types.ProjectsOutput{}.BuzzObject()},
@@ -1292,7 +1315,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	ctx := context.Background()
 	s := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = s.Close() })
-	s.SetSourceModule(testBoundaryTypesPath, testBoundaryTypesSource)
+	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	err := s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{}.`+field+`;`)
 	assert.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
 }
@@ -1312,7 +1335,7 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 	t.Parallel()
 	owners := []any{
 		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
-		types.SemverVersion{}, types.URL{}, types.Tag{}, types.ProjectEntry{},
+		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
 		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}

@@ -59,8 +59,8 @@ _ ".../internal/interp/engine/buzz"
 A spell exports a fixed set of `mgs_`-prefixed functions (see
 [spells.md](spells.md#authoring-a-custom-spell)). The list of optional functions
 and the decoder keys they map to is **single-sourced** in
-[`internal/spell/contract.go`](../../internal/spell/contract.go) as
-`OptionalContract`, and the Buzz resolver (`internal/spell/resolve.go`) iterates
+[`internal/spellruntime/contract.go`](../../internal/spellruntime/contract.go) as
+`OptionalContract`, and the Buzz resolver (`internal/spellruntime/resolve.go`) iterates
 that one list. A spell's `mgs_` functions decode to a `Spec` for every scalar and
 list contribution (`needs`, `provides`, `claims`, `version_cmd`, `opaque`) and
 for record-shaped ops (`{bin, args, charms}`).

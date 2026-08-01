@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +41,7 @@ func sampleInputs() Inputs {
 				},
 			},
 		},
-		Spells: []types.SpellEntry{
+		Spells: []types.Spell{
 			{Name: "go", Targets: []string{"go-build", "go-test"}, TargetDocs: map[string]string{"go-build": "Compile."}},
 		},
 		Modules: []types.ModuleEntry{{
@@ -196,9 +196,9 @@ func TestOutputMetadata(t *testing.T) {
 // TestDeterministicSerialization guards the byte-identical-output invariant that
 // cache fingerprinting and golden diffs depend on.
 func TestDeterministicSerialization(t *testing.T) {
-	a, err := codec.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
+	a, err := json.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
 	require.NoError(t, err)
-	b, err := codec.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
+	b, err := json.Marshal(mergeAll(AssembleShards(sampleInputs())).Output())
 	require.NoError(t, err)
 	assert.Equal(t, string(a), string(b))
 }
@@ -214,8 +214,8 @@ func TestMergeOrderIndependence(t *testing.T) {
 	}
 	backward := mergeAll(reversed).Output()
 
-	fwd, _ := codec.Marshal(forward)
-	bwd, _ := codec.Marshal(backward)
+	fwd, _ := json.Marshal(forward)
+	bwd, _ := json.Marshal(backward)
 	assert.Equal(t, string(fwd), string(bwd))
 }
 

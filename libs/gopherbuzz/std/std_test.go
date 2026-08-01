@@ -46,7 +46,7 @@ func TestRegisterNoPanic(t *testing.T) {
 }
 
 // TestAllModulesImportable verifies that every standard module can be imported
-// by name (no file-not-found error for synthetic modules).
+// by name (no file-not-found error for native modules).
 func TestAllModulesImportable(t *testing.T) {
 	for _, mod := range []string{"std", "math", "fs", "os", "crypto", "gc", "debug", "io", "serialize", "buffer", "ffi"} {
 		t.Run(mod, func(t *testing.T) {

@@ -1,5 +1,5 @@
 // Command magus-spelldocs generates Markdown reference documentation for every
-// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs: walk
+// built-in spell in the internal/spellruntime registry. It mirrors cmd/magus-docs: walk
 // the registry, emit one page per spell to docs/spells/<name>.md (injecting a
 // per-op example from spells/examples/<name>/<op>.buzz), and refresh the
 // built-in-spell table on the /spells/ landing (docs/spells.md) between its marker
@@ -26,9 +26,9 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/docs"
-	ispell "github.com/egladman/magus/internal/spell"
+	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/spells"
 )
 
@@ -133,7 +133,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	builtins := ispell.Builtins()
+	builtins := spellruntime.Builtins()
 	names := make([]string, 0, len(builtins))
 	for name := range builtins {
 		if _, ok := spellMeta[name]; !ok {

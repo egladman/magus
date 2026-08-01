@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../host/gen/charm.go
+//go:generate go run ../cmd/magus-utils bindings -module charm -lang buzz -out ../internal/interp/bindings/gen/charm.go
 
 func init() { Register(Charm) }
 

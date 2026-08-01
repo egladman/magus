@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -392,7 +392,7 @@ func TestGHACacheBackendInactiveOutsideGHA(t *testing.T) {
 	}
 }
 
-// TestCanonicalSpellModule verifies the embedded "magus/spell" source module
+// TestCanonicalSpellModule verifies the embedded "magus/spell" declarations
 // imports through the normal host-module registration and its Target/Charm
 // types resolve in both annotations and (nested) literals.
 func TestCanonicalSpellModule(t *testing.T) {

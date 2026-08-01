@@ -8,7 +8,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -41,7 +41,7 @@ type spellOp struct {
 	decodeErr error
 }
 
-// probeSpell resolves a SPELL buffer to its ops. It mirrors internal/spell's
+// probeSpell resolves a SPELL buffer to its ops. It mirrors internal/spellruntime's
 // resolve path (call mgs_listTargets, call each handler once with a null Target,
 // MapView the returned Command/Service), but keeps every op even when warded, so a
 // warded op (10-wards.buzz) still lists and surfaces its diagnostic rather than
@@ -64,7 +64,7 @@ func probeSpell(ctx context.Context, sess *buzz.Session) []spellOp {
 		}
 		// The handler is `fun(t: Target) > Command|Service`. It must be straight-line
 		// and not read the Target, so a null Target is passed (mirroring
-		// internal/spell.traceOp); a value pulled from it would read as null.
+		// internal/spellruntime.traceOp); a value pulled from it would read as null.
 		rv, err := sess.CallValue(ctx, handler, []vm.Value{vm.Null})
 		if err != nil {
 			continue
@@ -86,17 +86,17 @@ func probeSpell(ctx context.Context, sess *buzz.Session) []spellOp {
 // bin/args/charms directly. Both route through the shared spell.DecodeCommandValue so
 // the sandbox and the engine read a command identically; a decode error is carried on
 // the op (decodeErr) so `run` can surface it. Mirrors the service-vs-command decision
-// in internal/spell.traceOp / decode.
+// in internal/spellruntime.traceOp / decode.
 func decodeSpellOp(name string, mv vm.Value) spellOp {
 	if cmdV, ok := mv.MapGet("command"); ok {
 		// A Service: its `command` field is the process magus supervises.
 		if cv, ok := cmdV.MapView(); ok {
-			cmd, err := ispell.DecodeCommandValue(cv)
+			cmd, err := spellruntime.DecodeCommandValue(cv)
 			return spellOp{name: name, kind: spells.OpKindService, cmd: cmd, decodeErr: err}
 		}
 		return spellOp{name: name, kind: spells.OpKindService}
 	}
-	cmd, err := ispell.DecodeCommandValue(mv)
+	cmd, err := spellruntime.DecodeCommandValue(mv)
 	return spellOp{name: name, kind: spells.OpKindCommand, cmd: cmd, decodeErr: err}
 }
 
@@ -107,7 +107,7 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 // swallowed, so the dry run refuses the plan exactly as the engine would rather than
 // rendering the un-reshaped command as if the charm applied.
 func (o spellOp) renderCommand(activeNames []string) (string, error) {
-	args, err := ispell.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
+	args, err := spellruntime.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
 	if err != nil {
 		return "", err
 	}

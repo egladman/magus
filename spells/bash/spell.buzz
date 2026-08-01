@@ -2,32 +2,34 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "bash"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
-    return ["**/*.sh", "**/*.bash", ".shellcheckrc"];
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.sh"}, Path{value = "**/*.bash"}, Path{value = ".shellcheckrc"}];
 }
 
 // mgs_listIgnoreDirs names non-source dirs that carry third-party shell, pruned from
 // source discovery the same way the typescript and python spells prune theirs.
-export fun mgs_listIgnoreDirs() > [str] { return ["node_modules"]; }
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "node_modules", isDir = true}, Path{value = ".claude/worktrees", isDir = true}];
+}
 
 // One shellcheck invocation over every shell source: find feeds xargs with NUL
 // separators, and -r skips running shellcheck on an empty set.
 //
-// node_modules is pruned inside the find too, not just declared above: a declared
-// ignore dir shapes what magus treats as sources, but this op's find is its own walk,
-// so without the prune a single JS dependency shipping a .sh file fails the lint of a
-// repo that owns none of it.
+// node_modules and .claude/worktrees are pruned inside the find too, not just
+// declared above: a declared ignore dir shapes what magus treats as sources, but this
+// op's find is its own walk. Without the prunes, third-party shell files or stale
+// agent worktrees make the current project fail lint for code it does not own.
 //
 // TODO: this prune is a stopgap and duplicates knowledge the engine already has. An op
 // handler is called ONCE with a null Target and reduced to static {cmd, args} (see
-// recordOp in internal/spell/resolve.go), so it cannot expand a file list itself - the
+// recordOp in internal/spellruntime/resolve.go), so it cannot expand a file list itself - the
 // `sh -c find` is what defers the walk to execution time in the project dir. The fix is
 // engine-side: let an op declare a sources placeholder that the runner expands per
 // project from expandSources(..., IgnoreDirs), the same walk that builds cache keys.
 // Then every spell inherits the declared ignore dirs instead of hardcoding names here.
 fun shellcheck(target: Target) > Command {
     return Command{bin = "sh", args = ["-c",
-        "find . -name node_modules -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]};
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

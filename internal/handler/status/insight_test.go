@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )

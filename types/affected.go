@@ -13,19 +13,3 @@ type AffectedResult struct {
 
 // ErrAffectedFallback is returned when the VCS cannot compute a definitive changed-files set.
 var ErrAffectedFallback = errors.New("affected: cannot compute affected set")
-
-// BuzzObject is the Buzz boundary map magus.affected returns. FilesBySeed is flattened
-// to a map of lists so a magusfile can index it by seed path directly.
-func (r AffectedResult) BuzzObject() BuzzObject {
-	filesBySeed := make(map[string]any, len(r.FilesBySeed))
-	for seed, files := range r.FilesBySeed {
-		filesBySeed[seed] = files
-	}
-	return map[string]any{
-		"base":        r.Base,
-		"changed":     r.Changed,
-		"seed":        r.Seed,
-		"filesBySeed": filesBySeed,
-		"affected":    r.Affected,
-	}
-}
