@@ -9903,7 +9903,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.",
-      "source": "evals/magusfile.buzz:68",
+      "source": "evals/magusfile.buzz:69",
       "attrs": {
         "exported": "true"
       }
@@ -9913,7 +9913,7 @@
       "kind": "function",
       "label": "grid",
       "doc": "grid is the full run: every skill, both permutations, every model, 5 trials. Minutes-to-hours and real money. Never on the PR path.",
-      "source": "evals/magusfile.buzz:60",
+      "source": "evals/magusfile.buzz:61",
       "attrs": {
         "exported": "true"
       }
@@ -9922,15 +9922,15 @@
       "id": "function:evals/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.",
-      "source": "evals/magusfile.buzz:31"
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled install can leave a node_modules directory that exists but is incomplete, so isDir alone is not a valid readiness check.",
+      "source": "evals/magusfile.buzz:34"
     },
     {
       "id": "function:evals/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists. No network, no API key.",
-      "source": "evals/magusfile.buzz:45",
+      "source": "evals/magusfile.buzz:46",
       "attrs": {
         "exported": "true"
       }
@@ -9949,7 +9949,7 @@
       "kind": "function",
       "label": "smoke",
       "doc": "smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.",
-      "source": "evals/magusfile.buzz:52",
+      "source": "evals/magusfile.buzz:53",
       "attrs": {
         "exported": "true"
       }
@@ -20678,8 +20678,8 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out7bd0ec85",
-        "last_run_ok": "false"
+        "last_output_ref": "out34eb27da",
+        "last_run_ok": "true"
       }
     },
     {
@@ -20711,7 +20711,9 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outa6ed21a8",
+        "last_run_ok": "false"
       }
     },
     {
@@ -20764,7 +20766,9 @@
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out782dcdad",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21099,7 +21103,9 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "outc809bd4e",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21283,7 +21289,9 @@
       "doc": "ci is LINT ONLY, deliberately.",
       "source": "evals",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out8ddd849c",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21343,7 +21351,9 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out0f659f4c",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21362,7 +21372,9 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz"
+        "engine": "buzz",
+        "last_output_ref": "out57ccbdab",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21420,7 +21432,7 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out4e97d542",
+        "last_output_ref": "out3b646804",
         "last_run_ok": "true"
       }
     },
@@ -21443,8 +21455,8 @@
       "source": "libs/gopherbuzz",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out05d1d43a",
-        "last_run_ok": "false"
+        "last_output_ref": "out3a10f6d0",
+        "last_run_ok": "true"
       }
     },
     {
@@ -21532,7 +21544,7 @@
       "source": "libs/textsearch",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out8b522be4",
+        "last_output_ref": "out9b73505a",
         "last_run_ok": "true"
       }
     },
@@ -21593,7 +21605,7 @@
       "source": "proto",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out9bcadae7",
+        "last_output_ref": "outf99b65d7",
         "last_run_ok": "true"
       }
     },
