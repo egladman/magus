@@ -48,6 +48,15 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 		Ts: 3, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws/a",
 		Action: "graph build", Outcome: trail.OutcomeError, Error: "boom", DurMs: 40,
 	})
+	agentReqBody := []byte(`{"schema_version":1,"tool":"Bash","command":"go test ./..."}`)
+	agentRespBody := []byte(`{"schema_version":1,"decision":"deny","reason":"use magus"}`)
+	agentReq, _ := trail.WriteBlob(dir, "agent", agentReqBody)
+	agentResp, _ := trail.WriteBlob(dir, "agent", agentRespBody)
+	trail.Append(dir, trail.Event{
+		Ts: 4, Kind: trail.KindAgentCommand, Actor: "session:abc", Workspace: "/ws/a",
+		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
+		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
+	})
 	return dir, respRef
 }
 
@@ -58,20 +67,28 @@ func TestListActivity_MapsAndOrdersNewestFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	events := resp.Msg.GetEvents()
-	require.Len(t, events, 3)
-	// newest first: the KIND_JOB event carries its workspace and error outcome
-	assert.Equal(t, "graph build", events[0].GetAction())
-	assert.Equal(t, activityv1.Kind_KIND_JOB, events[0].GetKind())
+	require.Len(t, events, 4)
+	// newest first: an agent observation preserves its payload references and workspace.
+	assert.Equal(t, "Bash", events[0].GetAction())
+	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
+	assert.Equal(t, "session:abc", events[0].GetActor())
 	assert.Equal(t, "/ws/a", events[0].GetWorkspace())
-	assert.Equal(t, activityv1.Outcome_OUTCOME_ERROR, events[0].GetOutcome())
-	assert.Equal(t, "boom", events[0].GetError())
-	assert.Equal(t, "connector.create", events[1].GetAction())
-	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, events[1].GetKind())
-	assert.Empty(t, events[1].GetWorkspace()) // a non-workspace action leaves it empty
-	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[2].GetKind())
-	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, events[2].GetOutcome())
-	assert.Equal(t, "magus_query", events[2].GetAction())
-	require.NotNil(t, events[2].GetDuration())
+	assert.Equal(t, "guard: deny", events[0].GetPreview())
+	assert.NotEmpty(t, events[0].GetRequestRef())
+	assert.NotEmpty(t, events[0].GetResponseRef())
+
+	assert.Equal(t, "graph build", events[1].GetAction())
+	assert.Equal(t, activityv1.Kind_KIND_JOB, events[1].GetKind())
+	assert.Equal(t, "/ws/a", events[1].GetWorkspace())
+	assert.Equal(t, activityv1.Outcome_OUTCOME_ERROR, events[1].GetOutcome())
+	assert.Equal(t, "boom", events[1].GetError())
+	assert.Equal(t, "connector.create", events[2].GetAction())
+	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, events[2].GetKind())
+	assert.Empty(t, events[2].GetWorkspace()) // a non-workspace action leaves it empty
+	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[3].GetKind())
+	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, events[3].GetOutcome())
+	assert.Equal(t, "magus_query", events[3].GetAction())
+	require.NotNil(t, events[3].GetDuration())
 }
 
 func TestListActivity_FilterByKind(t *testing.T) {
@@ -84,6 +101,14 @@ func TestListActivity_FilterByKind(t *testing.T) {
 	events := resp.Msg.GetEvents()
 	require.Len(t, events, 1)
 	assert.Equal(t, "magus_query", events[0].GetAction())
+}
+
+func TestListActivity_FilterAgentCommand(t *testing.T) {
+	dir, _ := seedTrail(t)
+	events := list(t, dir, &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_AGENT_COMMAND}})
+	require.Len(t, events, 1)
+	assert.Equal(t, "Bash", events[0].GetAction())
+	assert.Equal(t, "session:abc", events[0].GetActor())
 }
 
 func TestGetPayload_RoundTripAndReject(t *testing.T) {
@@ -159,6 +184,8 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 	assert.Equal(t, activityv1.Kind_KIND_CONFIG_CHANGE, encodeKind(trail.KindConfigChange))
 	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, encodeKind(trail.KindTokenLifecycle))
 	assert.Equal(t, activityv1.Kind_KIND_SANDBOX_DENIAL, encodeKind(trail.KindSandboxDenial))
+	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, encodeKind(trail.KindAgentCommand))
+	assert.Equal(t, activityv1.Kind_KIND_MEMORY, encodeKind(trail.KindMemory))
 	assert.Equal(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind("who-knows"))
 
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, encodeOutcome(trail.OutcomeOK))

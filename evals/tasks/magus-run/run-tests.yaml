@@ -1,0 +1,12 @@
+id: run-tests
+skill: magus-run
+smoke: true
+prompt: |
+  Run the test suite for this workspace and report the result.
+constraints:
+  - fn: usedSkill
+    args: [magus-run]
+  - fn: ranMagusTarget
+    args: [test]
+  - fn: neverRan
+    args: [RAW_GO, raw-go]

@@ -1,22 +1,22 @@
 # Recent changes in a magus workspace
 
 Turn a large workspace's recent change history into a short, evidence-backed
-brief.<!-- why --> The output is a decision aid, not a chronological commit dump.<!-- /why -->
+brief.{{if .Full}} The output is a decision aid, not a chronological commit dump.{{end}}
 
 ## Gather evidence
 
 1. Get the project map and target vocabulary from the workspace: `magus ls`
    for projects, `magus describe targets` for the target vocabulary. Do not
-   read `MAGUS.md` for this<!-- why --> - it is a generated index for human readers, and
-   a history brief that describes stale structure is worse than none<!-- /why -->.
-2. Establish the requested time boundary.<!-- why --> On Git, inspect merge commits first:<!-- /why -->
+   read `MAGUS.md` for this{{if .Full}} - it is a generated index for human readers, and
+   a history brief that describes stale structure is worse than none{{end}}.
+2. Establish the requested time boundary.{{if .Full}} On Git, inspect merge commits first:{{end}}
 
    ```sh
    git log --first-parent --merges --since="<window>" --format='%h %ad %s' --date=short
    ```
 
-   If no VCS merge history is available, say so.<!-- why --> Use `magus insight trend` and
-   `magus insight hotspots --files` for activity, but do not call that a merge summary.<!-- /why -->
+   If no VCS merge history is available, say so.{{if .Full}} Use `magus insight trend` and
+   `magus insight hotspots --files` for activity, but do not call that a merge summary.{{end}}
 3. For each candidate change, list its files, then classify them before reading:
 
    ```sh
@@ -24,8 +24,8 @@ brief.<!-- why --> The output is a decision aid, not a chronological commit dump
    magus describe file <paths...>
    ```
 
-   Ignore generated outputs when identifying the change<!-- why -->; trace them to their
-   declared source and generator instead<!-- /why -->.
+   Ignore generated outputs when identifying the change{{if .Full}}; trace them to their
+   declared source and generator instead{{end}}.
 4. Map the source files to projects and graph entities. Prefer MCP
    `magus_query`, `magus_explain`, and `magus_describe_file`; otherwise use:
 
@@ -36,8 +36,8 @@ brief.<!-- why --> The output is a decision aid, not a chronological commit dump
    ```
 
 5. Use `magus insight affinity`, `ownership`, and `trend` only to add context:
-   hidden coupling, ownership risk, or unusually rising activity.<!-- why --> They do not
-   prove that a feature landed.<!-- /why -->
+   hidden coupling, ownership risk, or unusually rising activity.{{if .Full}} They do not
+   prove that a feature landed.{{end}}
 
 ## Write the brief
 
@@ -68,13 +68,13 @@ Use this shape:
 ```
 
 Do not label a refactor, generated-output refresh, dependency bump, or failed
-experiment as a landed feature unless the source and graph evidence support it.<!-- why -->
+experiment as a landed feature unless the source and graph evidence support it.{{if .Full}}
 Link to the relevant documentation page or generated manpage when it explains a
-new command, target, diagnostic, or workflow.<!-- /why -->
+new command, target, diagnostic, or workflow.{{end}}
 
 ## Write a CHANGELOG entry
 
-<!-- why -->A brief is for a person catching up; a changelog entry is a durable record.<!-- /why --> When
+{{if .Full}}A brief is for a person catching up; a changelog entry is a durable record.{{end}} When
 the ask is "add this to the changelog", match the file's existing shape - Keep a
 Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
 
@@ -89,20 +89,20 @@ Changelog 1.1.0 with SemVer - and append under `## [Unreleased]`:
 Rules for an entry, all checkable:
 
 - Name every surface it adds: the config key WITH its env var, the CLI flag, the
-  diagnostic code, the target.<!-- why --> A reader upgrades by searching for those strings.<!-- /why -->
+  diagnostic code, the target.{{if .Full}} A reader upgrades by searching for those strings.{{end}}
 - Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Do not invent one.
-- Write behaviour, not implementation.<!-- why --> "The graph indexes the build I/O layer" is an
-  entry; "refactored the extractor" is not.<!-- /why -->
-- One entry per user-visible change, not per commit.<!-- why --> Squash a fix-up into the entry
-  for the thing it fixed up.<!-- /why -->
-- `CHANGELOG.md` is a SOURCE file, not generated<!-- why --> - confirm with
-  `magus describe file CHANGELOG.md` if unsure, and edit it directly<!-- /why -->.
+- Write behaviour, not implementation.{{if .Full}} "The graph indexes the build I/O layer" is an
+  entry; "refactored the extractor" is not.{{end}}
+- One entry per user-visible change, not per commit.{{if .Full}} Squash a fix-up into the entry
+  for the thing it fixed up.{{end}}
+- `CHANGELOG.md` is a SOURCE file, not generated{{if .Full}} - confirm with
+  `magus describe file CHANGELOG.md` if unsure, and edit it directly{{end}}.
 
 ## Answer a granular diff question
 
-When the ask narrows to "what exactly changed in X", stay on magus surfaces<!-- why -->: they
-classify and relate, where a raw diff only shows text<!-- /why -->.
+When the ask narrows to "what exactly changed in X", stay on magus surfaces{{if .Full}}: they
+classify and relate, where a raw diff only shows text{{end}}.
 
 | question | command |
 | --- | --- |
@@ -114,11 +114,11 @@ classify and relate, where a raw diff only shows text<!-- /why -->.
 | where is this symbol defined and used | `magus refs <symbol>` |
 | what did a target actually output | `magus query output <ref>` |
 
-`magus graph diff` is the one to reach for first on a branch review<!-- why -->: it reports the
+`magus graph diff` is the one to reach for first on a branch review{{if .Full}}: it reports the
 nodes and edges added, removed, or changed, which is blast radius as data rather
-than a file list to interpret<!-- /why -->. Pair it with `magus describe file` so a diff of 300
+than a file list to interpret{{end}}. Pair it with `magus describe file` so a diff of 300
 paths collapses to the handful that are declared sources.
 
-<!-- why -->Raw VCS commands answer what only the VCS knows: who committed, when, and in which
+{{if .Full}}Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did. Reading a raw diff to work out
-what a change affects is the work these verbs already did.<!-- /why --><!-- terse -->Raw VCS answers who and when; the table answers what the change did.<!-- /terse -->
+what a change affects is the work these verbs already did.{{else}}Raw VCS answers who and when; the table answers what the change did.{{end}}

@@ -78,6 +78,87 @@ func TestAppend_EmptyBaseIsNoop(t *testing.T) {
 	Append("", Event{Action: "x"}) // must not panic or create anything
 }
 
+func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(dir, AgentCommand{
+		Actor:     "session:abc123",
+		Workspace: "/repo/magus",
+		Host:      "codex",
+		Session:   "abc123",
+		Event:     "PreToolUse",
+		Tool:      "Bash",
+		Command:   "magus run test .",
+		Decision:  "pass",
+	})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	event := events[0]
+	require.Equal(t, KindAgentCommand, event.Kind)
+	require.Equal(t, "session:abc123", event.Actor)
+	require.Equal(t, "/repo/magus", event.Workspace)
+	require.Equal(t, "Bash", event.Action)
+	require.Equal(t, OutcomeOK, event.Outcome)
+	require.Equal(t, "guard: pass", event.Preview)
+
+	request, err := ReadBlob(dir, event.RequestRef)
+	require.NoError(t, err)
+	var gotRequest agentCommandRequest
+	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.Equal(t, agentCommandRequest{
+		SchemaVersion: agentCommandSchemaVersion,
+		Host:          "codex",
+		Session:       "abc123",
+		Event:         "PreToolUse",
+		Tool:          "Bash",
+		Command:       "magus run test .",
+	}, gotRequest)
+
+	response, err := ReadBlob(dir, event.ResponseRef)
+	require.NoError(t, err)
+	var gotResponse agentCommandResponse
+	require.NoError(t, json.Unmarshal(response, &gotResponse))
+	require.Equal(t, agentCommandResponse{SchemaVersion: agentCommandSchemaVersion, Decision: "pass"}, gotResponse)
+}
+
+func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(dir, AgentCommand{Tool: "Bash", Decision: "pass"})
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Empty(t, events)
+}
+
+func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	event := events[0]
+	require.Equal(t, "agent", event.Actor)
+	require.Equal(t, "command", event.Action)
+	require.Equal(t, "guard: advise", event.Preview)
+
+	request, err := ReadBlob(dir, event.RequestRef)
+	require.NoError(t, err)
+	var gotRequest agentCommandRequest
+	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.Equal(t, agentCommandRequest{SchemaVersion: agentCommandSchemaVersion, Path: "AGENTS.md"}, gotRequest)
+
+	response, err := ReadBlob(dir, event.ResponseRef)
+	require.NoError(t, err)
+	var gotResponse agentCommandResponse
+	require.NoError(t, json.Unmarshal(response, &gotResponse))
+	require.Equal(t, agentCommandResponse{
+		SchemaVersion: agentCommandSchemaVersion,
+		Decision:      "advise",
+		Context:       "record the decision",
+	}, gotResponse)
+}
+
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	dir := t.TempDir()
 	ref, size := WriteBlob(dir, "mcp", []byte("payload one"))

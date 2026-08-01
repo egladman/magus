@@ -99,6 +99,11 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- Agent skill version 22. Skills now render their full and simple permutations
+  with standard-library `text/template` branches (`{{if .Full}}`, `{{else}}`,
+  `{{if .Simple}}`) instead of private HTML-comment markers. Installation now
+  fails loudly for malformed template syntax, while a parse-tree guard keeps
+  bodies limited to deterministic wording branches.
 - `magus\normalize(name)` canonicalizes any entity name from a magusfile - the same
   function targets, charms and spell ops resolve through. It is also live in the browser
   playground, so [the name-normalization docs](https://eli.gladman.cc/magus/concepts/targets/)

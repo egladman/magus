@@ -50,6 +50,19 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusAffectedResult(ret0), nil
 	}))
+	m.MapSet("goModReplaceArgs", vm.DirectValue("magus.goModReplaceArgs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusGoModReplaceArgs(ctx)
+		if err != nil {
+			return vm.Null, err
+		}
+		return StrSliceVal(ret0), nil
+	}))
+	m.MapSet("goModReplaceCheck", vm.DirectValue("magus.goModReplaceCheck", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		if err := std.MagusGoModReplaceCheck(ctx); err != nil {
+			return vm.Null, err
+		}
+		return vm.Null, nil
+	}))
 	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGraph(ctx)
 		if err != nil {

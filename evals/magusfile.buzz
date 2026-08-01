@@ -1,0 +1,70 @@
+import "magus";
+import "fs";
+import "os";
+
+import "magus/spell/magusfile";
+
+// The skill-eval harness. Measures whether an installed skill actually changes
+// agent behaviour, per permutation and per model, instead of leaving that to
+// judgement. Live model runs are opt-in: `ci` is lint-only so `magus affected ci`
+// stays offline and keyless.
+magus\project({
+    "spells": [magusfile],
+    "sources": ["magusfile.buzz", "*.buzz",
+                "tasks/**/*.yaml", "lib/**/*.mjs", "tools/**/*.mjs", "tools/**/*.py",
+                "promptfooconfig.*.yaml",
+                "fixtures/**", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
+                "pnpm-workspace.yaml"],
+    "outputs": ["results/**"],
+    "targets": {
+        // These targets deliberately produce no result artifact. The live smoke
+        // and grid targets retain the project output snapshot.
+        "preflight": {"skip_cache": true},
+        "lint": {"skip_cache": true},
+        "ci": {"skip_cache": true},
+    },
+});
+
+export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+fun install() > void {
+    if (!fs\isDir("node_modules")) {
+        if (fs\isFile("pnpm-lock.yaml")) {
+            os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+        } else {
+            // The first bootstrap establishes the committed lock. Every later
+            // install is frozen, so CI cannot resolve a newer dependency graph.
+            os\exec("pnpm", ["install"], ".", {});
+        }
+    }
+}
+
+// lint validates every task file against the schema and checks that each named
+// constraint predicate exists. No network, no API key.
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    install();
+    os\exec("pnpm", ["run", "lint"], ".", {});
+}
+
+// smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
+export fun smoke(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    install();
+    os\exec("pnpm", ["run", "smoke"], ".", {});
+}
+
+// grid is the full run: every skill, both permutations, every model, 5 trials.
+// Minutes-to-hours and real money. Never on the PR path.
+export fun grid(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    install();
+    os\exec("pnpm", ["run", "grid"], ".", {});
+}
+
+// ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have,
+// and a keyless environment must not fail this gate.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint);
+}

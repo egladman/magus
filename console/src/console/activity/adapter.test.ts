@@ -40,6 +40,7 @@ test("kindLabel maps every kind to its terse tag", () => {
   assert.equal(kindLabel(Kind.CONFIG_CHANGE), "config");
   assert.equal(kindLabel(Kind.TOKEN_LIFECYCLE), "token");
   assert.equal(kindLabel(Kind.SANDBOX_DENIAL), "sandbox");
+  assert.equal(kindLabel(Kind.AGENT_COMMAND), "agent");
   assert.equal(kindLabel(Kind.UNSPECIFIED), "event");
 });
 
@@ -75,6 +76,23 @@ test("an ok mcp call accents pass and heads with action+actor", () => {
   assert.equal(sec.lines[0], sec.title);
   assert.match(sec.title, /magus_query {2}agent:claude/);
   assert.match(sec.title, /mcp - ok/);
+});
+
+test("an agent command observation renders as an agent event, not an execution result", () => {
+  const sec = eventSection(
+    ev({
+      kind: Kind.AGENT_COMMAND,
+      action: "Bash",
+      actor: "session:abc",
+      preview: "guard: deny",
+      outcome: Outcome.OK,
+    }),
+  );
+  assert.equal(sec.meta?.label, "agent");
+  assert.equal(sec.meta?.status, "pass");
+  assert.match(sec.title, /Bash {2}session:abc/);
+  assert.match(sec.title, /agent - ok/);
+  assert.ok(sec.lines.includes("guard: deny"));
 });
 
 test("an errored call accents fail and leads its body with the error text", () => {
@@ -119,13 +137,14 @@ test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps origina
     ev({ kind: Kind.MCP_TOOL_CALL, action: "m1" }),
     ev({ kind: Kind.JOB, action: "j2" }),
     ev({ kind: Kind.SANDBOX_DENIAL, action: "s3", outcome: Outcome.ERROR }),
+    ev({ kind: Kind.AGENT_COMMAND, action: "Bash" }),
   ];
   const groups = groupEventsByKind(events);
   // MCP leads the fixed order even though a Job appeared first in the page; Config/Token have no
   // events and are absent.
   assert.deepEqual(
     groups.map((g) => g.label),
-    ["MCP tool calls", "Jobs", "Sandbox denials"],
+    ["MCP tool calls", "Jobs", "Sandbox denials", "Agent commands"],
   );
   // Jobs bucket keeps page order and original indices (0 then 2).
   const jobs = groups.find((g) => g.label === "Jobs");
@@ -136,6 +155,7 @@ test("groupEventsByKind buckets in fixed order, drops empty kinds, keeps origina
   assert.equal(jobs?.events[0].event.action, "j0");
   // The sandbox denial keeps its index 3, so the view can reach section 3.
   assert.equal(groups.find((g) => g.label === "Sandbox denials")?.events[0].index, 3);
+  assert.equal(groups.find((g) => g.label === "Agent commands")?.events[0].index, 4);
 });
 
 test("groupEventsByKind collects an unknown kind under Other", () => {

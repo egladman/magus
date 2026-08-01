@@ -23,6 +23,8 @@ export function kindLabel(kind: Kind): string {
       return "token";
     case Kind.SANDBOX_DENIAL:
       return "sandbox";
+    case Kind.AGENT_COMMAND:
+      return "agent";
     default:
       return "event";
   }
@@ -121,6 +123,7 @@ const KIND_GROUP_ORDER: ReadonlyArray<{ kind: Kind; label: string }> = [
   { kind: Kind.CONFIG_CHANGE, label: "Config changes" },
   { kind: Kind.TOKEN_LIFECYCLE, label: "Token lifecycle" },
   { kind: Kind.SANDBOX_DENIAL, label: "Sandbox denials" },
+  { kind: Kind.AGENT_COMMAND, label: "Agent commands" },
 ];
 
 // groupEventsByKind buckets a page of events into the fixed kind order, dropping empty groups so the

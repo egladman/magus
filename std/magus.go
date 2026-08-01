@@ -4,10 +4,14 @@ package std
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -61,6 +65,17 @@ var Magus = Module{
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "AffectedResult"}},
 			Impl:    MagusAffected,
+		},
+		{
+			Name:    "go_mod_replace_args",
+			Doc:     "Derive go mod edit flags that make this Go module replace its workspace-local requirements with their relative project paths. Reads go.mod through `go mod edit -json`; it never writes the file.",
+			Returns: []Ret{{Type: TypeStringSlice}},
+			Impl:    MagusGoModReplaceArgs,
+		},
+		{
+			Name: "go_mod_replace_check",
+			Doc:  "Raise MGS1016 when this Go module's workspace-local replace directives drift from the workspace project graph. Writes nothing.",
+			Impl: MagusGoModReplaceCheck,
 		},
 		{
 			Name:    "graph",
@@ -219,6 +234,193 @@ func MagusAffected(ctx context.Context, base string) (types.AffectedResult, erro
 		return types.AffectedResult{}, err
 	}
 	return *res, nil
+}
+
+// MagusGoModReplaceArgs derives the go mod edit flags for the Go module in the
+// contextual project directory. It reads every workspace go.mod through the Go
+// toolchain, but deliberately leaves applying those flags to the go spell so a
+// go.mod write remains a visible, sandboxed command operation.
+func MagusGoModReplaceArgs(ctx context.Context) ([]string, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil, errors.New("magus.goModReplaceArgs: no workspace on the context (callable from a magusfile target, not a bare script)")
+	}
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("magus.goModReplaceArgs: current directory: %w", err)
+	}
+	var project *types.Project
+	for _, candidate := range ws.All() {
+		if sameDirectory(candidate.Dir, dir) {
+			project = candidate
+			break
+		}
+	}
+	if project == nil {
+		return nil, fmt.Errorf("magus.goModReplaceArgs: %s is not inside a workspace project", dir)
+	}
+
+	mods := make([]goMod, 0)
+	for _, candidate := range ws.All() {
+		if _, err := os.Stat(filepath.Join(candidate.Dir, "go.mod")); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("magus.goModReplaceArgs: stat %s/go.mod: %w", candidate.Path, err)
+		}
+		mod, err := readGoMod(ctx, candidate.Dir)
+		if err != nil {
+			return nil, err
+		}
+		mods = append(mods, mod)
+	}
+
+	return deriveGoModReplaceArgs(project.Dir, mods)
+}
+
+// MagusGoModReplaceCheck is the read-only ward for workspace-local Go module
+// replaces. The corresponding go_mod_replace_args method is intentionally kept
+// separate: a sync target needs those flags to repair the drift through go mod edit.
+func MagusGoModReplaceCheck(ctx context.Context) error {
+	args, err := MagusGoModReplaceArgs(ctx)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	dir, err := EffectiveCwd(ctx)
+	if err != nil {
+		return fmt.Errorf("magus.goModReplaceCheck: current directory: %w", err)
+	}
+	return types.DiagnosticErrorf(types.GoModReplaceDrift,
+		"go.mod in %s has workspace-local replace drift; run `magus run mod-sync:rw` to apply the derived replacements", dir)
+}
+
+type goMod struct {
+	Dir     string
+	Path    string
+	Require []goModRequire
+	Replace []goModReplace
+}
+
+type goModRequire struct {
+	Path string
+}
+
+type goModReplace struct {
+	OldPath string
+	NewPath string
+}
+
+func readGoMod(ctx context.Context, dir string) (goMod, error) {
+	cmd := exec.CommandContext(ctx, "go", "mod", "edit", "-json")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return goMod{}, fmt.Errorf("magus.goModReplaceArgs: go mod edit -json in %s: %w", dir, err)
+	}
+
+	var raw struct {
+		Module struct {
+			Path string
+		}
+		Require []struct {
+			Path string
+		}
+		Replace []struct {
+			Old struct {
+				Path string
+			}
+			New struct {
+				Path string
+			}
+		}
+	}
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return goMod{}, fmt.Errorf("magus.goModReplaceArgs: decode go mod edit output in %s: %w", dir, err)
+	}
+
+	mod := goMod{Dir: dir, Path: raw.Module.Path}
+	for _, require := range raw.Require {
+		mod.Require = append(mod.Require, goModRequire{Path: require.Path})
+	}
+	for _, replace := range raw.Replace {
+		mod.Replace = append(mod.Replace, goModReplace{OldPath: replace.Old.Path, NewPath: replace.New.Path})
+	}
+	return mod, nil
+}
+
+func deriveGoModReplaceArgs(projectDir string, mods []goMod) ([]string, error) {
+	var current *goMod
+	byPath := make(map[string]goMod, len(mods))
+	for i := range mods {
+		mod := mods[i]
+		if mod.Path == "" {
+			continue
+		}
+		byPath[mod.Path] = mod
+		if sameDirectory(projectDir, mod.Dir) {
+			current = &mods[i]
+		}
+	}
+	if current == nil {
+		return nil, fmt.Errorf("magus.goModReplaceArgs: no Go module for %s", projectDir)
+	}
+
+	desired := make(map[string]string)
+	for _, require := range current.Require {
+		provider, ok := byPath[require.Path]
+		if !ok || sameDirectory(current.Dir, provider.Dir) {
+			continue
+		}
+		rel, err := filepath.Rel(current.Dir, provider.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("magus.goModReplaceArgs: relative path from %s to %s: %w", current.Dir, provider.Dir, err)
+		}
+		desired[require.Path] = goModReplacePath(rel)
+	}
+
+	currentByPath := make(map[string][]goModReplace)
+	for _, replace := range current.Replace {
+		if _, workspaceModule := byPath[replace.OldPath]; workspaceModule {
+			currentByPath[replace.OldPath] = append(currentByPath[replace.OldPath], replace)
+		}
+	}
+
+	var drops, replaces []string
+	for path, existing := range currentByPath {
+		want, needed := desired[path]
+		correct := needed && len(existing) == 1 && sameGoModReplace(current.Dir, existing[0].NewPath, want)
+		if !correct {
+			drops = append(drops, "-dropreplace="+path)
+		}
+	}
+	for path, want := range desired {
+		existing := currentByPath[path]
+		if len(existing) != 1 || !sameGoModReplace(current.Dir, existing[0].NewPath, want) {
+			replaces = append(replaces, "-replace="+path+"="+want)
+		}
+	}
+	slices.Sort(drops)
+	slices.Sort(replaces)
+	return append(drops, replaces...), nil
+}
+
+func goModReplacePath(rel string) string {
+	rel = filepath.ToSlash(rel)
+	if rel == "." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "./") {
+		return rel
+	}
+	return "./" + rel
+}
+
+func sameGoModReplace(dir, got, want string) bool {
+	return sameDirectory(filepath.Join(dir, got), filepath.Join(dir, want))
+}
+
+func sameDirectory(a, b string) bool {
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // MagusWhere returns the project path containing dir, or "" when dir is inside none.

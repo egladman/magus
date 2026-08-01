@@ -7,11 +7,12 @@
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1,
 // magus.status.v1). It is deliberately NOT the execution journal (magus.viewer.v1, what a
 // build ran) nor metrics (magus.metrics.v1, aggregate counters): activity answers "who did
-// what, and did it succeed". The sources are MCP tool calls and connector-token lifecycle
-// today; the enum reserves the other governance sources the envelope is built to hold
-// (config mutations, sandbox denials) so they slot in with no schema change. buf-breaking
-// gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case, matching the
-// journal); this proto is the WIRE format only, mapped from that struct in the handler.
+// what, and did it succeed". It also records agent-host command observations so maintainers can
+// understand which tools and interfaces agents actually choose. A pre-execution hook cannot know
+// whether its requested command later ran, so that event captures the guard decision rather than
+// inventing an execution result. This is local workflow telemetry, not a security boundary.
+// buf-breaking gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case,
+// matching the journal); this proto is the WIRE format only, mapped from that struct in the handler.
 package activityv1connect
 
 import (

@@ -1,0 +1,120 @@
+{
+  "skills": [
+    {
+      "skill": "magus-architecture",
+      "full_bytes": 7030,
+      "simple_bytes": 5787,
+      "cut_pct": 17.7,
+      "full_only_branches": 14,
+      "simple_only_branches": 0,
+      "two_wordings": 4,
+      "simple_prose_pct": 75.0,
+      "simple_hard_pct": 19.5
+    },
+    {
+      "skill": "magus-buzz",
+      "full_bytes": 7136,
+      "simple_bytes": 6172,
+      "cut_pct": 13.5,
+      "full_only_branches": 15,
+      "simple_only_branches": 0,
+      "two_wordings": 4,
+      "simple_prose_pct": 53.1,
+      "simple_hard_pct": 42.1
+    },
+    {
+      "skill": "magus-changes",
+      "full_bytes": 6102,
+      "simple_bytes": 4836,
+      "cut_pct": 20.7,
+      "full_only_branches": 15,
+      "simple_only_branches": 0,
+      "two_wordings": 1,
+      "simple_prose_pct": 67.3,
+      "simple_hard_pct": 29.2
+    },
+    {
+      "skill": "magus-context-audit",
+      "full_bytes": 6186,
+      "simple_bytes": 4706,
+      "cut_pct": 23.9,
+      "full_only_branches": 12,
+      "simple_only_branches": 0,
+      "two_wordings": 1,
+      "simple_prose_pct": 71.2,
+      "simple_hard_pct": 23.5
+    },
+    {
+      "skill": "magus-docs",
+      "full_bytes": 4494,
+      "simple_bytes": 3745,
+      "cut_pct": 16.7,
+      "full_only_branches": 11,
+      "simple_only_branches": 0,
+      "two_wordings": 4,
+      "simple_prose_pct": 65.2,
+      "simple_hard_pct": 28.7
+    },
+    {
+      "skill": "magus-memory",
+      "full_bytes": 4612,
+      "simple_bytes": 3938,
+      "cut_pct": 14.6,
+      "full_only_branches": 10,
+      "simple_only_branches": 0,
+      "two_wordings": 3,
+      "simple_prose_pct": 67.7,
+      "simple_hard_pct": 29.7
+    },
+    {
+      "skill": "magus-query",
+      "full_bytes": 8570,
+      "simple_bytes": 6365,
+      "cut_pct": 25.7,
+      "full_only_branches": 20,
+      "simple_only_branches": 0,
+      "two_wordings": 3,
+      "simple_prose_pct": 82.7,
+      "simple_hard_pct": 13.6
+    },
+    {
+      "skill": "magus-run",
+      "full_bytes": 8824,
+      "simple_bytes": 5057,
+      "cut_pct": 42.7,
+      "full_only_branches": 25,
+      "simple_only_branches": 0,
+      "two_wordings": 5,
+      "simple_prose_pct": 82.6,
+      "simple_hard_pct": 11.3
+    },
+    {
+      "skill": "magus-sdk",
+      "full_bytes": 14308,
+      "simple_bytes": 13646,
+      "cut_pct": 4.6,
+      "full_only_branches": 2,
+      "simple_only_branches": 0,
+      "two_wordings": 0,
+      "simple_prose_pct": 84.3,
+      "simple_hard_pct": 13.1
+    },
+    {
+      "skill": "magus-vcs",
+      "full_bytes": 6363,
+      "simple_bytes": 4408,
+      "cut_pct": 30.7,
+      "full_only_branches": 13,
+      "simple_only_branches": 0,
+      "two_wordings": 3,
+      "simple_prose_pct": 91.0,
+      "simple_hard_pct": 6.1
+    }
+  ],
+  "total_full_bytes": 73625,
+  "total_simple_bytes": 58660,
+  "total_cut_pct": 20.3,
+  "total_full_only_branches": 137,
+  "total_simple_only_branches": 0,
+  "total_two_wordings": 28
+}

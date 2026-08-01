@@ -32,6 +32,7 @@ docs/reference/config.md merge=magus linguist-generated
 docs/reference/manpage/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
 docs/guides/integrations/agents/dist/** merge=magus linguist-generated
+evals/results/** merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/go.mod merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated

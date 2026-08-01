@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2295 nodes** and **5090 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2360 nodes** and **5202 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -44,19 +44,19 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 89 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
+| project | 10 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 94 | `magus query kind:target` | `content-generate`, `skills-generate`, `generate` |
 | spell | 13 | `magus query kind:spell` | `go`, `markdown`, `rust` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
-| module | 23 | `magus query kind:module` | `fs`, `charm`, `vcs` |
-| method | 160 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
+| module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
+| method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS4001` |
-| doc | 252 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 135 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 222 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1143 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| doc | 274 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 163 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 223 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1149 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 121 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -67,6 +67,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `generate`, `ci` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
+| evals | 5 | `magus query project:evals` | `preflight`, `lint`, `ci` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
@@ -155,6 +156,16 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|---|
 | `lint` | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off. |
+| `preflight` |  |
+
+## Project: evals
+
+| Target | What it does |
+|---|---|
+| `lint` | lint validates every task file against the schema and checks that each named constraint predicate exists. |
+| `smoke` | smoke is the PR gate: one trial, a subset of tasks, one model. |
+| `grid` | grid is the full run: every skill, both permutations, every model, 5 trials. |
+| `ci` | ci is LINT ONLY, deliberately. |
 | `preflight` |  |
 
 ## Project: libs/diagnostics

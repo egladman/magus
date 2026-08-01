@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2295,
-  "edge_count": 5090,
+  "node_count": 2360,
+  "edge_count": 5202,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1308,6 +1308,314 @@
         "dir_commits": "0",
         "dir_files": "17",
         "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures",
+      "kind": "dir",
+      "label": "evals/fixtures",
+      "source": "evals/fixtures",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "46",
+        "dir_languages": "claude,markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full",
+      "kind": "dir",
+      "label": "evals/fixtures/full",
+      "source": "evals/fixtures/full",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "22",
+        "dir_languages": "claude,markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude",
+      "source": "evals/fixtures/full/.claude",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "21",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills",
+      "source": "evals/fixtures/full/.claude/skills",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-architecture",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-architecture",
+      "source": "evals/fixtures/full/.claude/skills/magus-architecture",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-buzz",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-buzz",
+      "source": "evals/fixtures/full/.claude/skills/magus-buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-changes",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-changes",
+      "source": "evals/fixtures/full/.claude/skills/magus-changes",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-context-audit",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-context-audit",
+      "source": "evals/fixtures/full/.claude/skills/magus-context-audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-docs",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-docs",
+      "source": "evals/fixtures/full/.claude/skills/magus-docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-memory",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-memory",
+      "source": "evals/fixtures/full/.claude/skills/magus-memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-query",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-query",
+      "source": "evals/fixtures/full/.claude/skills/magus-query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-run",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-run",
+      "source": "evals/fixtures/full/.claude/skills/magus-run",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-sdk",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-sdk",
+      "source": "evals/fixtures/full/.claude/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-vcs",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-vcs",
+      "source": "evals/fixtures/full/.claude/skills/magus-vcs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple",
+      "kind": "dir",
+      "label": "evals/fixtures/simple",
+      "source": "evals/fixtures/simple",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "22",
+        "dir_languages": "claude,markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude",
+      "source": "evals/fixtures/simple/.claude",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "21",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills",
+      "source": "evals/fixtures/simple/.claude/skills",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "20",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-architecture",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-architecture",
+      "source": "evals/fixtures/simple/.claude/skills/magus-architecture",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-buzz",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-buzz",
+      "source": "evals/fixtures/simple/.claude/skills/magus-buzz",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-changes",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-changes",
+      "source": "evals/fixtures/simple/.claude/skills/magus-changes",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "source": "evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-docs",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-docs",
+      "source": "evals/fixtures/simple/.claude/skills/magus-docs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-memory",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-memory",
+      "source": "evals/fixtures/simple/.claude/skills/magus-memory",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-query",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-query",
+      "source": "evals/fixtures/simple/.claude/skills/magus-query",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-run",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-run",
+      "source": "evals/fixtures/simple/.claude/skills/magus-run",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-sdk",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-sdk",
+      "source": "evals/fixtures/simple/.claude/skills/magus-sdk",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-vcs",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-vcs",
+      "source": "evals/fixtures/simple/.claude/skills/magus-vcs",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/tasks",
+      "kind": "dir",
+      "label": "evals/tasks",
+      "source": "evals/tasks",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
       }
     },
     {
@@ -4443,6 +4751,204 @@
       }
     },
     {
+      "id": "doc:evals/README.md",
+      "kind": "doc",
+      "label": "evals/README.md",
+      "source": "evals/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-changes/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-changes/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-changes/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-memory/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-memory/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-memory/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-vcs/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-vcs/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-vcs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-architecture/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-architecture/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-architecture/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-memory/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-memory/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-memory/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-vcs/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-vcs/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-vcs/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/tasks/schema.md",
+      "kind": "doc",
+      "label": "evals/tasks/schema.md",
+      "source": "evals/tasks/schema.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
       "id": "doc:internal/handler/README.md",
       "kind": "doc",
       "label": "internal/handler/README.md",
@@ -5163,6 +5669,15 @@
       "kind": "file",
       "label": "docs/tour/17-output-refs.buzz",
       "source": "docs/tour/17-output-refs.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:evals/magusfile.buzz",
+      "kind": "file",
+      "label": "evals/magusfile.buzz",
+      "source": "evals/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -9379,6 +9894,62 @@
       "kind": "function",
       "label": "build",
       "source": "docs/tour/17-output-refs.buzz:48",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.",
+      "source": "evals/magusfile.buzz:68",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:grid",
+      "kind": "function",
+      "label": "grid",
+      "doc": "grid is the full run: every skill, both permutations, every model, 5 trials. Minutes-to-hours and real money. Never on the PR path.",
+      "source": "evals/magusfile.buzz:60",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:install",
+      "kind": "function",
+      "label": "install",
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.",
+      "source": "evals/magusfile.buzz:31"
+    },
+    {
+      "id": "function:evals/magusfile.buzz:lint",
+      "kind": "function",
+      "label": "lint",
+      "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists. No network, no API key.",
+      "source": "evals/magusfile.buzz:45",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:preflight",
+      "kind": "function",
+      "label": "preflight",
+      "source": "evals/magusfile.buzz:28",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:smoke",
+      "kind": "function",
+      "label": "smoke",
+      "doc": "smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.",
+      "source": "evals/magusfile.buzz:52",
       "attrs": {
         "exported": "true"
       }
@@ -18544,6 +19115,24 @@
       }
     },
     {
+      "id": "method:magus.go_mod_replace_args",
+      "kind": "method",
+      "label": "magus.go_mod_replace_args",
+      "doc": "Derive go mod edit flags that make this Go module replace its workspace-local requirements with their relative project paths. Reads go.mod through `go mod edit -json`; it never writes the file.",
+      "attrs": {
+        "buzz": "magus\\goModReplaceArgs() → []string"
+      }
+    },
+    {
+      "id": "method:magus.go_mod_replace_check",
+      "kind": "method",
+      "label": "magus.go_mod_replace_check",
+      "doc": "Raise MGS1016 when this Go module's workspace-local replace directives drift from the workspace project graph. Writes nothing.",
+      "attrs": {
+        "buzz": "magus\\goModReplaceCheck()"
+      }
+    },
+    {
       "id": "method:magus.graph",
       "kind": "method",
       "label": "magus.graph",
@@ -19885,6 +20474,16 @@
       }
     },
     {
+      "id": "project:evals",
+      "kind": "project",
+      "label": "evals",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz",
+        "target_count": "5"
+      }
+    },
+    {
       "id": "project:libs/diagnostics",
       "kind": "project",
       "label": "libs/diagnostics",
@@ -20079,7 +20678,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "outaca4b539",
+        "last_output_ref": "out7bd0ec85",
         "last_run_ok": "false"
       }
     },
@@ -20529,7 +21128,7 @@
       "source": "docs",
       "attrs": {
         "engine": "buzz",
-        "last_output_ref": "out743a9ca7",
+        "last_output_ref": "out025d9689",
         "last_run_ok": "false"
       }
     },
@@ -20673,6 +21272,55 @@
       "kind": "target",
       "label": "test",
       "source": "docs",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:ci",
+      "kind": "target",
+      "label": "ci",
+      "doc": "ci is LINT ONLY, deliberately.",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:grid",
+      "kind": "target",
+      "label": "grid",
+      "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:lint",
+      "kind": "target",
+      "label": "lint",
+      "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:preflight",
+      "kind": "target",
+      "label": "preflight",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:smoke",
+      "kind": "target",
+      "label": "smoke",
+      "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
+      "source": "evals",
       "attrs": {
         "engine": "buzz"
       }
@@ -23873,6 +24521,382 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
+      "source": "dir:evals/fixtures",
+      "target": "dir:evals/fixtures/full",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full"
+    },
+    {
+      "source": "dir:evals/fixtures",
+      "target": "dir:evals/fixtures/simple",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple"
+    },
+    {
+      "source": "dir:evals/fixtures/full",
+      "target": "dir:evals/fixtures/full/.claude",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude",
+      "target": "dir:evals/fixtures/full/.claude/skills",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-architecture",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-architecture"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-buzz"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-changes"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-context-audit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-context-audit"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-docs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-docs"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-memory",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-memory"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-query",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-run"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-sdk"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-vcs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-vcs"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-architecture",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-buzz",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-changes",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-changes/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-changes/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-context-audit",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-docs",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-memory",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-memory/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-query",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-run",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-sdk",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-vcs",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-vcs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-vcs/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple",
+      "target": "dir:evals/fixtures/simple/.claude",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude",
+      "target": "dir:evals/fixtures/simple/.claude/skills",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-architecture",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-architecture"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-buzz"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-changes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-changes"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-context-audit"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-docs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-docs"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-memory",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-memory"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-query",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-run"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-sdk",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-sdk"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-vcs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-vcs"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-architecture",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-architecture/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-buzz",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-changes",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-docs",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-memory",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-memory/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-query",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-run",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-sdk",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-vcs",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-vcs/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-vcs/SKILL.md"
+    },
+    {
+      "source": "dir:evals/tasks",
+      "target": "doc:evals/tasks/schema.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/tasks/schema.md"
     },
     {
       "source": "dir:internal",
@@ -30180,6 +31204,14 @@
     },
     {
       "source": "doc:docs/reference/buzz/magus.md",
+      "target": "diagnostic:MGS1016",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/buzz/magus.md"
+    },
+    {
+      "source": "doc:docs/reference/buzz/magus.md",
       "target": "module:magus",
       "relation": "documents",
       "confidence": "extracted",
@@ -35099,6 +36131,278 @@
       "provenance": "docs/reference/skills/magus-vcs.md"
     },
     {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-architecture/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-buzz/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-changes/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-changes/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-buzz/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-changes/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-docs/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "diagnostic:MGS2001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-insight.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-sdk/SKILL.md"
+    },
+    {
       "source": "doc:libs/gopherbuzz/README.md",
       "target": "doc:libs/gopherbuzz/docs/ffi.md",
       "relation": "references",
@@ -39753,6 +41057,86 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/17-output-refs.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:grid",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:install",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:smoke",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "import:magus/spell/magusfile",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "evals/magusfile.buzz"
     },
     {
       "source": "file:internal/spellruntime/charm.buzz",
@@ -51907,6 +53291,38 @@
       "provenance": "docs/tour/12-magusfile.buzz"
     },
     {
+      "source": "function:evals/magusfile.buzz:grid",
+      "target": "function:evals/magusfile.buzz:install",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "function:evals/magusfile.buzz:lint",
+      "target": "function:evals/magusfile.buzz:install",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "function:evals/magusfile.buzz:preflight",
+      "target": "function:evals/magusfile.buzz:install",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "function:evals/magusfile.buzz:smoke",
+      "target": "function:evals/magusfile.buzz:install",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
       "source": "function:internal/spellruntime/charm.buzz:after",
       "target": "function:internal/spellruntime/charm.buzz:_charmAddOps",
       "relation": "calls",
@@ -56557,6 +57973,20 @@
     },
     {
       "source": "module:magus",
+      "target": "method:magus.go_mod_replace_args",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.go_mod_replace_check",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
       "target": "method:magus.graph",
       "relation": "contains",
       "confidence": "extracted",
@@ -58275,6 +59705,78 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents"
+    },
+    {
+      "source": "project:evals",
+      "target": "dir:evals/fixtures",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures"
+    },
+    {
+      "source": "project:evals",
+      "target": "dir:evals/tasks",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/tasks"
+    },
+    {
+      "source": "project:evals",
+      "target": "doc:evals/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/README.md"
+    },
+    {
+      "source": "project:evals",
+      "target": "file:evals/magusfile.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:grid",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:smoke",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
     },
     {
       "source": "project:libs/diagnostics",
@@ -60276,6 +61778,14 @@
     },
     {
       "source": "target:docs:build",
+      "target": "diagnostic:MGS3001",
+      "relation": "emits",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "runtime"
+    },
+    {
+      "source": "target:docs:build",
       "target": "target:docs:generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -61017,6 +62527,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
+    },
+    {
+      "source": "target:evals:ci",
+      "target": "target:evals:lint",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "target:evals:grid",
+      "target": "target:evals:preflight",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "target:evals:lint",
+      "target": "target:evals:preflight",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "target:evals:smoke",
+      "target": "target:evals:preflight",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
     },
     {
       "source": "target:libs/diagnostics:build",
