@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -106,7 +106,7 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]spel
 			activeNames = append(activeNames, name)
 		}
 	}
-	return ispell.ApplyCharms(base, charms, activeNames)
+	return spellruntime.ApplyCharms(base, charms, activeNames)
 }
 
 // charmConflictWarned dedups the run-time conflict warning: the same overridden
@@ -126,7 +126,7 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 			activeNames = append(activeNames, name)
 		}
 	}
-	conflicts, err := ispell.Conflicts(base, charms, activeNames)
+	conflicts, err := spellruntime.Conflicts(base, charms, activeNames)
 	if err != nil {
 		return
 	}

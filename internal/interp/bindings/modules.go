@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	hostreg "github.com/egladman/magus/host/registry"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -122,46 +122,46 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	// Canonical value types (Target/Charm) as a flat-importable source module, so
 	// a spell's mgs_listTargets can be typed {str: fun(Target, fun(any)) void/bool}
 	// instead of `any`. Single source of truth lives in the spell package.
-	sess.SetSourceModule(ispell.TargetModulePath, strings.Join([]string{
-		ispell.TargetModuleSource,
+	sess.SetSourceModule(spellruntime.TargetModulePath, strings.Join([]string{
+		spellruntime.TargetModuleSource,
 		// Command value types (PatchOp < Charm < Command ordering: each references
 		// the prior). Inlined into built-ins too — see builtinModuleSources.
-		ispell.PatchOpSource,
-		ispell.CharmTypeSource,
-		ispell.CommandSource,
+		spellruntime.PatchOpSource,
+		spellruntime.CharmTypeSource,
+		spellruntime.CommandSource,
 		// Service must follow Command (its command/readiness/stop fields are typed
 		// Command), so a workspace-local spell can author a service op. The dry host
 		// registers the same bundle; keep the two in step.
-		ispell.ServiceSource,
-		ispell.ExecResultSource,
+		spellruntime.ServiceSource,
+		spellruntime.ExecResultSource,
 		// Boundary mirrors of the host-method record shapes, so a magusfile can
 		// annotate a vcs.commit / fs.stat / http.* / semver.parse / parse_url result
 		// for compile-checked field access. CommitAuthor precedes Commit (Commit's
 		// author field is typed CommitAuthor).
-		ispell.CommitAuthorSource,
-		ispell.CommitSource,
-		ispell.FileInfoSource,
-		ispell.HTTPResponseSource,
-		ispell.SemverVersionSource,
-		ispell.URLSource,
+		spellruntime.CommitAuthorSource,
+		spellruntime.CommitSource,
+		spellruntime.FileInfoSource,
+		spellruntime.HTTPResponseSource,
+		spellruntime.SemverVersionSource,
+		spellruntime.URLSource,
 		// magus.ls's result. ProjectEntry precedes Projects (Projects.projects is
 		// [ProjectEntry]).
-		ispell.ProjectEntrySource,
-		ispell.ProjectsSource,
+		spellruntime.ProjectEntrySource,
+		spellruntime.ProjectsSource,
 		// The remaining host results: vcs.tags, magus.affected, magus.graph, and
 		// magus.modules / magus.module. The Module entries precede Module.
-		ispell.TagSource,
-		ispell.AffectedSource,
-		ispell.GraphSource,
-		ispell.ModuleFieldEntrySource,
-		ispell.ModuleMethodEntrySource,
-		ispell.ModuleSource,
+		spellruntime.TagSource,
+		spellruntime.AffectedSource,
+		spellruntime.GraphSource,
+		spellruntime.ModuleFieldEntrySource,
+		spellruntime.ModuleMethodEntrySource,
+		spellruntime.ModuleSource,
 	}, "\n"))
 	// magus/charm: the pure-Buzz patch constructors, registered as its own source
 	// module so a handler op spell or a magusfile can `import "magus/charm"` and
 	// build charms with charm.after/set/… (the built-in generator inlines it for
 	// self-contained command spells; see SelfContainedBuiltinSource).
-	sess.SetSourceModule(ispell.CharmModulePath, ispell.CharmModuleSource)
+	sess.SetSourceModule(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 }
 
 // buzzLogFn builds the Buzz trampoline for magus.<level>(msg, fields?). It routes

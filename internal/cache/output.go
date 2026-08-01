@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/journal"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // RefPrefix begins every target-output reference id ("out1a2b3c"). It is the provenance tag in

@@ -50,7 +50,7 @@ func TestEncoderDecoder(t *testing.T) {
 }
 
 // TestDurationRoundTrips checks a time.Duration survives a Marshal/Unmarshal cycle
-// under either codec. Under json/v2 it doubles as the go.dev/issue/71631 regression
+// under either json. Under json/v2 it doubles as the go.dev/issue/71631 regression
 // guard: without the codec's explicit Duration handling, Marshal errors outright
 // (Duration has no default v2 representation), which broke `magus config view -o json`.
 func TestDurationRoundTrips(t *testing.T) {
@@ -84,8 +84,8 @@ func TestProductionCodecBypassesSkipsDependencyAndBuildTrees(t *testing.T) {
 	for _, path := range []string{
 		"cmd/magus/main.go",
 		"node_modules/example/index.go",
-		"vendor/example/codec.go",
-		"third_party/example/codec.go",
+		"vendor/example/json.go",
+		"third_party/example/json.go",
 		"build/generated.go",
 		"dist/generated.go",
 	} {

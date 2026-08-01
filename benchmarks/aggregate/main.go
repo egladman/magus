@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 )
 
 // hyperfineOutput is the JSON schema emitted by hyperfine --export-json.

@@ -8,7 +8,7 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -91,12 +91,12 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 	if cmdV, ok := mv.MapGet("command"); ok {
 		// A Service: its `command` field is the process magus supervises.
 		if cv, ok := cmdV.MapView(); ok {
-			cmd, err := ispell.DecodeCommandValue(cv)
+			cmd, err := spellruntime.DecodeCommandValue(cv)
 			return spellOp{name: name, kind: spells.OpKindService, cmd: cmd, decodeErr: err}
 		}
 		return spellOp{name: name, kind: spells.OpKindService}
 	}
-	cmd, err := ispell.DecodeCommandValue(mv)
+	cmd, err := spellruntime.DecodeCommandValue(mv)
 	return spellOp{name: name, kind: spells.OpKindCommand, cmd: cmd, decodeErr: err}
 }
 
@@ -107,7 +107,7 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 // swallowed, so the dry run refuses the plan exactly as the engine would rather than
 // rendering the un-reshaped command as if the charm applied.
 func (o spellOp) renderCommand(activeNames []string) (string, error) {
-	args, err := ispell.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
+	args, err := spellruntime.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
 	if err != nil {
 		return "", err
 	}

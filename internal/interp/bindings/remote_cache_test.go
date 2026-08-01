@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"

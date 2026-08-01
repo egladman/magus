@@ -114,7 +114,7 @@ func TestXzDecompress(t *testing.T) {
 	require.NoError(t, err, "xz Write")
 	require.NoError(t, xw.Close(), "xz Close")
 
-	// Decompress with the codec.
+	// Decompress with the json.
 	r, err := NewXzReader(bytes.NewReader(buf.Bytes()))
 	require.NoError(t, err, "NewXzReader")
 	defer r.Close()
@@ -137,7 +137,7 @@ func TestXzCrossCompatRead(t *testing.T) {
 	require.NoError(t, xw.Close(), "xz Close")
 	compressed := buf.Bytes()
 
-	// Decode with codec.
+	// Decode with json.
 	r, err := NewXzReader(bytes.NewReader(compressed))
 	require.NoError(t, err, "NewXzReader")
 	codecGot, err := io.ReadAll(r)

@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
-	ispell "github.com/egladman/magus/internal/spell"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -643,7 +643,7 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		IgnoreDirs:      ignoreDirs,
 		Outputs:         outputs,
 		WorkspaceRoot:   m.ws.Root,
-		SpellDefVersion: ispell.BuiltinsHash(),
+		SpellDefVersion: spellruntime.BuiltinsHash(),
 		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module json -lang buzz -out ../host/gen/json.go
@@ -39,7 +39,7 @@ var JSON = Module{
 // JSONParse decodes a JSON string into a value (map, list, string, number, or boolean).
 func JSONParse(_ context.Context, s string) (any, error) {
 	var v any
-	if err := codec.Unmarshal([]byte(s), &v); err != nil {
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
 		return nil, fmt.Errorf("json.parse: %w", err)
 	}
 	return v, nil
@@ -53,9 +53,9 @@ func JSONParse(_ context.Context, s string) (any, error) {
 func JSONStringify(_ context.Context, value any, indent string) (string, error) {
 	marshal := func() ([]byte, error) {
 		if indent == "" {
-			return codec.Marshal(value)
+			return json.Marshal(value)
 		}
-		return codec.MarshalIndent(value, "", indent)
+		return json.MarshalIndent(value, "", indent)
 	}
 	b, err := marshal()
 	if err != nil {

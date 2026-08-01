@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
-	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive/clihint"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"

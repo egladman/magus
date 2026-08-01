@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +45,7 @@ func readManifest(t *testing.T, cacheDir string) manifest {
 	b, err := os.ReadFile(filepath.Join(StoreDir(cacheDir), "manifest.json"))
 	require.NoError(t, err)
 	var m manifest
-	require.NoError(t, codec.Unmarshal(b, &m))
+	require.NoError(t, json.Unmarshal(b, &m))
 	return m
 }
 
@@ -101,8 +101,8 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 	// A pure disk load (no assembly) reproduces the built graph byte-for-byte.
 	loaded, err := NewStore(cacheDir, false, 0, nil, nil).Load(context.Background())
 	require.NoError(t, err)
-	built, _ := codec.Marshal(g1.Output())
-	fromDisk, _ := codec.Marshal(loaded.Output())
+	built, _ := json.Marshal(g1.Output())
+	fromDisk, _ := json.Marshal(loaded.Output())
 	assert.Equal(t, string(built), string(fromDisk))
 }
 
@@ -182,8 +182,8 @@ func TestRebuildIsIdempotent(t *testing.T) {
 	second := snapshotDir(t, shardsDir)
 
 	assert.Equal(t, first, second, "shard files should be byte-identical across idempotent rebuilds")
-	a, _ := codec.Marshal(g1.Output())
-	b, _ := codec.Marshal(g2.Output())
+	a, _ := json.Marshal(g1.Output())
+	b, _ := json.Marshal(g2.Output())
 	assert.Equal(t, string(a), string(b))
 }
 

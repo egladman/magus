@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // envelope is the wire-format wrapper; drain goroutine marshals body and splices
@@ -17,7 +17,7 @@ type envelope struct {
 
 // writeJSONL writes the envelope as one JSONL line; errors only on marshal failure or non-object body.
 func (e envelope) writeJSONL(bw *bufio.Writer) error {
-	body, err := codec.Marshal(e.Body)
+	body, err := json.Marshal(e.Body)
 	if err != nil {
 		return fmt.Errorf("report: marshal %T: %w", e.Body, err)
 	}

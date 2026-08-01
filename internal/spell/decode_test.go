@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mapObj is a test-only implementation of ispell.Obj backed by map[string]any.
+// mapObj is a test-only implementation of spellruntime.Obj backed by map[string]any.
 type mapObj map[string]any
 
 func (m mapObj) Str(key string) (string, bool) {

@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 )
 
 // LastEntry returns the manifest and log-file path of the most recently
@@ -46,7 +46,7 @@ func (c *Cache) lastEntry(projectPath, target string) (*Manifest, string, error)
 			continue
 		}
 		var m Manifest
-		if codec.Unmarshal(data, &m) != nil {
+		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
 		if target != "" && m.Target != target {

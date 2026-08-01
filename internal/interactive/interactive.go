@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/internal/codec"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -94,7 +94,7 @@ func LoadState() (State, error) {
 		}
 		return s, err
 	}
-	if err := codec.Unmarshal(b, &s); err != nil {
+	if err := json.Unmarshal(b, &s); err != nil {
 		return s, err
 	}
 	return s, nil
@@ -109,7 +109,7 @@ func SaveState(s State) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	b, err := codec.MarshalIndent(s, "", "  ")
+	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}

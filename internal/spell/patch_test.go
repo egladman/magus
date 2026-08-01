@@ -3,7 +3,7 @@ package spell
 import (
 	"testing"
 
-	json "github.com/egladman/magus/internal/codec"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
