@@ -97,7 +97,7 @@
 </tr>
 <tr>
 <td><code>generate</code></td>
-<td><code>preflight</code>, <code>md-generate</code></td>
+<td><code>preflight</code>, <code>mod-sync</code>, <code>md-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -106,8 +106,13 @@
 <td>-</td>
 </tr>
 <tr>
+<td><code>mod-sync</code></td>
+<td>-</td>
+<td>go</td>
+</tr>
+<tr>
 <td><code>format</code></td>
-<td><code>generate</code></td>
+<td><code>generate</code>, <code>mod-sync</code></td>
 <td>go</td>
 </tr>
 <tr>
@@ -148,8 +153,10 @@
 <h2 id="run-order">Run order</h2>
 <div class="mermaid-src"><pre><code class="language-mermaid">graph LR
     preflight --&gt; generate
+    mod-sync --&gt; generate
     md-generate --&gt; generate
     generate --&gt; format
+    mod-sync --&gt; format
     format --&gt; lint
     format --&gt; build
     format --&gt; test

@@ -79,12 +79,25 @@
           ]
         },
         {
-          "name": "bindings-generate",
-          "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.",
+          "name": "types-generate",
+          "declared": "types_generate",
+          "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
           "outputs": [
             {
-              "glob": "host/gen/*.go"
+              "glob": "types/buzzobject_gen.go"
+            }
+          ]
+        },
+        {
+          "name": "bindings-generate",
+          "declared": "bindings_generate",
+          "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+          "dependencies": [
+            "types-generate"
+          ],
+          "outputs": [
+            {
+              "glob": "internal/interp/bindings/gen/*.go"
             }
           ]
         },
@@ -92,6 +105,9 @@
           "name": "spells-generate",
           "declared": "spells_generate",
           "doc": "Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
               "glob": "internal/spell/gen/*.bo"
@@ -105,6 +121,9 @@
           "name": "mocks-generate",
           "declared": "mocks_generate",
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
               "glob": "**/gen/mocks/*.go"
@@ -131,6 +150,9 @@
           "name": "config-generate",
           "declared": "config_generate",
           "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go.",
+          "dependencies": [
+            "types-generate"
+          ],
           "outputs": [
             {
               "glob": "cmd/magus/gen/*.go"
@@ -167,6 +189,27 @@
           ]
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "doc": "The derivation is read-only core logic; the go spell is the only layer that renders or writes go.mod.",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "postflight",
           "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
           "charms": [
@@ -177,7 +220,9 @@
           "name": "generate",
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
+            "mod-sync",
             "man-generate",
+            "types-generate",
             "bindings-generate",
             "spells-generate",
             "mocks-generate",
@@ -272,6 +317,21 @@
           ],
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
+          "name": "e-2-e",
+          "declared": "e2e",
+          "doc": "Runs the release-confidence checks that are intentionally outside ordinary CI: the root race/coverage suite, the pinned upstream Buzz conformance suite, and the completion scripts inside their official shell images.",
+          "dependencies": [
+            "test",
+            "completion-test"
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "conformance"
+            }
           ]
         },
         {
@@ -705,6 +765,44 @@
       ]
     },
     {
+      "path": "evals",
+      "name": "evals",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "lint",
+          "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "smoke",
+          "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "grid",
+          "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "ci is LINT ONLY, deliberately.",
+          "dependencies": [
+            "lint"
+          ]
+        }
+      ]
+    },
+    {
       "path": "libs/diagnostics",
       "name": "libs/diagnostics",
       "engine": "buzz",
@@ -717,6 +815,7 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
+            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -729,9 +828,30 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {
@@ -809,6 +929,7 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
+            "mod-sync",
             "md-generate"
           ],
           "charms": [
@@ -821,9 +942,30 @@
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {

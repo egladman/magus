@@ -16,7 +16,7 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "typescript"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below
     // already matches it - self-documenting rather than riding along by accident.
     return ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx",

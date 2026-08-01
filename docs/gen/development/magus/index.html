@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#go-build" title="go-build">go-build</a></li><li><a href="#image-build" title="image-build">image-build</a></li><li><a href="#image-scan" title="image-scan">image-scan</a></li><li><a href="#man-generate" title="man-generate">man-generate</a></li><li><a href="#bindings-generate" title="bindings-generate">bindings-generate</a></li><li><a href="#spells-generate" title="spells-generate">spells-generate</a></li><li><a href="#mocks-generate" title="mocks-generate">mocks-generate</a></li><li><a href="#skills-generate" title="skills-generate">skills-generate</a></li><li><a href="#config-generate" title="config-generate">config-generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#graph-generate" title="graph-generate">graph-generate</a></li><li><a href="#postflight" title="postflight">postflight</a></li><li><a href="#generate" title="generate">generate</a></li><li><a href="#release-build" title="release-build">release-build</a></li><li><a href="#release-sign" title="release-sign">release-sign</a></li><li><a href="#release" title="release">release</a></li><li><a href="#watch" title="watch">watch</a></li><li><a href="#test" title="test">test</a></li><li><a href="#buzz-check" title="buzz-check">buzz-check</a></li><li><a href="#buzz-run" title="buzz-run">buzz-run</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#build" title="build">build</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#format" title="format">format</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#completion-test" title="completion-test">completion-test</a></li><li><a href="#ci-shard" title="ci-shard">ci-shard</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
+        <ul><li><a href="#go-build" title="go-build">go-build</a></li><li><a href="#image-build" title="image-build">image-build</a></li><li><a href="#image-scan" title="image-scan">image-scan</a></li><li><a href="#man-generate" title="man-generate">man-generate</a></li><li><a href="#types-generate" title="types-generate">types-generate</a></li><li><a href="#bindings-generate" title="bindings-generate">bindings-generate</a></li><li><a href="#spells-generate" title="spells-generate">spells-generate</a></li><li><a href="#mocks-generate" title="mocks-generate">mocks-generate</a></li><li><a href="#skills-generate" title="skills-generate">skills-generate</a></li><li><a href="#config-generate" title="config-generate">config-generate</a></li><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#graph-generate" title="graph-generate">graph-generate</a></li><li><a href="#mod-sync" title="mod-sync">mod-sync</a></li><li><a href="#postflight" title="postflight">postflight</a></li><li><a href="#generate" title="generate">generate</a></li><li><a href="#release-build" title="release-build">release-build</a></li><li><a href="#release-sign" title="release-sign">release-sign</a></li><li><a href="#watch" title="watch">watch</a></li><li><a href="#test" title="test">test</a></li><li><a href="#e-2-e" title="e-2-e">e-2-e</a></li><li><a href="#buzz-check" title="buzz-check">buzz-check</a></li><li><a href="#buzz-run" title="buzz-run">buzz-run</a></li><li><a href="#preflight" title="preflight">preflight</a></li><li><a href="#build" title="build">build</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#format" title="format">format</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#completion-test" title="completion-test">completion-test</a></li><li><a href="#ci-shard" title="ci-shard">ci-shard</a></li><li><a href="#serve" title="serve">serve</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -112,18 +112,23 @@
 <td>-</td>
 </tr>
 <tr>
-<td><code>bindings-generate</code></td>
+<td><code>types-generate</code></td>
 <td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td><code>bindings-generate</code></td>
+<td><code>types-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
 <td><code>spells-generate</code></td>
-<td>-</td>
+<td><code>types-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
 <td><code>mocks-generate</code></td>
-<td>-</td>
+<td><code>types-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -133,7 +138,7 @@
 </tr>
 <tr>
 <td><code>config-generate</code></td>
-<td>-</td>
+<td><code>types-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -147,13 +152,18 @@
 <td>-</td>
 </tr>
 <tr>
+<td><code>mod-sync</code></td>
+<td>-</td>
+<td>go</td>
+</tr>
+<tr>
 <td><code>postflight</code></td>
 <td>-</td>
 <td>-</td>
 </tr>
 <tr>
 <td><code>generate</code></td>
-<td><code>man-generate</code>, <code>bindings-generate</code>, <code>spells-generate</code>, <code>mocks-generate</code>, <code>skills-generate</code>, <code>config-generate</code>, <code>md-generate</code>, <code>graph-generate</code></td>
+<td><code>mod-sync</code>, <code>man-generate</code>, <code>types-generate</code>, <code>bindings-generate</code>, <code>spells-generate</code>, <code>mocks-generate</code>, <code>skills-generate</code>, <code>config-generate</code>, <code>md-generate</code>, <code>graph-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -180,6 +190,11 @@
 <td><code>test</code></td>
 <td><code>format</code></td>
 <td>go</td>
+</tr>
+<tr>
+<td><code>e-2-e</code></td>
+<td><code>test</code>, <code>completion-test</code></td>
+<td>-</td>
 </tr>
 <tr>
 <td><code>buzz-check</code></td>
@@ -241,8 +256,10 @@
 <p>Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.</p>
 <h3 id="man-generate"><code>man-generate</code></h3>
 <p>Renders the roff man pages into manpage/ (repo root).</p>
+<h3 id="types-generate"><code>types-generate</code></h3>
+<p>Regenerates the runtime BuzzObject maps before anything imports a host binding.</p>
 <h3 id="bindings-generate"><code>bindings-generate</code></h3>
-<p>Regenerates the Go host bindings (std -&gt; host/gen) from std.Module declarations.</p>
+<p>Regenerates the Go host bindings (std -&gt; internal/interp/bindings/gen) from std.Module declarations.</p>
 <h3 id="spells-generate"><code>spells-generate</code></h3>
 <p>Regenerates the compiled built-in spell bytecode (internal/spell/gen) and the Buzz value-type mirrors (internal/spell/gen/types), both driven by the go:generate directives in internal/spell.</p>
 <h3 id="mocks-generate"><code>mocks-generate</code></h3>
@@ -255,6 +272,8 @@
 <p>Renders MAGUS.md via <code>magus describe graph</code>.</p>
 <h3 id="graph-generate"><code>graph-generate</code></h3>
 <p>Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.</p>
+<h3 id="mod-sync"><code>mod-sync</code></h3>
+<p>The derivation is read-only core logic; the go spell is the only layer that renders or writes go.mod.</p>
 <h3 id="postflight"><code>postflight</code></h3>
 <p>Renders the insight report (hotspots, affinity, ownership, trend) and, with the <code>gha</code> charm, appends it to a host output path supplied via env.</p>
 <h3 id="generate"><code>generate</code></h3>
@@ -263,12 +282,12 @@
 <p>Builds one release binary for one platform.</p>
 <h3 id="release-sign"><code>release-sign</code></h3>
 <p>Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).</p>
-<h3 id="release"><code>release</code></h3>
-<p>release cuts a version across the workspace in the order Go's multi-module convention requires - the part that is easy to get wrong by hand: 1.</p>
 <h3 id="watch"><code>watch</code></h3>
 <p>Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.</p>
 <h3 id="test"><code>test</code></h3>
 <p>Tests with race detection, coverage, and a drift-gated coverage badge.</p>
+<h3 id="e-2-e"><code>e-2-e</code></h3>
+<p>Runs the release-confidence checks that are intentionally outside ordinary CI: the root race/coverage suite, the pinned upstream Buzz conformance suite, and the completion scripts inside their official shell images.</p>
 <h3 id="buzz-check"><code>buzz-check</code></h3>
 <p>Type-checks the standalone Buzz with the upstream <code>buzz</code> toolchain (--check).</p>
 <h3 id="buzz-run"><code>buzz-run</code></h3>
@@ -292,7 +311,13 @@
 <h2 id="run-order">Run order</h2>
 <div class="mermaid-src"><pre><code class="language-mermaid">graph LR
     image-build --&gt; image-scan
+    types-generate --&gt; bindings-generate
+    types-generate --&gt; spells-generate
+    types-generate --&gt; mocks-generate
+    types-generate --&gt; config-generate
+    mod-sync --&gt; generate
     man-generate --&gt; generate
+    types-generate --&gt; generate
     bindings-generate --&gt; generate
     spells-generate --&gt; generate
     mocks-generate --&gt; generate
@@ -301,6 +326,8 @@
     md-generate --&gt; generate
     graph-generate --&gt; generate
     format --&gt; test
+    test --&gt; e-2-e
+    completion-test --&gt; e-2-e
     format --&gt; build
     image-build --&gt; build
     go-build --&gt; build

@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module encoding -lang buzz -out ../host/gen/encoding.go
+//go:generate go run ../cmd/magus-utils bindings -module encoding -lang buzz -out ../internal/interp/bindings/gen/encoding.go
 
 func init() { Register(Encoding) }
 

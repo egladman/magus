@@ -14,6 +14,14 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
+// The built-in compiler inlines these generated declarations, so they must run
+// before it. Keeping the generation order here avoids compiling a spell against
+// yesterday's schema when Command, Service, or Target changes.
+//go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
+//go:generate go run ../../cmd/magus-utils types -type PatchOp -out gen/types/patchop.buzz
+//go:generate go run ../../cmd/magus-utils types -type Charm -out gen/types/charm.buzz
+//go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz
+//go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
 //go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 
 // builtinFS holds the compiled bytecode of every built-in spell, one <name>.bo per

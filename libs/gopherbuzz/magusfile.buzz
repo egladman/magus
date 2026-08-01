@@ -46,6 +46,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {}
 // not it is committed; only a regeneration that changes a clean file fails.
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    ctx.needs(mod_sync);
     final clean_before = vcs\isDirty(["MAGUS.md"]) == false;
     ctx.needs(md_generate);
     if (ctx.has_charm("rw")) { return; }
@@ -60,7 +61,19 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
     final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
     fs\writeFile("MAGUS.md", doc + "\n");
 }
-export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
+export fun mod_sync(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("go.mod");
+    final flags = magus\goModReplaceArgs();
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        magus\goModReplaceCheck();
+        throw "mod-sync: go mod edit -print differs from go.mod";
+    }
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate, mod_sync); go["go-fmt"](ctx); go["go-mod-tidy"](ctx); }
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
 export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }

@@ -83,12 +83,12 @@
           <li><a href="../../../guides/integrations/mcp/" title="MCP">MCP</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#two-permutations---simple" title="Two permutations: --simple">Two permutations: --simple</a></li><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#the-guard-is-not-a-security-boundary" title="The guard is not a security boundary">The guard is not a security boundary</a></li><li><a href="#parity-across-hosts" title="Parity across hosts">Parity across hosts</a></li><li><a href="#claude-code" title="Claude Code">Claude Code</a></li></ul></li><li><a href="#hook-templates" title="Hook templates">Hook templates</a><ul><li><a href="#how-they-fit-together" title="How they fit together">How they fit together</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#attention-hooks-knowing-when-an-agent-needs-you" title="Attention hooks: knowing when an agent needs you">Attention hooks: knowing when an agent needs you</a><ul><li><a href="#wiring-it-per-host" title="Wiring it per host">Wiring it per host</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
+        <ul><li><a href="#the-skills" title="The skills">The skills</a><ul><li><a href="#where-guidance-belongs" title="Where guidance belongs">Where guidance belongs</a></li></ul></li><li><a href="#install-and-update" title="Install and update">Install and update</a><ul><li><a href="#two-permutations---simple" title="Two permutations: --simple">Two permutations: --simple</a></li><li><a href="#codex" title="Codex">Codex</a></li><li><a href="#daemon-optional-agent-surface-preferred" title="Daemon optional, agent surface preferred">Daemon optional, agent surface preferred</a></li></ul></li><li><a href="#project-references" title="Project references">Project references</a></li><li><a href="#guard-hooks" title="Guard hooks">Guard hooks</a><ul><li><a href="#the-guard-is-not-a-security-boundary" title="The guard is not a security boundary">The guard is not a security boundary</a></li><li><a href="#agent-command-telemetry" title="Agent command telemetry">Agent command telemetry</a></li><li><a href="#parity-across-hosts" title="Parity across hosts">Parity across hosts</a></li><li><a href="#claude-code" title="Claude Code">Claude Code</a></li></ul></li><li><a href="#hook-templates" title="Hook templates">Hook templates</a><ul><li><a href="#how-they-fit-together" title="How they fit together">How they fit together</a></li><li><a href="#other-agents" title="Other agents">Other agents</a></li></ul></li><li><a href="#attention-hooks-knowing-when-an-agent-needs-you" title="Attention hooks: knowing when an agent needs you">Attention hooks: knowing when an agent needs you</a><ul><li><a href="#wiring-it-per-host" title="Wiring it per host">Wiring it per host</a></li></ul></li><li><a href="#the-mcp-daemon" title="The MCP daemon">The MCP daemon</a></li><li><a href="#why-a-daemon-not-a-wrapper" title="Why a daemon, not a wrapper">Why a daemon, not a wrapper</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">41 min read</small>
+    <small class="reading-time" title="Estimated reading time">43 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
@@ -496,6 +496,57 @@ response dialect directly. Bare <code>-o template</code> lists the fields. A hos
 integration is therefore a few lines of configuration you own, with no
 host-specific code in magus. An unreadable event fails open as a <code>pass</code>, since
 a guard that errors on every tool call is worse than no guard.</p>
+<h3 id="agent-command-telemetry">Agent command telemetry</h3>
+<p>Every <code>magus agent hook</code> invocation with a readable command or path also appends
+one <code>agent_command</code> event to the existing Activity Trail. This is product
+telemetry for improving agent support: it shows which host tool an agent
+selected, whether it reached a Magus surface or a raw command, and which guard
+guidance would help move that workflow onto Magus. It is not a security feature
+and it is never an execution gate: recording is best-effort, local, and cannot
+change the hook verdict.</p>
+<p>The hook writes a normalized request and response as content-addressed blobs,
+not the opaque host event. The request is schema-versioned and contains only
+the stable fields Magus needs for usage analysis:</p>
+<pre><code class="language-json">{
+  &quot;schema_version&quot;: 1,
+  &quot;session&quot;: &quot;abc123&quot;,
+  &quot;event&quot;: &quot;PreToolUse&quot;,
+  &quot;tool&quot;: &quot;Bash&quot;,
+  &quot;command&quot;: &quot;magus run test .&quot;
+}
+</code></pre>
+<p>For a file-edit hook, <code>path</code> replaces <code>command</code>. The response contains the
+same schema version plus <code>decision</code> (<code>pass</code>, <code>advise</code>, or <code>deny</code>) and, where
+applicable, the guard's <code>reason</code> or <code>context</code>. The Activity event uses the
+host's tool name as <code>action</code>, a host-provided agent/session identifier as
+<code>actor</code> when one exists, and the workspace root. The command itself remains in
+the request blob rather than the list row, so the Activity view can group and
+scan safely while an operator can inspect the exact invocation when needed.</p>
+<p><code>agent_command</code> means <strong>observed invocation</strong>, not successful execution. A
+pre-tool hook runs before the host decides whether to call the tool, so an
+<code>OUTCOME_OK</code> event means Magus recorded and evaluated the observation; it does
+not say that a shell process started, exited zero, or even ran at all. This is
+why direct MCP calls remain <code>mcp_tool_call</code> events: their central wrapper sees
+the actual result and records its duration and success or failure. Skills do
+not need a separate producer: they only tell an agent what to do, and the
+resulting shell, editor, or MCP call is captured at that real execution
+surface.</p>
+<p>The documented Claude Code, Codex, Cursor, and OpenCode templates all call
+<code>magus agent hook</code>, so their configured shell and file-tool surfaces flow into
+the same trail automatically. A host without a hook cannot be observed by
+Magus; no local CLI can discover commands another process did not report. The
+coverage boundary is explicit rather than guessed. An unreadable host event or
+a workspace/cache lookup failure still fails open and produces no command
+event, preserving the host session over telemetry.</p>
+<p>Events live alongside the rest of the local trail at
+<code>&lt;cache-dir&gt;/activity/events.jsonl</code>; their blobs live under
+<code>&lt;cache-dir&gt;/activity/blobs</code>. They follow the trail's existing bounded
+retention (10,000 newest events, with unreferenced blobs collected on rotate).
+Commands and paths are intentionally retained because they are the evidence
+needed to improve adoption, so do not put credentials or other secrets in a
+command line. The authenticated Activity view is the supported way to inspect
+them; there is no new network exporter, scoring system, or instrumentation
+inside a Magus target or <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> execution path.</p>
 <h3 id="parity-across-hosts">Parity across hosts</h3>
 <p>Every host gets the same RULES - they come from one binary, and none of them is
 per-host. What differs is how much of a verdict a host's hook surface can carry.</p>
@@ -1294,6 +1345,9 @@ toolchain's real commands. See <a href="../../../concepts/spells/">spells</a>.</
 <h3 id="ward">Ward</h3>
 <p>A coded diagnostic that inspects a resolved op and nudges or blocks an
 anti-pattern before it runs. See <a href="../../../concepts/wards/">wards</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../../../concepts/engines/">engines</a>.</p>
 <h3 id="cache">Cache</h3>
 <p>The content-addressed store magus consults before running a target, so unchanged
 work is skipped. See <a href="../../../concepts/cache/">cache</a>.</p>

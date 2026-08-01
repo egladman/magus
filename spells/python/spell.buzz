@@ -4,7 +4,7 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "python"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt",
             "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"];
 }

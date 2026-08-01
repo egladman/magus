@@ -47,11 +47,11 @@ gap.
 Both discover the workspace root's projects and evaluate magusfiles the same
 way (`Open` calls the same `load()` `Inspect` does, then additionally opens
 the on-disk cache) - the difference is purely whether a cache gets built, not
-what gets discovered.<!-- why --> `Inspect` returning the narrow
+what gets discovered.{{if .Full}} `Inspect` returning the narrow
 `types.WorkspaceRepository` interface rather than the concrete `*Magus` is
 itself a hint: an introspection-only caller should code against the
 interface, and a caller who later needs `Run` should switch to `Open` and get
-the concrete type, not type-assert their way there.<!-- /why -->
+the concrete type, not type-assert their way there.{{end}}
 
 `magus.FindRoot(dir)` walks up from `dir` (or cwd) to locate the workspace
 root before calling either constructor, the same walk the CLI does.
@@ -117,11 +117,11 @@ canceled"`), and wraps `ctx.Err()`, so `errors.Is(err, context.Canceled)` and
 before calling `ListProjects` on a one-project workspace produces exactly
 that message and `errors.Is` returns true.
 
-<!-- why -->The reason is stated directly in describe.go: a partial inventory
+{{if .Full}}The reason is stated directly in describe.go: a partial inventory
 reporting `Count: 3` is indistinguishable from a workspace that genuinely has
 three projects, so silently truncating would be a wrong answer wearing a
 right answer's shape. Never treat an empty or short `List*`/`Evaluate*`
-result as "the workspace has nothing" without checking the error first.<!-- /why -->
+result as "the workspace has nothing" without checking the error first.{{end}}
 
 ## Two different graphs, easy to conflate
 

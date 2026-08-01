@@ -10,10 +10,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/interp"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	ispell "github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -81,6 +82,28 @@ func TestSupersetModules(t *testing.T) {
 	}
 }
 
+func TestRegisterModuleSurfaceWithModules(t *testing.T) {
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	t.Cleanup(func() { _ = sess.Close() })
+
+	modules := bindinggen.Modules.With("json", bindinggen.ModuleReg{
+		Register: func(context.Context, *buzz.Session) vm.Value {
+			m := vm.NewMap()
+			m.MapSet("mocked", vm.StrValue("json"))
+			return m
+		},
+		Capabilities: bindinggen.Capabilities(bindinggen.WASM),
+	})
+	RegisterModuleSurface(ctx, sess, WithModules(modules))
+
+	json, ok := sess.SyntheticModule("json")
+	require.True(t, ok)
+	mocked, ok := json.MapGet("mocked")
+	require.True(t, ok)
+	assert.Equal(t, "json", mocked.String())
+}
+
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with host/gen
@@ -106,7 +129,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 		if len(m.Methods) == 0 {
 			continue
 		}
-		key := host.CamelCase(m.Methods[0].Name)
+		key := std.CamelCase(m.Methods[0].Name)
 		if bn := m.Methods[0].BuzzName; bn != "" {
 			key = bn
 		}
@@ -121,11 +144,11 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
 // signatures) so the two surfaces can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
-	core := host.Modules("") // what `magus describe modules` formats
+	core := std.DescribeModules("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
 
 	// What a magusfile sees from magus.modules(): the same core, marshalled.
-	got, ok := host.ValueToAny(host.MapsVal(core)).([]any)
+	got, ok := bindinggen.ValueToAny(bindinggen.MapsVal(core)).([]any)
 	require.True(t, ok)
 	require.Len(t, got, len(core))
 	for i, m := range core {
@@ -135,7 +158,7 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	}
 
 	// Detail mode (magus.module) shares the same core, with typed methods + signatures.
-	fs := host.Modules("fs")
+	fs := std.DescribeModules("fs")
 	require.Len(t, fs, 1)
 	require.NotEmpty(t, fs[0].Methods)
 	assert.NotEmpty(t, fs[0].Methods[0].Buzz, "each method carries its Buzz signature")
@@ -1264,7 +1287,7 @@ func TestMirrorFieldsMatchBuzzObject(t *testing.T) {
 		object string
 		toMap  map[string]any
 	}{
-		{"Tag", types.Tag{}.BuzzObject()},
+		{"Tag", types.VCSTag{}.BuzzObject()},
 		{"Affected", types.AffectedResult{}.BuzzObject()},
 		{"Graph", types.GraphView{}.BuzzObject()},
 		{"Projects", types.ProjectsOutput{}.BuzzObject()},
@@ -1312,7 +1335,7 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 	t.Parallel()
 	owners := []any{
 		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
-		types.SemverVersion{}, types.URL{}, types.Tag{}, types.ProjectEntry{},
+		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
 		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}

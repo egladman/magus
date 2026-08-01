@@ -6,7 +6,7 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "tslib"; }
 
-export fun mgs_listRequiredGlobs(dir: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/*.json", "package.json"];
 }
 

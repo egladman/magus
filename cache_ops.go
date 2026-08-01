@@ -116,6 +116,18 @@ func (m *Magus) CacheDir() string {
 	return resolveCacheDir(m.ws.Root, m.cfg)
 }
 
+// ResolveCacheDir returns the cache directory that an Open or Inspect workspace rooted at root
+// would use without discovering projects or evaluating magusfiles. Sidecar writers that need the
+// shared cache location before a command runs use this narrow path so instrumentation does not pay
+// workspace-load cost merely to append an event.
+func ResolveCacheDir(root string, opts ...Option) (string, error) {
+	cfg, err := loadConfig(root, opts...)
+	if err != nil {
+		return "", err
+	}
+	return resolveCacheDir(root, cfg), nil
+}
+
 // OutputByRef resolves a target-output reference id (or a unique prefix, git-style)
 // to its reconstructed raw text and metadata. It reads the output store directly from
 // the resolved cache dir, so it works on Inspect workspaces too (no live cache needed)

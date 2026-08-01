@@ -1,12 +1,14 @@
 package types
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Boundary mirrors of the objects magus host methods return. Each is the typed
 // value a Go SDK caller gets and the serializable view a magusfile can annotate
 // (`> FileInfo`, `> HttpResponse`, ...) for compile-checked field access. The
 // Impl returns the struct; its BuzzObject method is the {field: value} map the
-// generated Buzz trampoline marshals (see host.BuzzObjecter). The Buzz `object`
+// generated Buzz trampoline turns into the corresponding map. The Buzz `object`
 // mirrors are generated from these structs by cmd/magus-utils types (go:generate)
 // and shipped with the host module that returns each one (os, fs, http, encoding,
 // semver, vcs - see internal/spell/hosttypes.go), so the Go struct stays the
@@ -23,6 +25,8 @@ import "fmt"
 // `buzz:"-"` omissions, timestamps as RFC3339 text).
 type BuzzObject map[string]any
 
+//go:generate go run ../cmd/magus-utils buzzobjects -out buzzobject_gen.go
+
 // FileInfo mirrors fs.stat's {size, mtime, mode, is_dir} object: size in bytes,
 // mtime as Unix milliseconds, mode as the integer permission bits.
 type FileInfo struct {
@@ -32,27 +36,12 @@ type FileInfo struct {
 	IsDir bool `buzz:"is_dir"`
 }
 
-// BuzzObject is the Buzz boundary map fs.stat returns: {size, mtime, mode, is_dir}.
-func (fi FileInfo) BuzzObject() BuzzObject {
-	return map[string]any{
-		"size":   fi.Size,
-		"mtime":  fi.Mtime,
-		"mode":   fi.Mode,
-		"is_dir": fi.IsDir,
-	}
-}
-
 // HTTPResponse mirrors http.get/post/request's {status, body, headers} object.
 // headers maps each response header name to its first value.
 type HTTPResponse struct {
 	Status  int
 	Body    string
 	Headers map[string]string
-}
-
-// BuzzObject is the Buzz boundary map http.get/post/request returns: {status, body, headers}.
-func (r HTTPResponse) BuzzObject() BuzzObject {
-	return map[string]any{"status": r.Status, "body": r.Body, "headers": r.Headers}
 }
 
 // SemverVersion mirrors semver.parse's {major, minor, patch, prerelease,
@@ -64,18 +53,6 @@ type SemverVersion struct {
 	Prerelease string
 	Metadata   string
 	Original   string
-}
-
-// BuzzObject is the Buzz boundary map semver.parse returns.
-func (v SemverVersion) BuzzObject() BuzzObject {
-	return map[string]any{
-		"major":      v.Major,
-		"minor":      v.Minor,
-		"patch":      v.Patch,
-		"prerelease": v.Prerelease,
-		"metadata":   v.Metadata,
-		"original":   v.Original,
-	}
 }
 
 // String renders the canonical "vMAJOR.MINOR.PATCH[-PRERELEASE][+METADATA]"
@@ -106,15 +83,6 @@ type SemverNext struct {
 	Patch string
 }
 
-// BuzzObject is the Buzz boundary map semver.next returns.
-func (n SemverNext) BuzzObject() BuzzObject {
-	return map[string]any{
-		"major": n.Major,
-		"minor": n.Minor,
-		"patch": n.Patch,
-	}
-}
-
 // URL mirrors encoding.parse_url's {scheme, host, port, path, query, fragment}
 // object.
 type URL struct {
@@ -124,16 +92,4 @@ type URL struct {
 	Path     string
 	Query    string
 	Fragment string
-}
-
-// BuzzObject is the Buzz boundary map encoding.parse_url returns.
-func (u URL) BuzzObject() BuzzObject {
-	return map[string]any{
-		"scheme":   u.Scheme,
-		"host":     u.Host,
-		"port":     u.Port,
-		"path":     u.Path,
-		"query":    u.Query,
-		"fragment": u.Fragment,
-	}
 }

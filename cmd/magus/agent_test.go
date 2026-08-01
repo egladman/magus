@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -693,6 +694,7 @@ func TestGuardKnownHoles(t *testing.T) {
 // input forms (arguments, raw stdin, --from-json extraction), the -o arm, and
 // the fail-open contract for unreadable input.
 func TestAgentHookCmd(t *testing.T) {
+	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
 		// The display flags live on a package global and default to whatever it
@@ -701,7 +703,8 @@ func TestAgentHookCmd(t *testing.T) {
 		// load-bearing here - and the reason this reset exists rather than a
 		// local output flag, which is what the command used to have.
 		global = globalFlags{}
-		require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(stdin), &out, args))
+		ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: auditDir, workspace: "/repo/magus"})
+		require.NoError(t, agentHookCmd(ctx, strings.NewReader(stdin), &out, args))
 		return out.String()
 	}
 
@@ -734,6 +737,64 @@ func TestAgentHookCmd(t *testing.T) {
 	assert.Equal(t, "pass\n", run("not json", "--from-json", "tool_input.command"))
 	assert.Equal(t, "pass\n", run(`{"other":1}`, "--from-json", "tool_input.command"))
 	assert.Equal(t, "pass\n", run(""))
+}
+
+func TestAgentHookCmd_AppendsNormalizedActivity(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: dir, workspace: "/repo/magus"})
+	event := `{"agent_host":"codex","session_id":"abc123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`
+	var out bytes.Buffer
+	require.NoError(t, agentHookCmd(ctx, strings.NewReader(event), &out, []string{"--from-json", "tool_input.command", "-o", "name"}))
+	assert.Equal(t, "deny\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, trail.KindAgentCommand, got.Kind)
+	assert.Equal(t, "session:abc123", got.Actor)
+	assert.Equal(t, "/repo/magus", got.Workspace)
+	assert.Equal(t, "Bash", got.Action)
+	assert.Equal(t, "guard: deny", got.Preview)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"codex","session":"abc123","event":"PreToolUse","tool":"Bash","command":"git stash"}`, string(body))
+	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"schema_version":1`)
+	assert.Contains(t, string(body), `"decision":"deny"`)
+	assert.Contains(t, string(body), `"reason":`)
+}
+
+func TestAgentHookCmd_PathAndEmptyInputActivity(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, agentHookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name", "-"}))
+	assert.Equal(t, "advise\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, trail.KindAgentCommand, got.Kind)
+	assert.Equal(t, "agent", got.Actor)
+	assert.Equal(t, "file.write", got.Action)
+	assert.Equal(t, "guard: advise", got.Preview)
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write"}`, string(body))
+
+	emptyDir := t.TempDir()
+	emptyCtx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: emptyDir, workspace: "/repo/magus"})
+	out.Reset()
+	require.NoError(t, agentHookCmd(emptyCtx, strings.NewReader(""), &out, nil))
+	assert.Equal(t, "pass\n", out.String())
+	events, err = trail.ReadRecent(emptyDir, 1)
+	require.NoError(t, err)
+	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
 
 // TestExtractJSONString pins the dot-path walk and its error cases.
@@ -811,7 +872,8 @@ func TestAgentHookPathMode(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
-			require.NoError(t, agentHookCmd(context.Background(), strings.NewReader(""), &out, tt.args))
+			ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: t.TempDir(), workspace: "/repo/magus"})
+			require.NoError(t, agentHookCmd(ctx, strings.NewReader(""), &out, tt.args))
 			assert.Equal(t, "pass\n", out.String(),
 				"an unclassifiable path says nothing: an advisory fired on a guess trains the reader to ignore it")
 		})

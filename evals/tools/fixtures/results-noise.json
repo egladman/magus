@@ -1,0 +1,8 @@
+{
+  "results": [
+    {"vars": {"skill": "magus-run", "permutation": "full", "model": "fixture", "task_id": "one", "trial": 1}, "assertions": [{"passed": true}, {"passed": true}, {"passed": false}, {"passed": false}, {"passed": false}]},
+    {"vars": {"skill": "magus-run", "permutation": "simple", "model": "fixture", "task_id": "one", "trial": 1}, "assertions": [{"passed": true}, {"passed": true}, {"passed": true}, {"passed": false}, {"passed": false}]},
+    {"vars": {"skill": "magus-run", "permutation": "full", "model": "fixture", "task_id": "two", "trial": 1}, "assertions": [{"passed": true}, {"passed": true}, {"passed": true}, {"passed": false}, {"passed": false}]},
+    {"vars": {"skill": "magus-run", "permutation": "simple", "model": "fixture", "task_id": "two", "trial": 1}, "assertions": [{"passed": true}, {"passed": true}, {"passed": false}, {"passed": false}, {"passed": false}]}
+  ]
+}

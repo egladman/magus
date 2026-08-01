@@ -181,7 +181,7 @@ type TargetGraphNode struct {
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
 	// UpdateRef for why magus must neither delete nor restore one.
 	//
-	// buzz:"-": TargetGraphNode.BuzzObject() below does not emit an "updates" key
+	// buzz:"-": TargetGraphNode.BuzzObject() does not emit an "updates" key
 	// (JSON/YAML carry it; the Buzz boundary map does not), so a generated mirror
 	// field would promise a key the runtime value never has. Same reasoning as
 	// TargetGraphOutput.Definition / TargetGraphProject.RelPath just below.
@@ -215,66 +215,12 @@ type TargetGraphNode struct {
 	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
 }
 
-// buzzList is the Buzz boundary form of an optional []string: never nil.
-//
-// Every list below is `omitempty` on the wire, where absent and empty are the same
-// thing. On the Buzz boundary they are NOT: a nil slice arrives as null, and null is
-// not a list - `deps.len()` on it raises "null is not callable" at render time, far
-// from the field that was empty. The mirrors generated from these structs default
-// every list field to `[]`, so returning one is also what the annotation promises.
-func buzzList(s []string) []string {
-	if s == nil {
-		return []string{}
-	}
-	return s
-}
-
-// BuzzObject is the Buzz boundary map for one target. Keys are the camelCase names the
-// generated mirror declares, not the snake_case JSON ones.
-func (n TargetGraphNode) BuzzObject() BuzzObject {
-	spells := make([]any, len(n.Spells))
-	for i, s := range n.Spells {
-		spells[i] = s.BuzzObject()
-	}
-	cross := make([]any, len(n.CrossDependencies))
-	for i, c := range n.CrossDependencies {
-		cross[i] = c.BuzzObject()
-	}
-	inputs := make([]any, len(n.Inputs))
-	for i, in := range n.Inputs {
-		inputs[i] = in.BuzzObject()
-	}
-	outputs := make([]any, len(n.Outputs))
-	for i, o := range n.Outputs {
-		outputs[i] = o.BuzzObject()
-	}
-	return map[string]any{
-		"name":              n.Name,
-		"declared":          n.Declared,
-		"doc":               n.Doc,
-		"dependencies":      buzzList(n.Dependencies),
-		"charms":            buzzList(n.Charms),
-		"spells":            spells,
-		"crossDependencies": cross,
-		"inputs":            inputs,
-		"outputs":           outputs,
-	}
-}
-
 // CrossTargetRef names one target in another project: a target-level cross-project
 // dependency. Project is workspace-relative (resolved from the dot-/repo-relative
 // path written in the magusfile); Target is the kebab-normalized target name.
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
-}
-
-// BuzzObject is the Buzz boundary map for one cross-project target reference.
-func (c CrossTargetRef) BuzzObject() BuzzObject {
-	return map[string]any{
-		"project": c.Project,
-		"target":  c.Target,
-	}
 }
 
 // InputRef names one file input a target declares via ctx.inputs, in a single shape
@@ -290,14 +236,6 @@ func (c CrossTargetRef) BuzzObject() BuzzObject {
 type InputRef struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Glob    string `json:"glob" yaml:"glob"`
-}
-
-// BuzzObject is the Buzz boundary map for one declared file input.
-func (r InputRef) BuzzObject() BuzzObject {
-	return map[string]any{
-		"project": r.Project,
-		"glob":    r.Glob,
-	}
 }
 
 // OutputRef names one file output a target declares via ctx.outputs, in the same shape
@@ -336,14 +274,6 @@ type UpdateRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// BuzzObject is the Buzz boundary map for one declared file output.
-func (r OutputRef) BuzzObject() BuzzObject {
-	return map[string]any{
-		"project": r.Project,
-		"glob":    r.Glob,
-	}
-}
-
 // CrossFileMember is the reserved member on a project-import handle
 // (`<alias>.file("rel")`) that resolves a cross-project file to a workspace-relative
 // path. The static extractor (internal/describe) and the runtime resolver
@@ -355,14 +285,6 @@ const CrossFileMember = "file"
 type TargetSpellUse struct {
 	Spell string   `json:"spell"         yaml:"spell"`
 	Ops   []string `json:"ops,omitempty" yaml:"ops,omitempty"`
-}
-
-// BuzzObject is the Buzz boundary map for one spell a target drives.
-func (u TargetSpellUse) BuzzObject() BuzzObject {
-	return map[string]any{
-		"spell": u.Spell,
-		"ops":   buzzList(u.Ops),
-	}
 }
 
 // TargetGraphProject is one project's target graph, plus a detected cycle (a path
@@ -396,24 +318,6 @@ func (p TargetGraphProject) Label() string {
 	return ProjectDisplayName(p.Path, name, "")
 }
 
-// BuzzObject is the Buzz boundary map for one project's target graph. RelPath is dropped:
-// it exists for Label(), which a Go render site calls, and mirroring it would put a
-// field on the Buzz value that the value never carries.
-func (p TargetGraphProject) BuzzObject() BuzzObject {
-	nodes := make([]any, len(p.Nodes))
-	for i, n := range p.Nodes {
-		nodes[i] = n.BuzzObject()
-	}
-	return map[string]any{
-		"path":      p.Path,
-		"name":      p.Name,
-		"engine":    p.Engine,
-		"nodes":     nodes,
-		"cycle":     buzzList(p.Cycle),
-		"dependsOn": buzzList(p.DependsOn),
-	}
-}
-
 // TargetGraphOutput is the top-level result for "describe graph".
 //
 // The Buzz `object TargetGraph` mirror is generated from this struct by
@@ -424,16 +328,6 @@ func (p TargetGraphProject) BuzzObject() BuzzObject {
 type TargetGraphOutput struct {
 	Definition string               `json:"definition" yaml:"definition" buzz:"-"`
 	Projects   []TargetGraphProject `json:"projects"   yaml:"projects"`
-}
-
-// BuzzObject is the Buzz boundary map magus.targets returns. Definition is dropped: it is
-// prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o TargetGraphOutput) BuzzObject() BuzzObject {
-	projects := make([]any, len(o.Projects))
-	for i, p := range o.Projects {
-		projects[i] = p.BuzzObject()
-	}
-	return map[string]any{"projects": projects}
 }
 
 // ProjectDefinition is the human-readable description of a project shown by "magus describe projects".
@@ -477,22 +371,6 @@ type ProjectEntry struct {
 	Manifests []string `json:"manifests,omitempty" yaml:"manifests,omitempty"`
 }
 
-// BuzzObject is the Buzz boundary map for one project (magus.ls's entries).
-func (p ProjectEntry) BuzzObject() BuzzObject {
-	return map[string]any{
-		"path":      p.Path,
-		"name":      p.Name,
-		"dir":       p.Dir,
-		"spell":     p.Spell,
-		"spells":    p.Spells,
-		"sources":   p.Sources,
-		"outputs":   p.Outputs,
-		"dependsOn": p.DependsOn,
-		"exclusive": p.Exclusive,
-		"manifests": p.Manifests,
-	}
-}
-
 // ProjectsOutput is the top-level result for "describe projects".
 //
 // The Buzz `object Projects` mirror is generated from this struct by
@@ -505,20 +383,6 @@ type ProjectsOutput struct {
 	Workspace  string         `json:"workspace"  yaml:"workspace"`
 	Count      int            `json:"count"      yaml:"count"`
 	Projects   []ProjectEntry `json:"projects"   yaml:"projects"`
-}
-
-// BuzzObject is the Buzz boundary map magus.ls returns. Definition is dropped: it is
-// prose for a human reading `magus describe`, not something a magusfile branches on.
-func (o ProjectsOutput) BuzzObject() BuzzObject {
-	projects := make([]any, len(o.Projects))
-	for i, p := range o.Projects {
-		projects[i] = p.BuzzObject()
-	}
-	return map[string]any{
-		"workspace": o.Workspace,
-		"count":     o.Count,
-		"projects":  projects,
-	}
 }
 
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
@@ -536,21 +400,11 @@ type ModuleMethodEntry struct {
 	BuzzStdlib string `json:"buzz_stdlib,omitempty" yaml:"buzz_stdlib,omitempty"`
 }
 
-// BuzzObject is the Buzz boundary map for a method entry (magus.module's methods).
-func (m ModuleMethodEntry) BuzzObject() BuzzObject {
-	return map[string]any{"name": m.Name, "doc": m.Doc, "buzz": m.Buzz, "buzzStdlib": m.BuzzStdlib}
-}
-
 // ModuleFieldEntry is one static, table-level value on a module (e.g. vcs.name).
 type ModuleFieldEntry struct {
 	Name string `json:"name"          yaml:"name"`
 	Type string `json:"type"          yaml:"type"`
 	Doc  string `json:"doc,omitempty" yaml:"doc,omitempty"`
-}
-
-// BuzzObject is the Buzz boundary map for a field entry (magus.module's fields).
-func (f ModuleFieldEntry) BuzzObject() BuzzObject {
-	return map[string]any{"name": f.Name, "type": f.Type, "doc": f.Doc}
 }
 
 // ModuleEntry is a module's summary; Fields/Methods are populated only for the detail view.
@@ -559,21 +413,6 @@ type ModuleEntry struct {
 	Doc     string              `json:"doc,omitempty"     yaml:"doc,omitempty"`
 	Fields  []ModuleFieldEntry  `json:"fields,omitempty"  yaml:"fields,omitempty"`
 	Methods []ModuleMethodEntry `json:"methods,omitempty" yaml:"methods,omitempty"`
-}
-
-// BuzzObject is the Buzz boundary map magus.modules / magus.module return:
-// {name, doc, fields, methods}. fields/methods are always present (empty in the
-// summary view). The generated/hand-written bindings marshal it via host.BuzzObjecter.
-func (e ModuleEntry) BuzzObject() BuzzObject {
-	fields := make([]any, len(e.Fields))
-	for i, f := range e.Fields {
-		fields[i] = f.BuzzObject()
-	}
-	methods := make([]any, len(e.Methods))
-	for i, m := range e.Methods {
-		methods[i] = m.BuzzObject()
-	}
-	return map[string]any{"name": e.Name, "doc": e.Doc, "fields": fields, "methods": methods}
 }
 
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
@@ -645,7 +484,7 @@ type EvaluatedProject struct {
 
 // BuzzObject is the Buzz boundary map for one evaluated project. Written explicitly
 // rather than left to the BuzzObject ProjectEntry promotes: an embedded ProjectEntry's
-// BuzzObject is promoted onto EvaluatedProject too, which would satisfy host.BuzzObjecter
+// BuzzObject is promoted onto EvaluatedProject too, which would satisfy host's boundary view
 // (host/helpers.go) while emitting only the declared half and silently dropping
 // ResolvedSpells/TargetPolicies. EvaluatedProject is not on the Buzz mirror
 // allowlist and no std/ host method returns it today, so nothing calls this yet -
@@ -654,13 +493,24 @@ type EvaluatedProject struct {
 // policy - see Target's identity-fields comment) has its own BuzzObject, so their
 // fields are read directly rather than through a promoted-in-the-same-way call.
 func (p EvaluatedProject) BuzzObject() BuzzObject {
-	m := p.ProjectEntry.BuzzObject()
+	m := BuzzObject{
+		"path":      p.Path,
+		"name":      p.Name,
+		"dir":       p.Dir,
+		"spell":     p.Spell,
+		"spells":    p.Spells,
+		"sources":   p.Sources,
+		"outputs":   p.Outputs,
+		"dependsOn": p.DependsOn,
+		"exclusive": p.Exclusive,
+		"manifests": p.Manifests,
+	}
 	spells := make([]any, len(p.ResolvedSpells))
 	for i, s := range p.ResolvedSpells {
 		spells[i] = map[string]any{
 			"name":            s.Name,
-			"targetSources":   buzzList(s.TargetSources),
-			"effectiveClaims": buzzList(s.EffectiveClaims),
+			"targetSources":   s.TargetSources,
+			"effectiveClaims": s.EffectiveClaims,
 			"claimWeight":     s.ClaimWeight,
 		}
 	}

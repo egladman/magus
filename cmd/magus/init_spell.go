@@ -102,10 +102,9 @@ export fun mgs_getName() > str { return "SPELLNAME"; }
 
 // mgs_listRequiredGlobs declares the inputs this spell's ops read (its "needs").
 // magus hashes every matching file into the cache key, so editing one busts the
-// cache and re-runs; a file no glob matches never triggers a rebuild. ` + "`root`" + ` is
-// the project directory, usually ignorable. Under-declare here and you replay a
-// stale build; see docs/cache.md.
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+// cache and re-runs; a file no glob matches never triggers a rebuild.
+// Under-declare here and you replay a stale build; see docs/cache.md.
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.SPELLNAME"];
 }
 

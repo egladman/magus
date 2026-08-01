@@ -27,7 +27,6 @@ const SpellModulePath = "magus/spell"
 // both at runtime (as part of the magus/spell source module) and at built-in
 // generation time (inlined into each built-in via SelfContainedBuiltinSource).
 //
-//go:generate go run ../../cmd/magus-utils types -type Target -out gen/types/target.buzz
 //go:embed gen/types/target.buzz
 var TargetModuleSource string
 
@@ -39,15 +38,12 @@ var TargetModuleSource string
 // bundle (see builtinModuleSources). Order matters in that bundle: PatchOp precedes
 // Charm (Charm.ops is [PatchOp]) precedes Run (Run.charms is {str: Charm}).
 //
-//go:generate go run ../../cmd/magus-utils types -type PatchOp -out gen/types/patchop.buzz
 //go:embed gen/types/patchop.buzz
 var PatchOpSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Charm -out gen/types/charm.buzz
 //go:embed gen/types/charm.buzz
 var CharmTypeSource string
 
-//go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz
 //go:embed gen/types/command.buzz
 var CommandSource string
 
@@ -57,7 +53,6 @@ var CommandSource string
 // can author a service op; it must follow CommandSource there (Service's fields are
 // typed Command).
 //
-//go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
 //go:embed gen/types/service.buzz
 var ServiceSource string
 

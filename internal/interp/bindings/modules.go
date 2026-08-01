@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	hostreg "github.com/egladman/magus/host/registry"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	ispell "github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
@@ -57,9 +57,9 @@ var hostTypeModuleSources = map[string]string{
 // byte-level companions) and layers it onto the stdlib module of the same name,
 // or installs it fresh when Buzz has no such module. Ordered by name so the bind
 // sequence is deterministic.
-func magusModules() []buzz.Module {
-	names := make([]string, 0, len(hostreg.Modules))
-	for name := range hostreg.Modules {
+func magusModules(modules bindinggen.Set) []buzz.Module {
+	names := make([]string, 0, len(modules))
+	for name := range modules {
 		names = append(names, name)
 	}
 	sort.Strings(names)
@@ -67,9 +67,9 @@ func magusModules() []buzz.Module {
 	mods := make([]buzz.Module, 0, len(names))
 	for _, name := range names {
 		name := name
-		reg := hostreg.Modules[name]
+		reg := modules[name]
 		labels := []string{labelMagus}
-		if reg.WASMCompatible {
+		if reg.Capabilities.Has(bindinggen.WASM) {
 			labels = append(labels, labelWASM)
 		}
 		mods = append(mods, buzz.Module{
@@ -133,13 +133,29 @@ func mergeModuleMap(dst, src vm.Value) {
 // a standalone script sees, shared by the magusfile engine (which then adds the
 // magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
-func RegisterModuleSurface(ctx context.Context, sess *buzz.Session) {
+type moduleSurfaceConfig struct{ modules bindinggen.Set }
+
+// ModuleSurfaceOption configures one registration of the host module surface.
+type ModuleSurfaceOption func(*moduleSurfaceConfig)
+
+// WithModules replaces the default host-module set for one session. It is the
+// test seam for a fake fs/http/vcs module; callers use registry.Modules.With to
+// replace only the capability they need without mutating global state.
+func WithModules(modules bindinggen.Set) ModuleSurfaceOption {
+	return func(c *moduleSurfaceConfig) { c.modules = modules }
+}
+
+func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...ModuleSurfaceOption) {
+	cfg := moduleSurfaceConfig{modules: bindinggen.Modules}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	// Buzz's stdlib provides the base modules; the magus modules then layer onto
 	// the same bare names (their Bind reads back and merges) or install fresh. One
 	// registration path: gopherbuzz's stdlib and magus's own modules are both
 	// buzz.Modules applied through Session.Provide.
 	buzzstd.Register(sess)
-	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules()...)
+	_ = sess.Provide(buzz.ModuleEnv{Ctx: ctx}, magusModules(cfg.modules)...)
 }
 
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {

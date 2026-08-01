@@ -2,8 +2,8 @@
 
 magus already measured the workspace: what depends on what, what changes
 together, where churn and complexity concentrate, who owns what. Query those
-facts before proposing structure<!-- why -->; a proposal that cites graph evidence is
-checkable, one from intuition is vibes<!-- /why -->.
+facts before proposing structure{{if .Full}}; a proposal that cites graph evidence is
+checkable, one from intuition is vibes{{end}}.
 
 ## Survey before proposing
 
@@ -18,10 +18,10 @@ magus graph deps -o tree     # the declared project DAG
 ```
 
 MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
-ground.<!-- why --> Affinity deserves special weight: two projects that keep changing
+ground.{{if .Full}} Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
-either declare the dependency or move the shared concern.<!-- /why --><!-- terse --> Weight affinity most: changing
-together with no declared edge is back-door coupling.<!-- /terse -->
+either declare the dependency or move the shared concern.{{else}} Weight affinity most: changing
+together with no declared edge is back-door coupling.{{end}}
 
 ## Then survey the opposite: what is too THIN to justify a boundary
 
@@ -29,14 +29,14 @@ Every lens above finds something too big, too central, or too churned. None find
 the inverse, and over-abstraction is the more common failure in a young codebase.
 Ask it explicitly, because nothing prompts it for you:
 
-<!-- why -->A boundary is not free. In Go every package boundary FORCES an export:
+{{if .Full}}A boundary is not free. In Go every package boundary FORCES an export:
 a helper that would be lowercase inside one package must be capitalized to cross
 into another. So splitting files into packages to "organize" them WIDENS the
 public surface you were trying to keep small, and each new export is a name you
 must justify, document, and keep stable. The cost is paid per boundary, and no
-churn or coupling metric records it.<!-- /why --><!-- terse -->A boundary is not free: in
+churn or coupling metric records it.{{else}}A boundary is not free: in
 Go, splitting a package forces exports, widening the surface you meant to shrink.
-No churn or coupling metric records that cost.<!-- /terse -->
+No churn or coupling metric records that cost.{{end}}
 
 The shapes worth flagging, in rough order of how clearly they are wrong:
 
@@ -61,16 +61,16 @@ and nothing it exports would need to be exported once merged.
 ## Sizing a specific refactor
 
 1. Blast radius of a node: `magus explain <node>` shows its edges and how many
-   nodes reach it.<!-- why --> A high reached-by count means migration plan, not quick
-   rename.<!-- /why -->
+   nodes reach it.{{if .Full}} A high reached-by count means migration plan, not quick
+   rename.{{end}}
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
-   any exported symbol.<!-- why --> (If it reports no match for a symbol that surely
+   any exported symbol.{{if .Full}} (If it reports no match for a symbol that surely
    exists, the index is likely unbuilt: check `magus status`, then
-   `magus graph build`.)<!-- /why --><!-- terse --> No match for a symbol that exists means an unbuilt
-   index: `magus graph build`.<!-- /terse -->
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain<!-- why --> -
-   use it to test whether a proposed boundary actually separates them<!-- /why -->.
+   `magus graph build`.){{else}} No match for a symbol that exists means an unbuilt
+   index: `magus graph build`.{{end}}
+3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}} -
+   use it to test whether a proposed boundary actually separates them{{end}}.
 4. Owners: `magus query kind:owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
@@ -78,16 +78,16 @@ and nothing it exports would need to be exported once merged.
 
 Derive the pattern from the graph rather than imposing one: where similar code
 already lives (`magus query kind:<kind> <term>`), which modules import which
-(`relation:imports`), how existing projects segment (`magus graph deps`).<!-- why --> A
+(`relation:imports`), how existing projects segment (`magus graph deps`).{{if .Full}} A
 suggestion that follows the workspace's own conventions costs less than an
-imported ideal.<!-- /why --> State the observed convention in the proposal, with the query
+imported ideal.{{end}} State the observed convention in the proposal, with the query
 that shows it.
 
 ## Audit the domain model itself
 
-<!-- why -->The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+{{if .Full}}The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):<!-- /why --><!-- terse -->Census the kinds, then read the stats for smells:<!-- /terse -->
+stats for smells (see the magus-query skill for the query syntax):{{else}}Census the kinds, then read the stats for smells:{{end}}
 
 ```sh
 magus graph stats                    # god nodes, orphans, doc coverage
@@ -104,26 +104,26 @@ Confirm each smell against the source before acting on it:
   kind, or fold into an attr on an existing one?
 - Two kinds with near-identical population AND edge shape may be one concept
   under two names. Keep them distinct only if their PROVENANCE differs (the kind
-  doctrine in `types/knowledge.go`)<!-- why -->: a kind whose every instance is derivable
-  from another kind's attr fails that test and should fold<!-- /why -->.
+  doctrine in `types/knowledge.go`){{if .Full}}: a kind whose every instance is derivable
+  from another kind's attr fails that test and should fold{{end}}.
 - An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
-  which<!-- why -->; an undeclared-but-available builtin is neither<!-- /why -->.
+  which{{if .Full}}; an undeclared-but-available builtin is neither{{end}}.
 - A NODE LABEL that varies by checkout (a worktree name where a stable module
-  name belongs) is an identity smell<!-- why -->, even when the ID is stable<!-- /why -->.
+  name belongs) is an identity smell{{if .Full}}, even when the ID is stable{{end}}.
 
 A kind or edge earns its place only if it answers a question the others cannot;
-prefer folding into an existing mechanism over adding one<!-- why --> (pre-1.0: break
-freely)<!-- /why -->. Ground every claim in a query, exactly as for a layout proposal.
+prefer folding into an existing mechanism over adding one{{if .Full}} (pre-1.0: break
+freely){{end}}. Ground every claim in a query, exactly as for a layout proposal.
 
 ## Verify the change
 
 After restructuring, show the impact in graph terms: `magus graph diff --rev
 <base> -o markdown` lists the nodes and edges the change added, removed, or
-altered<!-- why --> - blast radius as data, suitable for a PR description<!-- /why -->. Then run
+altered{{if .Full}} - blast radius as data, suitable for a PR description{{end}}. Then run
 `magus affected ci` to prove the affected projects still pass.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool<!-- why --> - do not hand-draw diagrams of what the graph already knows<!-- /why -->.
+browser graph tool{{if .Full}} - do not hand-draw diagrams of what the graph already knows{{end}}.

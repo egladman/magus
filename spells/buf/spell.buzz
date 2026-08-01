@@ -16,7 +16,7 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "buf"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.proto", "buf.yaml", "buf.gen.yaml", "buf.work.yaml", "buf.lock"];
 }
 

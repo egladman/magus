@@ -58,14 +58,14 @@ type VCSDriver interface {
 	// An empty result means "no tags visible here", which is NOT "never
 	// released": a shallow or single-branch clone commonly fetches none, so a
 	// caller deciding what shipped must treat empty as unknown.
-	Tags(ctx context.Context, dir, pattern string) ([]Tag, error)
+	Tags(ctx context.Context, dir, pattern string) ([]VCSTag, error)
 }
 
-// Tag is a VCS-agnostic release marker: a name pinned to a revision. Only the
+// VCSTag is a VCS-agnostic release marker: a name pinned to a revision. Only the
 // facts every tagging backend agrees on are modeled - an annotated tag's tagger
 // and message are not, since a lightweight tag has neither. Reach for vcs.exe()
 // for backend-specific tag work.
-type Tag struct {
+type VCSTag struct {
 	// Name is the tag as a user writes it ("v0.3.0", or "libs/gopherbuzz/v0.1.0"
 	// for a nested-module tag), without a refs/tags/ prefix.
 	Name string
@@ -87,24 +87,6 @@ type Tag struct {
 	ID string `buzz:"id"`
 }
 
-// BuzzObject is the Buzz boundary map vcs.tags entries return: {name, prefix,
-// version, date, id}. date is RFC3339, empty when the VCS reported no
-// timestamp; version nests SemverVersion.BuzzObject() (its own zero value when Name
-// did not parse as semver).
-func (t Tag) BuzzObject() BuzzObject {
-	date := ""
-	if !t.Date.IsZero() {
-		date = t.Date.Format(time.RFC3339)
-	}
-	return map[string]any{
-		"name":    t.Name,
-		"prefix":  t.Prefix,
-		"version": t.Version.BuzzObject(),
-		"date":    date,
-		"id":      t.ID,
-	}
-}
-
 // Person identifies who authored a revision.
 type Person struct {
 	Name  string
@@ -117,7 +99,7 @@ type Person struct {
 // vcs.exe() for VCS-specific work.
 type Commit struct {
 	// ID is the content/revision identifier: git SHA, hg node, jj commit_id.
-	ID    string
+	ID    string `buzz:"id"`
 	Short string // abbreviated ID
 	// Author wrote the change.
 	Author Person
@@ -140,10 +122,10 @@ func (c Commit) BuzzObject() BuzzObject {
 	if !c.Date.IsZero() {
 		date = c.Date.Format(time.RFC3339)
 	}
-	return map[string]any{
+	return BuzzObject{
 		"id":      c.ID,
 		"short":   c.Short,
-		"author":  map[string]any{"name": c.Author.Name, "email": c.Author.Email},
+		"author":  BuzzObject{"name": c.Author.Name, "email": c.Author.Email},
 		"date":    date,
 		"subject": c.Subject,
 		"body":    c.Body,

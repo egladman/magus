@@ -7,11 +7,12 @@
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1,
 // magus.status.v1). It is deliberately NOT the execution journal (magus.viewer.v1, what a
 // build ran) nor metrics (magus.metrics.v1, aggregate counters): activity answers "who did
-// what, and did it succeed". The sources are MCP tool calls and connector-token lifecycle
-// today; the enum reserves the other governance sources the envelope is built to hold
-// (config mutations, sandbox denials) so they slot in with no schema change. buf-breaking
-// gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case, matching the
-// journal); this proto is the WIRE format only, mapped from that struct in the handler.
+// what, and did it succeed". It also records agent-host command observations so maintainers can
+// understand which tools and interfaces agents actually choose. A pre-execution hook cannot know
+// whether its requested command later ran, so that event captures the guard decision rather than
+// inventing an execution result. This is local workflow telemetry, not a security boundary.
+// buf-breaking gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case,
+// matching the journal); this proto is the WIRE format only, mapped from that struct in the handler.
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
@@ -26,15 +27,17 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1/activity.proto.
  */
 export const file_magus_activity_v1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEi5gIKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJIoEBCg1BY3Rpdml0eVF1ZXJ5EiYKBWtpbmRzGAEgAygOMhcubWFndXMuYWN0aXZpdHkudjEuS2luZBIOCgZhY3RvcnMYAiADKAkSDwoHYWN0aW9ucxgDIAMoCRInCgR0aW1lGAQgASgLMhkubWFndXMucXVlcnkudjEuVGltZVJhbmdlInoKE0xpc3RBY3Rpdml0eVJlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkSMAoGZmlsdGVyGAMgASgLMiAubWFndXMuYWN0aXZpdHkudjEuQWN0aXZpdHlRdWVyeSJhChRMaXN0QWN0aXZpdHlSZXNwb25zZRIwCgZldmVudHMYASADKAsyIC5tYWd1cy5hY3Rpdml0eS52MS5BY3Rpdml0eUV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSI+ChFHZXRQYXlsb2FkUmVxdWVzdBIpCgNyZWYYASABKAlCHLpIGXIXMhVeW2Etel17Miw4fVswLTlhLWZdKyQiMQoSR2V0UGF5bG9hZFJlc3BvbnNlEgwKBGJvZHkYASABKAwSDQoFYnl0ZXMYAiABKAMqngEKBEtpbmQSFAoQS0lORF9VTlNQRUNJRklFRBAAEhYKEktJTkRfTUNQX1RPT0xfQ0FMTBABEgwKCEtJTkRfSk9CEAISFgoSS0lORF9DT05GSUdfQ0hBTkdFEAMSGAoUS0lORF9UT0tFTl9MSUZFQ1lDTEUQBBIXChNLSU5EX1NBTkRCT1hfREVOSUFMEAUSDwoLS0lORF9NRU1PUlkQBipFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMs0BCg9BY3Rpdml0eVNlcnZpY2USXwoMTGlzdEFjdGl2aXR5EiYubWFndXMuYWN0aXZpdHkudjEuTGlzdEFjdGl2aXR5UmVxdWVzdBonLm1hZ3VzLmFjdGl2aXR5LnYxLkxpc3RBY3Rpdml0eVJlc3BvbnNlElkKCkdldFBheWxvYWQSJC5tYWd1cy5hY3Rpdml0eS52MS5HZXRQYXlsb2FkUmVxdWVzdBolLm1hZ3VzLmFjdGl2aXR5LnYxLkdldFBheWxvYWRSZXNwb25zZULRAQoVY29tLm1hZ3VzLmFjdGl2aXR5LnYxQg1BY3Rpdml0eVByb3RvUAFaQ2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2FjdGl2aXR5L3YxO2FjdGl2aXR5djGiAgNNQViqAhFNYWd1cy5BY3Rpdml0eS5WMcoCEU1hZ3VzXEFjdGl2aXR5XFYx4gIdTWFndXNcQWN0aXZpdHlcVjFcR1BCTWV0YWRhdGHqAhNNYWd1czo6QWN0aXZpdHk6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
+  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEi5gIKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJIoEBCg1BY3Rpdml0eVF1ZXJ5EiYKBWtpbmRzGAEgAygOMhcubWFndXMuYWN0aXZpdHkudjEuS2luZBIOCgZhY3RvcnMYAiADKAkSDwoHYWN0aW9ucxgDIAMoCRInCgR0aW1lGAQgASgLMhkubWFndXMucXVlcnkudjEuVGltZVJhbmdlInoKE0xpc3RBY3Rpdml0eVJlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkSMAoGZmlsdGVyGAMgASgLMiAubWFndXMuYWN0aXZpdHkudjEuQWN0aXZpdHlRdWVyeSJhChRMaXN0QWN0aXZpdHlSZXNwb25zZRIwCgZldmVudHMYASADKAsyIC5tYWd1cy5hY3Rpdml0eS52MS5BY3Rpdml0eUV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSI+ChFHZXRQYXlsb2FkUmVxdWVzdBIpCgNyZWYYASABKAlCHLpIGXIXMhVeW2Etel17Miw4fVswLTlhLWZdKyQiMQoSR2V0UGF5bG9hZFJlc3BvbnNlEgwKBGJvZHkYASABKAwSDQoFYnl0ZXMYAiABKAMqtgEKBEtpbmQSFAoQS0lORF9VTlNQRUNJRklFRBAAEhYKEktJTkRfTUNQX1RPT0xfQ0FMTBABEgwKCEtJTkRfSk9CEAISFgoSS0lORF9DT05GSUdfQ0hBTkdFEAMSGAoUS0lORF9UT0tFTl9MSUZFQ1lDTEUQBBIXChNLSU5EX1NBTkRCT1hfREVOSUFMEAUSDwoLS0lORF9NRU1PUlkQBhIWChJLSU5EX0FHRU5UX0NPTU1BTkQQBypFCgdPdXRjb21lEhcKE09VVENPTUVfVU5TUEVDSUZJRUQQABIOCgpPVVRDT01FX09LEAESEQoNT1VUQ09NRV9FUlJPUhACMs0BCg9BY3Rpdml0eVNlcnZpY2USXwoMTGlzdEFjdGl2aXR5EiYubWFndXMuYWN0aXZpdHkudjEuTGlzdEFjdGl2aXR5UmVxdWVzdBonLm1hZ3VzLmFjdGl2aXR5LnYxLkxpc3RBY3Rpdml0eVJlc3BvbnNlElkKCkdldFBheWxvYWQSJC5tYWd1cy5hY3Rpdml0eS52MS5HZXRQYXlsb2FkUmVxdWVzdBolLm1hZ3VzLmFjdGl2aXR5LnYxLkdldFBheWxvYWRSZXNwb25zZULRAQoVY29tLm1hZ3VzLmFjdGl2aXR5LnYxQg1BY3Rpdml0eVByb3RvUAFaQ2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2FjdGl2aXR5L3YxO2FjdGl2aXR5djGiAgNNQViqAhFNYWd1cy5BY3Rpdml0eS5WMcoCEU1hZ3VzXEFjdGl2aXR5XFYx4gIdTWFndXNcQWN0aXZpdHlcVjFcR1BCTWV0YWRhdGHqAhNNYWd1czo6QWN0aXZpdHk6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
  * kind, action, outcome) is common to every kind; the payload refs point into the activity
  * blob store (fetched via GetPayload) so a large request/response body never bloats the line.
  * For an MCP tool call: actor is the agent id, action is the tool name, request is the
- * arguments, response is the result. For a token lifecycle event: actor is "cli", action is
- * "connector.create"/"connector.revoke", and the refs are empty.
+ * arguments, response is the result. For an agent command observation: actor is the host-supplied
+ * agent/session identity when available, action is the host tool name, request is the normalized
+ * invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
+ * action is "connector.create"/"connector.revoke", and the refs are empty.
  *
  * @generated from message magus.activity.v1.ActivityEvent
  */
@@ -323,6 +326,15 @@ export enum Kind {
    * @generated from enum value: KIND_MEMORY = 6;
    */
   MEMORY = 6,
+
+  /**
+   * An agent host observed a shell or file-tool invocation. The request blob contains normalized
+   * host/tool/session data and the command or path; the response blob contains the guard decision.
+   * OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
+   *
+   * @generated from enum value: KIND_AGENT_COMMAND = 7;
+   */
+  AGENT_COMMAND = 7,
 }
 
 /**

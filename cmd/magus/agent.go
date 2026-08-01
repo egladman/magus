@@ -15,9 +15,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	json "github.com/egladman/magus/internal/codec"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -42,7 +44,7 @@ var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchema
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
 // `install` writes the embedded skills into explicitly named destinations,
 // `install-agents-md` maintains the managed magus section in AGENTS.md, and
-// `hook` evaluates one shell command to a guard verdict. Destinations and
+// `hook` evaluates and records one shell or file-tool command to a guard verdict. Destinations and
 // event shapes are explicit arguments, never auto-detected (per the
 // explicit-and-granular preference); writing into a repo's agent-config dirs
 // happens only through these commands, never as a side effect of another.
@@ -81,8 +83,8 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
 	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
 	fmt.Fprintln(w, "                     never writes a file")
-	fmt.Fprintln(w, "  hook               evaluate one shell command against the magus guard")
-	fmt.Fprintln(w, "                     rules and emit a deny/advise/pass verdict")
+	fmt.Fprintln(w, "  hook               evaluate and record one agent tool invocation against")
+	fmt.Fprintln(w, "                     the magus guard rules, then emit a deny/advise/pass verdict")
 	fmt.Fprintln(w, "  notify             turn one agent-host event (waiting for input, needs")
 	fmt.Fprintln(w, "                     approval, finished) into an attention record, and")
 	fmt.Fprintln(w, "                     optionally a desktop notification")
@@ -313,25 +315,27 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 		return err
 	}
 
+	input, hasInput := readGuardInput(in, fset.Args(), *fromJSON)
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
-		if path, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
+		if hasInput {
 			// The generated-output rule is definitive (it reads declared globs), so it
 			// speaks first; the memory nudge is a heuristic on the filename and only
 			// fills the silence it leaves.
-			context := adviseGeneratedWrite(ctx, path)
+			context := adviseGeneratedWrite(ctx, input.Value)
 			if context == "" {
-				context = adviseMemoryWrite(path)
+				context = adviseMemoryWrite(input.Value)
 			}
 			if context != "" {
 				verdict.Decision = "advise"
 				verdict.Context = context
 			}
 		}
+		appendAgentHookActivity(ctx, input, true, verdict)
 		return writeGuardVerdict(out, opts, verdict)
 	}
-	if command, ok := readGuardCommand(in, fset.Args(), *fromJSON); ok {
-		switch v := evaluateBashGuard(command); {
+	if hasInput {
+		switch v := evaluateBashGuard(input.Value); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
@@ -340,6 +344,7 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 			verdict.Context = v.Context
 		}
 	}
+	appendAgentHookActivity(ctx, input, false, verdict)
 	return writeGuardVerdict(out, opts, verdict)
 }
 
@@ -430,32 +435,152 @@ func adviseMemoryWrite(path string) string {
 	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-memory skill if not already loaded."
 }
 
-// readGuardCommand resolves the command string from the three input forms:
-// --from-json extraction, positional arguments (joined), or raw stdin (also the
-// "-" positional). The boolean is false when no command could be read - the
-// caller's fail-open path.
-func readGuardCommand(in io.Reader, args []string, fromJSON string) (string, bool) {
+// guardInput keeps the resolved command/path distinct from optional host-event metadata.
+type guardInput struct {
+	Value string
+	Event []byte // original host event, retained only long enough to extract stable audit metadata
+}
+
+// readGuardInput resolves the command or path from the supported inputs. JSON event bytes travel
+// alongside the extracted value so the audit writer can retain host identity without ever storing
+// the opaque, potentially much larger host event itself.
+func readGuardInput(in io.Reader, args []string, fromJSON string) (guardInput, bool) {
 	if fromJSON != "" {
 		doc, err := io.ReadAll(in)
 		if err != nil {
-			return "", false
+			return guardInput{}, false
 		}
 		s, err := extractJSONString(doc, fromJSON)
 		if err != nil {
 			// Visible in the host's debug log, invisible to the session: fail open.
 			fmt.Fprintln(os.Stderr, "agent hook: "+err.Error()+" (failing open)")
-			return "", false
+			return guardInput{}, false
 		}
-		return s, true
+		return guardInput{Value: s, Event: doc}, true
 	}
 	if len(args) > 0 && (len(args) != 1 || args[0] != "-") {
-		return strings.Join(args, " "), true
+		return guardInput{Value: strings.Join(args, " ")}, true
 	}
 	b, err := io.ReadAll(in)
 	if err != nil || len(bytes.TrimSpace(b)) == 0 {
-		return "", false
+		return guardInput{}, false
 	}
-	return string(b), true
+	return guardInput{Value: string(b)}, true
+}
+
+// readGuardCommand resolves the command string from the three input forms: --from-json extraction,
+// positional arguments (joined), or raw stdin (also the "-" positional). The boolean is false when
+// no command could be read - the caller's fail-open path. The hook itself uses readGuardInput so
+// its activity event can capture host metadata separately.
+func readGuardCommand(in io.Reader, args []string, fromJSON string) (string, bool) {
+	input, ok := readGuardInput(in, args, fromJSON)
+	return input.Value, ok
+}
+
+type agentHookActivityLocation struct {
+	base      string
+	workspace string
+}
+
+type agentHookActivityLocationKey struct{}
+
+// appendAgentHookActivity contributes a best-effort, normalized observation to the same durable
+// trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
+// the host may choose not to execute a denied command, and a pre-hook never learns the eventual
+// exit status. An audit failure must therefore be invisible to both the verdict and the command.
+func appendAgentHookActivity(ctx context.Context, input guardInput, asPath bool, verdict guardVerdict) {
+	if input.Value == "" {
+		return
+	}
+	location := agentHookActivityTrail(ctx)
+	if location.base == "" {
+		return
+	}
+	metadata := agentHookMetadata(input.Event)
+	tool := metadata.tool
+	if tool == "" {
+		if asPath {
+			tool = "file.write"
+		} else {
+			tool = "shell.command"
+		}
+	}
+	actor := "agent"
+	if metadata.agentID != "" {
+		actor = "agent:" + metadata.agentID
+	} else if metadata.session != "" {
+		actor = "session:" + metadata.session
+	}
+	command := trail.AgentCommand{
+		Actor:     actor,
+		Workspace: location.workspace,
+		Host:      metadata.host,
+		Session:   metadata.session,
+		Event:     metadata.event,
+		Tool:      tool,
+		Decision:  verdict.Decision,
+		Reason:    verdict.Reason,
+		Context:   verdict.Context,
+	}
+	if asPath {
+		command.Path = input.Value
+	} else {
+		command.Command = input.Value
+	}
+	trail.AppendAgentCommand(location.base, command)
+}
+
+// agentHookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
+// client process, outside the daemon's memory. Tests can pin a temporary base through context so
+// a guard unit test never writes its checkout's real activity trail.
+func agentHookActivityTrail(ctx context.Context) agentHookActivityLocation {
+	if location, ok := ctx.Value(agentHookActivityLocationKey{}).(agentHookActivityLocation); ok {
+		return location
+	}
+	root, err := magus.FindRoot("")
+	if err != nil {
+		return agentHookActivityLocation{}
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return agentHookActivityLocation{}
+	}
+	return agentHookActivityLocation{base: cacheDir, workspace: root}
+}
+
+type hookMetadata struct {
+	host    string
+	session string
+	agentID string
+	event   string
+	tool    string
+}
+
+// agentHookMetadata accepts the field names shared by the documented host events. Unknown fields
+// stay unknown; guessing a provider identity is worse than recording the generic agent actor.
+func agentHookMetadata(event []byte) hookMetadata {
+	if len(event) == 0 {
+		return hookMetadata{}
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(event, &fields); err != nil {
+		return hookMetadata{}
+	}
+	stringField := func(names ...string) string {
+		for _, name := range names {
+			if value, ok := fields[name].(string); ok && value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	return hookMetadata{
+		host:    stringField("agent_host", "host"),
+		session: stringField("session_id", "session"),
+		agentID: stringField("agent_id", "agent"),
+		event:   stringField("hook_event_name", "event"),
+		tool:    stringField("tool_name", "tool"),
+	}
 }
 
 // extractJSONString unmarshals doc and walks a dot-separated path of object

@@ -16,12 +16,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"golang.org/x/mod/modfile"
@@ -122,10 +122,10 @@ func cacheImmutable(cfg config.Config) bool {
 // allModuleEntries returns every stdlib module with its methods populated. The
 // summary view (empty name) carries only names, so each is re-queried for detail.
 func allModuleEntries() []types.ModuleEntry {
-	summary := host.Modules("")
+	summary := std.DescribeModules("")
 	out := make([]types.ModuleEntry, 0, len(summary))
 	for _, m := range summary {
-		out = append(out, host.Modules(m.Name)...)
+		out = append(out, std.DescribeModules(m.Name)...)
 	}
 	return out
 }

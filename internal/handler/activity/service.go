@@ -25,8 +25,8 @@ const (
 )
 
 // Service implements activityv1connect.ActivityServiceHandler over a workspace's activity trail
-// at cacheDir. Read-only: producers (the MCP handler, and later jobs/config/token) write the
-// trail; this reads it.
+// at cacheDir. Read-only: producers (the MCP handler, agent hooks, and later jobs/config/token)
+// write the trail; this reads it.
 type Service struct {
 	cacheDir string
 }
@@ -126,6 +126,8 @@ func encodeKind(k trail.Kind) activityv1.Kind {
 		return activityv1.Kind_KIND_TOKEN_LIFECYCLE
 	case trail.KindSandboxDenial:
 		return activityv1.Kind_KIND_SANDBOX_DENIAL
+	case trail.KindAgentCommand:
+		return activityv1.Kind_KIND_AGENT_COMMAND
 	case trail.KindMemory:
 		return activityv1.Kind_KIND_MEMORY
 	default:

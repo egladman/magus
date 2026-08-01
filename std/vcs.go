@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../host/gen/vcs.go
+//go:generate go run ../cmd/magus-utils bindings -module vcs -lang buzz -out ../internal/interp/bindings/gen/vcs.go
 
 func init() { Register(Vcs) }
 
@@ -423,7 +423,7 @@ func VcsDescribe(ctx context.Context) (string, error) {
 
 // VcsTags returns the repository's tags newest-first, filtered by pattern. An
 // empty list when no VCS is resolved; a failed query is returned, not swallowed.
-func VcsTags(ctx context.Context, pattern string) ([]types.Tag, error) {
+func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
 		return nil, nil

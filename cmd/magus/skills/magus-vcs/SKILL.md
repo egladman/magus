@@ -1,14 +1,14 @@
 # VCS hygiene in a magus workspace
 
 Targets declare their outputs: the file globs a target regenerates on every run
-(`MAGUS.md`, `gen/` trees, lockfile-adjacent artifacts).<!-- why --> magus uses those
-declarations for caching, `magus clean`, and its VCS merge driver.<!-- /why --> Use the same
+(`MAGUS.md`, `gen/` trees, lockfile-adjacent artifacts).{{if .Full}} magus uses those
+declarations for caching, `magus clean`, and its VCS merge driver.{{end}} Use the same
 declarations to decide which changed files deserve your attention.
 
 ## Classify before you read
 
-Feed every changed or conflicting path to magus in one call<!-- why --> - it classifies
-each against the workspace's declared globs<!-- /why -->:
+Feed every changed or conflicting path to magus in one call{{if .Full}} - it classifies
+each against the workspace's declared globs{{end}}:
 
 ```sh
 magus describe file $(git diff --name-only) <other paths...>
@@ -21,33 +21,33 @@ project and a role:
 - `source` - matches a declared sources glob: it feeds cache keys and the
   affected set. This is the diff worth reading.
 - `unclaimed` - no project declares it: it affects no target. Check the VCS
-  ignore rules (`git check-ignore -v <path>`)<!-- why --> - build residue should be
-  ignored, and an unclaimed un-ignored file is at risk of being lost<!-- /why -->.
+  ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
+  ignored, and an unclaimed un-ignored file is at risk of being lost{{end}}.
 
-<!-- why -->WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
+{{if .Full}}WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
 CORRECT: note that `docs/gen/**` is a declared output of
-`docs:generate`, skip the diff, and read the source change that caused it.<!-- /why -->
+`docs:generate`, skip the diff, and read the source change that caused it.{{end}}
 
 ## Rules for generated files
 
 - Never hand-edit one. Change the source of truth, then run the producing
   target (usually `magus run generate`).
 - Do not investigate their diffs; regenerate and compare instead. If a generated
-  file changed with no source change, that is the finding<!-- why --> (stale or hand-edited
-  output) - `magus run generate` should settle it<!-- /why -->.
-- Distinguish real drift from environmental noise before you act.<!-- why --> If regenerating
+  file changed with no source change, that is the finding{{if .Full}} (stale or hand-edited
+  output) - `magus run generate` should settle it{{end}}.
+- Distinguish real drift from environmental noise before you act.{{if .Full}} If regenerating
   reproduces the same diff while the target's declared inputs are unchanged, the
   drift is environmental (a tool-version bump, an embedded timestamp), not your
   change. Report the tool or version; never revert the working tree to chase it.
-  Real drift traces to a source edit; environmental drift traces to the toolchain.<!-- /why --><!-- terse -->
+  Real drift traces to a source edit; environmental drift traces to the toolchain.{{else}}
   Same diff on regenerate with inputs unchanged means environmental (tool
-  version, timestamp). Report the tool; never revert the tree to chase it.<!-- /terse -->
+  version, timestamp). Report the tool; never revert the tree to chase it.{{end}}
 - Commit regenerated outputs together with the source change that produced
-  them.<!-- why --> CI typically runs the generate target as a drift gate: a source change
-  whose outputs were not committed fails there.<!-- /why -->
+  them.{{if .Full}} CI typically runs the generate target as a drift gate: a source change
+  whose outputs were not committed fails there.{{end}}
 - On merge conflicts in a generated file, do not merge hunks by hand: take
-  either side, then regenerate.<!-- why --> Workspaces wired with `magus config init` have
-  a VCS merge driver that does this automatically.<!-- /why -->
+  either side, then regenerate.{{if .Full}} Workspaces wired with `magus config init` have
+  a VCS merge driver that does this automatically.{{end}}
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
@@ -63,8 +63,8 @@ magus vcs add <path>...   # narrow it
 ```
 
 It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in<!-- why -->, which is the one thing
-`git add -A` cannot do<!-- /why -->. Pass `--untracked` when one of those undeclared paths is
+REPORTS every undeclared path instead of sweeping it in{{if .Full}}, which is the one thing
+`git add -A` cannot do{{end}}. Pass `--untracked` when one of those undeclared paths is
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
 
@@ -74,7 +74,7 @@ form below is what it automates, and what to fall back to.
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately.<!-- why --> `git add -A` stages every
+4. Review `git status` first, then stage deliberately.{{if .Full}} `git add -A` stages every
    untracked file too, so a stray build artifact or scratch file rides along
    silently (this is how a compiled binary once slipped into a commit); use it
    only when `git status` shows nothing you do not intend, else stage the specific
@@ -83,24 +83,24 @@ form below is what it automates, and what to fall back to.
    the rest), and a path you just moved or removed is gone at its old name.
    Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
    renames included (`renamed:`), must be present. `git commit` records what `git
-   diff --cached` shows and does not re-check that your edits landed.<!-- /why --><!-- terse --> Avoid staging
+   diff --cached` shows and does not re-check that your edits landed.{{else}} Avoid staging
    everything (stray artifacts ride along); a hand-typed path list is not safer,
    since the first non-matching pathspec aborts the whole call. Confirm with
-   `git diff --cached --stat`: every intended edit, renames included.<!-- /terse -->
-5. Run `magus affected ci` before calling the work done<!-- why -->: it runs the full
+   `git diff --cached --stat`: every intended edit, renames included.{{end}}
+5. Run `magus affected ci` before calling the work done{{if .Full}}: it runs the full
    pipeline over every project the diff reaches, including ones you never edited,
    and after committing confirms HEAD builds - a partial commit that drops a
-   rename or an importer update leaves HEAD non-building<!-- /why -->.
+   rename or an importer update leaves HEAD non-building{{end}}.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
-build without committing."<!-- why --> The working tree is ALREADY what you want to verify,
+build without committing."{{if .Full}} The working tree is ALREADY what you want to verify,
 so run `magus run build` / `magus affected ci` in place; building does not
 require committing first. A whole-tree revert also unrecoverably
-destroys any untracked work a concurrent agent is writing.<!-- /why --><!-- terse --> Build in place; a
-whole-tree revert destroys a concurrent agent's untracked work.<!-- /terse --> If you truly need a
+destroys any untracked work a concurrent agent is writing.{{else}} Build in place; a
+whole-tree revert destroys a concurrent agent's untracked work.{{end}} If you truly need a
 pristine tree (e.g. to diff regenerated output), use a throwaway
 `git worktree add`, never the live tree.
 
 `magus_affected_explain` {project} answers why a specific project is in the
-affected set<!-- why --> (the changed files and dependency chains that pulled it in) when
-the result surprises you<!-- /why -->.
+affected set{{if .Full}} (the changed files and dependency chains that pulled it in) when
+the result surprises you{{end}}.

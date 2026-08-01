@@ -5,11 +5,12 @@ syntax = "proto3";
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1,
 // magus.status.v1). It is deliberately NOT the execution journal (magus.viewer.v1, what a
 // build ran) nor metrics (magus.metrics.v1, aggregate counters): activity answers "who did
-// what, and did it succeed". The sources are MCP tool calls and connector-token lifecycle
-// today; the enum reserves the other governance sources the envelope is built to hold
-// (config mutations, sandbox denials) so they slot in with no schema change. buf-breaking
-// gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case, matching the
-// journal); this proto is the WIRE format only, mapped from that struct in the handler.
+// what, and did it succeed". It also records agent-host command observations so maintainers can
+// understand which tools and interfaces agents actually choose. A pre-execution hook cannot know
+// whether its requested command later ran, so that event captures the guard decision rather than
+// inventing an execution result. This is local workflow telemetry, not a security boundary.
+// buf-breaking gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case,
+// matching the journal); this proto is the WIRE format only, mapped from that struct in the handler.
 package magus.activity.v1;
 
 import "buf/validate/validate.proto";
@@ -30,6 +31,10 @@ enum Kind {
   KIND_TOKEN_LIFECYCLE = 4; // reserved: a connector token was minted or revoked
   KIND_SANDBOX_DENIAL = 5;  // reserved: a target attempted a disallowed filesystem write
   KIND_MEMORY = 6;          // a console MemoryService action on the durable magus_memory files (reads audited too)
+  // An agent host observed a shell or file-tool invocation. The request blob contains normalized
+  // host/tool/session data and the command or path; the response blob contains the guard decision.
+  // OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
+  KIND_AGENT_COMMAND = 7;
 }
 
 // Outcome is how the action ended.
@@ -43,8 +48,10 @@ enum Outcome {
 // kind, action, outcome) is common to every kind; the payload refs point into the activity
 // blob store (fetched via GetPayload) so a large request/response body never bloats the line.
 // For an MCP tool call: actor is the agent id, action is the tool name, request is the
-// arguments, response is the result. For a token lifecycle event: actor is "cli", action is
-// "connector.create"/"connector.revoke", and the refs are empty.
+// arguments, response is the result. For an agent command observation: actor is the host-supplied
+// agent/session identity when available, action is the host tool name, request is the normalized
+// invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
+// action is "connector.create"/"connector.revoke", and the refs are empty.
 message ActivityEvent {
   google.protobuf.Timestamp time = 1;    // when the action occurred
   Kind kind = 2;

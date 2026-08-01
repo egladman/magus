@@ -48,48 +48,94 @@ the gap where it will be found (the plans doc, a task, magus_memory).
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the
   live tools. A skill that mentions this repo's specifics is a bug.
 
-## 3b. Mark the why, so `--simple` can withhold it
+## 3b. Two permutations from one body: mark the why, then shorten the rest
 
-Every skill ships in two permutations from ONE body. Bracket the prose that
-only the full one keeps:
+A skill body is a `text/template` rendered against the variant, so a permutation
+is an ordinary `{{if}}`. Three forms, and that is the whole vocabulary:
 
 ```markdown
-Do not read `MAGUS.md` for this<!-- why --> - it is a generated index for
-human readers, and a brief describing stale structure is worse than none<!-- /why -->.
+Run the target first{{if .Full}}, because a raw tool bypasses the cache{{end}}.
 
-<!-- why -->WRONG: guess the URL.
-CORRECT: read `llms.txt`, then fetch the entry's Markdown.<!-- /why -->
+{{if .Simple}}Full explains this at length below.{{end}}
+
+Read `llms.txt` first{{if .Full}}, because guessing a URL wastes a fetch and the
+index is authoritative{{else}} - it is the index{{end}}.
 ```
 
-Unmarked text is in both. The markers are HTML comments, so a marked file
-renders identically either way and neither installed copy carries scaffolding.
-One pair covers a trailing clause and a whole block - the span between them is
-taken verbatim, newlines included.
+Unconditional text is in both permutations.
 
-The test to apply per sentence: **would a capable reader still do the right
-thing without this?** Yes -> mark it. No -> it is a step, not a rationale;
-leave it unmarked and rewrite it as an imperative. Making that call sentence by
-sentence is the curation. Nothing is summarized, and there is no second file to
-keep in sync.
+Dropping the `{{else}}` means "full says more here". Reaching for it means "both
+permutations say this, at different lengths", and that is the ONLY construct that
+can shorten something both must express. A bare `{{if .Simple}}` means "simple
+says this and full says nothing", which is almost always a mistake worth catching
+in review.
+
+Measured 2026-07-31: the ten shipped skills have 137 full-only branches and only
+28 `{{else}}` arms. Most distinctions are still deletion rather than re-wording;
+reach for `{{else}}` whenever a passage survives into simple at full length.
+
+A third permutation costs a constant, not a new markup convention:
+
+```markdown
+{{if .Is "minimal"}}bare imperative{{else if .Full}}the long version{{else}}the short one{{end}}
+```
+
+### Showing template syntax inside a skill
+
+The body IS a template, including inside fenced code blocks, so a skill that
+documents `{{ }}` syntax must escape it as a string constant. magus-run
+documents the `-o template` flag and magus-buzz documents mustache; both hit
+this:
+
+```markdown
+`-o template='{{"{{.Field}}"}}'`
+```
+
+Getting it wrong is a loud failure at install (a parse error for an unknown
+function, an execute error for an unknown field), never a silently mangled file.
+
+### Which rules may lose their why
+
+Not every rule tolerates losing its rationale, and the split is not stylistic.
+
+- MECHANICAL rules are fully enumerable and self-justifying. `run magus affected
+  ci before calling the work done` determines the action on its own. Mark the
+  why freely.
+- JUDGMENT rules ask the reader to recognize an instance nobody enumerated.
+  `never a whole-tree git op to verify a build` is one: the why (a concurrent
+  agent's untracked work dies) is what lets a reader generalize to a case the
+  rule never listed. Keep a short form of the why in simple via an `{{else}}`
+  arm rather than dropping it.
+
+The evidence, for the record: an ablation of repository context files
+(arXiv:2602.11988) found imperative instructions are followed well while
+background and overview prose is not worth its tokens, which is the case for
+cutting hard. Against that, short-context compression studies (arXiv:2505.00019,
+arXiv:2502.14255) found terse rewrites degrade short instruction text and hurt
+smaller models most. So cut whole rationale blocks, but do not crush the grammar
+of what survives.
+
+### Do not de-grammar the core
+
+Dropping articles and connectives to save bytes is NOT the intended use of these
+branches, and the measured effect on weaker models is negative. Shorten by saying
+less, not by writing badly. Plain sentences, ordinary punctuation, in both arms.
 
 Rules:
 
-- Never mark a step, a command, a flag, a path, or a WRONG/CORRECT pair whose
-  CORRECT half carries the instruction. Mark failure modes, war stories,
-  "otherwise X" clauses, and worked examples that only illustrate.
-- Keep the imperative grammatical after the cut. `foo<!-- why --> - because
-  bar<!-- /why -->.` reads as `foo.`; a mid-clause cut reads as damage.
-- Unbalanced or nested markers are a hard error at install, not a warning.
+- Never put a step, a command, a flag, a path, or a WRONG/CORRECT pair whose
+  CORRECT half carries the instruction inside `{{if .Full}}`. Put failure modes,
+  war stories, "otherwise X" clauses, and worked examples that only illustrate
+  there.
+- Keep the imperative grammatical after the cut. `foo{{if .Full}} - because
+  bar{{end}}.` reads as `foo.` in simple; a mid-clause cut reads as damage.
+- A malformed template is a parse or execute error at install, which also catches
+  typos the old scheme let through as literal text.
+- A passage that survives into simple at full length is a candidate for an
+  `{{else}}` arm, not evidence the ceiling has been reached.
 - `TestEveryEmbeddedSkillHasBothPermutations` fails for any skill whose
   permutations are byte-identical, so a skill with no marked rationale is
   caught rather than silently making `--simple` a lie for that one.
-
-Verify by installing both and reading the short one end to end:
-
-```sh
-magus agent install /tmp/full --force && magus agent install /tmp/short --simple --force
-diff /tmp/full/magus-vcs/SKILL.md /tmp/short/magus-vcs/SKILL.md
-```
 
 ## 4. Breadcrumbs are load-bearing
 

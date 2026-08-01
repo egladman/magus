@@ -21,7 +21,7 @@ import "magus/spell";
 
 export fun mgs_getName() > str { return "buzz"; }
 
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.buzz"];
 }
 

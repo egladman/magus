@@ -38,7 +38,7 @@ var registry = map[string]reflect.Type{
 	"SemverVersion": reflect.TypeOf(types.SemverVersion{}),
 	"SemverNext":    reflect.TypeOf(types.SemverNext{}),
 	"URL":           reflect.TypeOf(types.URL{}),
-	"Tag":           reflect.TypeOf(types.Tag{}),
+	"Tag":           reflect.TypeOf(types.VCSTag{}),
 	// magus.affected and magus.graph, the in-process verbs beside ls.
 	"Affected": reflect.TypeOf(types.AffectedResult{}),
 	"Graph":    reflect.TypeOf(types.GraphView{}),

@@ -1,0 +1,12 @@
+id: vcs-classify-before-reading
+skill: magus-vcs
+smoke: true
+prompt: |
+  Tell me what changed on this branch.
+constraints:
+  - fn: usedSkill
+    args: [magus-vcs]
+  - fn: classifiedBeforeReadingDiff
+    args: []
+  - fn: neverRan
+    args: [STAGE_EVERYTHING, stage-everything]

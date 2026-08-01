@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,4 +62,16 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 		CacheDir:  workspace.CacheDir(),
 		Workspace: workspace.Root(),
 	})
+}
+
+func TestResolveCacheDir_DoesNotNeedWorkspaceLoad(t *testing.T) {
+	root := t.TempDir()
+	// No magusfile is needed: this deliberately resolves only config/cache placement, not projects.
+	got, err := ResolveCacheDir(root)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, ".magus"), got)
+
+	got, err = ResolveCacheDir(root, WithLoadedConfig(config.Config{Cache: config.Cache{Dir: "cache"}}))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(root, "cache"), got)
 }

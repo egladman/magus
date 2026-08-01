@@ -1,8 +1,6 @@
 package types
 
-import (
-	"context"
-)
+import "context"
 
 // Graph is the project dependency DAG; cycles are caught at construction. The
 // DepGraphRepository it wraps (the query engine) lives in repository.go.
@@ -101,23 +99,6 @@ type GraphView struct {
 	// the number a magusfile branches on to decide whether a change is safe to
 	// batch, and it is already computed by the graph.
 	BlastRadius map[string]int
-}
-
-// BuzzObject is the Buzz boundary map magus.graph returns.
-func (g GraphView) BuzzObject() BuzzObject {
-	dependsOn := make(map[string]any, len(g.DependsOn))
-	for k, v := range g.DependsOn {
-		dependsOn[k] = v
-	}
-	blast := make(map[string]any, len(g.BlastRadius))
-	for k, v := range g.BlastRadius {
-		blast[k] = v
-	}
-	return map[string]any{
-		"nodes":       g.Nodes,
-		"dependsOn":   dependsOn,
-		"blastRadius": blast,
-	}
 }
 
 // View flattens the graph into the boundary object above.

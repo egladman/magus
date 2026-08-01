@@ -413,6 +413,66 @@ integration is therefore a few lines of configuration you own, with no
 host-specific code in magus. An unreadable event fails open as a `pass`, since
 a guard that errors on every tool call is worse than no guard.
 
+### Agent command telemetry
+
+Every `magus agent hook` invocation with a readable command or path also appends
+one `agent_command` event to the existing Activity Trail. This is product
+telemetry for improving agent support: it shows which host tool an agent
+selected, whether it reached a Magus surface or a raw command, and which guard
+guidance would help move that workflow onto Magus. It is not a security feature
+and it is never an execution gate: recording is best-effort, local, and cannot
+change the hook verdict.
+
+The hook writes a normalized request and response as content-addressed blobs,
+not the opaque host event. The request is schema-versioned and contains only
+the stable fields Magus needs for usage analysis:
+
+```json
+{
+  "schema_version": 1,
+  "session": "abc123",
+  "event": "PreToolUse",
+  "tool": "Bash",
+  "command": "magus run test ."
+}
+```
+
+For a file-edit hook, `path` replaces `command`. The response contains the
+same schema version plus `decision` (`pass`, `advise`, or `deny`) and, where
+applicable, the guard's `reason` or `context`. The Activity event uses the
+host's tool name as `action`, a host-provided agent/session identifier as
+`actor` when one exists, and the workspace root. The command itself remains in
+the request blob rather than the list row, so the Activity view can group and
+scan safely while an operator can inspect the exact invocation when needed.
+
+`agent_command` means **observed invocation**, not successful execution. A
+pre-tool hook runs before the host decides whether to call the tool, so an
+`OUTCOME_OK` event means Magus recorded and evaluated the observation; it does
+not say that a shell process started, exited zero, or even ran at all. This is
+why direct MCP calls remain `mcp_tool_call` events: their central wrapper sees
+the actual result and records its duration and success or failure. Skills do
+not need a separate producer: they only tell an agent what to do, and the
+resulting shell, editor, or MCP call is captured at that real execution
+surface.
+
+The documented Claude Code, Codex, Cursor, and OpenCode templates all call
+`magus agent hook`, so their configured shell and file-tool surfaces flow into
+the same trail automatically. A host without a hook cannot be observed by
+Magus; no local CLI can discover commands another process did not report. The
+coverage boundary is explicit rather than guessed. An unreadable host event or
+a workspace/cache lookup failure still fails open and produces no command
+event, preserving the host session over telemetry.
+
+Events live alongside the rest of the local trail at
+`<cache-dir>/activity/events.jsonl`; their blobs live under
+`<cache-dir>/activity/blobs`. They follow the trail's existing bounded
+retention (10,000 newest events, with unreferenced blobs collected on rotate).
+Commands and paths are intentionally retained because they are the evidence
+needed to improve adoption, so do not put credentials or other secrets in a
+command line. The authenticated Activity view is the supported way to inspect
+them; there is no new network exporter, scoring system, or instrumentation
+inside a Magus target or Buzz execution path.
+
 ### Parity across hosts
 
 Every host gets the same RULES - they come from one binary, and none of them is

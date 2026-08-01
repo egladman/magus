@@ -7,7 +7,7 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module toml -lang buzz -out ../host/gen/toml.go
+//go:generate go run ../cmd/magus-utils bindings -module toml -lang buzz -out ../internal/interp/bindings/gen/toml.go
 
 func init() { Register(TOML) }
 

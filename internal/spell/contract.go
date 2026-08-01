@@ -5,9 +5,8 @@ package spell
 // the decoder keys they map to live in one canonical list rather than being
 // spelled out at each call site.
 type ContractEntry struct {
-	Name     string // exported mgs_ function name
-	Field    string // decoder field key the resolved value is stored under
-	TakesDir bool   // true when the function accepts a directory string argument
+	Name  string // exported mgs_ function name
+	Field string // decoder field key the resolved value is stored under
 }
 
 // OptionalContract is the canonical list of optional mgs_ functions a spell
@@ -21,7 +20,7 @@ type ContractEntry struct {
 // command records (the form the built-in spells use). Record-shaped ops pass
 // through unchanged. See docs/engines.md.
 var OptionalContract = []ContractEntry{
-	{Name: "mgs_listRequiredGlobs", Field: "needs", TakesDir: true},
+	{Name: "mgs_listRequiredGlobs", Field: "needs"},
 	{Name: "mgs_listProvidedGlobs", Field: "provides"},
 	{Name: "mgs_listClaimedGlobs", Field: "claims"},
 	{Name: "mgs_listIgnoreDirs", Field: "ignore_dirs"},

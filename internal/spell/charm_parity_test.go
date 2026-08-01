@@ -20,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/host"
 	json "github.com/egladman/magus/internal/codec"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
@@ -52,7 +52,7 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		}, "\n"))
 		require.NoError(t, s.Exec(ctx, spell.CharmModuleSource), "load charm.buzz")
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
-		return host.ValueToAny(s.GetGlobal("__r"))
+		return bindinggen.ValueToAny(s.GetGlobal("__r"))
 	}
 	ok := func(v map[string]any, err error) any {
 		t.Helper()

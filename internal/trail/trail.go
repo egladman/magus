@@ -1,9 +1,9 @@
 // Package trail is the magus activity trail: a durable, append-only record of consequential
 // actions taken against the daemon - who did what, and did it succeed - kept next to the
 // execution journal under a base directory. It is the store behind the magus.activity.v1
-// "activity view"; producers (the MCP handler and background jobs today; config and token
-// lifecycle later) append events and store payload blobs, and the console's ActivityService
-// reads them for the log viewer.
+// "activity view"; producers (the MCP handler, agent hooks, and background jobs today; config
+// and token lifecycle later) append events and store payload blobs, and the console's
+// ActivityService reads them for the log viewer.
 //
 // It is the governance sibling of internal/journal (which records what a build executed) and
 // mirrors its Event/JSONL shape: a hand-rolled Event struct, snake_case json, one json.Marshal
@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	json "github.com/egladman/magus/internal/codec"
 )
@@ -60,9 +61,9 @@ const rotateEvery = 512
 // Kind names an action's source; the values map to the magus.activity.v1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
 // so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted - the
-// param is type-checked against these consts. MCP tool calls and jobs have producers today; the rest name
-// the governance sources the envelope is built to hold, so a reader can switch on kind and a producer adds
-// one without a schema change.
+// param is type-checked against these consts. MCP tool calls, agent hooks, and jobs have producers today;
+// the rest name the governance sources the envelope is built to hold, so a reader can switch on kind and a
+// producer adds one without a schema change.
 type Kind string
 
 const (
@@ -71,6 +72,11 @@ const (
 	KindConfigChange   Kind = "config_change"   // magus.yaml changed on reload, or a config-set mutation
 	KindTokenLifecycle Kind = "token_lifecycle" // a connector token minted or revoked
 	KindSandboxDenial  Kind = "sandbox_denial"  // a target attempted a disallowed filesystem write
+	// KindAgentCommand records an agent-host tool invocation observed by a configured hook. It is
+	// an observation, not a process result: a PreToolUse hook runs before the host executes the
+	// command, so its payload records the requested command or path and the guard's decision, never
+	// an invented exit status. MCP calls remain KindMCPToolCall because their wrapper sees completion.
+	KindAgentCommand Kind = "agent_command"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
 	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
 	// own working notes, so knowing when the operator inspected them is part of the governance story,
@@ -103,6 +109,102 @@ type Event struct {
 	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
 	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
 	ResponseBytes int64  `json:"response_bytes,omitempty"`
+}
+
+// AgentCommand is the normalized, host-independent observation an agent hook contributes to the
+// trail. Command and Path are mutually exclusive in the supplied hooks: the former is a shell-tool
+// invocation, the latter a file-edit invocation. Host integrations may omit identity fields when
+// their hook event does not expose them; the event remains attributable to the generic "agent"
+// actor rather than pretending to know more than the host supplied.
+type AgentCommand struct {
+	Actor     string
+	Workspace string
+	Host      string
+	Session   string
+	Event     string
+	Tool      string
+	Command   string
+	Path      string
+	Decision  string
+	Reason    string
+	Context   string
+}
+
+const agentCommandSchemaVersion = 1
+
+type agentCommandRequest struct {
+	SchemaVersion int    `json:"schema_version"`
+	Host          string `json:"host,omitempty"`
+	Session       string `json:"session,omitempty"`
+	Event         string `json:"event,omitempty"`
+	Tool          string `json:"tool,omitempty"`
+	Command       string `json:"command,omitempty"`
+	Path          string `json:"path,omitempty"`
+}
+
+type agentCommandResponse struct {
+	SchemaVersion int    `json:"schema_version"`
+	Decision      string `json:"decision"`
+	Reason        string `json:"reason,omitempty"`
+	Context       string `json:"context,omitempty"`
+}
+
+// AppendAgentCommand writes one normalized agent-hook observation into the existing activity
+// trail. Its blobs deliberately hold only the command-audit contract, not the raw host event: host
+// events often contain unrelated model and editor fields, while the normalized payload has the
+// stable provenance needed to answer who requested which tool action and how the guard replied.
+//
+// The Outcome is OK when this best-effort observation was constructed; it does not claim that the
+// requested command ran or succeeded. A pre-execution hook has no such knowledge. Callers must not
+// make command execution contingent on the trail, so this function follows Append's best-effort,
+// error-free contract.
+func AppendAgentCommand(base string, command AgentCommand) {
+	if base == "" || (command.Command == "" && command.Path == "") {
+		return
+	}
+	request, _ := json.Marshal(agentCommandRequest{
+		SchemaVersion: agentCommandSchemaVersion,
+		Host:          command.Host,
+		Session:       command.Session,
+		Event:         command.Event,
+		Tool:          command.Tool,
+		Command:       command.Command,
+		Path:          command.Path,
+	})
+	response, _ := json.Marshal(agentCommandResponse{
+		SchemaVersion: agentCommandSchemaVersion,
+		Decision:      command.Decision,
+		Reason:        command.Reason,
+		Context:       command.Context,
+	})
+	reqRef, reqBytes := WriteBlob(base, "agent", request)
+	respRef, respBytes := WriteBlob(base, "agent", response)
+
+	action := command.Tool
+	if action == "" {
+		action = "command"
+	}
+	actor := command.Actor
+	if actor == "" {
+		actor = "agent"
+	}
+	preview := "observed"
+	if command.Decision != "" {
+		preview = "guard: " + command.Decision
+	}
+	Append(base, Event{
+		Ts:            time.Now().UnixMilli(),
+		Kind:          KindAgentCommand,
+		Actor:         actor,
+		Workspace:     command.Workspace,
+		Action:        action,
+		Outcome:       OutcomeOK,
+		RequestRef:    reqRef,
+		RequestBytes:  reqBytes,
+		ResponseRef:   respRef,
+		ResponseBytes: respBytes,
+		Preview:       preview,
+	})
 }
 
 func eventsPath(base string) string { return filepath.Join(base, dir, eventsFile) }

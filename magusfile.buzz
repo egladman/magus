@@ -72,6 +72,9 @@ magus\project({
         "release": {"skip_cache": true, "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
         "test": {"skip_cache": true},
+        // e2e crosses the Docker and upstream-network boundaries below, so it
+        // must always exercise those checks rather than replay an old result.
+        "e2e": {"skip_cache": true},
     },
 });
 
@@ -190,9 +193,18 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void {
     os\exec("go", ["generate", "./internal/manpage/..."]);
 }
 
-// Regenerates the Go host bindings (std -> host/gen) from std.Module declarations.
+// Regenerates the runtime BuzzObject maps before anything imports a host binding.
+// Its reflection lives only in magus-utils while writing this Go file; the emitted
+// methods use direct field access, so Magus never reflects at a Buzz boundary.
+export fun types_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("types/buzzobject_gen.go");
+    os\exec("go", ["generate", "./types"]);
+}
+
+// Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("host/gen/*.go");
+    ctx.needs(types_generate);
+    ctx.outputs("internal/interp/bindings/gen/*.go");
     os\exec("go", ["generate", "./std/..."]);
 }
 
@@ -204,6 +216,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz");
     os\exec("go", ["generate", "./internal/spell/..."]);
 }
@@ -212,6 +225,7 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void {
 // interface's gen/ subdir. Mocks are committed and drift-gated like every other
 // generated tree; mockery is pinned in the go.mod tool block.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("**/gen/mocks/*.go");
     os\exec("go", ["tool", "mockery"]);
 }
@@ -242,6 +256,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void {
 // declared - undeclared they classified as ordinary source, so magus told a
 // reader they were safe to hand-edit.
 export fun config_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(types_generate);
     ctx.outputs("cmd/magus/gen/*.go", "schema/gen/*.go", "internal/config/gen/*.go",
                 "cmd/magus/completions/*");
     os\exec("go", ["generate", "./cmd/magus/..."]);
@@ -280,6 +295,20 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
+// The derivation is read-only core logic; the go spell is the only layer that
+// renders or writes go.mod. Without rw, go mod edit -print must equal the file.
+export fun mod_sync(ctx: magus\Context, args: [str]) > void {
+    ctx.outputs("go.mod");
+    final flags = magus\goModReplaceArgs();
+    if (flags.len() == 0) { return; }
+    final edited = go["go-mod-edit"](ctx, {"args": flags});
+    if (ctx.has_charm("rw")) { return; }
+    if (edited.stdout != fs\readFile("go.mod")) {
+        magus\goModReplaceCheck();
+        throw "mod-sync: go mod edit -print differs from go.mod";
+    }
+}
+
 // Renders the insight report (hotspots, affinity, ownership, trend) and, with the
 // `gha` charm, appends it to a host output path supplied via env. The final CI step;
 // never gates. The env var name (MAGUS_INSIGHT_OUTPUT_PATH) is generic on purpose;
@@ -313,6 +342,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 // but its output was not re-run and committed).
 export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty() == false;
+    ctx.needs(mod_sync);
     ctx.needs(ctx.glob("*-generate"));
     if (ctx.has_charm("rw")) { return; }
 
@@ -623,6 +653,15 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     if (clean_before and vcs\isDirty([fs\join("assets", "coverage.svg")])) {
         throw "test: assets/coverage.svg is stale; re-run `magus run test:rw` and commit the badge";
     }
+}
+
+// Runs the release-confidence checks that are intentionally outside ordinary CI:
+// the root race/coverage suite, the pinned upstream Buzz conformance suite, and
+// the completion scripts inside their official shell images. Credentialed model
+// evaluations remain a separate opt-in run (`magus run smoke evals`), so a local
+// or manually dispatched e2e run never unexpectedly spends API budget.
+export fun e2e(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test, gopherbuzz\conformance, completion_test);
 }
 
 // Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).

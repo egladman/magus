@@ -9,4 +9,5 @@ export object Command {
     bin: str = "",
     args: [str] = [],
     charms: {str: Charm} = {},
+    capture: bool = false,
 }

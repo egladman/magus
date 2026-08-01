@@ -123,6 +123,28 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
+## go-mod-edit
+
+**Command:** `go mod edit -print`
+
+### rw
+
+Drops `-print`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "remove",
+    "path": "/2"
+  }
+]
+```
+
+</details>
+
 ## go-mod-tidy
 
 **Command:** `go mod tidy --diff`

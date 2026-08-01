@@ -171,10 +171,10 @@ A charm only does something for a target that declares it. Declarations live in 
 
 ### 1. Built-in command spells (`import "magus/charm"`)
 
-A built-in command spell is **self-contained**: it imports only the pure-Buzz modules `magus/target` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/target` uses for `Target`). Each resolves a _value anchor_ to an index so you never count positions:
+A built-in command spell is **self-contained**: it imports only the pure-Buzz modules `magus/spell` and `magus/charm`, so it compiles to bare bytecode with no host bindings. `magus/charm` exports the core constructors as **bare functions** (the same flat-import idiom `magus/spell` uses for `Target`). Each resolves a _value anchor_ to an index so you never count positions:
 
 ```buzz
-import "magus/target";
+import "magus/spell";
 import "magus/charm";
 
 fun lint(target: Target) > Command {

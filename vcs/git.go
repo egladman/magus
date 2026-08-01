@@ -267,7 +267,7 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 // Tags lists tags newest-first. creatordate is the sort key because it reads a
 // lightweight tag's commit date and an annotated tag's own date, so the two kinds
 // order together instead of the lightweight ones bunching at the repository's age.
-func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.Tag, error) {
+func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, error) {
 	const format = "%(refname:short)\t%(creatordate:iso-strict)\t%(objectname)"
 	out, err := vcsOutput(ctx, dir, "git", "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
 	if err != nil {

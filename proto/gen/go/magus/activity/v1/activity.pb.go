@@ -9,11 +9,12 @@
 // accountability. It is a sibling of the magus tool-page contracts (magus.viewer.v1,
 // magus.status.v1). It is deliberately NOT the execution journal (magus.viewer.v1, what a
 // build ran) nor metrics (magus.metrics.v1, aggregate counters): activity answers "who did
-// what, and did it succeed". The sources are MCP tool calls and connector-token lifecycle
-// today; the enum reserves the other governance sources the envelope is built to hold
-// (config mutations, sandbox denials) so they slot in with no schema change. buf-breaking
-// gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case, matching the
-// journal); this proto is the WIRE format only, mapped from that struct in the handler.
+// what, and did it succeed". It also records agent-host command observations so maintainers can
+// understand which tools and interfaces agents actually choose. A pre-execution hook cannot know
+// whether its requested command later ran, so that event captures the guard decision rather than
+// inventing an execution result. This is local workflow telemetry, not a security boundary.
+// buf-breaking gates this file. The on-disk store is JSONL (a hand-rolled struct, snake_case,
+// matching the journal); this proto is the WIRE format only, mapped from that struct in the handler.
 
 package activityv1
 
@@ -51,6 +52,10 @@ const (
 	Kind_KIND_TOKEN_LIFECYCLE Kind = 4 // reserved: a connector token was minted or revoked
 	Kind_KIND_SANDBOX_DENIAL  Kind = 5 // reserved: a target attempted a disallowed filesystem write
 	Kind_KIND_MEMORY          Kind = 6 // a console MemoryService action on the durable magus_memory files (reads audited too)
+	// An agent host observed a shell or file-tool invocation. The request blob contains normalized
+	// host/tool/session data and the command or path; the response blob contains the guard decision.
+	// OUTCOME_OK means the observation was recorded, NOT that a pre-hooked command later succeeded.
+	Kind_KIND_AGENT_COMMAND Kind = 7
 )
 
 // Enum value maps for Kind.
@@ -63,6 +68,7 @@ var (
 		4: "KIND_TOKEN_LIFECYCLE",
 		5: "KIND_SANDBOX_DENIAL",
 		6: "KIND_MEMORY",
+		7: "KIND_AGENT_COMMAND",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED":     0,
@@ -72,6 +78,7 @@ var (
 		"KIND_TOKEN_LIFECYCLE": 4,
 		"KIND_SANDBOX_DENIAL":  5,
 		"KIND_MEMORY":          6,
+		"KIND_AGENT_COMMAND":   7,
 	}
 )
 
@@ -156,8 +163,10 @@ func (Outcome) EnumDescriptor() ([]byte, []int) {
 // kind, action, outcome) is common to every kind; the payload refs point into the activity
 // blob store (fetched via GetPayload) so a large request/response body never bloats the line.
 // For an MCP tool call: actor is the agent id, action is the tool name, request is the
-// arguments, response is the result. For a token lifecycle event: actor is "cli", action is
-// "connector.create"/"connector.revoke", and the refs are empty.
+// arguments, response is the result. For an agent command observation: actor is the host-supplied
+// agent/session identity when available, action is the host tool name, request is the normalized
+// invocation, and response is the guard decision. For a token lifecycle event: actor is "cli",
+// action is "connector.create"/"connector.revoke", and the refs are empty.
 type ActivityEvent struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Time     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"` // when the action occurred
@@ -621,7 +630,7 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\">\n" +
 	"\x12GetPayloadResponse\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\x9e\x01\n" +
+	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xb6\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
@@ -629,7 +638,8 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x12KIND_CONFIG_CHANGE\x10\x03\x12\x18\n" +
 	"\x14KIND_TOKEN_LIFECYCLE\x10\x04\x12\x17\n" +
 	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x0f\n" +
-	"\vKIND_MEMORY\x10\x06*E\n" +
+	"\vKIND_MEMORY\x10\x06\x12\x16\n" +
+	"\x12KIND_AGENT_COMMAND\x10\a*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

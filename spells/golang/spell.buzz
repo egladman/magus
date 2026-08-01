@@ -9,7 +9,7 @@ export fun mgs_getName() > str { return "go"; }
 // Without it a .txtar was unclaimed - editing one invalidated no cache key and pulled
 // no project into the affected set, so a CI run keyed on `magus affected` could not
 // see a behavior test change at all, and a stale pass would replay from cache.
-export fun mgs_listRequiredGlobs(root: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"];
 }
 
@@ -73,6 +73,12 @@ fun goModTidy(target: Target) > Command {
         "rw": drop(args, "--diff"),
     }};
 }
+fun goModEdit(target: Target) > Command {
+    final args = ["mod", "edit", "-print"];
+    return Command{bin = "go", args = args, capture = true, charms = {
+        "rw": drop(args, "-print"),
+    }};
+}
 fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
 fun goVulncheck(target: Target) > Command { return Command{bin = "go", args = ["tool", "govulncheck", "./..."]}; }
 fun scipGo(target: Target) > Command {
@@ -89,6 +95,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "golangci-lint": golangCILint,
         "go-test": goTest,
         "go-mod-tidy": goModTidy,
+        "go-mod-edit": goModEdit,
         "go-vet": goVet,
         "govulncheck": goVulncheck,
         "scip": scipGo,

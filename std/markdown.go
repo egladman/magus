@@ -18,7 +18,7 @@ import (
 	json "github.com/egladman/magus/internal/codec"
 )
 
-//go:generate go run ../cmd/magus-utils bindings -module markdown -lang buzz -out ../host/gen/markdown.go
+//go:generate go run ../cmd/magus-utils bindings -module markdown -lang buzz -out ../internal/interp/bindings/gen/markdown.go
 
 func init() { Register(Markdown) }
 

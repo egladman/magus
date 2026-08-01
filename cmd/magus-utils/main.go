@@ -20,6 +20,7 @@ import (
 // and writes the derived artifact; see the per-subcommand file for the details.
 var scribes = map[string]func(args []string) error{
 	"types":              runTypes,
+	"buzzobjects":        runBuzzObjects,
 	"bindings":           runBindings,
 	"completions":        runCompletions,
 	"config":             runConfig,
@@ -52,5 +53,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus-utils <types|buzzobjects|bindings|config|spells|sign|api|verify|cut|migrate|release-index|generate-changelog> [flags]")
 }

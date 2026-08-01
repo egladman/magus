@@ -89,11 +89,7 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, e
 		if !ok {
 			continue
 		}
-		var args []vm.Value
-		if f.TakesDir {
-			args = []vm.Value{vm.StrValue("")}
-		}
-		rv, err := sess.CallValue(ctx, fn, args)
+		rv, err := sess.CallValue(ctx, fn, nil)
 		if err != nil {
 			return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 		}

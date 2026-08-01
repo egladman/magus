@@ -70,7 +70,7 @@ var SemverVersionSource string
 var SemverNextSource string
 
 // CommitAuthorSource / CommitSource / TagSource are the generated Buzz mirrors of
-// types.CommitAuthor, types.CommitRecord, and types.Tag. Ship with "vcs":
+// types.CommitAuthor, types.CommitRecord, and types.VCSTag. Ship with "vcs":
 // vcs.commit/vcs.history return Commit, vcs.tags returns [Tag]. CommitAuthor must
 // precede Commit (Commit.author is CommitAuthor); the co-located SemverVersion (see
 // above) must precede Tag (Tag.version is SemverVersion).

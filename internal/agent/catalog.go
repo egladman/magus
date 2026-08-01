@@ -16,12 +16,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
 	"time"
 )
 
 // SkillVersion changes when the installed skill contract changes. It is part
 // of the generated provenance and lets verification explain stale installs.
-const SkillVersion = 21
+const SkillVersion = 22
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -56,6 +57,21 @@ type AgentSkill struct {
 // dead weight in a year. Rather than let the skills quietly become bricks, the
 // choice is a flag - and re-asking "does this still earn its context?" is the
 // audit, not a rewrite.
+//
+// A {{if .Full}} branch alone caps how short the simple permutation can get,
+// because it can only SUBTRACT. Simple is "everything minus the full-only
+// branches", so a passage BOTH permutations must express sits in the shared
+// text at whatever length the full form needs, and the only way to shorten it
+// further is to drop it entirely and lose the step. The {{else}} arm is the
+// one construct that reaches it: full keeps the long wording, simple gets the
+// short one.
+//
+// Measured 2026-07-31 across the ten shipped skills: simple came out 20.3%
+// smaller than full, on 137 full-only branches against only 28 {{else}} arms.
+// The most prose-heavy simple forms are magus-run (82.6% prose) and magus-vcs
+// (91.0% prose). The headroom is in the wording of the shared text, not in the
+// tables. An earlier version of this comment blamed the tables; that was wrong,
+// and it pointed authors at the one part of the page they should not touch.
 type Variant int
 
 const (
@@ -77,6 +93,17 @@ func (v Variant) String() string {
 	return "full"
 }
 
+// Full and Simple let a skill body branch on the permutation with {{if .Full}}.
+// They exist because text/template cannot reference a package constant, so the
+// predicate has to hang off the value being rendered.
+func (v Variant) Full() bool { return v == VariantFull }
+
+func (v Variant) Simple() bool { return v == VariantSimple }
+
+// Is reports whether v is the named variant, so a third permutation costs a
+// constant and a String case rather than a new pair of markers.
+func (v Variant) Is(name string) bool { return v.String() == name }
+
 // VariantOf maps a --simple boolean to a Variant, so the CLI does not spell the
 // conditional at every call site.
 func VariantOf(simple bool) Variant {
@@ -86,127 +113,24 @@ func VariantOf(simple bool) Variant {
 	return VariantFull
 }
 
-// whyOpen and whyClose bracket prose that only [VariantFull] keeps.
+// applyVariant renders body for v. The body is a text/template, so a permutation
+// is an ordinary {{if}} branch and a malformed one is a parse or execute error
+// rather than text that silently survives into an installed file.
 //
-// They are HTML comments so a marked body stays valid Markdown that renders
-// identically either way - the source is readable, and a skill file opened in any
-// viewer shows no scaffolding. One pair covers both granularities: a whole
-// paragraph, or a trailing clause inside a numbered step, because the span is
-// taken verbatim between the markers regardless of newlines. One rule, not two.
-//
-// The name says the intent rather than the mechanism. What a simple skill drops
-// is the WHY; what both keep is the WHAT. An author deciding where the marker
-// goes is answering "would a capable reader still do the right thing without this
-// sentence?", and that question is the curation.
-// terseOpen and terseClose bracket prose that only [VariantSimple] keeps: the
-// short wording of something the full form says at length.
-//
-// The why markers alone cap how short the simple form can get, because they can
-// only SUBTRACT. Simple is "full minus the marked spans", so a passage that
-// needs two sentences in the full form has to appear at that length in both, and
-// the only way to shorten it further is to drop it entirely and lose the step.
-// Measured on magus-run: widening the why brackets as far as they go reached 31%
-// against a 50-60% target, with the remainder sitting in command blocks and
-// tables that are the highest-value bytes on the page.
-//
-// A why span immediately followed by a terse span is therefore the two-wording
-// idiom - long version, then short version - and it is what makes real
-// compression possible without the full form losing anything:
-//
-//	<!-- why -->the full explanation, at length<!-- /why --><!-- terse -->the gist<!-- /terse -->
-//
-// Neither marker is required, and a span with no counterpart still means what it
-// always did: why-only is "full says more", terse-only is "simple says this and
-// full says nothing", which is almost always a mistake worth noticing in review.
-const (
-	whyOpen    = "<!-- why -->"
-	whyClose   = "<!-- /why -->"
-	terseOpen  = "<!-- terse -->"
-	terseClose = "<!-- /terse -->"
-)
-
-// applyVariant renders body for v: [VariantSimple] removes each marked span,
-// [VariantFull] keeps the prose and removes only the markers themselves, so no
-// scaffolding reaches an installed file either way.
-//
-// Unbalanced markers are an ERROR, never a best guess. A generator that silently
-// mis-elides ships a skill missing a step, and a missing step in an instruction
-// file is indistinguishable from an instruction not to do it.
+// A skill body that needs to SHOW template syntax (magus-run documents the
+// `-o template` flag, magus-buzz documents mustache) escapes it as a string
+// constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too - the
+// template engine does not know what Markdown is.
 func applyVariant(name, body string, v Variant) (string, error) {
-	// Two passes over the same machinery, differing only in which variant keeps
-	// the span. Order does not matter: the pairs may sit adjacent but never nest,
-	// which resolveSpans enforces.
-	out, err := resolveSpans(name, body, whyOpen, whyClose, v == VariantFull)
+	t, err := template.New(name).Parse(body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("skill %q: %w", name, err)
 	}
-	out, err = resolveSpans(name, out, terseOpen, terseClose, v == VariantSimple)
-	if err != nil {
-		return "", err
-	}
-	return tidyBlankLines(out), nil
-}
-
-// resolveSpans removes every open/close pair from body, keeping the bracketed
-// prose when keep is set and dropping it otherwise. Either way the markers
-// themselves go, so no scaffolding reaches an installed file.
-//
-// Unbalanced markers are an ERROR, never a best guess. A generator that silently
-// mis-elides ships a skill missing a step, and a missing step in an instruction
-// file is indistinguishable from an instruction not to do it.
-func resolveSpans(name, body, open, close string, keep bool) (string, error) {
 	var b strings.Builder
-	rest := body
-	for {
-		i := strings.Index(rest, open)
-		if i < 0 {
-			if strings.Contains(rest, close) {
-				return "", fmt.Errorf("skill %q: %s with no matching %s", name, close, open)
-			}
-			b.WriteString(rest)
-			break
-		}
-		after := rest[i+len(open):]
-		j := strings.Index(after, close)
-		if j < 0 {
-			return "", fmt.Errorf("skill %q: %s with no matching %s", name, open, close)
-		}
-		if strings.Contains(after[:j], open) {
-			return "", fmt.Errorf("skill %q: nested %s", name, open)
-		}
-		b.WriteString(rest[:i])
-		if keep {
-			b.WriteString(after[:j])
-		}
-		rest = after[j+len(close):]
-		if !keep {
-			trimSeam(&b, rest)
-		}
+	if err := t.Execute(&b, v); err != nil {
+		return "", fmt.Errorf("skill %q: %w", name, err)
 	}
-	return b.String(), nil
-}
-
-// trimSeam drops the space left dangling at an elision boundary, when the removed
-// span sat between a space and the punctuation that closed the sentence: "done - a
-// long reason<!-- /why -->." would otherwise render as "done ." with a floating space.
-//
-// It looks at exactly the two characters either side of the cut, and nowhere else.
-// A global " ." -> "." pass is the obvious shortcut and it is wrong: it silently
-// rewrote `git checkout .` to `git checkout.` in the middle of a command the skill
-// tells the reader never to run - corrupting content that was never elided at all.
-func trimSeam(b *strings.Builder, rest string) {
-	if b.Len() == 0 || rest == "" {
-		return
-	}
-	if !strings.ContainsRune(".,;:)!?", rune(rest[0])) {
-		return
-	}
-	s := b.String()
-	if !strings.HasSuffix(s, " ") {
-		return
-	}
-	b.Reset()
-	b.WriteString(strings.TrimRight(s, " "))
+	return tidyBlankLines(b.String()), nil
 }
 
 // tidyBlankLines collapses the blank-line runs a dropped paragraph leaves behind

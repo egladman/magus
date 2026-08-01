@@ -23,7 +23,7 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`buzz`](spells/buzz.md) | Buzz | 3 | Buzz spell: check and test .buzz sources, plus run them through the magus interpreter. |
 | [`cosign`](spells/cosign.md) | - | 3 | Cosign spell: keyless sign, attest, and verify for container artifacts. |
 | [`docker`](spells/docker.md) | Docker | 4 | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting. |
-| [`go`](spells/go.md) | Go | 11 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
+| [`go`](spells/go.md) | Go | 12 | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops. |
 | [`markdown`](spells/markdown.md) | Markdown | 3 | Markdown docs spell: markdownlint and prettier for linting and formatting prose. |
 | [`python`](spells/python.md) | Python | 6 | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops. |
 | [`rust`](spells/rust.md) | Rust | 6 | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops. |
@@ -143,7 +143,7 @@ magus\project.register("gems/", fun(p, cb) > bool { cb({ "spells": [rb] }); retu
 
 ## Composing spells
 
-Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/target` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
+Spells do **not** import one another. There is no spell-to-spell `import`, and a built-in spell may import only the pure-types `magus/spell` module (enforced by `SelfContainedBuiltinSource`). Composition happens one level up, at the **project**: bind several spells to the same project and let your targets call across them.
 
 ```buzz
 import "magus/spell/go";
@@ -222,7 +222,7 @@ Buzz (`spells/ruby.buzz`):
 
 ```buzz
 export fun mgs_getName() > str { return "ruby"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] {
+export fun mgs_listRequiredGlobs() > [str] {
     return ["**/*.rb", "Gemfile", "Gemfile.lock", "*.gemspec", ".rubocop.yml"];
 }
 export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**/*"]; }

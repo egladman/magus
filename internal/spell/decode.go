@@ -59,7 +59,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		Opaque:      src.Bool("opaque"),
 	}
 
-	needs, err := src.CallStrs("needs", "")
+	needs, err := src.CallStrs("needs")
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: needs(): %w", name, err)
 	}
@@ -155,6 +155,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 					return spells.Descriptor{}, err
 				}
 				t.Command = cmd
+				t.Capture = cmd.Capture
 			}
 			// Kind-coherence wards: reject an op whose argv contradicts its kind
 			// (a detached service, a never-exiting command) at resolution time,
@@ -179,7 +180,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 // RFC 6902 patch. It is shared by a command op and by each of a service op's
 // run/ready/stop commands, so every command shape decodes identically.
 func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
-	c := spells.Command{Args: o.Strs("args")}
+	c := spells.Command{Args: o.Strs("args"), Capture: o.Bool("capture")}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}

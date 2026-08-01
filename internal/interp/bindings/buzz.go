@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/egladman/magus/host"
-	buzzgen "github.com/egladman/magus/host/gen"
 	"github.com/egladman/magus/internal/interp"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	ispell "github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,7 +62,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// unbound. Merged onto the hand-built magus map above, which carries only the
 	// VM-infra members (project/cache/pry/log, plus the magus.Context) that can't
 	// share a Go Impl across the boundary.
-	mergeModuleMap(magus, buzzgen.RegisterMagus(ctx, sess))
+	mergeModuleMap(magus, bindinggen.RegisterMagus(ctx, sess))
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
 	// module registry - the same host.ModulesOutput core `magus describe module[s]`
@@ -72,18 +72,18 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// an unknown name. Hand-written (not declarative) because the core uses host,
 	// which std can't import.
 	magus.MapSet("modules", directVal(obs, "magus.modules", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return host.MapsVal(host.Modules("")), nil
+		return bindinggen.MapsVal(std.DescribeModules("")), nil
 	}))
 	magus.MapSet("module", directVal(obs, "magus.module", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		name := ""
 		if len(args) > 0 && args[0].IsStr() {
 			name = args[0].AsString()
 		}
-		out := host.Modules(name)
+		out := std.DescribeModules(name)
 		if len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.module: unknown module %q", name)
 		}
-		return host.AnyMapVal(out[0].BuzzObject()), nil
+		return bindinggen.AnyMapVal(out[0].BuzzObject()), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name - a target, a
@@ -99,7 +99,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		if len(args) == 0 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("magus.normalize: expected a name string")
 		}
-		return host.StrVal(types.Normalize(args[0].AsString())), nil
+		return bindinggen.StrVal(types.Normalize(args[0].AsString())), nil
 	}))
 
 	// Logging on the magus namespace itself (magus.info/debug/warn/error): the one

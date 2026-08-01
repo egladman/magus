@@ -10,10 +10,11 @@ import (
 	"go/format"
 	"reflect"
 	"strings"
+	"time"
 
-	"github.com/egladman/magus/host"
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // wasmExcludedModules names the host modules whose generated trampolines are
@@ -104,19 +105,20 @@ func goLiteral(v any) string {
 	return fmt.Sprintf("%#v", v)
 }
 
-// emitBuzz emits the Buzz trampolines for module m into package gen (host/gen):
+// emitBuzz emits the Buzz trampolines for module m into package gen
+// (internal/interp/bindings/gen):
 // one Register<Module>(ctx, sess) that builds a buzz map of DirectValue closures.
 // Buzz closures return (Value, error) natively, so host errors propagate as a Buzz
 // runtime error instead of a panic. Method names stay snake_case to match the
 // magusfile DSL; multi-return Impls yield a list.
 //
-// It emits directly against the concrete magus/gopherbuzz value system, calling
-// the marshalling helpers in the parent host package; see the registerAllBuzz doc
-// in interp/bindings/buzz.go for the full rationale.
+// It emits directly against the concrete magus/gopherbuzz value system. Typed
+// object returns get a concrete, generated encoder in this package: no reflection
+// and no map[string]any intermediary are linked into the magus runtime path.
 func emitBuzz(m std.Module) ([]byte, error) {
 	// Build the func body first, then derive the import set from what it uses:
-	// std (Impls/resolvers) and host (marshalling) appear only when the body
-	// references them, so an unused import can't sneak in.
+	// std (Impls/resolvers) appears only when the body references it, so an unused
+	// import can't sneak in.
 	var body bytes.Buffer
 
 	regFn := registerName(m.Name)
@@ -132,8 +134,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	for _, f := range m.Fields {
 		emitBuzzField(&body, f)
 	}
+	objects := newBuzzValueEmitter(m.Name)
 	for _, meth := range m.Methods {
-		emitBuzzMethod(&body, m, meth)
+		if err := emitBuzzMethod(&body, m, meth, objects); err != nil {
+			return nil, err
+		}
 	}
 
 	fmt.Fprintln(&body, "\treturn m")
@@ -158,15 +163,19 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, `	buzz "github.com/egladman/magus/libs/gopherbuzz"`)
 	fmt.Fprintln(&b, `	vm "github.com/egladman/magus/libs/gopherbuzz/vm"`)
-	if bytes.Contains(body.Bytes(), []byte("host.")) {
-		fmt.Fprintln(&b, `	"github.com/egladman/magus/host"`)
-	}
 	if bytes.Contains(body.Bytes(), []byte("std.")) {
 		fmt.Fprintln(&b, `	"github.com/egladman/magus/std"`)
+	}
+	if objects.usesTypes {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/types"`)
+	}
+	if objects.usesTime {
+		fmt.Fprintln(&b, `	"time"`)
 	}
 	fmt.Fprintln(&b, `)`)
 	fmt.Fprintln(&b)
 	b.Write(body.Bytes())
+	b.Write(objects.funcs.Bytes())
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
@@ -180,11 +189,11 @@ func emitBuzz(m std.Module) ([]byte, error) {
 // The key is camelCased (Buzz convention) though the std descriptor is snake_case.
 func emitBuzzField(w *bytes.Buffer, f std.Field) {
 	callArgs := ""
-	if host.FieldResolverTakesCtx(f) {
+	if std.FieldResolverTakesCtx(f) {
 		callArgs = "ctx"
 	}
-	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", host.FieldFuncName(f), callArgs)
-	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", host.CamelCase(f.Name), buzzValConv(f.Type, "v"))
+	fmt.Fprintf(w, "\tif v, err := std.%s(%s); err == nil {\n", std.FieldFuncName(f), callArgs)
+	fmt.Fprintf(w, "\t\tm.MapSet(%q, %s)\n", std.CamelCase(f.Name), buzzValConv(f.Type, "v"))
 	fmt.Fprintln(w, "\t}")
 }
 
@@ -192,8 +201,8 @@ func emitBuzzField(w *bytes.Buffer, f std.Field) {
 // slice is named bzArgs to avoid colliding with host args named "args". The map
 // key is camelCased to match Buzz's convention (the snake_case descriptor name
 // stays the runtime label so errors still read e.g. "fs.readFile").
-func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
-	name := host.CamelCase(meth.Name)
+func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter) error {
+	name := std.CamelCase(meth.Name)
 	if meth.BuzzName != "" {
 		name = meth.BuzzName
 	}
@@ -217,116 +226,122 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method) {
 
 	switch len(meth.Returns) {
 	case 0:
-		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", host.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
-		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", host.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
-		fmt.Fprintf(w, "\t\treturn %s, nil\n", returnConv(meth.Returns[0].Type, reflect.TypeOf(meth.Impl).Out(0), "ret0"))
+		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects)
+		if err != nil {
+			return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
+		}
+		fmt.Fprintf(w, "\t\treturn %s, nil\n", value)
 	default:
 		lhsParts := make([]string, 0, len(meth.Returns)+1)
 		for i := range meth.Returns {
 			lhsParts = append(lhsParts, fmt.Sprintf("ret%d", i))
 		}
 		lhsParts = append(lhsParts, "err")
-		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), host.MethodFuncName(meth), callStr)
+		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
 		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {
-			items[i] = buzzValConv(ret.Type, fmt.Sprintf("ret%d", i))
+			value, err := returnConv(ret, reflect.TypeOf(meth.Impl).Out(i), fmt.Sprintf("ret%d", i), objects)
+			if err != nil {
+				return fmt.Errorf("%s\\%s: %w", m.Name, meth.Name, err)
+			}
+			items[i] = value
 		}
 		fmt.Fprintf(w, "\t\treturn vm.ListValue([]vm.Value{%s}), nil\n", strings.Join(items, ", "))
 	}
 	fmt.Fprintln(w, "\t}))")
+	return nil
 }
 
 // emitBuzzArgDecode emits the decode statement for arg a at positional index idx.
 func emitBuzzArgDecode(w *bytes.Buffer, a std.Arg, idx int) {
 	if a.Variadic {
 		// Only TypeString variadic is used in practice.
-		fmt.Fprintf(w, "\t\t%s := host.VariadicStr(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := VariadicStr(bzArgs, %d)\n", a.Name, idx)
 		return
 	}
 	switch a.Type {
 	case std.TypeString:
-		fmt.Fprintf(w, "\t\t%s := host.Str(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := Str(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeInt:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := host.Int(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := Int(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeFloat:
 		def := "0"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := host.Float(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := Float(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeIndex:
 		// Buzz lists are 0-based, matching the Go Impl; no offset.
-		fmt.Fprintf(w, "\t\t%s := host.Int(bzArgs, %d, 0)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := Int(bzArgs, %d, 0)\n", a.Name, idx)
 	case std.TypeBool:
 		def := "false"
 		if a.Optional && a.Default != nil {
 			def = goLiteral(a.Default)
 		}
-		fmt.Fprintf(w, "\t\t%s := host.Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
+		fmt.Fprintf(w, "\t\t%s := Bool(bzArgs, %d, %s)\n", a.Name, idx, def)
 	case std.TypeStringSlice:
-		fmt.Fprintf(w, "\t\t%s := host.StrSlice(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := StrSlice(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeStringMap:
-		fmt.Fprintf(w, "\t\t%s := host.StrMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := StrMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAnyMap:
-		fmt.Fprintf(w, "\t\t%s := host.AnyMap(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := AnyMap(bzArgs, %d)\n", a.Name, idx)
 	case std.TypeFunc:
-		fmt.Fprintf(w, "\t\t%s := host.CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := CallbackArg(sess, bzArgs, %d)\n", a.Name, idx)
 	case std.TypeAny:
-		fmt.Fprintf(w, "\t\t%s := host.Any(bzArgs, %d)\n", a.Name, idx)
+		fmt.Fprintf(w, "\t\t%s := Any(bzArgs, %d)\n", a.Name, idx)
 	default:
-		fmt.Fprintf(w, "\t\t%s := host.Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
+		fmt.Fprintf(w, "\t\t%s := Any(bzArgs, %d) // unsupported type %s\n", a.Name, idx, a.Type.GoType())
 	}
 }
 
-// objecterType is host.BuzzObjecter, the interface a typed object return implements
-// (BuzzObject() types.BuzzObject). Referenced rather than re-declared so the
-// generator and the runtime it generates code for share one interface
-// declaration, not two spellings of it.
-var objecterType = reflect.TypeOf((*host.BuzzObjecter)(nil)).Elem()
-
-// returnConv returns the Go expression that converts a method's single return
-// (src) to a vm.Value. When the Impl returns a typed object (or a slice of them),
-// i.e. its Go type implements BuzzObject, it marshals via BuzzObject so the Buzz boundary
-// stays the same map a magusfile reads while the Go SDK gets the struct. Otherwise
-// it falls back to the TypeTag-driven conversion.
-func returnConv(tag std.TypeTag, goType reflect.Type, src string) string {
-	switch {
-	case goType.Implements(objecterType):
-		return "host.AnyMapVal(" + src + ".BuzzObject())"
-	case goType.Kind() == reflect.Slice && goType.Elem().Implements(objecterType):
-		return "host.MapsVal(" + src + ")"
-	default:
-		return buzzValConv(tag, src)
+// returnConv returns the Go expression that converts a method return to a vm.Value.
+// Object returns are emitted as direct, typed encoders; scalar and deliberately
+// untyped descriptor returns use the small shared primitive helpers.
+func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValueEmitter) (string, error) {
+	if ret.Object != "" {
+		return objects.valueFunc(goType, src)
 	}
+	return buzzValConv(ret.Type, src), nil
 }
 
 // objectName returns the Buzz object a return marshals to, or "" for a scalar.
-// It reads the Impl's reflected type, which is the same signal returnConv uses to
-// pick BuzzObject marshalling, so the two can never disagree about what an object is.
+// It reads the Impl's reflected type at generation time. Runtime conversion is
+// emitted as direct field access in internal/interp/bindings/gen.
 func objectName(goType reflect.Type) string {
 	switch {
-	case goType.Implements(objecterType):
-		return goType.Name()
-	case goType.Kind() == reflect.Slice && goType.Elem().Implements(objecterType):
+	case goType.Kind() == reflect.Struct && goType.PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath():
+		return buzzObjectName(goType)
+	case goType.Kind() == reflect.Slice && goType.Elem().Kind() == reflect.Struct && goType.Elem().PkgPath() == reflect.TypeFor[types.FileInfo]().PkgPath():
 		// Bracketed, so the descriptor states the shape as a magusfile annotation
 		// spells it and no consumer has to reflect to recover the list-ness.
-		return "[" + goType.Elem().Name() + "]"
+		return "[" + buzzObjectName(goType.Elem()) + "]"
 	}
 	return ""
+}
+
+// buzzObjectName is the public Buzz object name for t. Names normally match
+// their Go structs; VCSTag is the one intentional boundary alias.
+func buzzObjectName(t reflect.Type) string {
+	if t == reflect.TypeFor[types.VCSTag]() {
+		return "Tag"
+	}
+	return t.Name()
 }
 
 // checkObjectDecls verifies every method's declared Ret.Object against the Impl's
@@ -378,22 +393,189 @@ func checkObjectDecls(mods []std.Module) error {
 func buzzValConv(t std.TypeTag, src string) string {
 	switch t {
 	case std.TypeString:
-		return fmt.Sprintf("host.StrVal(%s)", src)
+		return fmt.Sprintf("StrVal(%s)", src)
 	case std.TypeInt, std.TypeIndex:
-		return fmt.Sprintf("host.IntVal(%s)", src)
+		return fmt.Sprintf("IntVal(%s)", src)
 	case std.TypeBool:
-		return fmt.Sprintf("host.BoolVal(%s)", src)
+		return fmt.Sprintf("BoolVal(%s)", src)
 	case std.TypeFloat:
-		return fmt.Sprintf("host.FloatVal(%s)", src)
+		return fmt.Sprintf("FloatVal(%s)", src)
 	case std.TypeStringSlice:
-		return fmt.Sprintf("host.StrSliceVal(%s)", src)
+		return fmt.Sprintf("StrSliceVal(%s)", src)
 	case std.TypeStringMap:
-		return fmt.Sprintf("host.StrMapVal(%s)", src)
+		return fmt.Sprintf("StrMapVal(%s)", src)
 	case std.TypeAnyMap:
-		return fmt.Sprintf("host.AnyMapVal(%s)", src)
+		return fmt.Sprintf("AnyMapVal(%s)", src)
 	case std.TypeAny:
-		return fmt.Sprintf("host.AnyVal(%s)", src)
+		return fmt.Sprintf("AnyVal(%s)", src)
 	default:
 		panic(fmt.Sprintf("buzzValConv: unsupported type tag %s for value conversion", t.GoType()))
 	}
+}
+
+// buzzValueEmitter writes concrete Go-to-VM encoders for descriptor object
+// returns. It is generator-only reflection: the binary receives ordinary field
+// reads, loops, and vm constructors.
+type buzzValueEmitter struct {
+	funcs     bytes.Buffer
+	emitted   map[reflect.Type]bool
+	module    string
+	usesTypes bool
+	usesTime  bool
+	n         int
+}
+
+func newBuzzValueEmitter(module string) *buzzValueEmitter {
+	return &buzzValueEmitter{emitted: map[reflect.Type]bool{}, module: titleCase(module)}
+}
+
+func (e *buzzValueEmitter) valueFunc(t reflect.Type, src string) (string, error) {
+	switch t.Kind() {
+	case reflect.Struct:
+		if err := e.emitStruct(t); err != nil {
+			return "", err
+		}
+		return e.funcName(t) + "(" + src + ")", nil
+	case reflect.Slice:
+		if t.Elem().Kind() != reflect.Struct {
+			return "", fmt.Errorf("object return %s is not a slice of structs", t)
+		}
+		if err := e.emitSlice(t.Elem()); err != nil {
+			return "", err
+		}
+		return e.sliceFuncName(t.Elem()) + "(" + src + ")", nil
+	default:
+		return "", fmt.Errorf("object return %s is not a struct or slice of structs", t)
+	}
+}
+
+func (e *buzzValueEmitter) emitStruct(t reflect.Type) error {
+	if e.emitted[t] {
+		return nil
+	}
+	if t.PkgPath() != reflect.TypeFor[types.FileInfo]().PkgPath() {
+		return fmt.Errorf("object %s is outside the types package", t)
+	}
+	// Mark before visiting fields so a mistaken recursive value type terminates
+	// deterministically and produces a normal Go compile error rather than looping.
+	e.emitted[t] = true
+	e.usesTypes = true
+
+	var body bytes.Buffer
+	fmt.Fprintf(&body, "func %s(v types.%s) vm.Value {\n", e.funcName(t), t.Name())
+	fmt.Fprintln(&body, "\tout := vm.NewMap()")
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
+			continue
+		}
+		value, err := e.value(&body, "v."+f.Name, f.Type, "\t")
+		if err != nil {
+			return fmt.Errorf("%s.%s: %w", t.Name(), f.Name, err)
+		}
+		fmt.Fprintf(&body, "\tout.MapSet(%q, %s)\n", buzzVMFieldName(f), value)
+	}
+	fmt.Fprintln(&body, "\treturn out")
+	fmt.Fprintln(&body, "}")
+	fmt.Fprintln(&body)
+
+	// Nested struct encoders must precede neither callers nor declarations in Go,
+	// so append the current function after recursively discovered helpers.
+	e.funcs.Write(body.Bytes())
+	return nil
+}
+
+func (e *buzzValueEmitter) emitSlice(t reflect.Type) error {
+	if err := e.emitStruct(t); err != nil {
+		return err
+	}
+	marker := reflect.SliceOf(t)
+	if e.emitted[marker] {
+		return nil
+	}
+	e.emitted[marker] = true
+	fmt.Fprintf(&e.funcs, "func %s(values []types.%s) vm.Value {\n", e.sliceFuncName(t), t.Name())
+	fmt.Fprintln(&e.funcs, "\titems := make([]vm.Value, len(values))")
+	fmt.Fprintln(&e.funcs, "\tfor i, value := range values {")
+	fmt.Fprintf(&e.funcs, "\t\titems[i] = %s(value)\n", e.funcName(t))
+	fmt.Fprintln(&e.funcs, "\t}")
+	fmt.Fprintln(&e.funcs, "\treturn vm.ListValue(items)")
+	fmt.Fprintln(&e.funcs, "}")
+	fmt.Fprintln(&e.funcs)
+	return nil
+}
+
+func (e *buzzValueEmitter) value(w *bytes.Buffer, value string, t reflect.Type, indent string) (string, error) {
+	if t == reflect.TypeFor[time.Time]() {
+		e.usesTime = true
+		formatted := e.name("formatted")
+		fmt.Fprintf(w, "%s%s := \"\"\n", indent, formatted)
+		fmt.Fprintf(w, "%sif !%s.IsZero() {\n", indent, value)
+		fmt.Fprintf(w, "%s\t%s = %s.Format(time.RFC3339)\n", indent, formatted, value)
+		fmt.Fprintf(w, "%s}\n", indent)
+		return "vm.StrValue(" + formatted + ")", nil
+	}
+
+	switch t.Kind() {
+	case reflect.String:
+		return "vm.StrValue(" + value + ")", nil
+	case reflect.Bool:
+		return "vm.BoolValue(" + value + ")", nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return "vm.IntValue(int64(" + value + "))", nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "vm.IntValue(int64(" + value + "))", nil
+	case reflect.Float32, reflect.Float64:
+		return "vm.FloatValue(float64(" + value + "))", nil
+	case reflect.Struct:
+		if err := e.emitStruct(t); err != nil {
+			return "", err
+		}
+		return e.funcName(t) + "(" + value + ")", nil
+	case reflect.Slice, reflect.Array:
+		out, index := e.name("items"), e.name("index")
+		fmt.Fprintf(w, "%s%s := make([]vm.Value, len(%s))\n", indent, out, value)
+		fmt.Fprintf(w, "%sfor %s := range %s {\n", indent, index, value)
+		item, err := e.value(w, value+"["+index+"]", t.Elem(), indent+"\t")
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(w, "%s\t%s[%s] = %s\n", indent, out, index, item)
+		fmt.Fprintf(w, "%s}\n", indent)
+		return "vm.ListValue(" + out + ")", nil
+	case reflect.Map:
+		if t.Key().Kind() != reflect.String {
+			return "", fmt.Errorf("map key %s is not a string", t.Key())
+		}
+		out, key, item := e.name("mapped"), e.name("key"), e.name("item")
+		fmt.Fprintf(w, "%s%s := vm.NewMap()\n", indent, out)
+		fmt.Fprintf(w, "%sfor %s, %s := range %s {\n", indent, key, item, value)
+		converted, err := e.value(w, item, t.Elem(), indent+"\t")
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(w, "%s\t%s.MapSet(%s, %s)\n", indent, out, key, converted)
+		fmt.Fprintf(w, "%s}\n", indent)
+		return out, nil
+	default:
+		return "", fmt.Errorf("unsupported field type %s", t)
+	}
+}
+
+func (e *buzzValueEmitter) funcName(t reflect.Type) string {
+	return "buzzValue" + e.module + t.Name()
+}
+
+func (e *buzzValueEmitter) sliceFuncName(t reflect.Type) string { return e.funcName(t) + "Slice" }
+
+func (e *buzzValueEmitter) name(prefix string) string {
+	e.n++
+	return fmt.Sprintf("%s%d", prefix, e.n)
+}
+
+func buzzVMFieldName(f reflect.StructField) string {
+	if name := f.Tag.Get("buzz"); name != "" {
+		return name
+	}
+	return strings.ToLower(f.Name[:1]) + f.Name[1:]
 }

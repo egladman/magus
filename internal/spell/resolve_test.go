@@ -31,6 +31,19 @@ func TestResolve_GetName(t *testing.T) {
 	assert.Equal(t, "testspell", spec.Name)
 }
 
+// Required globs are static spell metadata. They used to accept a string named
+// root, but Resolve could only ever pass an empty string; keeping that phantom
+// input made a spell look context-aware without supplying any real context.
+func TestResolve_RequiredGlobsHaveNoPhantomRoot(t *testing.T) {
+	const src = `
+export fun mgs_getName() > str { return "static-needs"; }
+export fun mgs_listRequiredGlobs() > [str] { return ["**/*.go", "go.mod"]; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"**/*.go", "go.mod"}, spec.Needs)
+}
+
 func TestResolve_MissingGetName(t *testing.T) {
 	const src = `var x: int = 1;`
 	_, err := resolve(t, src)
@@ -79,6 +92,18 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 	require.Truef(t, ok, "fmt missing charm \"write\": %+v", f)
 	want := spells.PatchOp{Op: "replace", Path: "/0", Value: "-w"}
 	assert.Equal(t, []spells.PatchOp{want}, ch.Ops)
+}
+
+func TestResolve_CommandCapture(t *testing.T) {
+	src := `
+import "magus/spell";
+export fun mgs_getName() > str { return "capture"; }
+fun inspect(t: Target) > Command { return Command{bin = "go", args = ["mod", "edit", "-print"], capture = true}; }
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"inspect": inspect}; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.True(t, spec.Ops["inspect"].Capture)
 }
 
 // TestResolve_ServiceAndCommandCoexist proves op-level kind: one spell mixes a

@@ -1,0 +1,5 @@
+allowBuilds:
+  '@playwright/browser-chromium': false
+  better-sqlite3: false
+  esbuild: false
+  sharp: false

@@ -103,7 +103,7 @@ func TestBuzzLocalSpellImport(t *testing.T) {
 	t.Chdir(dir) // the import resolves relative to the cwd
 
 	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "widgetimport"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.ts"]; }
+export fun mgs_listRequiredGlobs() > [str] { return ["**/*.ts"]; }
 export fun mgs_listTargets() > any {
     return {"build": {"bin": "npm", "args": ["run", "build"]}};
 }
@@ -337,7 +337,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 // previously regressed.
 func TestEngineDescriptorParity(t *testing.T) {
 	buzzSrc := `export fun mgs_getName() > str { return "parity_buzz"; }
-export fun mgs_listRequiredGlobs(_dir: str) > [str] { return ["**/*.rb", "Gemfile.lock"]; }
+export fun mgs_listRequiredGlobs() > [str] { return ["**/*.rb", "Gemfile.lock"]; }
 export fun mgs_listProvidedGlobs() > [str] { return ["vendor/bundle/**"]; }
 export fun mgs_listClaimedGlobs() > [str] { return [".rubocop.yml", "Gemfile"]; }
 export fun mgs_getVersionCommand() > [str] { return ["ruby", "--version"]; }

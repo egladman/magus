@@ -12,7 +12,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 
-	hostreg "github.com/egladman/magus/host/registry"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	ispell "github.com/egladman/magus/internal/spell"
 )
 
@@ -46,8 +46,8 @@ var WASMCompatibleMagusModules = wasmCompatibleMagusModules()
 
 func wasmCompatibleMagusModules() map[string]func(context.Context, *buzz.Session) vm.Value {
 	out := make(map[string]func(context.Context, *buzz.Session) vm.Value)
-	for name, reg := range hostreg.Modules {
-		if reg.WASMCompatible {
+	for name, reg := range bindinggen.Modules {
+		if reg.Capabilities.Has(bindinggen.WASM) {
 			out[name] = reg.Register
 		}
 	}
