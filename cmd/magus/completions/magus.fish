@@ -25,13 +25,13 @@ function __magus_subcommands
         config       'view or update magus configuration' \
         memory       'durable cross-session project memory (list, get, put, delete, verify)' \
         server       'manage the persistent daemon (start / stop / status; MCP starts with it)' \
-        repl         'open an interactive Buzz interpreter' \
         buzz         'run a Buzz script (Buzz stdlib + every magus host module)' \
         completion   'print a shell completion script (bash, zsh, fish)' \
         man          'install the man pages embedded in this binary' \
         init         'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
         agent        'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
-        vcs          'stage a change by what the workspace declares (vcs add), instead of git add -A' \
+        hook         'evaluate one shell command or file path against the magus guard rules (deny/advise/pass verdict)' \
+        notify       'normalize an attention event and optionally notify the local desktop' \
         self         'manage the magus binary (self update / install)' \
         version      'print version, commit, and build date' \
         help         'show this message'

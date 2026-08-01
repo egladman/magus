@@ -81,6 +81,7 @@
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
           <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-delegate-ultra/" title="magus-delegate-ultra">magus-delegate-ultra</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -94,10 +95,10 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">8 min read</small>
+    <small class="reading-time" title="Estimated reading time">9 min read</small>
     <article>
 <h1 id="magus-run">magus-run</h1>
-<p><progress value="4199" max="7970" aria-label="The --simple permutation is 47% smaller: 4199 of 7970 bytes."></progress><small>The --simple permutation is 47% smaller: 4199 of 7970 bytes.</small></p>
+<p><progress value="5139" max="8910" aria-label="The --simple permutation is 42% smaller: 5139 of 8910 bytes."></progress><small>The --simple permutation is 42% smaller: 5139 of 8910 bytes.</small></p>
 <p><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> at the root - a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> covers the work, and the raw tool bypasses the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>, the <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>, and <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (<a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -128,7 +129,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>21</code></td>
+<td><code>23</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -136,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>351a7800dc11</code></td>
+<td><code>12962ae67c6a</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -304,6 +305,27 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
    availability, cycles) when failures look environmental rather than caused by
    your change.
 
+## When a target is waiting on another magus process
+
+Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
+message already names the holder, and `magus status --watch=2s` reads that same
+lock state continuously: holder PID, command, directory, age, and waiters.
+Keep the status watch attached until the lock releases, then let the queued
+target continue. A long-running target is not evidence of a hang by itself.
+
+```sh
+magus status --watch=2s
+```
+
+If the lock has crossed its stale warning threshold, report the exact holder
+and inspect its captured target output. Do not send signals based on a guessed
+PID or a fixed elapsed delay; process termination needs an explicit, verified
+owner policy.
+
+The same status view lists shared services, including each service's lifecycle
+state and current dependent count. Use it to distinguish an idle retained
+service from active shared work before deciding how to proceed.
+
 ## Fetching current behavior
 
 Flags and target sets differ per workspace and magus version. Trust
@@ -410,6 +432,27 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles).
 
+## When a target is waiting on another magus process
+
+Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
+message already names the holder, and `magus status --watch=2s` reads that same
+lock state continuously: holder PID, command, directory, age, and waiters.
+Keep the status watch attached until the lock releases, then let the queued
+target continue. A long-running target is not evidence of a hang by itself.
+
+```sh
+magus status --watch=2s
+```
+
+If the lock has crossed its stale warning threshold, report the exact holder
+and inspect its captured target output. Do not send signals based on a guessed
+PID or a fixed elapsed delay; process termination needs an explicit, verified
+owner policy.
+
+The same status view lists shared services, including each service's lifecycle
+state and current dependent count. Use it to distinguish an idle retained
+service from active shared work before deciding how to proceed.
+
 ## Fetching current behavior
 
 Trust `magus describe targets`, `magus describe target &lt;name&gt;` and
@@ -435,7 +478,7 @@ Trust `magus describe targets`, `magus describe target &lt;name&gt;` and
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-run%22">magus-run</a></div>
-    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li><li><a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b"><code>b419ddd2</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface, display flags, ctx-first fixtures</li><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-run.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-run.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" data-tooltip="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" title="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6">90b33d9c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0b491a48cf41cb1e86e3e557edc089603166f039"><code>0b491a48</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface</li><li><a href="https://github.com/egladman/magus/commit/91db2157a3b6b68a2beda574fbaa191d7c47ae86"><code>91db2157</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/a1208da77f9de97ab9e26edcc44a139b20afd0d0"><code>a1208da7</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-run.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-run.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -470,6 +513,9 @@ only over them. See <a href="../../../guides/affected/">affected</a>.</p>
 <h3 id="sandbox">Sandbox</h3>
 <p>The restricted filesystem and environment a target runs in, so builds stay
 reproducible and side-effect-free. See <a href="../../../concepts/sandbox/">sandbox</a>.</p>
+<h3 id="service">Service</h3>
+<p>A long-running or shared process magus manages across runs, distinct from a
+one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
 <h3 id="daemon">Daemon</h3>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
@@ -485,6 +531,10 @@ captured output; it appears on each target's line, and
 <code>magus query output ref1a2b3c</code> prints those exact bytes. In OpenTelemetry terms
 it corresponds to a <strong>span</strong> (one target execution) within its <strong>trace</strong> (the
 whole <code>magus</code> invocation). See <a href="../../../concepts/output-refs/">output-refs</a>.</p>
+<h3 id="queued">Queued</h3>
+<p>A target that wants a slot while the pool is full; it blocks first-in-first-out
+until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
+See <a href="../../../guides/daemon/">daemon</a>.</p>
 <h3 id="magusmd">MAGUS.md</h3>
 <p>The committed routing index at a workspace root, regenerated from the knowledge
 graph: it lists every node and points at the exact query for a given question,

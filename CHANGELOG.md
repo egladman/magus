@@ -163,7 +163,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `magus describe targets`, instead of eight names baked into each script; zsh and fish also
   show each target's kind (canonical, or the spell providing it). Falls back to the built-in
   set outside a workspace, where `describe` cannot answer.
-- `magus repl` gained a line editor: arrow-key history, line editing, and Tab completion
+- `magus buzz --workspace` gained a line editor: arrow-key history, line editing, and Tab completion
   drawn from magus's own surfaces - meta commands, the session's user globals, host modules
   and their methods (`fs.writeF<TAB>`), and the workspace's targets and projects. A piped
   session is unchanged. It also pins a one-row status footer showing the active language,

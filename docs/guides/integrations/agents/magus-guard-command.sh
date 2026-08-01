@@ -5,8 +5,9 @@
 # repository invokes it, and you can download it and do the same. POSIX sh, no
 # bashisms; nothing in it is magus-internal.
 #
-# Contract: reads the host's event as JSON on stdin, writes the host's response
-# on stdout, exits 0 either way. Override any of the three variables below:
+# Contract: reads the host's event as JSON on stdin, selects its command with
+# jq, then pipes the command into magus hook. It writes the host's response on
+# stdout and exits 0 either way. Override any of the three variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
 #   HOST_RESPONSE    Go template rendering your host's reply
@@ -36,4 +37,4 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-exec "$GUARD_MAGUS_BIN" agent hook --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
+jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook -o "template=$HOST_RESPONSE"

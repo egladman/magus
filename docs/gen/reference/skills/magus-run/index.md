@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 7970
-skill_simple_bytes: 4199
+skill_full_bytes: 8910
+skill_simple_bytes: 5139
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `21` |
+| `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `351a7800dc11` |
+| `skill-content` | `12962ae67c6a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -197,6 +197,27 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
    availability, cycles) when failures look environmental rather than caused by
    your change.
 
+## When a target is waiting on another magus process
+
+Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
+message already names the holder, and `magus status --watch=2s` reads that same
+lock state continuously: holder PID, command, directory, age, and waiters.
+Keep the status watch attached until the lock releases, then let the queued
+target continue. A long-running target is not evidence of a hang by itself.
+
+```sh
+magus status --watch=2s
+```
+
+If the lock has crossed its stale warning threshold, report the exact holder
+and inspect its captured target output. Do not send signals based on a guessed
+PID or a fixed elapsed delay; process termination needs an explicit, verified
+owner policy.
+
+The same status view lists shared services, including each service's lifecycle
+state and current dependent count. Use it to distinguish an idle retained
+service from active shared work before deciding how to proceed.
+
 ## Fetching current behavior
 
 Flags and target sets differ per workspace and magus version. Trust
@@ -307,6 +328,27 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
    when you have no ref.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles).
+
+## When a target is waiting on another magus process
+
+Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
+message already names the holder, and `magus status --watch=2s` reads that same
+lock state continuously: holder PID, command, directory, age, and waiters.
+Keep the status watch attached until the lock releases, then let the queued
+target continue. A long-running target is not evidence of a hang by itself.
+
+```sh
+magus status --watch=2s
+```
+
+If the lock has crossed its stale warning threshold, report the exact holder
+and inspect its captured target output. Do not send signals based on a guessed
+PID or a fixed elapsed delay; process termination needs an explicit, verified
+owner policy.
+
+The same status view lists shared services, including each service's lifecycle
+state and current dependent count. Use it to distinguish an idle retained
+service from active shared work before deciding how to proceed.
 
 ## Fetching current behavior
 

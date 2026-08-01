@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
 
@@ -90,6 +91,16 @@ func TestPrintStatusCompact(t *testing.T) {
 			},
 		}},
 		"daemon · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
+
+	assertCompact("shared services report activity and dependents",
+		statusReport{
+			Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4},
+			Services: []types.StatusService{
+				{State: "running", Dependents: 2},
+				{State: "idle", Dependents: 0},
+			},
+		},
+		"daemon · 0/4 idle · services 1/2 active, 2 dependent(s)\n")
 
 	assertCompact("unparsable args fall back to ?:?",
 		statusReport{Pool: &types.StatusOutput{
@@ -565,6 +576,7 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	r := statusReport{
 		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
+		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", Command: "docker run postgres", Ports: []string{"5432"}, State: "running", Dependents: 2}},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -591,6 +603,7 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 			Workspaces:     []types.StatusWorkspace{{Root: "/repo"}},
 		},
 		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
+		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", State: "running", Dependents: 2}},
 	}
 	printStatusText(f, r, false, 0)
 	require.NoError(t, f.Close())
@@ -602,6 +615,15 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 	assert.Contains(t, out, "mcp endpoint", "the mcp block renders alongside the daemon block")
 	assert.Contains(t, out, "serving")
 	assert.Contains(t, out, "telemetry is disabled.")
+	assert.Contains(t, out, "shared services (1)")
+	assert.Contains(t, out, "2 dependent(s)")
+}
+
+func TestApplyStatusReplyCarriesSharedServices(t *testing.T) {
+	services := []types.StatusService{{ID: "service-1", State: "running", Dependents: 3}}
+	report := statusReport{}
+	applyStatusReply(&report, &proc.StatusReply{Services: services})
+	assert.Equal(t, services, report.Services)
 }
 
 func TestCompactMCPToken(t *testing.T) {

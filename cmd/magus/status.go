@@ -193,8 +193,16 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		report.PoolError = fmt.Sprintf("query %s: %v", addr, err)
 		return report
 	}
-	report.Pool = statusOutputFromReply(reply)
+	applyStatusReply(&report, reply)
 	return report
+}
+
+func applyStatusReply(report *statusReport, reply *proc.StatusReply) {
+	if reply == nil {
+		return
+	}
+	report.Pool = statusOutputFromReply(reply)
+	report.Services = reply.Services
 }
 
 // loadSymbolIndexStatus computes each symbol-capable project's SCIP index freshness,
@@ -364,8 +372,38 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 	}
 
 	printMCPEndpointStatus(w, r.MCPEndpoint)
+	printServiceStatus(w, r.Services)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
 	printLockStatus(w, r.Locks)
+}
+
+// printServiceStatus renders shared services separately from the pool: the pool
+// says how much work is executing now; this block says what the daemon has kept
+// warm across those runs and how many target dependents currently reuse it.
+func printServiceStatus(w io.Writer, services []types.StatusService) {
+	if len(services) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nshared services (%d)\n", len(services))
+	fmt.Fprintln(w, strings.Repeat("-", 60))
+	for _, s := range services {
+		label := s.Label
+		if label == "" {
+			label = s.ID
+		}
+		state := s.State
+		if state == "" {
+			state = "unknown"
+		}
+		fmt.Fprintf(w, "  %-10s  %-12s  %d dependent(s)", state, label, s.Dependents)
+		if len(s.Ports) > 0 {
+			fmt.Fprintf(w, "  ports %s", strings.Join(s.Ports, ","))
+		}
+		fmt.Fprintln(w)
+		if s.Command != "" {
+			fmt.Fprintf(w, "    %s\n", s.Command)
+		}
+	}
 }
 
 // printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
@@ -456,7 +494,24 @@ func printStatusCompact(w io.Writer, r statusReport, now time.Time) {
 	if tok := compactMCPToken(r.MCPEndpoint); tok != "" {
 		parts = append(parts, tok)
 	}
+	if tok := compactServiceToken(r.Services); tok != "" {
+		parts = append(parts, tok)
+	}
 	fmt.Fprintln(w, strings.Join(parts, " · "))
+}
+
+func compactServiceToken(services []types.StatusService) string {
+	if len(services) == 0 {
+		return ""
+	}
+	running, dependents := 0, 0
+	for _, s := range services {
+		if s.State == "running" || s.State == "starting" {
+			running++
+		}
+		dependents += s.Dependents
+	}
+	return fmt.Sprintf("services %d/%d active, %d dependent(s)", running, len(services), dependents)
 }
 
 // compactMCPToken renders the MCP endpoint as one sidebar-friendly token, or "" when

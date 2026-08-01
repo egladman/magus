@@ -10,8 +10,8 @@ import (
 // still a filesystem entry, so FileInfo remains the observed stat result rather
 // than a competing path abstraction.
 type Path struct {
-	Value string
-	IsDir bool `buzz:"isDir"`
+	Value string `json:"value"`
+	IsDir bool   `json:"is_dir,omitempty" buzz:"isDir"`
 }
 
 // Resolve returns p against base, retaining its kind. An absolute p is cleaned

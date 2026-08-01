@@ -151,13 +151,13 @@ forms with its size, and [Agents](integrations/agents.md) covers host wiring.
 ### The guard hook
 
 The guard reads one command an agent is about to run and returns deny, advise, or
-pass. It parses the shell rather than pattern-matching it, so a wrapper does not
-change the verdict:
+pass. It parses the shell rather than pattern-matching it, so a command cannot
+evade the guard by adding an environment prefix or a shell indirection:
 
 ```sh
-magus agent hook -- go test ./...          # deny: magus run test covers this
-magus agent hook -- mise exec -- go test   # deny: same command, wrapper peeled
-magus agent hook -- mise exec -- magus run test   # pass: the wrapper is fine
+magus hook -- go test ./...                 # deny: magus run test covers this
+magus hook -- env -u GOROOT go test ./...   # deny: same command, prefix peeled
+magus hook -- magus run test                # pass
 ```
 
 It denies on three triggers: what cannot be undone (whole-tree VCS operations),

@@ -81,6 +81,7 @@
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
           <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-delegate-ultra/" title="magus-delegate-ultra">magus-delegate-ultra</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -128,7 +129,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>21</code></td>
+<td><code>23</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -136,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>351a7800dc11</code></td>
+<td><code>12962ae67c6a</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -619,7 +620,7 @@ specific that has to be.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-sdk%22">magus-sdk</a></div>
-    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-sdk.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-sdk.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" data-tooltip="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" title="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6">90b33d9c</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

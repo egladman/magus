@@ -1,4 +1,4 @@
-# `magus repl` is the interactive Buzz interpreter that DOES carry the magus.*
+# `magus buzz --workspace` is the interactive Buzz interpreter that DOES carry the magus.*
 # namespace (unlike `magus buzz`, see buzz_run.txtar). It has no non-interactive
 # form, so testscript's stdin+exec pairing is the only way to drive it here: feed
 # REPL input lines as stdin and read the transcript back off stdout. With stdin
@@ -6,8 +6,8 @@
 # rather than requiring a real tty - that is what makes it testable at all.
 
 stdin repl_session.txt
-exec magus repl
-stdout 'magus repl \(\.help for commands\)'
+exec magus buzz --workspace
+stdout 'magus buzz --workspace \(\.help for commands\)'
 stdout 'Type \.exit to quit, \.help for commands\.'
 
 # a plain expression evaluates and the result comes back after a prompt

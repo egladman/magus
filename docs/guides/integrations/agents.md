@@ -316,7 +316,7 @@ Two rules cover the whole surface:
 
 Most agent hosts can run a hook before executing a shell command. magus
 supplies the rule evaluation; the host supplies the hook that calls it.
-`magus agent hook` reads one command, applies the guard rules, and returns a
+`magus hook` reads one command, applies the guard rules, and returns a
 neutral verdict.
 
 magus denies only what cannot be undone, and explains everything else. That is
@@ -396,7 +396,7 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     project.
 - `pass`: everything else.
 
-`magus agent hook --path <file>` is the one rule that is not a heuristic. It
+`magus hook --path <file>` is the one rule that is not a heuristic. It
 classifies the path against every target's DECLARED outputs, so it knows
 definitively which files a target regenerates. It ADVISES rather than blocks -
 see the rule above - and says nothing on any uncertainty, since an advisory
@@ -405,7 +405,7 @@ file-editing tool, not its shell tool.
 
 That verdict is the whole contract. The command arrives however your host can
 produce it: as arguments, as raw stdin, or extracted from a JSON event on
-stdin with `--from-json <dot.path>`. The verdict leaves through the standard
+stdin as plain command text. The verdict leaves through the standard
 output arm: `-o json` (a schema-versioned envelope), `-o yaml`, `-o name` (the
 bare decision word), or `-o template=<go-template>` to render your host's
 response dialect directly. Bare `-o template` lists the fields. A host
@@ -415,7 +415,7 @@ a guard that errors on every tool call is worse than no guard.
 
 ### Agent command telemetry
 
-Every `magus agent hook` invocation with a readable command or path also appends
+Every `magus hook` invocation with a readable command or path also appends
 one `agent_command` event to the existing Activity Trail. This is product
 telemetry for improving agent support: it shows which host tool an agent
 selected, whether it reached a Magus surface or a raw command, and which guard
@@ -456,7 +456,7 @@ resulting shell, editor, or MCP call is captured at that real execution
 surface.
 
 The documented Claude Code, Codex, Cursor, and OpenCode templates all call
-`magus agent hook`, so their configured shell and file-tool surfaces flow into
+`magus hook`, so their configured shell and file-tool surfaces flow into
 the same trail automatically. A host without a hook cannot be observed by
 Magus; no local CLI can discover commands another process did not report. The
 coverage boundary is explicit rather than guessed. An unreadable host event or
@@ -530,9 +530,9 @@ are examples, not a fixed list of supported hosts. Any host that can run a
 command and read its output fits.
 
 ```sh
-magus agent hook -- git stash                 # deny: whole-tree git stash destroys ...
-echo "go test ./..." | magus agent hook -     # advise: a magus target covers this ...
-magus agent hook -o template                  # list the fields -o json / -o template see
+magus hook -- git stash                 # deny: whole-tree git stash destroys ...
+echo "go test ./..." | magus hook -     # advise: a magus target covers this ...
+magus hook -o template                  # list the fields -o json / -o template see
 ```
 
 ### Claude Code
@@ -556,7 +556,7 @@ one you do not.
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; if [ ! -x \"$MAGUS_BIN\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: magus run build .\"}}'; exit 0; fi; exec \"$MAGUS_BIN\" agent hook --from-json tool_input.command -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
+            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; if [ ! -x \"$MAGUS_BIN\" ]; then printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"magus guard is NOT running: no magus on PATH and no /tmp/magus, so the destructive-VCS deny rules and the magus usage rules are unenforced right now. Build it once per session: magus run build .\"}}'; exit 0; fi; jq -r '.tool_input.command' | \"$MAGUS_BIN\" hook -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
             "timeout": 10
           }
         ]
@@ -566,7 +566,7 @@ one you do not.
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; exec \"$MAGUS_BIN\" agent hook --path --from-json tool_input.file_path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
+            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; jq -r '.tool_input.file_path' | \"$MAGUS_BIN\" hook --path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
             "timeout": 10
           }
         ]
@@ -647,7 +647,7 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-exec "$GUARD_MAGUS_BIN" agent hook --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
+jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook -o "template=$HOST_RESPONSE"
 ```
 
 #### `magus-guard-path.sh`
@@ -689,7 +689,7 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
+jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path -o "template=$HOST_RESPONSE"
 ```
 
 #### `codex-hooks.json`
@@ -775,7 +775,7 @@ case "$event" in
     fi
     # -o name prints the bare decision word, which is all this needs. magus
     # re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path -o name 2>/dev/null)
     [ "$verdict" = "advise" ] || exit 0
     # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
     # prose rather than as a verdict it would not read.
@@ -797,7 +797,7 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
     exit 0
 fi
 
-printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --from-json command \
+printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook \
     -o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
@@ -814,7 +814,7 @@ Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `ope
 // This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
 // .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
 //
-// It encodes no magus rule. Every decision comes from `magus agent hook`, so
+// It encodes no magus rule. Every decision comes from `magus hook`, so
 // this stays host-only glue rather than a second rule set that drifts out of
 // step with the other hosts' templates.
 //
@@ -966,7 +966,7 @@ export default MagusGuard;
 > [!NOTE]
 > Only the Claude Code setup above is tested end-to-end; it is the guard this
 > repository dogfoods. For the OpenCode and Cursor examples below, the magus
-> half is verified - the `magus agent hook -o json` verdict shape each one
+> half is verified - the `magus hook -o json` verdict shape each one
 > parses is checked against this repository's binary. The host half (plugin
 > loading, hook registration, whether a thrown `reason` reaches the model) is
 > written against each product's published spec and has not been run here, so
@@ -975,10 +975,10 @@ export default MagusGuard;
 > [Cursor hooks](https://docs.cursor.com/agent/hooks).
 
 A full setup is two steps: install the guidance where the host reads it, then
-wire the guard hook. The hook step is always the same shape - pull the command
-out of the host's event with `--from-json <dot.path>`, let `magus agent hook`
-judge it, and render the verdict into the host's response with `-o template`;
-only the dot-path and the response field names change. The examples below were
+wire the guard hook. The hook step is always the same shape - select the command
+from the host event in its wrapper, pipe that plain command to `magus hook`, and
+render the verdict into the host's response with `-o template`. The examples use
+`jq` for selection; only the selector and response field names change. The examples below were
 written against each product's published hook and instruction-file docs in
 mid-2026, with the confidence caveats called out inline. Those docs are the
 products' own and move on their schedule, so confirm each against the host's
@@ -1024,18 +1024,18 @@ export const MagusGuard: Plugin = async ({ $ }) => ({
   "tool.execute.before": async (input, output) => {
     if (input.tool !== "bash") return
     const command = output.args.command ?? ""
-    const res = await $`magus agent hook -o json -- ${command}`.nothrow()
+    const res = await $`magus hook -o json -- ${command}`.nothrow()
     // Fail closed: a missing binary, a non-zero exit, or unparseable output
     // must block, not wave the command through. `.nothrow()` keeps Bun from
     // throwing on exit status so this decision stays ours to make.
     if (res.exitCode !== 0) {
-      throw new Error(`magus agent hook unavailable (exit ${res.exitCode}); blocking`)
+      throw new Error(`magus hook unavailable (exit ${res.exitCode}); blocking`)
     }
     let verdict: { schema_version?: number; decision?: string; reason?: string }
     try {
       verdict = JSON.parse(res.text())
     } catch {
-      throw new Error("magus agent hook returned unparseable output; blocking")
+      throw new Error("magus hook returned unparseable output; blocking")
     }
     if (verdict.schema_version !== 1) {
       throw new Error(`unsupported hook schema ${verdict.schema_version}; blocking`)
@@ -1046,7 +1046,7 @@ export const MagusGuard: Plugin = async ({ $ }) => ({
 ```
 
 The verdict contract this plugin codes against is verified against the binary
-in this repository: `magus agent hook -o json` exits 0 whether or not it
+in this repository: `magus hook -o json` exits 0 whether or not it
 blocks, and prints `{"schema_version": 1, "decision": "pass"}` or
 `{"schema_version": 1, "decision": "deny", "reason": "..."}`. Because a pass
 and a deny are both exit 0, the `decision` field is the only signal - a plugin
@@ -1070,7 +1070,7 @@ magus agent install --agents-md
 The guard is a `beforeShellExecution` hook in `.cursor/hooks.json`. Cursor runs
 the hook as a program (not an inline shell string), so point it at a small
 wrapper script. The command is at the event's top-level `command`
-(`--from-json command`). One documented limit: Cursor delivers `agent_message`
+(selected with `jq -r '.command'`). One documented limit: Cursor delivers `agent_message`
 to the model only on a denial, not on an allow, so `advise` collapses to a
 plain allow here. The block is what reaches the model, and the advisory nudges
 live in the installed guidance instead. Cursor fails open on a hook crash or bad
@@ -1089,7 +1089,7 @@ JSON unless the hook sets `failClosed`.
 #!/bin/sh
 # .cursor/hooks/magus-guard.sh  (chmod +x)
 command -v magus >/dev/null 2>&1 || { echo '{"permission":"allow"}'; exit 0; }
-exec magus agent hook --from-json command -o 'template={{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
+printf '%s' "$event" | jq -r '.command' | magus hook -o 'template={{if eq .decision "deny"}}{"permission":"deny","agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
 Note that this script and the OpenCode plugin above take opposite stances when
@@ -1108,8 +1108,8 @@ command -v magus >/dev/null 2>&1 || { echo '{"permission":"deny","agent_message"
 ## Attention hooks: knowing when an agent needs you
 
 An agent that is blocked on a permission prompt, or that finished twenty minutes
-ago, is only useful if you find out. `magus agent notify` turns one host event
-into a neutral attention record and, with `--desktop`, a desktop notification.
+ago, is only useful if you find out. `magus notify` normalizes one host event
+into the shared attention record and, with `--desktop`, a desktop notification.
 
 **MCP cannot do this job, and it is worth being clear why.** An MCP server only
 ever observes tool *calls*. A blocked agent makes no call at all - the blockage
@@ -1117,28 +1117,26 @@ ever observes tool *calls*. A blocked agent makes no call at all - the blockage
 host's own hook system is the only surface that fires on it. So this is a hook
 sink, not a tool, and it stays that way regardless of whether the daemon is up.
 
-The command is host-neutral in the same way `magus agent hook` is: one envelope,
+The command is host-neutral in the same way `magus hook` is: one envelope,
 and each host's dialect expressed as a documented invocation rather than as code
 inside magus.
 
 ```sh
-magus agent notify --kind Notification --desktop "needs your approval"
-magus agent notify --kind Stop -o json          # for a script to consume
+printf '%s\n' "needs your approval" | magus notify --outcome Notification --desktop
+printf '%s\n' "finished" | magus notify --outcome Stop -o json
 ```
 
-`--kind` takes whatever the host calls the event. It is classified by substring,
-case-insensitively, into one of four kinds - `waiting`, `stopped`, `permission`,
-`other` - because host event vocabularies are not stable and an exact-match table
-would rot. An unrecognized kind still classifies as `other` and still notifies:
+`--outcome` takes whatever the host calls the event. It is classified by substring,
+case-insensitively, into canonical outcomes such as `waiting`, `finished`,
+`permission`, and `failed`. An unrecognized outcome becomes `other` and still notifies:
 a missed alert is the failure this exists to prevent.
 
-Read the event from the host's JSON on stdin when it provides one:
+When a host provides JSON, shape it into the canonical envelope before piping it
+to magus. The command itself deliberately does not know host field names:
 
 ```sh
-magus agent notify \
-  --kind-from-json hook_event_name \
-  --from-json message \
-  --desktop
+jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: "agent"}, message: .message}' \
+  | magus notify --desktop
 ```
 
 ### Wiring it per host
@@ -1164,7 +1162,7 @@ Claude Code, in `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" agent notify --kind-from-json hook_event_name --from-json message --desktop >/dev/null 2>&1; exit 0"
+            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" notify --desktop >/dev/null 2>&1; exit 0"
           }
         ]
       }

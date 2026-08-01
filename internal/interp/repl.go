@@ -324,7 +324,7 @@ func (f *replFooter) release() {
 // the same place every repaint: what is running, then where, then what it is
 // waiting for.
 func replState(lang, workDir string, depth int, pending bool) string {
-	parts := []string{"magus repl"}
+	parts := []string{"magus buzz"}
 	if lang != "" {
 		parts = append(parts, lang)
 	}

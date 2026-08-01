@@ -649,7 +649,7 @@ fun total_coverage(func_out: str) > str {
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
     // Declared because this target WRITES the badge below and gates on its drift.
-    // Undeclared, `magus vcs add` skipped it as unclaimed while ci still failed on
+    // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
     // it being stale - the workspace's account of itself disagreeing with what a
     // target actually does, which is the disagreement declarations exist to end.
     ctx.outputs("assets/coverage.svg");

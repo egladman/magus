@@ -32,9 +32,9 @@ magus watch | magus affected --stdin build
 
 Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
-JSON CI shard plan for the affected set (for CI fan-out; always keys off the ci
-anchor). --bisect drives VCS bisect using run history to find the commit that
-introduced a regression.
+JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
+plan of proposed paths before editing. --bisect drives VCS bisect using run
+history to find the commit that introduced a regression.
 
 ## Options
 
@@ -147,13 +147,13 @@ magus affected build --graph -o dot | dot -Tsvg > graph.svg
 *Emit a CI shard plan for the affected set*
 
 ```sh
-magus affected --plan
+magus affected ci --plan
 ```
 
-*Shard plan limited to four shards*
+*Shard a test plan across at most four workers*
 
 ```sh
-magus affected --plan --max-shards 4
+magus affected test --plan --max-shards 4
 ```
 
 *Bisect a regression in myapp*

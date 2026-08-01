@@ -31,4 +31,4 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-exec "$GUARD_MAGUS_BIN" agent hook --path --from-json "$HOST_EVENT_PATH" -o "template=$HOST_RESPONSE"
+jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path -o "template=$HOST_RESPONSE"

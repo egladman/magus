@@ -26,6 +26,8 @@
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
+//	magus hook [flags]                  evaluate one command or file path against the guard rules
+//	magus notify [flags]                raise one attention event from stdin (typed JSON or plain text)
 //	magus self update [flags]           update magus to the latest release
 //	magus version                       print version info
 //	magus help                          show this message
@@ -161,6 +163,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// agent install writes embedded skill files into a repo dir; it needs no
 		// workspace resolution and must not forward to a daemon (the install is
 		// local to the caller's directory).
+		return dispatchProfile{needsConfig: true}
+	case "hook", "notify":
+		// hook and notify read stdin and emit one record; they need no workspace
+		// resolution and must not forward to a daemon (a hook is the LAST thing
+		// that should be routed through a remote process; a notify must reach
+		// the local OS notifier, not one on the daemon's host).
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
@@ -544,8 +552,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
-	case "repl":
-		return replCmd(ctx, root, subArgs)
 	case "server":
 		return serverCmd(ctx, root, subArgs)
 	case "mcp":
@@ -558,8 +564,10 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return initCmd(ctx, root, subArgs)
 	case "agent":
 		return agentCmd(ctx, subArgs)
-	case "vcs":
-		return vcsCmd(ctx, root, subArgs)
+	case "hook":
+		return hookCmd(ctx, os.Stdin, os.Stdout, subArgs)
+	case "notify":
+		return notifyCmd(ctx, os.Stdin, os.Stdout, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

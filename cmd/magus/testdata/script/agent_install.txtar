@@ -4,7 +4,9 @@ exists .claude/skills/magus-query/SKILL.md
 exists .claude/skills/magus-run/SKILL.md
 exists .claude/skills/magus-vcs/SKILL.md
 exists .claude/skills/magus-architecture/SKILL.md
+exists .claude/skills/magus-delegate-ultra/SKILL.md
 grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
+grep 'name: magus-delegate-ultra' .claude/skills/magus-delegate-ultra/SKILL.md
 grep 'agent-skill-version: \d' .claude/skills/magus-query/SKILL.md
 
 # several destinations in one call; the destination is the caller's choice
@@ -38,16 +40,19 @@ stdout 'magus-query/SKILL.md'
 stderr 'destination directory'
 
 # the hook evaluates a command from a host event and renders any dialect
-stdin event.json
-exec magus agent hook --from-json tool_input.command -o name
+stdin command.txt
+exec magus hook -o name
 stdout 'deny'
-stdin event.json
-exec magus agent hook --from-json tool_input.command -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
+stdin command.txt
+exec magus hook -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
 stdout 'permissionDecision'
 
 # arguments work without stdin, and a benign command passes
-exec magus agent hook git status
+stdin pass-command.txt
+exec magus hook
 stdout 'pass'
 
--- event.json --
-{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}
+-- command.txt --
+git stash
+-- pass-command.txt --
+git status

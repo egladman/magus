@@ -129,6 +129,7 @@ development/console/
 development/contributing/
 development/docs-guides-integrations-agents/
 development/docs/
+development/evals/
 development/gopherbuzz/
 development/libs-diag/
 development/libs-diagnostics/
@@ -351,6 +352,7 @@ reference/skills/magus-architecture/
 reference/skills/magus-buzz/
 reference/skills/magus-changes/
 reference/skills/magus-context-audit/
+reference/skills/magus-delegate-ultra/
 reference/skills/magus-docs/
 reference/skills/magus-memory/
 reference/skills/magus-query/

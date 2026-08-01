@@ -79,8 +79,33 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 	assert.Contains(t, string(body), "name: magus-architecture")
 	assert.Contains(t, string(body), "skill-content: "+catalog.contentDigest)
 
+	ultra, err := catalog.SkillBytes("magus-delegate-ultra", VariantFull)
+	require.NoError(t, err)
+	assert.Contains(t, string(ultra), "name: magus-delegate-ultra")
+
 	_, err = catalog.SkillBytes("does-not-exist", VariantFull)
 	assert.ErrorContains(t, err, "unknown skill")
+}
+
+func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
+	catalog := NewCatalog(os.DirFS(filepath.Join("..", "..", "cmd", "magus")), "", 7)
+	full, err := catalog.SkillBytes("magus-delegate-ultra", VariantFull)
+	require.NoError(t, err)
+	simple, err := catalog.SkillBytes("magus-delegate-ultra", VariantSimple)
+	require.NoError(t, err)
+
+	for _, body := range [][]byte{full, simple} {
+		text := string(body)
+		assert.Contains(t, text, "acceptance criteria")
+		assert.Contains(t, text, "magus affected <target> --plan")
+		assert.Contains(t, text, "magus status --watch=2s")
+		assert.Contains(t, text, "Nested delegation is allowed")
+		assert.NotContains(t, text, "{{")
+	}
+	assert.Contains(t, string(full), "natural evolution of loop engineering")
+	assert.NotContains(t, string(simple), "natural evolution of loop engineering")
+	assert.LessOrEqual(t, len(simple)*5, len(full)*4,
+		"--simple must remove at least one fifth of the full skill while preserving its safety contract")
 }
 
 func TestCatalogRenderAndStamp(t *testing.T) {
@@ -182,7 +207,7 @@ func TestSkillTemplatesUseOnlyBranching(t *testing.T) {
 			require.NoError(t, err)
 			tmpl, err := template.New(source.name).Parse(string(body))
 			require.NoError(t, err)
-			require.NoError(t, validateTemplateNode(tmpl.Tree.Root))
+			require.NoError(t, validateTemplateNode(tmpl.Root))
 		})
 	}
 }

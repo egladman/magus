@@ -96,12 +96,12 @@
 <h1 id="debugging">Debugging</h1>
 <p>Magus has two entry points into an interactive debugging REPL:</p>
 <ul>
-<li><a href="#interactive-repl"><code>magus repl</code></a>: standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
+<li><a href="#interactive-repl"><code>magus buzz --workspace</code></a>: standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
 <li><a href="#maguspry-breakpoint-in-a-magusfile"><code>magus\pry()</code></a>: <code>binding.pry</code>-style breakpoint, opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context attached.</li>
 </ul>
 <p>Both share the same evaluator. Pry adds stack-introspection commands (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...) on top of the base REPL <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>. The <a href="#meta-commands">meta-commands</a> and <a href="#multiline-input">multiline input</a> sections apply to both unless noted.</p>
 <h2 id="interactive-repl">Interactive REPL</h2>
-<p><code>magus repl</code> opens an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
+<p><code>magus buzz --workspace</code> opens an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL with the same runtime environment available to a magusfile: the <code>magus</code> object (including the host modules and <a class="glossary-term" href="../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> bindings) is preloaded. If a <code>magusfile.buzz</code> is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.</p>
 <p>The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).</p>
 <pre><code class="language-buzz">// example session
 &gt; os\execSh(&quot;git rev-parse --short HEAD&quot;).stdout
@@ -115,7 +115,7 @@ go
 <p>Skip executing the magusfile on start. Useful when you want a blank environment to experiment without side-effects from your <a class="glossary-term" href="../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s startup code.</p>
 <h3 id="-c-dir"><code>-C &lt;dir&gt;</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a></h3>
 <p>Set the working directory for <code>import</code> resolution (default: cwd).</p>
-<pre><code class="language-sh">magus repl -C internal/auth
+<pre><code class="language-sh">magus buzz --workspace -C internal/auth
 </code></pre>
 <h2 id="maguspry-breakpoint-in-a-magusfile"><code>magus\pry()</code>: breakpoint in a magusfile</h2>
 <p>Call <code>magus\pry()</code> anywhere in a magusfile target to suspend execution and drop into the REPL at that exact point. The REPL inherits the calling Runner's bindings and exposes the surrounding scope.</p>
@@ -236,7 +236,7 @@ go
 </tr>
 </tbody>
 </table></figure>
-<p>Pry history is persisted at <code>$XDG_STATE_HOME/magus/pry_history</code> (or <code>~/.local/state/magus/pry_history</code>) and is shared across pry sessions. The standalone <code>magus repl</code> does not record to or read from this file.</p>
+<p>Pry history is persisted at <code>$XDG_STATE_HOME/magus/pry_history</code> (or <code>~/.local/state/magus/pry_history</code>) and is shared across pry sessions. The standalone <code>magus buzz --workspace</code> REPL does not record to or read from this file.</p>
 <p>Color output is enabled when stdout is a TTY; set <code>NO_COLOR=1</code> to disable. The continuation prompt (<code>&gt;&gt;</code> / <code>pry&gt;&gt;</code>) is green-tinted on color terminals.</p>
 <h2 id="multiline-input">Multiline input</h2>
 <p>The REPL detects incomplete input and reprompts with <code>&gt;&gt;</code> until the expression closes: it reinvokes the Buzz parser on each newline, treats anything that does not yet parse to a complete statement as incomplete, and surfaces type errors immediately.</p>

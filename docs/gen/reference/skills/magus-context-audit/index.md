@@ -2,8 +2,8 @@
 title: magus-context-audit
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5171
-skill_simple_bytes: 3687
+skill_full_bytes: 5165
+skill_simple_bytes: 3681
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `21` |
+| `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `351a7800dc11` |
+| `skill-content` | `12962ae67c6a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -81,7 +81,7 @@ not the exception - they were usually written in the same sitting by the same
 person. So resolve every claim against something that executes.
 
 ```sh
-magus agent hook -o name "<the exact command a document recommends>"
+magus hook -o name "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```
@@ -189,7 +189,7 @@ the one nobody remembers is loaded.
  So resolve every claim against something that executes.
 
 ```sh
-magus agent hook -o name "<the exact command a document recommends>"
+magus hook -o name "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```

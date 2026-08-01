@@ -694,11 +694,11 @@ func TestPry_WhereamiWithSource(t *testing.T) {
 // makes people kill a REPL mid-expression; the footer says how deep it is and
 // therefore how many closers are owed.
 func TestReplStateNamesTheContinuationDepth(t *testing.T) {
-	assert.Equal(t, "magus repl  |  buzz  |  /w  |  .help", replState("buzz", "/w", 0, false))
-	assert.Equal(t, "magus repl  |  buzz  |  /w  |  continuing (depth 2)  |  .help", replState("buzz", "/w", 2, false))
-	assert.Equal(t, "magus repl  |  buzz  |  /w  |  continuing  |  .help", replState("buzz", "/w", 0, true),
+	assert.Equal(t, "magus buzz  |  buzz  |  /w  |  .help", replState("buzz", "/w", 0, false))
+	assert.Equal(t, "magus buzz  |  buzz  |  /w  |  continuing (depth 2)  |  .help", replState("buzz", "/w", 2, false))
+	assert.Equal(t, "magus buzz  |  buzz  |  /w  |  continuing  |  .help", replState("buzz", "/w", 0, true),
 		"buffered input with depth 0 (an unterminated statement) still reports continuing")
-	assert.Equal(t, "magus repl  |  .help", replState("", "", 0, false),
+	assert.Equal(t, "magus buzz  |  .help", replState("", "", 0, false),
 		"an unknown language and cwd drop out rather than printing empty separators")
 }
 

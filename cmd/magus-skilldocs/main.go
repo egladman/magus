@@ -137,8 +137,12 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 func writeFenced(w *strings.Builder, body string) {
 	longest := 0
 	for _, line := range strings.Split(body, "\n") {
+		start := 0
+		for start < len(line) && start < 3 && line[start] == ' ' {
+			start++
+		}
 		run := 0
-		for run < len(line) && line[run] == '`' {
+		for start+run < len(line) && line[start+run] == '`' {
 			run++
 		}
 		if run > longest {

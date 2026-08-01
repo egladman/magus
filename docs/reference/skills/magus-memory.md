@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `21` |
+| `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `351a7800dc11` |
+| `skill-content` | `12962ae67c6a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -39,7 +39,7 @@ The `skill-content` digest is shared by both permutations below, so they version
 
 The default: the steps plus the rationale for each.
 
-```markdown
+````markdown
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
@@ -113,7 +113,7 @@ There is no free-text/`note` type. A claim that is true about the code is a
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
   session erase another's handoff.
-```
+````
 
 ## Short form (`--simple`)
 
@@ -122,7 +122,7 @@ The same steps with the rationale withheld; the bar under the heading above show
 <details>
 <summary>Show the short form</summary>
 
-```markdown
+````markdown
 # Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
@@ -190,7 +190,7 @@ about the code is a `query` or `output` pointer, never stored prose.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.
-```
+````
 
 
 </details>

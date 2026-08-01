@@ -53,6 +53,19 @@ stdin changed-proj-b.txt
 exec magus affected list --stdin --dry-run
 stderr '\[dry\] proj-b list'
 
+# Plan mode accepts the same explicit path source as a one-shot input. This lets
+# callers partition proposed work before any agent edits the tree.
+stdin changed-proj-b.txt
+exec magus affected lint --stdin --plan --max-shards=2
+stdout '"source": "stdin paths"'
+stdout '"projects": "proj-b"'
+! stdout '"projects": "\."'
+
+# Plan mode also honors the affected base-ref override.
+exec magus affected lint --plan --base=base --max-shards=2
+stdout '"source": "git diff vs base"'
+stdout '"projects": "proj-b"'
+
 # --impact reports the blast radius of a changeset as structured data; -o json
 # covers affected's support for a structured output format. The "base": "base"
 # field stays stable because base is the tag name, not a commit SHA.

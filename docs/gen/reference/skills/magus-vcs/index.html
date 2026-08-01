@@ -81,6 +81,7 @@
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
           <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-delegate-ultra/" title="magus-delegate-ultra">magus-delegate-ultra</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -97,7 +98,7 @@
     <small class="reading-time" title="Estimated reading time">6 min read</small>
     <article>
 <h1 id="magus-vcs">magus-vcs</h1>
-<p><progress value="3443" max="5402" aria-label="The --simple permutation is 36% smaller: 3443 of 5402 bytes."></progress><small>The --simple permutation is 36% smaller: 3443 of 5402 bytes.</small></p>
+<p><progress value="3447" max="5371" aria-label="The --simple permutation is 35% smaller: 3447 of 5371 bytes."></progress><small>The --simple permutation is 35% smaller: 3447 of 5371 bytes.</small></p>
 <p>Safe git operations in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> (any repo with <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git <a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a> or a diff - especially one touching <a class="glossary-term" href="../../../glossary/#magusmd" data-def="The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first.">MAGUS.md</a>, gen/ trees, lockfiles, or other generated files. Classifies every changed <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> as generated output vs source (<a class="code-xref" href="../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -128,7 +129,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>21</code></td>
+<td><code>23</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -136,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>351a7800dc11</code></td>
+<td><code>12962ae67c6a</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -200,20 +201,19 @@ CORRECT: note that `docs/gen/**` is a declared output of
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+There is deliberately no `magus vcs` command. Classify with Magus, then use
+your VCS directly and stage only the paths you intend. For a rare VCS fact that
+needs Magus's portable VCS module rather than porcelain, use one inline Buzz
+evaluation:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add &lt;path&gt;...   # narrow it
+magus buzz -e 'import &quot;std&quot;; import &quot;vcs&quot;; fun main() &gt; void { std\print(vcs\metadata()); } main();'
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in, which is the one thing
-`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty([&quot;path&quot;])`
+to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+The inline form is intentionally dense: it is an occasional capability query,
+not another everyday CLI surface.
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
@@ -221,11 +221,11 @@ form below is what it automates, and what to fall back to.
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately. `git add -A` stages every
+4. Review `git status` first, then stage deliberately with `git add -- &lt;paths&gt;`. `git add -A` stages every
    untracked file too, so a stray build artifact or scratch file rides along
    silently (this is how a compiled binary once slipped into a commit); use it
    only when `git status` shows nothing you do not intend, else stage the specific
-   paths. Do not lean on a hand-typed path list as your only safeguard either:
+   paths. Do not lean on an unreviewed hand-typed path list as your only safeguard either:
    `git add` aborts on the first pathspec that matches nothing (staging none of
    the rest), and a path you just moved or removed is gone at its old name.
    Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
@@ -293,19 +293,19 @@ project and a role:
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+There is deliberately no `magus vcs` command. Classify with Magus, then use
+your VCS directly and stage only the paths you intend. For a rare VCS fact that
+needs Magus's portable VCS module rather than porcelain, use one inline Buzz
+evaluation:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add &lt;path&gt;...   # narrow it
+magus buzz -e 'import &quot;std&quot;; import &quot;vcs&quot;; fun main() &gt; void { std\print(vcs\metadata()); } main();'
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty([&quot;path&quot;])`
+to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+The inline form is intentionally dense: it is an occasional capability query,
+not another everyday CLI surface.
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
@@ -313,7 +313,7 @@ form below is what it automates, and what to fall back to.
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately. Avoid staging
+4. Review `git status` first, then stage deliberately with `git add -- &lt;paths&gt;`. Avoid staging
    everything (stray artifacts ride along); a hand-typed path list is not safer,
    since the first non-matching pathspec aborts the whole call. Confirm with
    `git diff --cached --stat`: every intended edit, renames included.
@@ -341,13 +341,13 @@ affected set.
     <div class="related-grid">
         <a class="related-card" href="../../../reference/skills/"><span class="related-card-title">Agent skills</span><span class="related-card-desc">Every skill magus installs, in both curated permutations, generated from the embedded bodies.</span></a>
         <a class="related-card" href="../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../../reference/skills/magus-run/"><span class="related-card-title">magus-run</span><span class="related-card-desc">Run builds, tests, lints, and codegen through magus targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-vcs%22">magus-vcs</a></div>
-    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li><li><a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b"><code>b419ddd2</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface, display flags, ctx-first fixtures</li><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" data-tooltip="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" title="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6">90b33d9c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0b491a48cf41cb1e86e3e557edc089603166f039"><code>0b491a48</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface</li><li><a href="https://github.com/egladman/magus/commit/91db2157a3b6b68a2beda574fbaa191d7c47ae86"><code>91db2157</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/a1208da77f9de97ab9e26edcc44a139b20afd0d0"><code>a1208da7</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-vcs.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -367,6 +367,9 @@ may compose a spell's tool-native operations and depend on other targets. See
 <h3 id="operation">Operation</h3>
 <p>A single tool-native command a target composes; the middle of the work hierarchy
 (Spell to Operation to Target). See <a href="../../../concepts/operations/">operations</a>.</p>
+<h3 id="module">Module</h3>
+<p>A magus stdlib namespace a magusfile imports for host capabilities: filesystem,
+exec, vcs, and more. See <a href="../../../reference/buzz/">the module reference</a>.</p>
 <h3 id="buzz">Buzz</h3>
 <p>The language magusfiles are written in (the <code>.buzz</code> engine). See
 <a href="../../../concepts/engines/">engines</a>.</p>
@@ -390,6 +393,12 @@ span beneath it. See <a href="../../../concepts/telemetry/">telemetry</a>.</p>
 graph: it lists every node and points at the exact query for a given question,
 so it is the entry point an agent reads first. See
 <a href="../../../concepts/knowledge/">knowledge</a>.</p>
+<h3 id="surface">Surface</h3>
+<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
+Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
+you navigate to: it is mounted into a tab, or into a pane beside another one.
+Each is single-instance - opening one you already have focuses it instead of
+duplicating it. See <a href="../../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>

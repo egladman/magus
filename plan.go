@@ -18,15 +18,42 @@ type PlanOptions struct {
 	RunnerPoolBudget int
 	// HistoryPath overrides the configured history_path when non-empty.
 	HistoryPath string
+	// BaseRef overrides the VCS base used to compute the affected set.
+	// It is mutually exclusive with ChangedPaths.
+	BaseRef string
+	// ChangedPaths computes the affected set from these repo-relative paths
+	// instead of a VCS diff. A non-nil empty slice deliberately means no paths.
+	ChangedPaths []string
 }
 
 // Plan computes a provider-neutral CI shard plan for the affected project
 // set using target as the CI target (typically "ci"). Adaptive sharding is applied
 // when runtime history is available at the resolved HistoryPath.
 func (m *Magus) Plan(ctx context.Context, target string, opts PlanOptions) (types.ShardPlan, error) {
-	targets, source, _, err := m.ExpandAffected(ctx, target, "")
-	if err != nil {
-		return types.ShardPlan{}, err
+	if opts.ChangedPaths != nil && opts.BaseRef != "" {
+		return types.ShardPlan{}, fmt.Errorf("affected plan: changed paths and base ref are mutually exclusive")
+	}
+
+	var (
+		targets []types.Target
+		source  string
+	)
+	if opts.ChangedPaths != nil {
+		result, err := m.AffectedFromPaths(ctx, opts.ChangedPaths)
+		if err != nil {
+			return types.ShardPlan{}, fmt.Errorf("affected plan: compute paths: %w", err)
+		}
+		targets = make([]types.Target, len(result.Affected))
+		for i, path := range result.Affected {
+			targets[i] = types.Target{Path: path, Name: target, Files: result.FilesBySeed[path]}
+		}
+		source = "stdin paths"
+	} else {
+		var err error
+		targets, source, _, err = m.ExpandAffected(ctx, target, opts.BaseRef)
+		if err != nil {
+			return types.ShardPlan{}, err
+		}
 	}
 
 	projects := make([]*types.Project, 0, len(targets))

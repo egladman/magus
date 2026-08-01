@@ -81,6 +81,7 @@
           <li><a href="../../../reference/skills/magus-buzz/" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
           <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-delegate-ultra/" title="magus-delegate-ultra">magus-delegate-ultra</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" aria-current="page" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -89,7 +90,7 @@
           <li><a href="../../../reference/skills/magus-vcs/" title="magus-vcs">magus-vcs</a></li>
         </ul>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#recording" title="Recording">Recording</a></li><li><a href="#scope-boundaries" title="Scope boundaries">Scope boundaries</a></li><li><a href="#recording-1" title="Recording">Recording</a></li><li><a href="#scope-boundaries-1" title="Scope boundaries">Scope boundaries</a></li></ul>
+        <ul><li><a href="#what-an-installed-copy-carries" title="What an installed copy carries">What an installed copy carries</a></li><li><a href="#full-form" title="Full form">Full form</a></li><li><a href="#short-form---simple" title="Short form (--simple)">Short form (--simple)</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -128,7 +129,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>21</code></td>
+<td><code>23</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -136,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>351a7800dc11</code></td>
+<td><code>12962ae67c6a</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -191,45 +192,41 @@ There is no free-text/`note` type. A claim that is true about the code is a
   magus memory put release-gate --type plan \
     --ref 'command: magus affected ci' --status active \
     --body 'Run after the documentation render is committed.'
+  ```
+
+- Use `delete` for entries that no longer earn their keep. Run `magus memory
+  verify` (or MCP `{op: &quot;verify&quot;}`) after editing entries or when list reports
+  an issue. It gives a path and repair step for malformed, stale, or broken
+  linked entries.
+
+## Recording
+
+- `magus_memory` {op: &quot;put&quot;, name, type, refs, body?, status?} upserts a record
+  by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
+  `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
+- Made a choice another session would otherwise re-derive (architecture, naming,
+  a rejected approach and why): record a `decision`. A bare &quot;we chose X&quot; helps
+  nobody; the `body` carries the why, and the refs anchor it to the code.
+- Prefer a ref over prose: if a fact is derivable, record the `query` that proves
+  it, not a sentence that rots.
+- Prune with `op: &quot;delete&quot;`; list-then-get with `op: &quot;list&quot;` / `op: &quot;get&quot;`.
+
+## Scope boundaries
+
+- Intra-session working notes (checklists, partial findings) belong in
+  `magus_scratchpad`, which is per-workspace and disposable, not here.
+- Facts the repo already records (code structure, git history, MAGUS.md) do not
+  belong in memory; record the `magus_query` that surfaces them instead.
+- Records live outside the repo, keyed by repository identity. The console,
+  CLI, and MCP all show the same entries. A legacy cursor can still be read for
+  migration, but writes are intentionally retired: one shared cursor lets one
+  session erase another's handoff.
 </code></pre>
-<ul>
-<li>Use <code>delete</code> for entries that no longer earn their keep. <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> <code>magus memory verify</code> (or MCP <code>{op: &quot;verify&quot;}</code>) after editing entries or when list reports
-an issue. It gives a <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> and repair step for malformed, stale, or broken
-linked entries.</li>
-</ul>
-<h2 id="recording">Recording</h2>
-<ul>
-<li><code>magus_memory</code> {op: &quot;put&quot;, name, type, <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus refs: find a symbol's definition and references.">refs</a>, body?, <a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a>?} upserts a record
-by <code>name</code> (a kebab slug). Pass <code>refs</code> as one per line, <code>kind: target</code> (e.g.
-<code>query: kind:op depends cache</code> or <code>node: file:internal/hash/hasher.go</code>).</li>
-<li>Made a choice another session would otherwise re-derive (architecture, naming,
-a rejected approach and why): record a <code>decision</code>. A bare &quot;we chose <a class="code-xref" href="../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">X</a>&quot; helps
-nobody; the <code>body</code> carries the why, and the refs anchor it to the code.</li>
-<li>Prefer a ref over prose: if a fact is derivable, record the <code>query</code> that proves
-it, not a sentence that rots.</li>
-<li>Prune with <code>op: &quot;delete&quot;</code>; list-then-get with <code>op: &quot;list&quot;</code> / <code>op: &quot;get&quot;</code>.</li>
-</ul>
-<h2 id="scope-boundaries">Scope boundaries</h2>
-<ul>
-<li>Intra-session working notes (checklists, partial findings) belong in
-<code>magus_scratchpad</code>, which is per-<a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> and disposable, not here.</li>
-<li>Facts the repo already records (code structure, git history, <a class="glossary-term" href="../../../glossary/#magusmd" data-def="The committed routing index at a workspace root, regenerated from the knowledge graph: it lists every node and points at the exact query for a given question, so it is the entry point an agent reads first.">MAGUS.md</a>) do not
-belong in memory; record the <code>magus_query</code> that surfaces them instead.</li>
-<li>Records live outside the repo, keyed by repository identity. The <a class="glossary-term" href="../../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>,
-CLI, and MCP all show the same entries. A legacy cursor can still be read for
-migration, but writes are intentionally retired: one shared cursor lets one
-session erase another's handoff.</li>
-</ul>
-<pre><code>
-## Short form (`--simple`)
-
-The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
-
-&lt;details&gt;
-&lt;summary&gt;Show the short form&lt;/summary&gt;
-
-```markdown
-# Handoff journal
+<h2 id="short-form---simple">Short form (<code>--simple</code>)</h2>
+<p>The same steps with the rationale withheld; the bar under the heading above shows by how much. Both are hand-authored from one source body; see <a href="../../../guides/integrations/agents/">Agents</a> for when to prefer which.</p>
+<details>
+<summary>Show the short form</summary>
+<pre><code class="language-markdown"># Handoff journal
 
 `magus memory` and `magus_memory` are two frontends to a small, user-owned
 handoff journal. It is not automatic model memory: add an entry only
@@ -271,35 +268,33 @@ about the code is a `query` or `output` pointer, never stored prose.
   magus memory put release-gate --type plan \
     --ref 'command: magus affected ci' --status active \
     --body 'Run after the documentation render is committed.'
-</code></pre>
-<ul>
-<li>Use <code>delete</code> for entries that no longer earn their keep. Run <code>magus memory verify</code> (or MCP <code>{op: &quot;verify&quot;}</code>) after editing entries or when list reports
-an issue.</li>
-</ul>
-<h2 id="recording-1">Recording</h2>
-<ul>
-<li><code>magus_memory</code> {op: &quot;put&quot;, name, type, refs, body?, status?} upserts a record
-by <code>name</code> (a kebab slug). Pass <code>refs</code> as one per line, <code>kind: target</code> (e.g.
-<code>query: kind:op depends cache</code> or <code>node: file:internal/hash/hasher.go</code>).</li>
-<li>Made a choice another session would otherwise re-derive (architecture, naming,
-a rejected approach and why): record a <code>decision</code>. Put the why
-in <code>body</code> and anchor it with refs.</li>
-<li>Prefer a ref over prose: if a fact is derivable, record the <code>query</code> that proves
-it.</li>
-<li>Prune with <code>op: &quot;delete&quot;</code>; list-then-get with <code>op: &quot;list&quot;</code> / <code>op: &quot;get&quot;</code>.</li>
-</ul>
-<h2 id="scope-boundaries-1">Scope boundaries</h2>
-<ul>
-<li>Intra-session working notes (checklists, partial findings) belong in
-<code>magus_scratchpad</code>, not here.</li>
-<li>Facts the repo already records (code structure, git history, MAGUS.md) do not
-belong in memory; record the <code>magus_query</code> that surfaces them instead.</li>
-<li>Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.</li>
-</ul>
-<pre><code>
+  ```
 
-&lt;/details&gt;
+- Use `delete` for entries that no longer earn their keep. Run `magus memory
+  verify` (or MCP `{op: &quot;verify&quot;}`) after editing entries or when list reports
+  an issue.
+
+## Recording
+
+- `magus_memory` {op: &quot;put&quot;, name, type, refs, body?, status?} upserts a record
+  by `name` (a kebab slug). Pass `refs` as one per line, `kind: target` (e.g.
+  `query: kind:op depends cache` or `node: file:internal/hash/hasher.go`).
+- Made a choice another session would otherwise re-derive (architecture, naming,
+  a rejected approach and why): record a `decision`. Put the why
+  in `body` and anchor it with refs.
+- Prefer a ref over prose: if a fact is derivable, record the `query` that proves
+  it.
+- Prune with `op: &quot;delete&quot;`; list-then-get with `op: &quot;list&quot;` / `op: &quot;get&quot;`.
+
+## Scope boundaries
+
+- Intra-session working notes (checklists, partial findings) belong in
+  `magus_scratchpad`, not here.
+- Facts the repo already records (code structure, git history, MAGUS.md) do not
+  belong in memory; record the `magus_query` that surfaces them instead.
+- Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.
 </code></pre>
+</details>
     </article>
     </div>
     </div>
@@ -319,7 +314,7 @@ belong in memory; record the <code>magus_query</code> that surfaces them instead
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-memory%22">magus-memory</a></div>
-    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li><li><a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b"><code>b419ddd2</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface, display flags, ctx-first fixtures</li><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" data-tooltip="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" title="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6">90b33d9c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0b491a48cf41cb1e86e3e557edc089603166f039"><code>0b491a48</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface</li><li><a href="https://github.com/egladman/magus/commit/91db2157a3b6b68a2beda574fbaa191d7c47ae86"><code>91db2157</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/a1208da77f9de97ab9e26edcc44a139b20afd0d0"><code>a1208da7</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-memory.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

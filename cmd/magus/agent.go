@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"flag"
@@ -18,8 +17,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/interactive"
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -42,12 +41,16 @@ var agentsSection string
 var agentSkills = agent.NewCatalog(skillFS, agentsSection, types.KnowledgeSchemaVersion)
 
 // agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
-// `install` writes the embedded skills into explicitly named destinations,
-// `install-agents-md` maintains the managed magus section in AGENTS.md, and
-// `hook` evaluates and records one shell or file-tool command to a guard verdict. Destinations and
-// event shapes are explicit arguments, never auto-detected (per the
-// explicit-and-granular preference); writing into a repo's agent-config dirs
-// happens only through these commands, never as a side effect of another.
+// `install` writes the embedded skills into explicitly named destinations and
+// `install-agents-md` maintains the managed magus section in AGENTS.md.
+// Destinations and event shapes are explicit arguments, never auto-detected
+// (per the explicit-and-granular preference); writing into a repo's agent-config
+// dirs happens only through these commands, never as a side effect of another.
+//
+// The `hook` and `notify` subcommands used to live here; they are now top-level
+// (`magus hook`, `magus notify`) because their contracts are not agent-specific.
+// A guard evaluates any command or file path the host can produce, and a
+// notification is whatever needs a human's attention regardless of source.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
@@ -59,20 +62,16 @@ func agentCmd(ctx context.Context, args []string) error {
 		return agentInstallAgentsMDCmd(ctx, args[1:])
 	case "sample":
 		return agentSampleCmd()
-	case "hook":
-		return agentHookCmd(ctx, os.Stdin, os.Stdout, args[1:])
-	case "notify":
-		return agentNotifyCmd(ctx, os.Stdin, os.Stdout, args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, install-agents-md, sample, hook, or notify)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, install-agents-md, or sample)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|install-agents-md|sample|hook|notify> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|install-agents-md|sample> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  install            render the embedded skills and write or stream them")
@@ -83,11 +82,6 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "                     bytes outside the markers never touched)")
 	fmt.Fprintln(w, "  sample             print a starter AGENTS.md to stdout to own and tweak;")
 	fmt.Fprintln(w, "                     never writes a file")
-	fmt.Fprintln(w, "  hook               evaluate and record one agent tool invocation against")
-	fmt.Fprintln(w, "                     the magus guard rules, then emit a deny/advise/pass verdict")
-	fmt.Fprintln(w, "  notify             turn one agent-host event (waiting for input, needs")
-	fmt.Fprintln(w, "                     approval, finished) into an attention record, and")
-	fmt.Fprintln(w, "                     optionally a desktop notification")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Stdout philosophy: `magus agent` is a pure data generator. To install")
 	fmt.Fprintln(w, "skills anywhere your shell can reach, use --tar and pipe to tar:")
@@ -290,16 +284,19 @@ type guardVerdict struct {
 
 const guardSchemaVersion = 1
 
-// agentHookCmd implements `magus agent hook`: evaluate one shell command
-// against the guard rules and emit a verdict. The command arrives as arguments,
-// as raw stdin, or extracted from a JSON event on stdin via --from-json
-// <dot.path> - whichever the calling agent host can produce. The verdict goes
-// out through the standard -o arm, so a host-specific response shape is a
-// documented template, not code. A guard must fail open: an unreadable event is
-// a pass, never an error that would block every tool call.
-func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
-	fset := flag.NewFlagSet("agent hook", flag.ContinueOnError)
-	fromJSON := fset.String("from-json", "", "Extract the command from a JSON document on stdin at this dot-separated path (e.g. tool_input.command)")
+// hookCmd implements `magus hook`: evaluate one shell command against the guard
+// rules and emit a verdict. It reads exactly one command or file path from
+// stdin. The caller owns any extraction from its host-specific event shape;
+// magus owns only the host-neutral policy and response. The verdict goes out
+// through the standard -o arm, so a caller-specific response shape is a
+// documented template, not code. A guard must fail open: an empty or unreadable
+// input is a pass, never an error that would block every tool call.
+//
+// This used to be `magus agent hook`; it moved to top level because the guard
+// rules are not agent-specific. Any caller that can produce a command or a file
+// path on stdin can wire it.
+func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
@@ -310,12 +307,15 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
+	if len(fset.Args()) != 0 {
+		return usagef("magus hook: takes no positional arguments (read the command or path from stdin)")
+	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err
 	}
 
-	input, hasInput := readGuardInput(in, fset.Args(), *fromJSON)
+	input, hasInput := readGuardInput(in)
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if hasInput {
@@ -331,7 +331,7 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 				verdict.Context = context
 			}
 		}
-		appendAgentHookActivity(ctx, input, true, verdict)
+		appendHookActivity(ctx, input, true, verdict)
 		return writeGuardVerdict(out, opts, verdict)
 	}
 	if hasInput {
@@ -344,7 +344,7 @@ func agentHookCmd(ctx context.Context, in io.Reader, out io.Writer, args []strin
 			verdict.Context = v.Context
 		}
 	}
-	appendAgentHookActivity(ctx, input, false, verdict)
+	appendHookActivity(ctx, input, false, verdict)
 	return writeGuardVerdict(out, opts, verdict)
 }
 
@@ -435,88 +435,48 @@ func adviseMemoryWrite(path string) string {
 	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-memory skill if not already loaded."
 }
 
-// guardInput keeps the resolved command/path distinct from optional host-event metadata.
+// guardInput keeps the resolved command/path distinct from its rendering and
+// audit policy. The hook's input is deliberately plain text: host event parsing
+// belongs in the host wrapper, not in a durable magus CLI contract.
 type guardInput struct {
 	Value string
-	Event []byte // original host event, retained only long enough to extract stable audit metadata
 }
 
-// readGuardInput resolves the command or path from the supported inputs. JSON event bytes travel
-// alongside the extracted value so the audit writer can retain host identity without ever storing
-// the opaque, potentially much larger host event itself.
-func readGuardInput(in io.Reader, args []string, fromJSON string) (guardInput, bool) {
-	if fromJSON != "" {
-		doc, err := io.ReadAll(in)
-		if err != nil {
-			return guardInput{}, false
-		}
-		s, err := extractJSONString(doc, fromJSON)
-		if err != nil {
-			// Visible in the host's debug log, invisible to the session: fail open.
-			fmt.Fprintln(os.Stderr, "agent hook: "+err.Error()+" (failing open)")
-			return guardInput{}, false
-		}
-		return guardInput{Value: s, Event: doc}, true
-	}
-	if len(args) > 0 && (len(args) != 1 || args[0] != "-") {
-		return guardInput{Value: strings.Join(args, " ")}, true
-	}
+func readGuardInput(in io.Reader) (guardInput, bool) {
 	b, err := io.ReadAll(in)
-	if err != nil || len(bytes.TrimSpace(b)) == 0 {
+	value := strings.TrimSpace(string(b))
+	if err != nil || value == "" {
 		return guardInput{}, false
 	}
-	return guardInput{Value: string(b)}, true
+	return guardInput{Value: value}, true
 }
 
-// readGuardCommand resolves the command string from the three input forms: --from-json extraction,
-// positional arguments (joined), or raw stdin (also the "-" positional). The boolean is false when
-// no command could be read - the caller's fail-open path. The hook itself uses readGuardInput so
-// its activity event can capture host metadata separately.
-func readGuardCommand(in io.Reader, args []string, fromJSON string) (string, bool) {
-	input, ok := readGuardInput(in, args, fromJSON)
-	return input.Value, ok
-}
-
-type agentHookActivityLocation struct {
+type hookActivityLocation struct {
 	base      string
 	workspace string
 }
 
-type agentHookActivityLocationKey struct{}
+type hookActivityLocationKey struct{}
 
-// appendAgentHookActivity contributes a best-effort, normalized observation to the same durable
+// appendHookActivity contributes a best-effort, normalized observation to the same durable
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendAgentHookActivity(ctx context.Context, input guardInput, asPath bool, verdict guardVerdict) {
+func appendHookActivity(ctx context.Context, input guardInput, asPath bool, verdict guardVerdict) {
 	if input.Value == "" {
 		return
 	}
-	location := agentHookActivityTrail(ctx)
+	location := hookActivityTrail(ctx)
 	if location.base == "" {
 		return
 	}
-	metadata := agentHookMetadata(input.Event)
-	tool := metadata.tool
-	if tool == "" {
-		if asPath {
-			tool = "file.write"
-		} else {
-			tool = "shell.command"
-		}
-	}
-	actor := "agent"
-	if metadata.agentID != "" {
-		actor = "agent:" + metadata.agentID
-	} else if metadata.session != "" {
-		actor = "session:" + metadata.session
+	tool := "shell.command"
+	if asPath {
+		tool = "file.write"
 	}
 	command := trail.AgentCommand{
-		Actor:     actor,
+		Actor:     "agent",
 		Workspace: location.workspace,
-		Host:      metadata.host,
-		Session:   metadata.session,
-		Event:     metadata.event,
 		Tool:      tool,
 		Decision:  verdict.Decision,
 		Reason:    verdict.Reason,
@@ -530,80 +490,22 @@ func appendAgentHookActivity(ctx context.Context, input guardInput, asPath bool,
 	trail.AppendAgentCommand(location.base, command)
 }
 
-// agentHookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
+// hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
 // client process, outside the daemon's memory. Tests can pin a temporary base through context so
 // a guard unit test never writes its checkout's real activity trail.
-func agentHookActivityTrail(ctx context.Context) agentHookActivityLocation {
-	if location, ok := ctx.Value(agentHookActivityLocationKey{}).(agentHookActivityLocation); ok {
+func hookActivityTrail(ctx context.Context) hookActivityLocation {
+	if location, ok := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); ok {
 		return location
 	}
 	root, err := magus.FindRoot("")
 	if err != nil {
-		return agentHookActivityLocation{}
+		return hookActivityLocation{}
 	}
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
-		return agentHookActivityLocation{}
+		return hookActivityLocation{}
 	}
-	return agentHookActivityLocation{base: cacheDir, workspace: root}
-}
-
-type hookMetadata struct {
-	host    string
-	session string
-	agentID string
-	event   string
-	tool    string
-}
-
-// agentHookMetadata accepts the field names shared by the documented host events. Unknown fields
-// stay unknown; guessing a provider identity is worse than recording the generic agent actor.
-func agentHookMetadata(event []byte) hookMetadata {
-	if len(event) == 0 {
-		return hookMetadata{}
-	}
-	var fields map[string]any
-	if err := json.Unmarshal(event, &fields); err != nil {
-		return hookMetadata{}
-	}
-	stringField := func(names ...string) string {
-		for _, name := range names {
-			if value, ok := fields[name].(string); ok && value != "" {
-				return value
-			}
-		}
-		return ""
-	}
-	return hookMetadata{
-		host:    stringField("agent_host", "host"),
-		session: stringField("session_id", "session"),
-		agentID: stringField("agent_id", "agent"),
-		event:   stringField("hook_event_name", "event"),
-		tool:    stringField("tool_name", "tool"),
-	}
-}
-
-// extractJSONString unmarshals doc and walks a dot-separated path of object
-// keys to a string value.
-func extractJSONString(doc []byte, path string) (string, error) {
-	var v any
-	if err := json.Unmarshal(doc, &v); err != nil {
-		return "", fmt.Errorf("--from-json: stdin is not valid JSON: %w", err)
-	}
-	for _, key := range strings.Split(path, ".") {
-		m, ok := v.(map[string]any)
-		if !ok {
-			return "", fmt.Errorf("--from-json: %s: no object to descend into at %q", path, key)
-		}
-		if v, ok = m[key]; !ok {
-			return "", fmt.Errorf("--from-json: %s: key %q not found", path, key)
-		}
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", fmt.Errorf("--from-json: %s: value is not a string", path)
-	}
-	return s, nil
+	return hookActivityLocation{base: cacheDir, workspace: root}
 }
 
 // bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
@@ -633,16 +535,13 @@ type bashGuardVerdict struct {
 // reading the regex alternation as a pipe into `mockery`.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
-// A pass-through wrapper runs ANOTHER command, with the toolchain, environment,
-// or timeout adjusted first. It is never itself the finding: `mise exec` is how
-// this workspace reaches its pinned Go and `env -u GOROOT` is load-bearing in
-// every documented build here, so a guard that denied them would be denying the
-// house style. The guard peels them off and judges the payload, which is why
-// `mise exec -- magus run test` passes and the same wrapper around `go test`
-// does not.
+// A pass-through wrapper runs ANOTHER command, with the environment or timeout
+// adjusted first. It is never itself the finding: the guard peels it off and
+// judges the payload, so an unapproved launcher cannot tunnel a raw tool past
+// the guard.
 //
-// `mise run` is deliberately absent: it runs a DECLARED mise task, not a
-// smuggled command, and peeling it would misattribute the task's contents.
+// A launcher's declared task subcommand is deliberately absent: it runs a task,
+// not a smuggled command, and peeling it would misattribute the task's contents.
 var guardWrappers = map[string]bool{
 	"env": true, "nohup": true, "command": true, "exec": true,
 	"time": true, "timeout": true, "nice": true, "stdbuf": true,
@@ -737,7 +636,8 @@ func peelWrappers(words []string) []guardCommand {
 			return []guardCommand{{Name: name, Args: words[1:]}}
 
 		case name == "mise" || name == "rtx":
-			// mise exec [tool@version ...] -- cmd, and the `mise x` alias.
+			// A launcher may carry tool selectors before `--`; its short form is
+			// accepted too. Both then pass the command after `--` through unchanged.
 			if len(words) > 1 && (words[1] == "exec" || words[1] == "x") {
 				if i := slices.Index(words, "--"); i >= 0 {
 					words = words[i+1:]
@@ -828,36 +728,13 @@ func shellDashC(args []string) (string, bool) {
 	return "", false
 }
 
-// guardRawTools maps a program to the subcommands that have a magus equivalent.
-// An empty set means the program is covered whatever it is asked to do.
-//
-// Structured, not a pattern: the key is a program NAME the parser resolved, so a
-// tool named in prose, in a commit message, or inside a quoted argument can
-// never reach this map. That is what the cmdPos anchor was approximating.
-var guardRawTools = map[string]map[string]bool{
-	"go":            {"test": true, "build": true, "vet": true, "generate": true, "mod": true},
-	"buf":           {"generate": true, "lint": true, "breaking": true},
-	"npm":           {"test": true, "run": true, "exec": true},
-	"cargo":         {"test": true, "build": true, "check": true, "clippy": true, "fmt": true},
-	"gofmt":         {},
-	"goimports":     {},
-	"golangci-lint": {},
-	"govulncheck":   {},
-	"mockery":       {},
-	"npx":           {},
-	"pnpm":          {},
-	"yarn":          {},
-	"eslint":        {},
-	"prettier":      {},
-	"biome":         {},
-	"vitest":        {},
-	"jest":          {},
-	"pytest":        {},
-	"ruff":          {},
-	"black":         {},
-	"mypy":          {},
-	"tsc":           {},
-	"rustfmt":       {},
+// guardToolMatch is one command spell operation Magus can run on the caller's
+// behalf. It is derived from the registered spell catalog, never a hand-kept
+// list in the guard: adding a spell operation automatically teaches the hook
+// which raw command it replaces.
+type guardToolMatch struct {
+	spell     string
+	operation string
 }
 
 // guardTextFilters are the shell commands whose purpose is to trim, slice, or
@@ -962,7 +839,7 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 		return guardCommand{}, false
 	}
 	for _, c := range cmds {
-		if rawToolDenied(c) {
+		if _, ok := rawToolMatch(c); ok {
 			return c, true
 		}
 	}
@@ -984,57 +861,72 @@ func explainDeny(typed string, c guardCommand, reason string) string {
 	return b.String()
 }
 
-// rawToolDenied reports whether one resolved command has a magus equivalent that
-// should be used instead.
-//
-// The exemptions are the commands that bypass nothing, where a deny would be
-// pure obstruction:
-//
-//   - `go mod` other than tidy/vendor, which read rather than write.
-//   - `gofmt -l` / `-d`   lists or diffs; only -w rewrites the tree.
-//   - any `--version`     asks what is installed. It reads no sources, writes no
-//     outputs, and has no magus equivalent.
-//
-// `go build` is NOT exempt at any output path, and the `-o /tmp/...` dev-loop
-// build that used to be exempt is the specific case this closed. It produces a
-// binary, which makes it a write, and the write rule has no exceptions - the
-// toolchain verb is what has to change, not the destination. `magus run build`
-// covers it and `magus run go::go-build` is the one-op form.
-//
-// That is the whole justification. An earlier version of this comment also
-// blamed raw builds for poisoning the Go build cache into a link-time
-// fingerprint mismatch; that claim was tested and is FALSE. The mismatch
-// reproduces with no raw build in the session and survives `go clean -cache`,
-// so it has some other cause. Do not restore the claim without evidence.
+// rawToolDenied reports whether one resolved command has a registered spell-op
+// equivalent. It intentionally allows a tool that Magus does not expose; a
+// guard may funnel an available capability, never remove one.
 func rawToolDenied(c guardCommand) bool {
-	subs, known := guardRawTools[c.Name]
-	if !known {
-		return false
-	}
+	_, ok := rawToolMatch(c)
+	return ok
+}
+
+// rawToolMatch finds the operation whose rendered base command and semantic
+// subcommand match c. Both the ordinary and rw renderings participate: a spell
+// can expose a read-only check (`gofmt -l`) and a rewriting form (`gofmt -w`)
+// without the guard confusing the two. The catalog is read for every process,
+// so a newly registered spell operation requires no guard edit.
+func rawToolMatch(c guardCommand) (guardToolMatch, bool) {
 	for _, a := range c.Args {
 		if a == "--version" || a == "-version" || a == "-V" {
-			return false
+			return guardToolMatch{}, false
 		}
 	}
-	if len(subs) > 0 {
-		if len(c.Args) == 0 || !subs[c.Args[0]] {
-			return false
-		}
-	}
-
-	switch c.Name {
-	case "go":
-		if c.Args[0] == "mod" {
-			return len(c.Args) > 1 && (c.Args[1] == "tidy" || c.Args[1] == "vendor")
-		}
-	case "gofmt":
-		for _, a := range c.Args {
-			if a == "-l" || a == "-d" {
-				return false
+	for _, spell := range project.DefaultSpellRegistry().All() {
+		for _, operation := range spell.Targets() {
+			for _, charms := range [][]string{nil, []string{"rw"}} {
+				program, args, ok, err := spell.RenderCommand(operation, charms)
+				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
+					continue
+				}
+				prefix := guardCommandPrefix(args)
+				if len(prefix) == 0 || len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix) {
+					continue
+				}
+				return guardToolMatch{spell: spell.Name(), operation: operation}, true
 			}
 		}
 	}
-	return true
+	return guardToolMatch{}, false
+}
+
+// guardCommandPrefix extracts the semantic command portion from an operation's
+// rendered argv. It preserves compound verbs (`go mod tidy`, `go tool
+// govulncheck`) and uses write-mode flags as a verb when an operation has no
+// subcommand (`gofmt -w`). Other leading flags describe a read-only rendering
+// and therefore do not create a raw-tool deny.
+func guardCommandPrefix(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	for _, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
+			break
+		}
+		if arg == "-w" || arg == "--write" || arg == "--fix" {
+			return []string{arg}
+		}
+	}
+	first := 0
+	for first < len(args) && strings.HasPrefix(args[first], "-") {
+		first++
+	}
+	if first == len(args) || args[first] == "." || strings.HasPrefix(args[first], "./") {
+		return nil
+	}
+	prefix := []string{args[first]}
+	if (args[first] == "mod" || args[first] == "tool") && first+1 < len(args) && !strings.HasPrefix(args[first+1], "-") {
+		prefix = append(prefix, args[first+1])
+	}
+	return prefix
 }
 
 // gitGuard classifies git invocations from PARSED commands, returning the first
@@ -1221,7 +1113,7 @@ var (
 )
 
 const (
-	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Load the magus-vcs skill for the commit checklist if not already loaded."
+	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs skill for the commit checklist if not already loaded."
 	// An explicit ladder, because the old text ended with "if no target covers
 	// this work, proceed" - which reads as permission to go straight to the raw
 	// binary. There is a rung between the two, and naming it is the whole point:
@@ -1243,8 +1135,8 @@ const (
 		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - `magus describe targets` lists every target, `-o name` for just the names\n" +
 		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
 		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
-		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded.\n" +
-		"Do NOT retry this behind a wrapper. The guard reads the command being RUN, not the one being typed, so `mise exec -- ...`, `env -u GOROOT ...`, a `VAR=value` prefix and `bash -c '...'` all reach the same verdict. Those wrappers are fine in front of a magus command - `mise exec -- magus run test` is exactly right, and is what to reach for when the point of the wrapper was the pinned toolchain."
+		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. The operation already supplies its own default arguments: forward only the extra flags or overrides you need. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded.\n" +
+		"Do NOT retry this behind a wrapper. The guard reads the command being RUN, not the one being typed, so a launcher, `env -u GOROOT ...`, a `VAR=value` prefix, and `bash -c '...'` all reach the same verdict. Run the named magus command directly."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it -
 	// but a generate target rewriting its declared outputs is the system working,
@@ -1284,18 +1176,14 @@ const (
 	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
-	// flags are the actionable part, and a weaker model needs the exact spelling.
-	// denyStageAll routes to deliberate staging. `git add -A` is the single command
+	// exact safe replacement is the actionable part. `git add -A` is the single command
 	// most likely to turn a focused change into an unreviewable one: it sweeps every
 	// regenerated output and every unrelated formatting fix a target just wrote into
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
-	denyStageAll = "staging everything has an exact equivalent in magus workspaces, so this is denied rather than explained. Use it:\n" +
-		"  magus vcs add --dry-run      # classify the dirty tree, stage nothing\n" +
-		"  magus vcs add                # stage the declared sources AND the generated outputs they produced\n" +
-		"It groups what it stages by role and REPORTS every undeclared path instead of sweeping it in, which is the one thing `git add -A` cannot do. `magus vcs add <path>...` narrows it, and `--untracked` opts the undeclared ones back in when one of them is genuinely a new source file.\n" +
-		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Staging specific paths by hand (`git add <path> ...`) is still fine; confirm either way with `git diff --cached --stat` BEFORE committing. Load the magus-vcs skill if not already loaded."
+	denyStageAll = "staging everything is denied because it sweeps unrelated sources, generated outputs, and residue into one commit. First classify the dirty tree: `magus describe file $(git diff --name-only)`. Then stage only the reviewed source files and the generated outputs they require: `git add -- <paths>`.\n" +
+		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs skill if not already loaded."
 
 	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading. The one command you MAY pipe into a filter is `magus query output <ref>`: that returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
 )
@@ -1354,7 +1242,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	rawToolCmd, rawToolDeny := firstRawToolDenied(command)
 	switch {
 	case rawToolDeny:
-		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContext)}
+		match, _ := rawToolMatch(rawToolCmd)
+		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContextFor(match))}
 	case magusPipedToFilter(command):
 		return bashGuardVerdict{Deny: outputGuardContext}
 	case guardMagusRedirRe.MatchString(command):
@@ -1365,6 +1254,10 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: searchGuardReason}
 	}
 	return bashGuardVerdict{}
+}
+
+func runGuardContextFor(match guardToolMatch) string {
+	return fmt.Sprintf("Run this instead: `magus run %s::%s`. Tool flags and overrides remain available: `magus run %s::%s [<project>] -- <tool-args>`.\n\n%s", match.spell, match.operation, match.spell, match.operation, runGuardContext)
 }
 
 // reportContextCost tells the caller how many bytes of instruction the install

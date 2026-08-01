@@ -103,8 +103,16 @@
 <pre><code class="language-text">daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 </code></pre>
 <p>When no daemon is running the line reads <code>daemon: off</code>, with no error and no hang. Drop <code>--compact</code> for the full grid view when you have a wider pane to spare.</p>
+<p>The full view also lists <a class="glossary-term" href="../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> locks held by ordinary <code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a></code> processes,
+which may exist without a daemon. When a <a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> is waiting on one, keep this
+watch open instead of writing a <code>sleep</code>/<code>ps</code> loop: it reports the lock holder's
+PID, command, directory, age, and waiters. A long <a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> alone is not grounds to
+kill it; only act on a verified stale holder.</p>
+<p>The same view lists registered shared services with their lifecycle state and
+current dependent count, so an idle retained <a class="glossary-term" href="../../glossary/#service" data-def="A long-running or shared process magus manages across runs, distinct from a one-shot target.">service</a> is not mistaken for active
+shared work.</p>
 <h2 id="step-through-a-target-to-diagnose-a-volatile-build">Step through a target to diagnose a volatile build</h2>
-<p><code><a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> --step</code> pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-<a class="code-xref" href="../../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a>. <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">Concurrency</a> is forced to 1, so commands execute one at a time:</p>
+<p><code>magus run --step</code> pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">Concurrency</a> is forced to 1, so commands execute one at a time:</p>
 <pre><code class="language-sh">magus run build --step
 magus affected build --step
 </code></pre>
@@ -144,8 +152,8 @@ ProjectEntry:
 <h2 id="interactive-debugging-entry-points">Interactive debugging entry points</h2>
 <p>Two entry points into an interactive <a class="glossary-term" href="../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> REPL, sharing one evaluator:</p>
 <ul>
-<li><strong><code>magus repl</code></strong> - standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
-<li><strong><code>magus\pry()</code></strong> - <code>binding.pry</code>-style breakpoint that opens the same REPL mid-<a class="glossary-term" href="../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> with frame context (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
+<li><strong><code>magus buzz --workspace</code></strong> - standalone shell with <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> bindings preloaded.</li>
+<li><strong><code>magus\pry()</code></strong> - <code>binding.pry</code>-style breakpoint that opens the same REPL mid-target with frame context (<code>.<a class="code-xref" href="../../reference/manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a></code>, <code>.locals</code>, <code>.up</code>/<code>.down</code>, <code>.step</code>, ...).</li>
 </ul>
 <pre><code class="language-buzz">export fun build(ctx: magus\Context, args: [str]) &gt; void {
     os\exec(&quot;go&quot;, [&quot;generate&quot;, &quot;./...&quot;]);
@@ -182,7 +190,10 @@ ProjectEntry:
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="project">Project</h3>
+    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
+<p>The magus root directory that owns a set of projects and shared config; the unit
+magus operates over. See <a href="../../concepts/workspace/">workspace</a>.</p>
+<h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
 caching, scheduling, and dependency tracking. See <a href="../../concepts/workspace/">workspace</a>.</p>
 <h3 id="magusfile">Magusfile</h3>
@@ -204,6 +215,9 @@ anti-pattern before it runs. See <a href="../../concepts/wards/">wards</a>.</p>
 <h3 id="affected">Affected</h3>
 <p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
 only over them. See <a href="../../guides/affected/">affected</a>.</p>
+<h3 id="service">Service</h3>
+<p>A long-running or shared process magus manages across runs, distinct from a
+one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <h3 id="daemon">Daemon</h3>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>

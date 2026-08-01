@@ -207,9 +207,9 @@ This pairs with magus watch for continuous-build workflows:
 
 Forensic modes reason about the affected set instead of executing a target.
 --explain shows why a project is in the set. --plan emits a provider-neutral
-JSON CI shard plan for the affected set (for CI fan-out; always keys off the ci
-anchor). --bisect drives VCS bisect using run history to find the commit that
-introduced a regression.`,
+JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
+plan of proposed paths before editing. --bisect drives VCS bisect using run
+history to find the commit that introduced a regression.`,
 	Usage: "magus affected <target> [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Bool("dry-run", false, "Print what would run without executing")
@@ -235,8 +235,8 @@ introduced a regression.`,
 		{"List affected projects without building", "magus affected list"},
 		{"Show dependency graph for the affected scope", "magus affected build --graph"},
 		{"Graph as DOT for piping to Graphviz", "magus affected build --graph -o dot | dot -Tsvg > graph.svg"},
-		{"Emit a CI shard plan for the affected set", "magus affected --plan"},
-		{"Shard plan limited to four shards", "magus affected --plan --max-shards 4"},
+		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
+		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
 	},
 }

@@ -81,6 +81,7 @@
           <li><a href="../../../reference/skills/magus-buzz/" aria-current="page" title="magus-buzz">magus-buzz</a></li>
           <li><a href="../../../reference/skills/magus-changes/" title="magus-changes">magus-changes</a></li>
           <li><a href="../../../reference/skills/magus-context-audit/" title="magus-context-audit">magus-context-audit</a></li>
+          <li><a href="../../../reference/skills/magus-delegate-ultra/" title="magus-delegate-ultra">magus-delegate-ultra</a></li>
           <li><a href="../../../reference/skills/magus-docs/" title="magus-docs">magus-docs</a></li>
           <li><a href="../../../reference/skills/magus-memory/" title="magus-memory">magus-memory</a></li>
           <li><a href="../../../reference/skills/magus-query/" title="magus-query">magus-query</a></li>
@@ -97,7 +98,7 @@
     <small class="reading-time" title="Estimated reading time">8 min read</small>
     <article>
 <h1 id="magus-buzz">magus-buzz</h1>
-<p><progress value="5180" max="6148" aria-label="The --simple permutation is 15% smaller: 5180 of 6148 bytes."></progress><small>The --simple permutation is 15% smaller: 5180 of 6148 bytes.</small></p>
+<p><progress value="5265" max="6233" aria-label="The --simple permutation is 15% smaller: 5265 of 6233 bytes."></progress><small>The --simple permutation is 15% smaller: 5265 of 6233 bytes.</small></p>
 <p>Write and <a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> <a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a>, the language magusfiles, spells, and <code>magus buzz</code> scripts are written in. Use when writing or debugging a <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, a <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>, or a .buzz file, and when a <a class="glossary-term" href="../../../glossary/#one-off" data-def="A single magus invocation that runs a target and exits, using a per-process pool; the opposite of the long-lived daemon or a service.">one-off</a> script is needed in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> - Buzz is already installed with the whole magus host <a class="glossary-term" href="../../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use <code>=</code>, and <code>magus buzz</code> runs upstream-strict (no top-level control flow, every argument after the first must be labeled).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -128,7 +129,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>agent-skill-<a class="code-xref" href="../../manpage/magus-version/" data-kind="command" data-def="magus version: Print the magus version string, git commit hash, and build date for the currently installed binary.">version</a></code></td>
-<td><code>21</code></td>
+<td><code>23</code></td>
 </tr>
 <tr>
 <td><code>knowledge-schema-version</code></td>
@@ -136,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>351a7800dc11</code></td>
+<td><code>12962ae67c6a</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -183,6 +184,7 @@ magus buzz hello.buzz
 | `echo '&lt;code&gt;' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t &lt;file&gt;` | run the file's `test &quot;...&quot; {}` blocks and report pass/fail |
 | `magus buzz` (a terminal, no args) | REPL |
+| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
 
 ## Never guess an API: ask
 
@@ -356,6 +358,7 @@ magus buzz hello.buzz
 | `echo '&lt;code&gt;' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t &lt;file&gt;` | run the file's `test &quot;...&quot; {}` blocks and report pass/fail |
 | `magus buzz` (a terminal, no args) | REPL |
+| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
 
 ## Never guess an API: ask
 
@@ -503,7 +506,7 @@ Prefer a target over a script for anything that will be run more than once.
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22magus-buzz%22">magus-buzz</a></div>
-    <small>Last updated <time datetime="2026-07-31T17:00:25Z">July 31, 2026, 5:00 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/f889d5613e20fc9bdc895a02df4fe1284910410e" data-tooltip="f889d5613e20fc9bdc895a02df4fe1284910410e" title="f889d5613e20fc9bdc895a02df4fe1284910410e">f889d561</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3f7517ec955bf7ef09ca91eb3003bdb5dcd7b760"><code>3f7517ec</code></a> <small><time datetime="2026-07-31T14:02:03Z">Jul 31, 2026</time></small> - add a Go SDK persona skill and its docs page for consumers who import the package rather than shell out to the CLI; both state plainly the two boundaries that actually bite, that go get cannot resolve this repo because libs/gopherbuzz and libs/diag are nested modules nobody has ever tagged, and that magusfile evaluation needs internal packages only cmd/magus links, so the SDK today introspects a workspace but cannot dispatch its targets</li><li><a href="https://github.com/egladman/magus/commit/b419ddd272c4be167280f17377a838a44936900b"><code>b419ddd2</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface, display flags, ctx-first fixtures</li><li><a href="https://github.com/egladman/magus/commit/bd8572b42f1c666df079878328daa964751a294b"><code>bd8572b4</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/25fcf68aeee54cc165b2725861139d059ebcee64"><code>25fcf68a</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout / artifact-history stack into main</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" data-tooltip="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6" title="90b33d9c6c057f7cb96dd9fa75658618c9ae1fe6">90b33d9c</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/0b491a48cf41cb1e86e3e557edc089603166f039"><code>0b491a48</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout: playground surface</li><li><a href="https://github.com/egladman/magus/commit/91db2157a3b6b68a2beda574fbaa191d7c47ae86"><code>91db2157</code></a> <small><time datetime="2026-07-30T19:11:30Z">Jul 30, 2026</time></small> - merge the gopherbuzz upstream-parity line into main</li><li><a href="https://github.com/egladman/magus/commit/a1208da77f9de97ab9e26edcc44a139b20afd0d0"><code>a1208da7</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - merge the agent-harness / generator-layout</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/skills/magus-buzz.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

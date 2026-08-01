@@ -323,7 +323,7 @@ go run ./cmd/buzz -L ./lib m.buzz      # add an import search path
 ```
 
 The Buzz standard library is available; magus host bindings are not (use
-`magus buzz` / `magus repl --engine buzz` for those).
+`magus buzz` for those, or `magus buzz --workspace` to load a magusfile).
 
 ## Testing
 

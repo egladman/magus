@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 5402
-skill_simple_bytes: 3443
+skill_full_bytes: 5371
+skill_simple_bytes: 3447
 ---
 
 # magus-vcs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `21` |
+| `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `351a7800dc11` |
+| `skill-content` | `12962ae67c6a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -93,20 +93,19 @@ CORRECT: note that `docs/gen/**` is a declared output of
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+There is deliberately no `magus vcs` command. Classify with Magus, then use
+your VCS directly and stage only the paths you intend. For a rare VCS fact that
+needs Magus's portable VCS module rather than porcelain, use one inline Buzz
+evaluation:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in, which is the one thing
-`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])`
+to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+The inline form is intentionally dense: it is an occasional capability query,
+not another everyday CLI surface.
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
@@ -114,11 +113,11 @@ form below is what it automates, and what to fall back to.
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately. `git add -A` stages every
+4. Review `git status` first, then stage deliberately with `git add -- <paths>`. `git add -A` stages every
    untracked file too, so a stray build artifact or scratch file rides along
    silently (this is how a compiled binary once slipped into a commit); use it
    only when `git status` shows nothing you do not intend, else stage the specific
-   paths. Do not lean on a hand-typed path list as your only safeguard either:
+   paths. Do not lean on an unreviewed hand-typed path list as your only safeguard either:
    `git add` aborts on the first pathspec that matches nothing (staging none of
    the rest), and a path you just moved or removed is gone at its old name.
    Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
@@ -191,19 +190,19 @@ project and a role:
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+There is deliberately no `magus vcs` command. Classify with Magus, then use
+your VCS directly and stage only the paths you intend. For a rare VCS fact that
+needs Magus's portable VCS module rather than porcelain, use one inline Buzz
+evaluation:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])`
+to scope a cleanliness check, and `vcs\metadata()` for branch/revision state.
+The inline form is intentionally dense: it is an occasional capability query,
+not another everyday CLI surface.
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
@@ -211,7 +210,7 @@ form below is what it automates, and what to fall back to.
    silently lost - stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately. Avoid staging
+4. Review `git status` first, then stage deliberately with `git add -- <paths>`. Avoid staging
    everything (stray artifacts ride along); a hand-typed path list is not safer,
    since the first non-matching pathspec aborts the whole call. Confirm with
    `git diff --cached --stat`: every intended edit, renames included.

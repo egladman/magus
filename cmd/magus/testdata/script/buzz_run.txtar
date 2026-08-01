@@ -3,7 +3,7 @@
 # that cannot report a failing test is worse than none, so this exercises both a
 # passing and a failing test file. It also pins the diagnostic shape (a BZZ code
 # plus a see: URL) and the one deliberate gap the help text calls out: the
-# magus.* namespace exists in `magus repl` but not here.
+# magus.* namespace exists in `magus buzz --workspace` but not here.
 
 # a script file that produces output
 exec magus buzz hello.buzz
@@ -36,7 +36,7 @@ stderr '1 of 1 tests failed'
 stderr '\[BZZ1001\] buzz: line 1:1: undefined: std'
 stderr 'see: https://.*BZZ1001'
 
-# the magus.* namespace is deliberately unavailable here (use `magus repl` for
+# the magus.* namespace is deliberately unavailable here (use `magus buzz --workspace` for
 # that); importing it fails the same way any missing module would
 ! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
 stderr '\[BZZ2001\] buzz: import "magus": module not found'

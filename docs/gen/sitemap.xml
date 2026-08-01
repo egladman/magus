@@ -45,6 +45,7 @@
   <url><loc>https://eli.gladman.cc/magus/development/contributing/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/docs-guides-integrations-agents/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/docs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/development/evals/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/libs-diagnostics/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/libs-gopherbuzz/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/development/libs-textsearch/</loc></url>
@@ -188,6 +189,7 @@
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-buzz/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-changes/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-context-audit/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-delegate-ultra/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-docs/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-memory/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-query/</loc></url>

@@ -89,8 +89,10 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolAffectedPlan),
-		Description: "Emit a provider-neutral JSON shard plan for the VCS-affected project set. Use for CI fan-out: map the matrix entries to your CI system's parallel job format.",
+		Description: "Emit a provider-neutral JSON shard plan for a target's VCS-affected project set. Use for CI fan-out or graph-guided work partitioning: map the matrix entries to parallel jobs, then inspect dependencies and outputs before assigning edits.",
 		Params: []ParamDescriptor{
+			{Name: "target", Type: "string", Description: "Target to plan (default: ci; any affected target is accepted)."},
+			{Name: "base", Type: "string", Description: "Optional VCS base ref override."},
 			{Name: "max_shards", Type: "number", Description: "Maximum CI shards (default: from config; -1 means unlimited)."},
 		},
 	},

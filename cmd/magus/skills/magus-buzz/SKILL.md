@@ -36,6 +36,7 @@ magus buzz hello.buzz
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
 | `magus buzz` (a terminal, no args) | REPL |
+| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
 
 ## Never guess an API: ask
 

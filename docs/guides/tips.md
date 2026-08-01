@@ -37,6 +37,16 @@ daemon 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 
 When no daemon is running the line reads `daemon: off`, with no error and no hang. Drop `--compact` for the full grid view when you have a wider pane to spare.
 
+The full view also lists workspace locks held by ordinary `magus run` processes,
+which may exist without a daemon. When a target is waiting on one, keep this
+watch open instead of writing a `sleep`/`ps` loop: it reports the lock holder's
+PID, command, directory, age, and waiters. A long run alone is not grounds to
+kill it; only act on a verified stale holder.
+
+The same view lists registered shared services with their lifecycle state and
+current dependent count, so an idle retained service is not mistaken for active
+shared work.
+
 ## Step through a target to diagnose a volatile build
 
 `magus run --step` pauses before every subprocess and lets you inspect state, skip commands, or open a REPL mid-run. Concurrency is forced to 1, so commands execute one at a time:
@@ -103,7 +113,7 @@ The field names are always the json keys - `-o json` and `-o template` share one
 
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
-- **`magus repl`** - standalone shell with magusfile bindings preloaded.
+- **`magus buzz --workspace`** - standalone shell with magusfile bindings preloaded.
 - **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz

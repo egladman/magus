@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -436,10 +440,17 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	var (
 		maxShards        *int
 		runnerPoolBudget *int
+		baseStr          string
+		stdin            *bool
+		null             *bool
 	)
 	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
 		maxShards = fs.Int("max-shards", globalCfg.CI.MaxShards, "Maximum CI shards (-1 = unlimited)")
 		runnerPoolBudget = fs.Int("max-parallel-budget", globalCfg.CI.RunnerPoolBudget, "Cross-shard concurrency cap; 0 = unlimited")
+		fs.StringVar(&baseStr, "base", "", "Override base ref for the VCS diff (mutually exclusive with --stdin)")
+		fs.StringVar(&baseStr, "b", "", "Short for --base")
+		stdin = fs.Bool("stdin", false, "Read one set of changed file paths from stdin instead of a VCS diff")
+		null = fs.Bool("null", false, "With --stdin: expect NUL-separated paths")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected <target> --plan [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -448,6 +459,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "(e.g. GitHub Actions) translate the matrix into their own format.")
 			fmt.Fprintln(os.Stderr, "Adaptive sharding is always enabled; set MAGUS_HISTORY_PATH or history_path")
 			fmt.Fprintln(os.Stderr, "in magus.yaml to override the history file location.")
+			fmt.Fprintln(os.Stderr, "Use --stdin for a one-shot plan of proposed repo-relative paths before editing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
 			fs.PrintDefaults()
@@ -455,16 +467,30 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}); err != nil {
 		return err
 	}
+	if *stdin && baseStr != "" {
+		return fmt.Errorf("magus affected --plan: --stdin and --base are mutually exclusive")
+	}
+	if *null && !*stdin {
+		return fmt.Errorf("magus affected --plan: --null requires --stdin")
+	}
 
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
 	}
 
-	plan, err := m.Plan(ctx, target, magus.PlanOptions{
+	planOpts := magus.PlanOptions{
 		MaxShards:        *maxShards,
 		RunnerPoolBudget: *runnerPoolBudget,
-	})
+		BaseRef:          baseStr,
+	}
+	if *stdin {
+		planOpts.ChangedPaths, err = readAffectedPlanPaths(os.Stdin, *null)
+		if err != nil {
+			return err
+		}
+	}
+	plan, err := m.Plan(ctx, target, planOpts)
 	if err != nil {
 		return err
 	}
@@ -499,6 +525,33 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	_, err = os.Stdout.Write([]byte{'\n'})
 	return err
+}
+
+func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
+	var paths []string
+	if null {
+		body, err := io.ReadAll(r)
+		if err != nil {
+			return nil, fmt.Errorf("magus affected --plan: read stdin: %w", err)
+		}
+		for _, path := range bytes.Split(body, []byte{0}) {
+			if len(path) > 0 {
+				paths = append(paths, string(path))
+			}
+		}
+	} else {
+		scanner := bufio.NewScanner(r)
+		for scanner.Scan() {
+			if path := scanner.Text(); path != "" {
+				paths = append(paths, path)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("magus affected --plan: read stdin: %w", err)
+		}
+	}
+	slices.Sort(paths)
+	return slices.Compact(paths), nil
 }
 
 // affectedImpact reports the blast radius of the current changeset (the --impact

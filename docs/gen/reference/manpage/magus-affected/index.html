@@ -124,9 +124,9 @@ This pairs with <a class="code-xref" href="../magus-watch/" data-kind="command" 
 <p>magus <a class="code-xref" href="../magus-watch/" data-kind="command" data-def="magus watch: Watch the workspace for file-system changes and emit batches of changed paths to stdout, compatible with git diff and magus affected --stdin.">watch</a> | <a class="code-xref" href="./" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> --stdin build</p>
 <p>Forensic modes reason about the affected set instead of executing a target.
 --<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> shows why a project is in the set. --plan emits a provider-neutral
-JSON <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shard plan for the affected set (for CI fan-out; always keys off the ci
-anchor). --bisect drives VCS bisect using run history to find the commit that
-introduced a regression.</p>
+JSON shard plan for the named target. Combine --plan with --stdin for a one-shot
+plan of proposed paths before editing. --bisect drives VCS bisect using run
+history to find the commit that introduced a regression.</p>
 <h2 id="options">Options</h2>
 <dl>
 <dt><strong>--base</strong> <em>string</em></dt>
@@ -146,7 +146,7 @@ introduced a regression.</p>
 <dt><strong>--max-parallel-budget</strong> <em>int</em></dt>
 <dd>With --plan: cross-shard <a class="glossary-term" href="../../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> cap; 0 = unlimited</dd>
 <dt><strong>--max-shards</strong> <em>int</em> (default: 8)</dt>
-<dd>With --plan: maximum CI shards (-1 = unlimited)</dd>
+<dd>With --plan: maximum <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> shards (-1 = unlimited)</dd>
 <dt><strong>--null</strong></dt>
 <dd>With --stdin: expect NUL-separated paths and double-NUL between batches</dd>
 <dt><strong>--plan</strong></dt>
@@ -197,10 +197,10 @@ introduced a regression.</p>
 <pre><code class="language-sh">magus affected build --graph -o dot | dot -Tsvg &gt; graph.svg
 </code></pre>
 <p><em>Emit a CI shard plan for the affected set</em></p>
-<pre><code class="language-sh">magus affected --plan
+<pre><code class="language-sh">magus affected ci --plan
 </code></pre>
-<p><em>Shard plan limited to four shards</em></p>
-<pre><code class="language-sh">magus affected --plan --max-shards 4
+<p><em>Shard a test plan across at most four workers</em></p>
+<pre><code class="language-sh">magus affected test --plan --max-shards 4
 </code></pre>
 <p><em>Bisect a regression in myapp</em></p>
 <pre><code class="language-sh">magus affected --bisect ./apps/myapp
@@ -225,7 +225,7 @@ introduced a regression.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22cli%22">cli</a><a class="tag" href="../../../search/?q=tag%3A%22magus+affected%22">magus affected</a><a class="tag" href="../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../search/?q=tag%3A%22changed+files%22">changed files</a><a class="tag" href="../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../search/?q=tag%3A%22git%22">git</a><a class="tag" href="../../../search/?q=tag%3A%22bisect%22">bisect</a><a class="tag" href="../../../search/?q=tag%3A%22ci%22">ci</a></div>
-    <small>Last updated <time datetime="2026-07-31T03:55:25Z">July 31, 2026, 3:55 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/5e387ac525d4d6eb933af04d01399bc2aa11570f" data-tooltip="5e387ac525d4d6eb933af04d01399bc2aa11570f" title="5e387ac525d4d6eb933af04d01399bc2aa11570f">5e387ac5</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-affected.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-affected.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-07-31T03:55:25Z">July 31, 2026, 3:55 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4ddd9878c38817958b40769b83b7c6dcfe95e790" data-tooltip="4ddd9878c38817958b40769b83b7c6dcfe95e790" title="4ddd9878c38817958b40769b83b7c6dcfe95e790">4ddd9878</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/manpage/magus-affected.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/manpage/magus-affected.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

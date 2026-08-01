@@ -142,12 +142,12 @@ func TestMatchFilter_ActorsActions(t *testing.T) {
 }
 
 func TestMatchFilter_TimeWindow(t *testing.T) {
-	dir, _ := seedTrail(t) // Ts 1 (mcp), 2 (token), 3 (job)
+	dir, _ := seedTrail(t) // Ts 1 (mcp), 2 (token), 3 (job), 4 (agent)
 
 	since := list(t, dir, &activityv1.ActivityQuery{
 		Time: &queryv1.TimeRange{Since: timestamppb.New(time.UnixMilli(2))},
 	})
-	assert.Equal(t, []string{"graph build", "connector.create"}, actions(since)) // Ts>=2, newest first
+	assert.Equal(t, []string{"Bash", "graph build", "connector.create"}, actions(since)) // Ts>=2, newest first
 
 	until := list(t, dir, &activityv1.ActivityQuery{
 		Time: &queryv1.TimeRange{Until: timestamppb.New(time.UnixMilli(2))},
@@ -172,7 +172,7 @@ func TestListActivity_PageSizeDefaultAndCap(t *testing.T) {
 		resp, err := NewService(dir).ListActivity(context.Background(),
 			connect.NewRequest(&activityv1.ListActivityRequest{PageSize: size}))
 		require.NoError(t, err)
-		assert.Len(t, resp.Msg.GetEvents(), 3, "page_size=%d", size)
+		assert.Len(t, resp.Msg.GetEvents(), 4, "page_size=%d", size)
 		assert.Empty(t, resp.Msg.GetNextPageToken())
 	}
 }

@@ -40,7 +40,7 @@ not the exception - they were usually written in the same sitting by the same
 person.{{end}} So resolve every claim against something that executes.
 
 ```sh
-magus agent hook -o name "<the exact command a document recommends>"
+magus hook -o name "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```

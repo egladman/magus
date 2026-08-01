@@ -183,6 +183,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
+	// Workspace-local Go-module helpers are read-only metadata in the real host.
+	// The dry host has no workspace, so preserve their result shapes without
+	// pretending to derive replacements.
+	m.MapSet("goModReplaceArgs", fn("magus.goModReplaceArgs", func(context.Context, []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	m.MapSet("goModReplaceCheck", fn("magus.goModReplaceCheck", retNull))
 	m.MapSet("targets", fn("magus.targets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("projects", vm.ListValue(nil))

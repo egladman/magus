@@ -40,7 +40,7 @@ case "$event" in
 	fi
 	# -o name prints the bare decision word, which is all this needs. magus
 	# re-roots the absolute path Cursor sends onto the workspace itself.
-	verdict=$(printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --path --from-json file_path -o name 2>/dev/null)
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path -o name 2>/dev/null)
 	[ "$verdict" = "advise" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
 	# prose rather than as a verdict it would not read.
@@ -62,5 +62,5 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 	exit 0
 fi
 
-printf '%s' "$event" | "$GUARD_MAGUS_BIN" agent hook --from-json command \
+printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook \
 	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'

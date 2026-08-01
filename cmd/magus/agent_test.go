@@ -12,6 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +21,7 @@ import (
 func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 	skills, err := agentSkills.EmbeddedSkills(agent.VariantFull)
 	require.NoError(t, err)
-	require.Len(t, skills, 10)
+	require.Len(t, skills, 11)
 	for _, skill := range skills {
 		assert.NotEmpty(t, skill.Name)
 		assert.NotEmpty(t, skill.Description)
@@ -279,14 +281,13 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Deliberate staging is still only advised - that IS the replacement.
 		{command: "git add cmd/magus/agent.go", context: "magus-vcs"},
 		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs"},
-		// Raw language tools DENY. Not because they are dangerous - they are not -
-		// but because magus does the same thing and more, so the deny is free. As an
-		// advisory this fired on every raw `go` call in a long session and changed
-		// behaviour zero times; the deny message still carries the full ladder.
+		// A raw tool denies only when a registered spell renders that exact base
+		// command and verb. Unsupported runners remain available: a guard funnels
+		// capability Magus has, never removes capability it does not.
 		{command: "go test ./...", deny: true},
-		{command: "npm test", deny: true},
-		{command: "npx prettier --check .", deny: true},
-		{command: "pytest tests/", deny: true},
+		{command: "npm test"},
+		{command: "npx prettier --check ."},
+		{command: "pytest tests/"},
 		{command: "cargo build --release", deny: true},
 		{command: "gofmt -w x.go", deny: true},
 		// Anchored to a COMMAND position, so the pattern appearing as TEXT is not a
@@ -303,7 +304,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
 		// Still caught in every real command position.
 		{command: "cd /repo && go test ./...", deny: true},
-		{command: "make lint; pytest tests/", deny: true},
+		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", deny: true},
 		// Exempt: these bypass nothing, so advising on them is pure noise.
 		{command: "gofmt -l ./libs"},
@@ -324,15 +325,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "bash -c 'go test ./...'", deny: true},
 		{command: `sh -c "gofmt -w x.go"`, deny: true},
 		{command: "timeout 300 go test ./...", deny: true},
-		{command: "nohup pnpm build", deny: true},
-		{command: "time npx prettier --write .", deny: true},
+		{command: "nohup pnpm build"},
+		{command: "time npx prettier --write ."},
 		{command: "nice -n 10 cargo build", deny: true},
 		{command: "make deps && mise exec -- go generate ./...", deny: true},
 		// Stacked wrappers reduce all the way down.
 		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", deny: true},
-		// The WRAPPER is never the finding. Peeling exists so the payload can be
-		// judged, and a magus payload is exactly what the wrapper should carry -
-		// `mise exec` is how this workspace reaches its pinned toolchain.
+		// The wrapper is never the finding. Peeling exists so the payload can be
+		// judged; only the actual command determines the verdict.
 		{command: "mise exec -- magus run test"},
 		{command: "env -u GOROOT magus run build"},
 		{command: "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus", deny: true},
@@ -345,18 +345,19 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// absolute -o (the documented `/tmp/magus` dev loop) is exempt.
 		{command: "go build -o ./bin/magus ./cmd/magus", deny: true},
 		{command: "go mod tidy", deny: true},
-		{command: "go mod vendor", deny: true},
-		{command: "govulncheck ./...", deny: true},
-		// The rule set is language-agnostic on purpose: magus workspaces are not
-		// Go-only, and a guard that only knows Go is useless in a Rust or JS repo.
-		{command: "ruff check .", deny: true},
-		{command: "mypy .", deny: true},
-		{command: "rustfmt src/main.rs", deny: true},
-		{command: "vitest run", deny: true},
+		// A raw tool is guarded only when a spell renders that exact base command
+		// and verb. These programs have no direct rendered equivalent, so they
+		// remain available instead of being denied by a stale generic list.
+		{command: "go mod vendor"},
+		{command: "govulncheck ./..."},
+		{command: "ruff check ."},
+		{command: "mypy ."},
+		{command: "rustfmt src/main.rs"},
+		{command: "vitest run"},
 		{command: "buf lint", deny: true},
 		{command: "golangci-lint run", deny: true},
 		{command: "buf generate", deny: true},
-		{command: "mockery", deny: true},
+		{command: "mockery"},
 		// Trimming magus's own output with the shell. DENIED, not advised: as an
 		// advisory this fired repeatedly in one session while its own author kept
 		// piping magus into grep anyway - the same trained-reflex result the raw
@@ -478,15 +479,43 @@ func TestParseGuardCommandsUnparseable(t *testing.T) {
 	assert.False(t, denied)
 }
 
+func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
+	const spellName = "guard-catalog-test"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
+		spellName,
+		spells.WithTargets("verify"),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+			if target != "verify" {
+				return "", nil, false, nil
+			}
+			return "catalog-tool", []string{"verify"}, true, nil
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	match, ok := rawToolMatch(guardCommand{Name: "catalog-tool", Args: []string{"verify", "./..."}})
+	require.True(t, ok)
+	assert.Equal(t, guardToolMatch{spell: spellName, operation: "verify"}, match)
+	assert.False(t, rawToolDenied(guardCommand{Name: "catalog-tool", Args: []string{"other"}}))
+}
+
+func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
+	verdict := evaluateBashGuard("go test ./... -run TestFocused")
+	require.NotEmpty(t, verdict.Deny)
+	assert.Contains(t, verdict.Deny, "Run this instead: `magus run go::go-test`")
+	assert.Contains(t, verdict.Deny, "Tool flags and overrides remain available")
+	assert.Contains(t, verdict.Deny, "-- <tool-args>")
+	assert.NotContains(t, verdict.Deny, "mise exec")
+}
+
 // TestGuardAdversarial is the hostile pass: every way found to smuggle a covered
 // tool past the guard, and every way found to trip it on something innocent.
 //
 // It is written as an attack list rather than a feature list because that is how
-// the failures actually arrived. The wrapper cases are not hypothetical - the
-// `mise exec -- env -u GOROOT go test` form is what an agent reached for in a
-// real session, unprompted, after the bare form denied. An agent does not need
-// to intend evasion to evade; it just needs a habit and a toolchain that is
-// awkward to reach. Treat any new entry here as a bug report, not a nice-to-have.
+// the failures actually arrived. The wrapper cases are not hypothetical. An
+// agent does not need to intend evasion to evade; it just needs a habit and a
+// toolchain that is awkward to reach. Treat any new entry here as a bug report,
+// not a nice-to-have.
 func TestGuardAdversarial(t *testing.T) {
 	denied := []struct{ name, command string }{
 		// Wrapper smuggling, the observed failure mode.
@@ -556,10 +585,8 @@ func TestGuardAdversarial(t *testing.T) {
 		{"wrapped absolute build", "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus"},
 		{"bare build", "go build ./..."},
 		{"go mod tidy", "go mod tidy"},
-		{"go mod vendor", "go mod vendor"},
 		{"gofmt -w", "gofmt -w ."},
 		{"go generate", "go generate ./..."},
-		{"prettier write", "npx prettier --write ."},
 		{"wrapped write", "mise exec -- go generate ./..."},
 
 		// Destructive git still denies however it is REACHED - the safety property
@@ -603,6 +630,8 @@ func TestGuardAdversarial(t *testing.T) {
 		{"go help", "go help test"},
 		{"go mod download reads", "go mod download"},
 		{"go list reads", "go list ./..."},
+		{"go mod vendor has no spell operation", "go mod vendor"},
+		{"prettier through an unsupported package runner", "npx prettier --write ."},
 
 		// A tool name as DATA. Every one of these denied at some point.
 		{"prose in echo", "echo 'run go test to check'"},
@@ -690,10 +719,18 @@ func TestGuardKnownHoles(t *testing.T) {
 	}
 }
 
-// TestAgentHookCmd covers the neutral plumbing around the guard: the three
-// input forms (arguments, raw stdin, --from-json extraction), the -o arm, and
-// the fail-open contract for unreadable input.
-func TestAgentHookCmd(t *testing.T) {
+func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
+	verdict := evaluateBashGuard("git add -A")
+	require.NotEmpty(t, verdict.Deny)
+	assert.Contains(t, verdict.Deny, "magus describe file $(git diff --name-only)")
+	assert.Contains(t, verdict.Deny, "git add -- <paths>")
+	assert.NotContains(t, verdict.Deny, "magus vcs add")
+}
+
+// TestHookCmd covers the stdin-only guard boundary, the standard output arm,
+// and the fail-open contract for empty input. Host-specific event extraction
+// happens before the command is piped to magus.
+func TestHookCmd(t *testing.T) {
 	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
@@ -703,48 +740,40 @@ func TestAgentHookCmd(t *testing.T) {
 		// load-bearing here - and the reason this reset exists rather than a
 		// local output flag, which is what the command used to have.
 		global = globalFlags{}
-		ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: auditDir, workspace: "/repo/magus"})
-		require.NoError(t, agentHookCmd(ctx, strings.NewReader(stdin), &out, args))
+		ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: auditDir, workspace: "/repo/magus"})
+		require.NoError(t, hookCmd(ctx, strings.NewReader(stdin), &out, args))
 		return out.String()
 	}
 
-	// Argument input, default text output. A command with dash tokens rides
-	// behind the -- terminator so the flag parser leaves it alone.
-	assert.Equal(t, "pass\n", run("", "--", "ls", "-la"))
-	assert.True(t, strings.HasPrefix(run("", "git", "stash"), "deny: "))
-
-	// Raw stdin input ("-" and bare both read stdin).
-	assert.True(t, strings.HasPrefix(run("git commit -m x", "-"), "advise: "))
+	assert.True(t, strings.HasPrefix(run("git commit -m x"), "advise: "))
 	assert.True(t, strings.HasPrefix(run("git stash"), "deny: "))
 
-	// --from-json extraction from a host event document.
-	event := `{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`
-	got := run(event, "--from-json", "tool_input.command", "-o", "json")
+	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
 	assert.Contains(t, got, `"schema_version": 1`)
 	assert.Contains(t, got, "magus-vcs")
 
 	// A template renders a host dialect; pass renders empty, deny fills it.
 	tpl := `template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}`
-	assert.Contains(t, run(event, "--from-json", "tool_input.command", "-o", tpl), `"permissionDecision":"deny"`)
-	passEvent := `{"tool_input":{"command":"ls"}}`
-	assert.Empty(t, strings.TrimSpace(run(passEvent, "--from-json", "tool_input.command", "-o", tpl)))
+	assert.Contains(t, run("git stash", "-o", tpl), `"permissionDecision":"deny"`)
+	assert.Empty(t, strings.TrimSpace(run("ls", "-o", tpl)))
 
 	// -o name is the bare decision word.
-	assert.Equal(t, "deny\n", run(event, "--from-json", "tool_input.command", "-o", "name"))
+	assert.Equal(t, "deny\n", run("git stash", "-o", "name"))
 
-	// Fail open: malformed JSON, a missing path, and empty stdin are all a pass.
-	assert.Equal(t, "pass\n", run("not json", "--from-json", "tool_input.command"))
-	assert.Equal(t, "pass\n", run(`{"other":1}`, "--from-json", "tool_input.command"))
+	// Fail open on empty stdin; positional input is rejected instead of quietly
+	// creating a second input contract.
 	assert.Equal(t, "pass\n", run(""))
+	var positionalOut strings.Builder
+	err := hookCmd(context.Background(), strings.NewReader(""), &positionalOut, []string{"git", "stash"})
+	require.ErrorContains(t, err, "no positional arguments")
 }
 
-func TestAgentHookCmd_AppendsNormalizedActivity(t *testing.T) {
+func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	dir := t.TempDir()
-	ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: dir, workspace: "/repo/magus"})
-	event := `{"agent_host":"codex","session_id":"abc123","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git stash"}}`
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer
-	require.NoError(t, agentHookCmd(ctx, strings.NewReader(event), &out, []string{"--from-json", "tool_input.command", "-o", "name"}))
+	require.NoError(t, hookCmd(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"}))
 	assert.Equal(t, "deny\n", out.String())
 
 	events, err := trail.ReadRecent(dir, 1)
@@ -752,14 +781,14 @@ func TestAgentHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, "session:abc123", got.Actor)
+	assert.Equal(t, "agent", got.Actor)
 	assert.Equal(t, "/repo/magus", got.Workspace)
-	assert.Equal(t, "Bash", got.Action)
+	assert.Equal(t, "shell.command", got.Action)
 	assert.Equal(t, "guard: deny", got.Preview)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"schema_version":1,"host":"codex","session":"abc123","event":"PreToolUse","tool":"Bash","command":"git stash"}`, string(body))
+	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"git stash"}`, string(body))
 	body, err = trail.ReadBlob(dir, got.ResponseRef)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"schema_version":1`)
@@ -767,12 +796,12 @@ func TestAgentHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	assert.Contains(t, string(body), `"reason":`)
 }
 
-func TestAgentHookCmd_PathAndEmptyInputActivity(t *testing.T) {
+func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	global = globalFlags{}
 	dir := t.TempDir()
-	ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: dir, workspace: "/repo/magus"})
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer
-	require.NoError(t, agentHookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name", "-"}))
+	require.NoError(t, hookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "-o", "name"}))
 	assert.Equal(t, "advise\n", out.String())
 
 	events, err := trail.ReadRecent(dir, 1)
@@ -788,33 +817,13 @@ func TestAgentHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write"}`, string(body))
 
 	emptyDir := t.TempDir()
-	emptyCtx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: emptyDir, workspace: "/repo/magus"})
+	emptyCtx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: emptyDir, workspace: "/repo/magus"})
 	out.Reset()
-	require.NoError(t, agentHookCmd(emptyCtx, strings.NewReader(""), &out, nil))
+	require.NoError(t, hookCmd(emptyCtx, strings.NewReader(""), &out, nil))
 	assert.Equal(t, "pass\n", out.String())
 	events, err = trail.ReadRecent(emptyDir, 1)
 	require.NoError(t, err)
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
-}
-
-// TestExtractJSONString pins the dot-path walk and its error cases.
-func TestExtractJSONString(t *testing.T) {
-	doc := []byte(`{"a":{"b":"deep"},"top":"x","n":3}`)
-	s, err := extractJSONString(doc, "a.b")
-	require.NoError(t, err)
-	assert.Equal(t, "deep", s)
-	s, err = extractJSONString(doc, "top")
-	require.NoError(t, err)
-	assert.Equal(t, "x", s)
-
-	_, err = extractJSONString(doc, "a.missing")
-	assert.ErrorContains(t, err, "not found")
-	_, err = extractJSONString(doc, "n")
-	assert.ErrorContains(t, err, "not a string")
-	_, err = extractJSONString(doc, "top.deeper")
-	assert.ErrorContains(t, err, "no object")
-	_, err = extractJSONString([]byte("nope"), "a")
-	assert.ErrorContains(t, err, "not valid JSON")
 }
 
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
@@ -858,22 +867,26 @@ func extractTar(t *testing.T, src, dst string) {
 	}
 }
 
-// TestAgentHookPathMode covers --path, the definitive (non-heuristic) arm: a
+// TestHookPathMode covers --path, the definitive (non-heuristic) arm: a
 // declared target output is denied. The deny path needs a real workspace, so it
 // is exercised end to end elsewhere; what matters here is that the mode parses,
 // shares the standard output arm, and FAILS OPEN on anything it cannot classify.
-func TestAgentHookPathMode(t *testing.T) {
+func TestHookPathMode(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		args []string
 	}{
-		{name: "unclassifiable path", args: []string{"--path", "-o", "name", "--", "/nonexistent/elsewhere.txt"}},
-		{name: "empty path", args: []string{"--path", "-o", "name", "--", ""}},
+		{name: "unclassifiable path", args: []string{"--path", "-o", "name"}},
+		{name: "empty path", args: []string{"--path", "-o", "name"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var out bytes.Buffer
-			ctx := context.WithValue(context.Background(), agentHookActivityLocationKey{}, agentHookActivityLocation{base: t.TempDir(), workspace: "/repo/magus"})
-			require.NoError(t, agentHookCmd(ctx, strings.NewReader(""), &out, tt.args))
+			ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: t.TempDir(), workspace: "/repo/magus"})
+			input := ""
+			if tt.name == "unclassifiable path" {
+				input = "/nonexistent/elsewhere.txt"
+			}
+			require.NoError(t, hookCmd(ctx, strings.NewReader(input), &out, tt.args))
 			assert.Equal(t, "pass\n", out.String(),
 				"an unclassifiable path says nothing: an advisory fired on a guess trains the reader to ignore it")
 		})
