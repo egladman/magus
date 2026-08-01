@@ -180,12 +180,14 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	var (
 		refresh     bool
 		globalScope bool
+		static      bool
 		sel         string
 		budget      int
 	)
 	_, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before exporting")
 		fs.BoolVar(&globalScope, "global", false, "union the workspaces registered in config (knowledge.workspaces) into one graph, IDs namespaced by workspace")
+		fs.BoolVar(&static, "static", false, "omit locally observed runtime attrs and edges for a reproducible source artifact")
 		fs.StringVar(&sel, "select", "", "export only the neighborhood of a query (same grammar as `magus query`) instead of the whole graph")
 		fs.IntVar(&budget, "budget", knowledge.DefaultBudget, "node budget for --select (how many nodes the neighborhood may collect)")
 		fs.Usage = func() {
@@ -233,6 +235,9 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", sel)
 		}
 	}
+	if static {
+		stripRuntimeAttrs(&out)
+	}
 	// The blob base lets a viewer link a node's relative `source` to the right repo.
 	// A --global union spans many repos, so a single base would be wrong: leave it off.
 	if !globalScope {
@@ -268,6 +273,51 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	}
 	fmt.Println("\nRun with -o json (node-link) or -o graphml for the full graph.")
 	return nil
+}
+
+// stripRuntimeAttrs removes locally observed execution history from an exported graph.
+// Graph.Output shares node attribute maps with the live graph, so this copies only maps
+// containing runtime keys. It is used exclusively for reproducible checked-in exports;
+// interactive graph queries retain their local performance and output-reference context.
+func stripRuntimeAttrs(g *types.KnowledgeGraphOutput) {
+	runtimeAttrs := map[string]bool{
+		knowledge.AttrDurationP75Ms: true,
+		knowledge.AttrCacheHitRate:  true,
+		knowledge.AttrRunSamples:    true,
+		knowledge.AttrLastOutputRef: true,
+		knowledge.AttrLastRunOK:     true,
+	}
+	for i := range g.Nodes {
+		src := g.Nodes[i].Attrs
+		hasRuntime := false
+		for key := range src {
+			if runtimeAttrs[key] {
+				hasRuntime = true
+				break
+			}
+		}
+		if !hasRuntime {
+			continue
+		}
+		kept := make(map[string]string, len(src))
+		for key, value := range src {
+			if !runtimeAttrs[key] {
+				kept[key] = value
+			}
+		}
+		if len(kept) == 0 {
+			kept = nil
+		}
+		g.Nodes[i].Attrs = kept
+	}
+	links := g.Links[:0]
+	for _, link := range g.Links {
+		if link.Provenance != "runtime" {
+			links = append(links, link)
+		}
+	}
+	g.Links = links
+	g.EdgeCount = len(links)
 }
 
 // graphStats reports the knowledge graph's shape: god nodes, orphans, and doc

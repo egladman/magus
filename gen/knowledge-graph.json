@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2360,
-  "edge_count": 5202,
+  "edge_count": 5199,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -20677,9 +20677,7 @@
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out34eb27da",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20711,9 +20709,7 @@
       "doc": "Runs the CI gates through their declared dependencies.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out273fbca4",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -20756,9 +20752,7 @@
       "doc": "Regenerates, then formats Go and tidies `go.mod`.",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out5486ee80",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -20768,9 +20762,7 @@
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
       "source": ".",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out17de58d5",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21105,9 +21097,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off.",
       "source": "docs/guides/integrations/agents",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out906367b2",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21135,9 +21125,7 @@
       "label": "build",
       "source": "docs",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out025d9689",
-        "last_run_ok": "false"
+        "engine": "buzz"
       }
     },
     {
@@ -21291,9 +21279,7 @@
       "doc": "ci is LINT ONLY, deliberately.",
       "source": "evals",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out73a22bb5",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21341,9 +21327,7 @@
       "label": "build",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out7f57fef8",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21353,9 +21337,7 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out0f659f4c",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21374,9 +21356,7 @@
       "doc": "Regenerates MAGUS.md and fails on drift.",
       "source": "libs/diagnostics",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out57ccbdab",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21433,9 +21413,7 @@
       "label": "build",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out3b646804",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21456,9 +21434,7 @@
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
       "source": "libs/gopherbuzz",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out3a10f6d0",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21545,9 +21521,7 @@
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
       "source": "libs/textsearch",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "out9b73505a",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -21606,9 +21580,7 @@
       "label": "ci",
       "source": "proto",
       "attrs": {
-        "engine": "buzz",
-        "last_output_ref": "outf99b65d7",
-        "last_run_ok": "true"
+        "engine": "buzz"
       }
     },
     {
@@ -60672,14 +60644,6 @@
     },
     {
       "source": "target:.:build",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
-    },
-    {
-      "source": "target:.:build",
       "target": "target:.:format",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -61792,14 +61756,6 @@
     },
     {
       "source": "target:docs:build",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
-    },
-    {
-      "source": "target:docs:build",
       "target": "target:docs:generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -62517,14 +62473,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"
-    },
-    {
-      "source": "target:docs:render",
-      "target": "diagnostic:MGS3001",
-      "relation": "emits",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "runtime"
     },
     {
       "source": "target:docs:test",

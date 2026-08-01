@@ -285,7 +285,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void {
     fs\mkdirall("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus\cmd(["graph", "export", "-o", "json"], {"quiet": true}).stdout;
+    final knowledge = magus\cmd(["graph", "export", "--static", "-o", "json"], {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
