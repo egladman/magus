@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2656,
-  "edge_count": 5253,
+  "node_count": 2646,
+  "edge_count": 5225,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -4522,17 +4522,6 @@
       }
     },
     {
-      "id": "dir:plans",
-      "kind": "dir",
-      "label": "plans",
-      "source": "plans",
-      "attrs": {
-        "dir_commits": "0",
-        "dir_files": "9",
-        "dir_languages": "markdown"
-      }
-    },
-    {
       "id": "dir:project",
       "kind": "dir",
       "label": "project",
@@ -8253,87 +8242,6 @@
       "source": "libs/gopherbuzz/std/README.md",
       "attrs": {
         "role": "readme"
-      }
-    },
-    {
-      "id": "doc:plans/agent-guard-hardening-handoff.md",
-      "kind": "doc",
-      "label": "plans/agent-guard-hardening-handoff.md",
-      "source": "plans/agent-guard-hardening-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/agent-harness-handoff-2.md",
-      "kind": "doc",
-      "label": "plans/agent-harness-handoff-2.md",
-      "source": "plans/agent-harness-handoff-2.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/agent-harness-handoff-3.md",
-      "kind": "doc",
-      "label": "plans/agent-harness-handoff-3.md",
-      "source": "plans/agent-harness-handoff-3.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/agent-harness-handoff.md",
-      "kind": "doc",
-      "label": "plans/agent-harness-handoff.md",
-      "source": "plans/agent-harness-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/artifact-history-handoff.md",
-      "kind": "doc",
-      "label": "plans/artifact-history-handoff.md",
-      "source": "plans/artifact-history-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/buzz-parity-handoff.md",
-      "kind": "doc",
-      "label": "plans/buzz-parity-handoff.md",
-      "source": "plans/buzz-parity-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/cross-project-outputs-handoff.md",
-      "kind": "doc",
-      "label": "plans/cross-project-outputs-handoff.md",
-      "source": "plans/cross-project-outputs-handoff.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/dagger-typed-returns-plan.md",
-      "kind": "doc",
-      "label": "plans/dagger-typed-returns-plan.md",
-      "source": "plans/dagger-typed-returns-plan.md",
-      "attrs": {
-        "role": "doc"
-      }
-    },
-    {
-      "id": "doc:plans/release-v0.4-orchestration-followups-handoff.md",
-      "kind": "doc",
-      "label": "plans/release-v0.4-orchestration-followups-handoff.md",
-      "source": "plans/release-v0.4-orchestration-followups-handoff.md",
-      "attrs": {
-        "role": "doc"
       }
     },
     {
@@ -28811,78 +28719,6 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
-      "source": "dir:plans",
-      "target": "doc:plans/agent-guard-hardening-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/agent-guard-hardening-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/agent-harness-handoff-2.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/agent-harness-handoff-2.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/agent-harness-handoff-3.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/agent-harness-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/agent-harness-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/artifact-history-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/artifact-history-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/buzz-parity-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/buzz-parity-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/cross-project-outputs-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/dagger-typed-returns-plan.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/dagger-typed-returns-plan.md"
-    },
-    {
-      "source": "dir:plans",
-      "target": "doc:plans/release-v0.4-orchestration-followups-handoff.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans/release-v0.4-orchestration-followups-handoff.md"
-    },
-    {
       "source": "dir:schema",
       "target": "doc:schema/README.md",
       "relation": "contains",
@@ -39705,150 +39541,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/README.md"
-    },
-    {
-      "source": "doc:plans/agent-guard-hardening-handoff.md",
-      "target": "diagnostic:MGS3001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-guard-hardening-handoff.md"
-    },
-    {
-      "source": "doc:plans/agent-guard-hardening-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-guard-hardening-handoff.md"
-    },
-    {
-      "source": "doc:plans/agent-guard-hardening-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-guard-hardening-handoff.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-2.md",
-      "target": "diagnostic:MGS1009",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-2.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-2.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-2.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-2.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "plans/agent-harness-handoff-2.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-2.md",
-      "target": "spell:magusfile",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "plans/agent-harness-handoff-2.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-3.md",
-      "target": "diagnostic:MGS1002",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-3.md",
-      "target": "diagnostic:MGS1015",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-3.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-3.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "doc:plans/agent-harness-handoff-3.md",
-      "target": "spell:buzz",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "plans/agent-harness-handoff-3.md"
-    },
-    {
-      "source": "doc:plans/cross-project-outputs-handoff.md",
-      "target": "diagnostic:MGS1009",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "doc:plans/cross-project-outputs-handoff.md",
-      "target": "diagnostic:MGS3001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "doc:plans/cross-project-outputs-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-config.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "doc:plans/cross-project-outputs-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "doc:plans/cross-project-outputs-handoff.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/cross-project-outputs-handoff.md"
-    },
-    {
-      "source": "doc:plans/dagger-typed-returns-plan.md",
-      "target": "doc:docs/reference/manpage/magus-run.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "plans/dagger-typed-returns-plan.md"
     },
     {
       "source": "doc:schema/README.md",
@@ -62177,14 +61869,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal"
-    },
-    {
-      "source": "project:.",
-      "target": "dir:plans",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "plans"
     },
     {
       "source": "project:.",
