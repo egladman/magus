@@ -16,13 +16,17 @@ Integration tests sit behind `//go:build integration` and are named
 `TestIntegration*`. `go test ./...` runs the fast unit tests; `go test
 -tags=integration ./...` runs everything.
 
-Lint and the vuln check live in a separate `go.tool.mod`, so the linter's large
-dependency tree stays out of magus's library module graph:
+Lint and the vuln check run as pinned binaries from `mise.toml`, so the linter's
+large dependency tree stays out of magus's module graph entirely:
 
 ```sh
-go tool -modfile=go.tool.mod golangci-lint run
-go tool -modfile=go.tool.mod govulncheck ./...
+magus run lint
 ```
+
+They deliberately do not go through `go tool`. That compiles the tool from source
+with whichever `go` leads `PATH`, which is how CI once built golangci-lint with a
+different toolchain than the one it analyzed with, and panicked. `mise install`
+gets you both binaries at the pinned versions.
 
 ## Performance changes need evidence
 

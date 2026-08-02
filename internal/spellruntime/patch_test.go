@@ -247,7 +247,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmd: []string{"go", "version"},
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.
-		VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
+		VersionCmds: map[string][]string{
+			"golangci-lint": {"golangci-lint", "--version"},
+			"govulncheck":   {"govulncheck", "-version"},
+		},
 		Language:    "go",
 		IgnoreDirs:  []string{"vendor"},
 		Manifests:   []string{"go.mod"},
@@ -283,7 +286,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
-			"govulncheck": {Command: spells.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
+			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
 			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
