@@ -12,7 +12,6 @@ import "io";
 import "std";
 import "semver";
 
-import "magus/spell/magusfile";
 import "magus/spell/go";
 import "magus/spell/docker";
 import "magus/spell/cosign";
@@ -54,7 +53,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [magusfile, go, buzz, markdown, bash],
+    "spells": [go, buzz, markdown, bash],
     "targets": {
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -76,6 +75,13 @@ magus\project({
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": true},
+        // Screen-records the CLI, so the bytes it writes are never the same twice
+        // (real target durations land in the frames). Caching would replay a GIF
+        // recorded against different code, which is the one thing a demo must not
+        // do. Deliberately NOT named *-generate: `generate` globs that suffix and
+        // drift-gates it, and a non-reproducible artifact under a drift gate fails
+        // every CI run by construction. See the tapes target below.
+        "tapes": {"skip_cache": true},
     },
 });
 
@@ -375,6 +381,33 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (clean_before and vcs\isDirty()) {
         throw "generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw` and commit";
+    }
+}
+
+// Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus
+// binary through a real terminal, so the GIFs are documentation that cannot quietly
+// go stale the way a pasted transcript does - re-record and the drift is visible.
+//
+// Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs
+// vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every
+// time. Run it when the CLI's output actually changes, then commit the result.
+//
+// The GIFs are declared outputs all the same, so `magus describe file` reports them
+// as generated and the agent guard warns on a hand-edit - the same treatment
+// assets/coverage.svg gets.
+export fun tapes(ctx: magus\Context, args: [str]) > void {
+    // Declared, or the tapes and the script that stages their workspace would be
+    // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
+    // editing a tape invalidated nothing and told a reader it affected no target.
+    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
+    ctx.writesFiles("assets/gen/*.gif");
+    if (os\which("vhs") == "") {
+        throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
+            + "(see tapes/README.md)";
+    }
+    foreach (tape in fs\glob("tapes/*.tape")) {
+        magus\info("recording {tape}");
+        os\exec("vhs", [tape], ".", {});
     }
 }
 
