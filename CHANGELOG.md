@@ -9,8 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Fixed
+
+- magus no longer panics mid-run on a target that fans out. `captureRun` puts one
+  pair of output taps on the context for a whole target body, and `ctx.needs(lint,
+  test)` - the shape of every `ci` target - runs its children concurrently, so
+  several goroutines reached the same tap. Its line buffer was unguarded, so two
+  writers tore the slice header and the process died with `slice bounds out of
+  range` inside `lineTap.Write`. The panic killed the writer goroutine, after which
+  the child process reported its broken output pipe as `exit -1` - surfacing as an
+  unrelated-looking tool failure rather than as a crash. The shared log sink beside
+  it already had the equivalent guard.
+
 ### Removed
 
+- Breaking: `magusfile` is no longer a spell. `import "magus/spell/magusfile"` and a
+  `magusfile` entry in a project's `"spells"` list now fail with
+  [MGS1017](docs/reference/codes/magusfile/MGS1017.md) and the one-line fix: delete
+  both. Neither did anything already - magus binds that driver to every project it
+  discovers, because it is what makes a magusfile's own targets runnable rather than
+  a toolchain an author opts into. Leaving the declarations accepted kept teaching
+  readers that `magusfile` was a spell like `go` or `buf`, which the spell reference
+  has never listed it as. Consequences: `magus describe spells` no longer lists it,
+  and `magus ls` reports the toolchain a project actually binds (or none) instead of
+  answering `magusfile` for almost every project - a fact true by construction, since
+  having a magusfile is how a project is discovered at all.
+- Breaking: `magus memory list` and `magus config mcp connector list` are now
+  `... ls`, matching `magus ls` and `magus run ls`. The old spelling errors with a
+  message naming the new one.
+- Breaking: the three vendor spells register canonical, vendor-qualified names -
+  `actions` is now `github-actions`, `s3-cache` is now `aws-s3`, and the GitLab CI
+  provider's `ci` is now `gitlab-ci`. A registered name is what identifies a spell
+  in every listing and diagnostic, with no directory around it to supply context,
+  so it has to stand alone: `actions` named no product, and `ci` collided outright
+  with the `ci` TARGET that `magus affected ci` anchors on. Source paths are
+  unchanged (`spells/github/actions`, `spells/aws/s3-cache`, `spells/gitlab/ci`),
+  so the path imports in magusfiles keep working; only the registered name moved.
+  The reasoning is written down in [CONTRIBUTING.md](CONTRIBUTING.md#naming).
 - Breaking: `magus tail` is gone. It streamed the most recent cached log for the
   project in the current directory - a view `magus query output <ref>` already gives
   from the reference every run prints. A whole subcommand, flag surface, and man page

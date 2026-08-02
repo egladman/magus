@@ -336,8 +336,8 @@ That gives a clean rule for **where to declare a glob**:
   `ctx.modifiesExistingFiles(...)` in that target's body, according to the file relationship above.
 
 Outputs are almost always target-specific (`build` -> `dist/`, `test` ->
-`coverage/`), so a project-wide `outputs` - which makes every target snapshot it
-- is usually the wrong tool; prefer `ctx.writesFiles(...)`.
+`coverage/`), so a project-wide `outputs` - which makes every target snapshot
+it - is usually the wrong tool; prefer `ctx.writesFiles(...)`.
 
 ## Replay: a hit restores outputs, not execution
 
