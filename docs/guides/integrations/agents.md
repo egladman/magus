@@ -1199,7 +1199,7 @@ Two tools deserve a callout because they carry state across sessions:
 pointing into the codebase, kept in the user state directory outside the repo,
 and shared across branches and worktrees). Both are pull-based: nothing is
 injected into an agent's context. The journal is also available through `magus
-memory list|get|put|delete|verify`; use `verify` to surface stale, malformed,
+memory ls|get|put|delete|verify`; use `verify` to surface stale, malformed,
 or broken linked entries. Captured build output is addressed by
 [output references](../../concepts/cache/output-refs.md).
 

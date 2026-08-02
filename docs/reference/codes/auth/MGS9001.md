@@ -39,7 +39,7 @@ valid tokens), so any of these produces the same `401`:
 2. Confirm the token your client sends matches one the daemon knows:
 
    ```sh
-   magus config mcp connector list
+   magus config mcp connector ls
    ```
 
    A token you expect but do not see was revoked or belongs to another daemon.

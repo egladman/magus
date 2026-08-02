@@ -32,7 +32,7 @@ func TestAllRegistered(t *testing.T) {
 	declared := []Command{
 		Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
 		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-		DescribeTargets, MCPTokenGenerate,
+		DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
 	}
 	if len(All) != len(declared) {
 		t.Fatalf("All has %d commands, declared list has %d; keep them in sync", len(All), len(declared))

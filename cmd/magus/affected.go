@@ -225,7 +225,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		if err != nil {
 			return err
 		}
-		listTargets("affected:list", targets, source)
+		listTargets("affected:ls", targets, source)
 		return nil
 	}
 

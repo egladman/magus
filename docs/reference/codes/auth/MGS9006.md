@@ -26,7 +26,7 @@ List what is actually there and revoke by an exact name or fingerprint from the
 list:
 
 ```sh
-magus config mcp connector list
+magus config mcp connector ls
 magus config mcp connector revoke <name-or-fingerprint>
 ```
 
@@ -40,4 +40,4 @@ token, magus asks you to disambiguate rather than guess.
 
 ## See also
 
-- `magus config mcp connector list`: the tokens you can revoke.
+- `magus config mcp connector ls`: the tokens you can revoke.

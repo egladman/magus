@@ -17,7 +17,7 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 		return nil
 	}
 	switch args[0] {
-	case "list":
+	case "ls":
 		return memoryList(root, args[1:])
 	case "get":
 		return memoryGet(root, args[1:])
@@ -27,8 +27,13 @@ func memoryCmd(_ context.Context, root string, args []string) error {
 		return memoryDelete(root, args[1:])
 	case "verify":
 		return memoryVerify(root, args[1:])
+	case "list":
+		// Renamed to ls in v0.4.0, for one spelling of "enumerate" across the whole
+		// surface (`magus ls`, `magus run ls`). Named rather than left to the generic
+		// unknown-subcommand error so the message says what to type instead.
+		return usagef("magus memory: `list` is now `ls` (run `magus memory ls`)")
 	default:
-		return usagef("magus memory: unknown subcommand %q (want list, get, put, delete, or verify)", args[0])
+		return usagef("magus memory: unknown subcommand %q (want ls, get, put, delete, or verify)", args[0])
 	}
 }
 
@@ -40,7 +45,7 @@ func memoryUsage() {
 	fmt.Fprintln(os.Stderr, "automatic model memory.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  list     show entries and any repair warnings")
+	fmt.Fprintln(os.Stderr, "  ls       show entries and any repair warnings")
 	fmt.Fprintln(os.Stderr, "  get      show one entry")
 	fmt.Fprintln(os.Stderr, "  put      create or replace a named entry")
 	fmt.Fprintln(os.Stderr, "  delete   remove one entry")
@@ -56,9 +61,9 @@ type memoryListOutput struct {
 }
 
 func memoryList(root string, args []string) error {
-	_, err := cmdParse("memory list", args, func(fs *flag.FlagSet) {
+	_, err := cmdParse("memory ls", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus memory list [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus memory ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "List handoff-journal entries. Warnings identify stale entries without hiding them.")
 			fmt.Fprintln(os.Stderr, "")

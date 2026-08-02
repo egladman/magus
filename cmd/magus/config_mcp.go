@@ -206,7 +206,7 @@ func configMCPConnector(args []string) error {
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
 		fmt.Fprintln(os.Stderr, "  create   mint a new connector token (prints the secret once)")
-		fmt.Fprintln(os.Stderr, "  list     show names, fingerprints, and expiry (never the secret)")
+		fmt.Fprintln(os.Stderr, "  ls       show names, fingerprints, and expiry (never the secret)")
 		fmt.Fprintln(os.Stderr, "  revoke   delete a connector token by name or fingerprint")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp connector <subcommand> -h` for flags.")
@@ -223,13 +223,17 @@ func configMCPConnector(args []string) error {
 	switch sub {
 	case "create":
 		return configMCPConnectorCreate(subArgs)
-	case "list":
+	case "ls":
 		return configMCPConnectorList(subArgs)
 	case "revoke":
 		return configMCPConnectorRevoke(subArgs)
 	case "-h", "--help", "help":
 		fs.Usage()
 		return nil
+	case "list":
+		// Renamed to ls in v0.4.0; see the note in memoryCmd.
+		return usagef("magus config mcp connector: `list` is now `ls` " +
+			"(run `magus config mcp connector ls`)")
 	default:
 		fs.Usage()
 		return usagef("magus config mcp connector: unknown subcommand %q", sub)
