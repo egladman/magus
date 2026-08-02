@@ -85,17 +85,33 @@ func normalizePath(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sandbox: %w", err)
 	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		// Path does not exist yet: resolve parent and re-attach base.
-		parent := filepath.Dir(abs)
-		resolvedParent, err2 := filepath.EvalSymlinks(parent)
-		if err2 != nil {
-			resolvedParent = parent // parent also missing: keep lexical form
-		}
-		resolved = filepath.Join(resolvedParent, filepath.Base(abs))
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		return filepath.Clean(resolved), nil
 	}
-	return filepath.Clean(resolved), nil
+	// The path does not exist yet (a write target). Walk up to the nearest ancestor
+	// that DOES exist, resolve that, and re-attach the missing tail.
+	//
+	// Resolving only the immediate parent was not enough: when the parent is also
+	// missing - creating a file inside a directory this run has yet to make - the
+	// old fallback kept the whole path lexical, so a symlink anywhere above it went
+	// unresolved. The rule paths it is compared against ARE resolved
+	// (ResolveRulePath), so the two forms could never match and the write was
+	// denied. That is every nested create on a machine whose workspace sits under a
+	// symlink, which on macOS is any path under /var or /tmp.
+	missing := []string{}
+	dir := abs
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached the root without finding anything that exists
+		}
+		missing = append([]string{filepath.Base(dir)}, missing...)
+		if resolvedParent, err := filepath.EvalSymlinks(parent); err == nil {
+			return filepath.Clean(filepath.Join(append([]string{resolvedParent}, missing...)...)), nil
+		}
+		dir = parent
+	}
+	return filepath.Clean(abs), nil
 }
 
 // ResolveRulePath normalizes path the same way checkAccess does so containment checks are symmetric.

@@ -11,6 +11,13 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
+- The sandbox no longer denies a write into a directory the run has yet to create.
+  A non-existent write target is normalized by resolving its parent, but when that
+  parent was missing too the whole path stayed lexical, so a symlink anywhere above
+  it went unresolved and could never match a rule path (which IS resolved). Any
+  workspace under a symlinked prefix - on macOS that is every path under `/var` or
+  `/tmp` - had nested creates denied. It now walks up to the nearest ancestor that
+  exists and re-attaches the missing tail.
 - magus no longer panics mid-run on a target that fans out. `captureRun` puts one
   pair of output taps on the context for a whole target body, and `ctx.needs(lint,
   test)` - the shape of every `ci` target - runs its children concurrently, so
