@@ -463,7 +463,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			slog.String("label", s.Label),
 			slog.String("target", reproTarget(s)),
 			slog.Int64("duration", int64(result.Duration)),
-			slog.String("error", runErr.Error()),
+			// The concise cause: this record already carries project and target as
+			// their own attrs, and the pretty handler prints both in the heading
+			// directly above the cause line.
+			slog.String("error", types.CauseText(runErr)),
 			slog.String("ref", ref),
 		)
 		if rc.onError != nil {

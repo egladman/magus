@@ -274,13 +274,21 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 		return nil, types.ExitError{Code: code}
 	}
 	if err != nil {
-		return nil, fmt.Errorf("magusfile: target %s: %w", target, err)
+		// Deliberately unwrapped: every caller reaches a user through
+		// types.SpellErrors, which already names the spell and the target. Adding
+		// them here too produced "[magusfile] magusfile: target lint: ..." - the
+		// spell twice, the target twice, before the actual failure.
+		return nil, err
 	}
 	// The value was discarded here for as long as targets existed, which is what
 	// made `> void` look like a rule rather than a convention.
 	ret, err := buzzReturnToGo(val)
 	if err != nil {
-		return nil, fmt.Errorf("magusfile: target %s: %w", target, err)
+		// Deliberately unwrapped: every caller reaches a user through
+		// types.SpellErrors, which already names the spell and the target. Adding
+		// them here too produced "[magusfile] magusfile: target lint: ..." - the
+		// spell twice, the target twice, before the actual failure.
+		return nil, err
 	}
 	return ret, nil
 }

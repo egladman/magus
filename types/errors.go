@@ -62,17 +62,62 @@ type SpellFailure struct {
 // SpellErrors aggregates failures across multiple spells running the same target.
 type SpellErrors struct {
 	Project string
-	Target  string
-	Failed  []SpellFailure
+	// ProjectLabel is the human name for Project, set from ProjectDisplayName where
+	// the whole project is in hand. Project is the workspace-relative path, and for
+	// a root project that path is ".", which rendered as "magus lint .:" - a bare
+	// dot against a colon, which reads as punctuation rather than as the project it
+	// actually names. Empty falls back to Project.
+	ProjectLabel string
+	Target       string
+	Failed       []SpellFailure
 }
 
 func (e *SpellErrors) Error() string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "magus %s %s: %d spell(s) failed\n", e.Target, e.Project, len(e.Failed))
-	for _, f := range e.Failed {
-		fmt.Fprintf(&sb, "  [%s] %s\n", f.Spell, f.Err)
+	return fmt.Sprintf("%s failed in %s: %s", e.Target, e.label(), e.Cause())
+}
+
+// Cause is the failure WITHOUT the project and target restated: which tool broke,
+// and how.
+//
+// It exists because those two facts reach a reader twice. The CLI prints the
+// project and target in the heading immediately above the cause line, so a cause
+// that opened by repeating them ("magus lint .: 1 spell(s) failed [magusfile]
+// magusfile: target lint: ...") spent its first two thirds on what the previous
+// line already said, and buried the one thing it alone knew - the failing tool -
+// at the end. Error() keeps the full sentence for an SDK consumer holding nothing
+// but the error; the CLI logs this.
+//
+// A lone failure needs no spell attribution: the tool name is what a reader acts
+// on, and which spell dispatched it is not. Fan-out across several spells keeps the
+// bracketed list, where the spell is what tells the failures apart.
+func (e *SpellErrors) Cause() string {
+	if len(e.Failed) == 1 {
+		return e.Failed[0].Err.Error()
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%d spells failed", len(e.Failed))
+	for _, f := range e.Failed {
+		fmt.Fprintf(&sb, "\n  [%s] %s", f.Spell, f.Err)
+	}
+	return sb.String()
+}
+
+func (e *SpellErrors) label() string {
+	if e.ProjectLabel != "" {
+		return e.ProjectLabel
+	}
+	return e.Project
+}
+
+// CauseText is what a failure record carries as its cause: the concise form when
+// the error has one, else the full message. Callers that have already printed the
+// project and target use this so the cause adds information instead of echoing.
+func CauseText(err error) string {
+	var se *SpellErrors
+	if errors.As(err, &se) {
+		return se.Cause()
+	}
+	return err.Error()
 }
 
 // Unwrap satisfies errors.Is/As.
