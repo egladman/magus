@@ -176,7 +176,7 @@ during a <a class="code-xref" href="../../../reference/manpage/magus-run/" data-
 <strong>required</strong> alongside it: a remote backend with no trust set fails at load (see
 the next section). Generate a key with <code><a class="code-xref" href="../../../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> cache key generate</code>.</p>
 <h3 id="github-actions-cache">GitHub Actions Cache</h3>
-<p>The <code>actions</code> spell (<a href="../../../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
+<p>The <code>github-actions</code> spell (<a href="../../../spells/github/actions/spell.buzz"><code>spells/github/actions</code></a>)
 stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.</p>
 <pre><code class="language-buzz">import &quot;spells/github/actions&quot; as github;
 magus\cache.remote(github);
@@ -214,7 +214,7 @@ dormant locally. You still declare a trust set and set the signing secret as for
 any backend (see <a href="#signing-is-required-trust-model">Signing is required</a>). GitHub
 evicts old artifacts on its own (7-day idle / repo size cap).</p>
 <h3 id="s3-minio-cloudflare-r2-backblaze-b2">S3, MinIO, Cloudflare R2, Backblaze B2</h3>
-<p>The <code>s3-cache</code> spell (<a href="../../../spells/aws/s3-cache/spell.buzz"><code>spells/aws/s3-cache</code></a>)
+<p>The <code>aws-s3</code> spell (<a href="../../../spells/aws/s3-cache/spell.buzz"><code>spells/aws/s3-cache</code></a>)
 stores artifacts in any S3-compatible bucket, signing every request with AWS
 Signature V4.</p>
 <pre><code class="language-buzz">import &quot;spells/aws/s3-cache&quot; as s3;

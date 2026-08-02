@@ -80,7 +80,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">16 min read</small>
+    <small class="reading-time" title="Estimated reading time">17 min read</small>
     <article>
 <h1 id="magus">magus</h1>
 <p align="center">
@@ -93,6 +93,10 @@
 <p><a href="https://github.com/egladman/magus/actions/workflows/ci.yaml" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img loading="lazy" decoding="async" alt="Coverage" src="./assets/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus" rel="noopener noreferrer" target="_blank" data-external><img loading="lazy" decoding="async" alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a></p>
 <p>A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, <a class="code-xref" href="reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a> as code, no second toolchain to install.</p>
 <p>Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.</p>
+<!-- Recorded by `magus run tapes` from tapes/core-loop.tape; regenerate and commit to refresh. -->
+<p align="center">
+  <img loading="lazy" decoding="async" alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them in 802ms reporting '0 cached, 4 ran', and the same command run again reports '4 cached, 0 ran' in 130ms, replaying the captured test output from cache." src="./assets/gen/core-loop.gif">
+</p>
 <h2 id="why-magus-exists">Why magus exists</h2>
 <p>The tools you <a class="code-xref" href="reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> in a monorepo, you run all day. Build, test, lint, switch
 branches, do it again. So friction compounds fast. A few wasted seconds a run,

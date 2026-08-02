@@ -1,6 +1,6 @@
 ---
 title: "MGS1011: cross-project output names an unusable owner"
-description: Fires at load when a target declares ctx.outputs into another project that magus cannot resolve or did not discover, so nothing would own, clean, or regenerate the file.
+description: Fires at load when a target declares ctx.writesFiles into another project that magus cannot resolve or did not discover, so nothing would own, clean, or regenerate the file.
 tags: [MGS1011, magusfile, outputs, cross-project, load, discovery]
 ---
 
@@ -10,14 +10,14 @@ A target declared an output into another project's tree, and magus cannot use th
 project it named as the owner of that file.
 
 ```text
-[MGS1011] workspace://producer: target "build": ctx.outputs declares an output
+[MGS1011] workspace://producer: target "build": ctx.writesFiles declares an output
 into "gen", which magus did not discover as a project; it needs a project marker
 and must not sit under an ignored directory
 ```
 
 ## Why
 
-`ctx.outputs(site.file("generated.txt"))` says two things at once: this target
+`ctx.writesFiles(site.file("generated.txt"))` says two things at once: this target
 produces that file, and the file lands in `site`'s tree rather than its own. The
 second half is what makes it different from an ordinary output, and it is the
 half that needs a real project on the other end.
@@ -75,7 +75,7 @@ If you did not mean to write into another project at all, drop the alias and
 declare an ordinary same-project output:
 
 ```buzz
-ctx.outputs("dist/**");
+ctx.writesFiles("dist/**");
 ```
 
 ## See also

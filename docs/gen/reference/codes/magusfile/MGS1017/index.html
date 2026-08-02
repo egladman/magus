@@ -6,14 +6,14 @@
   <meta name="color-scheme" content="light dark">
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
-  <title>MGS1001: no ci target defined - magus</title>
-  <meta name="description" content="Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.">
-  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1001/">
+  <title>MGS1017: magusfile is not a spell - magus</title>
+  <meta name="description" content="Fires when a magusfile imports magus/spell/magusfile or lists magusfile among its spells. Magus binds that driver to every project automatically, so declaring it does nothing.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1017/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
-  <meta property="og:title" content="MGS1001: no ci target defined - magus">
-  <meta property="og:description" content="Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.">
-  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1001/">
+  <meta property="og:title" content="MGS1017: magusfile is not a spell - magus">
+  <meta property="og:description" content="Fires when a magusfile imports magus/spell/magusfile or lists magusfile among its spells. Magus binds that driver to every project automatically, so declaring it does nothing.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1017/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../../public/atom/releases.atom.xml">
@@ -67,17 +67,17 @@
   </header>
   <main id="main-content" class="container" tabindex="-1">
     <nav class="breadcrumb" aria-label="Breadcrumb">
-      <ul><li><a href="../../../../index.html">Home</a></li><li><a href="../../../../documentation/">Documentation</a></li><li><a href="../../../../reference/">Reference</a></li><li><a href="../../../../reference/codes/">Codes</a></li><li><a href="../../../../reference/codes/magusfile/">magusfile diagnostics</a></li><li aria-current="page">MGS1001: no ci target defined</li></ul>
+      <ul><li><a href="../../../../index.html">Home</a></li><li><a href="../../../../documentation/">Documentation</a></li><li><a href="../../../../reference/">Reference</a></li><li><a href="../../../../reference/codes/">Codes</a></li><li><a href="../../../../reference/codes/magusfile/">magusfile diagnostics</a></li><li aria-current="page">MGS1017: magusfile is not a spell</li></ul>
     </nav>
     <div class="page-tools"></div>
     <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
-    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/codes/magusfile/MGS1001.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/codes/magusfile/MGS1017.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
     <div class="with-toc">
     <aside class="toc">
       <nav>
         <p class="toc-title">In this section</p>
         <ul class="section-nav">
-          <li><a href="../../../../reference/codes/magusfile/MGS1001/" aria-current="page" title="MGS1001: no ci target defined">MGS1001: no ci target defined</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1001/" title="MGS1001: no ci target defined">MGS1001: no ci target defined</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1002/" title="MGS1002: spell import shadowed">MGS1002: spell import shadowed</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1003/" title="MGS1003: bespoke phase-fragment target name">MGS1003: bespoke phase-fragment target name</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1004/" title="MGS1004: unreached footprint declaration">MGS1004: unreached footprint declaration</a></li>
@@ -93,94 +93,72 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1014/" title="MGS1014: cross-project output was never produced">MGS1014: cross-project output was never produced</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1016/" title="MGS1016: workspace-local Go replace directives drifted">MGS1016: workspace-local Go replace directives drifted</a></li>
-          <li><a href="../../../../reference/codes/magusfile/MGS1017/" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1017/" aria-current="page" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
         </ul>
-        <p class="toc-title">On this page</p>
-        <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
-<h1 id="mgs1001-no-ci-target-defined">MGS1001: no ci target defined</h1>
-<p><code>magus ci</code> (or <code><a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code>, <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --plan</code>, <code><a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">magus x</a></code> <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>) was
-asked to <a class="code-xref" href="../../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> the <code>ci</code> <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, but no <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> in the selected scope declares one.</p>
-<pre><code class="language-text">[MGS1001] no &quot;ci&quot; target defined in the selected project(s); it is the anchor
-&quot;magus affected ci&quot; and &quot;magus affected --plan&quot; key off, so this run would do nothing
-  see: .../MGS1001.md
-</code></pre>
-<h2 id="why">Why</h2>
-<p><code>ci</code> is an ordinary <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> target. Magus does not hardcode a CI chain.
-You compose the gate yourself with <code>magus\needs</code>, ordering the stages your
-<a class="glossary-term" href="../../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> needs (build, test, lint, ...).</p>
-<p>It is the one target magus treats as the CI anchor: <code>magus affected ci</code> and <code>magus affected --plan</code> key off it to decide what the <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a>
-set should build and gate. Every other target fans out and silently skips
-projects that don't declare it. That default suits <code>build</code>/<code>test</code>/<code>lint</code>, but
-for <code>ci</code> it means a workspace with no <code>ci</code> target anywhere would let <code>magus ci</code>
-exit <code>0</code> having run nothing, reporting a green check that checked nothing.</p>
-<p>Magus fails fast instead. Both paths enforce the same rule:</p>
-<ul>
-<li><strong>Run time.</strong> <code>Magus.RunCI</code> returns this diagnostic before executing anything
-when the scope has projects but none declare <code>ci</code>. (An empty scope, such as
-<code>magus affected ci</code> with no changes, stays a legitimate no-op and is left
-alone.)</li>
-<li><strong><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code>.</strong> The <code>ci target</code> check fails when no project in the
-workspace declares <code>ci</code>, surfacing the gap before CI ever runs it.</li>
-</ul>
+<h1 id="mgs1017-magusfile-is-not-a-spell">MGS1017: magusfile is not a spell</h1>
+<p>A <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> imported <code>magus/spell/magusfile</code>, or named <code>magusfile</code> in its
+<a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s <code>&quot;spells&quot;</code> list. Neither has any effect: magus binds that driver to
+every project it discovers.</p>
+<p>A <a href="../../../../concepts/spells/">spell</a> is a library of tool-native operations for
+one toolchain - the <code>go</code> <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> exposes <code>go-build</code>/<code>go-test</code>/<code>go-vet</code>, the <code>rust</code>
+spell exposes <code>cargo-build</code>/<code>cargo-clippy</code>. The magusfile driver adapts no
+toolchain and contributes no operations. It is what makes the targets in the file
+you are writing runnable at all, which is not something an author opts into.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Define a <code>ci</code> target in your magusfile and compose the stages with
-<code>magus\needs</code>:</p>
-<pre><code class="language-buzz">export fun ci(ctx: magus\Context, _a: [str]) &gt; void {
-    ctx.needs(build, test, lint);
-}
+<p>Delete the import, and drop <code>magusfile</code> from the <code>&quot;spells&quot;</code> list:</p>
+<pre><code class="language-diff"> import &quot;magus&quot;;
+-import &quot;magus/spell/magusfile&quot;;
+ import &quot;magus/spell/go&quot;;
+
+ magus\project({
+-    &quot;spells&quot;: [magusfile, go],
++    &quot;spells&quot;: [go],
+ });
 </code></pre>
-<p>Run <code><a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> targets</code> to see the stages available to compose. The name
-matches case- and delimiter-insensitively (magus normalizes <code>CI</code>/<code>Ci</code> to <code>ci</code>),
-so any casing of the declaration is detected.</p>
-<p>In a multi-project workspace the target only needs to exist in one project
-for the anchor to resolve. Declare it wherever you compose the workspace gate.</p>
-<h2 id="what-this-is-not">What this is NOT</h2>
-<ul>
-<li><strong>Not a missing-<a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> error.</strong> <code>ci</code> is never a spell op; it lives in the
-magusfile and composes spell-backed targets via <code>magus\needs</code>. Adding a
-spell will not satisfy this check.</li>
-<li><strong>Not triggered by an empty affected set.</strong> <code>magus affected ci</code> with no
-changed projects is a real no-op and does not raise <a class="code-xref" href="./" data-kind="code" data-def="Fires when magus ci runs but no project in the selected scope declares a ci target, meaning the CI anchor would silently do nothing.">MGS1001</a>. The diagnostic
-fires only when the scope has projects yet none declare <code>ci</code>.</li>
-</ul>
-<h2 id="see-also">See also</h2>
-<ul>
-<li><a href="../../../../concepts/targets/">targets</a>: the anatomy of a magus target.</li>
-<li><a href="../../../../concepts/spells/">spells</a> § Spells vs Targets: why <code>ci</code> is a target, not a spell.</li>
-<li><code>magus <a class="code-xref" href="../../../manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> targets</code>: lists the stages you can compose into <code>ci</code>.</li>
-</ul>
+<p>A project whose targets all come from its magusfile binds no toolchain at all,
+so it needs no list:</p>
+<pre><code class="language-diff"> magus\project({
+-    &quot;spells&quot;: [magusfile],
+ });
+</code></pre>
+<p>Your targets keep running exactly as before. <code><a class="code-xref" href="../../../manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> will stop reporting
+<code>spell: magusfile</code> for the project and report the toolchain it actually binds,
+or none.</p>
+<h2 id="why-this-is-an-error-rather-than-a-warning">Why this is an error rather than a warning</h2>
+<p>Binding the driver became implicit because listing it was never the author's
+job. That left the import and the list entry as no-ops which still taught every
+reader - and every generated example - that <code>magusfile</code> was a spell like <code>go</code> or
+<code>buf</code>. Failing loudly with the one-line fix ends that, rather than leaving a
+declaration that looks load-bearing and is not.</p>
     </article>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-next" href="../MGS1002/"><span class="page-nav-dir">Next</span><span class="page-nav-title">MGS1002: spell import shadowed</span></a>
+      <a class="page-nav-prev" href="../MGS1016/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MGS1016: workspace-local Go replace directives drifted</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1003/"><span class="related-card-title">MGS1003: bespoke phase-fragment target name</span><span class="related-card-desc">Fires when a magusfile declares a target named after a static-analysis or formatting subset (typecheck, vet, audit, security, style, prettify) instead of composing it into lint or format.</span></a>
-        <a class="related-card" href="../../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1006/"><span class="related-card-title">MGS1006: unknown target</span><span class="related-card-desc">Fires when a magusfile references a target that no project declares, whether run from the CLI or wired via a dependency like magus\needs.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../../reference/faq/"><span class="related-card-title">FAQ</span><span class="related-card-desc">Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the daemon, and adding a tool.</span></a>
+        <a class="related-card" href="../../../../reference/skills/"><span class="related-card-title">Agent skills</span><span class="related-card-desc">Every skill magus installs, in both curated permutations, generated from the embedded bodies.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1001%22">MGS1001</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../../search/?q=tag%3A%22targets%22">targets</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a><a class="tag" href="../../../../search/?q=tag%3A%22anchor%22">anchor</a><a class="tag" href="../../../../search/?q=tag%3A%22affected%22">affected</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1001.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1001.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1017%22">MGS1017</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22spells%22">spells</a><a class="tag" href="../../../../search/?q=tag%3A%22migration%22">migration</a><a class="tag" href="../../../../search/?q=tag%3A%22breaking-change%22">breaking-change</a></div>
+    
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
-    <div class="disclosure-body ref-embed"><h3 id="workspace">Workspace</h3>
-<p>The magus root directory that owns a set of projects and shared config; the unit
-magus operates over. See <a href="../../../../concepts/workspace/">workspace</a>.</p>
-<h3 id="project">Project</h3>
+    <div class="disclosure-body ref-embed"><h3 id="project">Project</h3>
 <p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
 caching, scheduling, and dependency tracking. See <a href="../../../../concepts/workspace/">workspace</a>.</p>
 <h3 id="magusfile">Magusfile</h3>
@@ -190,15 +168,12 @@ binds its spells. See <a href="../../../../concepts/targets/">targets</a>.</p>
 <p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
 may compose a spell's tool-native operations and depend on other targets. See
 <a href="../../../../concepts/targets/">targets</a>.</p>
+<h3 id="operation">Operation</h3>
+<p>A single tool-native command a target composes; the middle of the work hierarchy
+(Spell to Operation to Target). See <a href="../../../../concepts/operations/">operations</a>.</p>
 <h3 id="spell">Spell</h3>
 <p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
 toolchain's real commands. See <a href="../../../../concepts/spells/">spells</a>.</p>
-<h3 id="buzz">Buzz</h3>
-<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
-<a href="../../../../concepts/engines/">engines</a>.</p>
-<h3 id="affected">Affected</h3>
-<p>The set of projects touched by a change; <code>magus affected &lt;target&gt;</code> runs a target
-only over them. See <a href="../../../../guides/affected/">affected</a>.</p>
 <h3 id="ci">CI</h3>
 <p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
 magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in

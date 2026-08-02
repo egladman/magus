@@ -40,4 +40,4 @@ to revoke - a footgun for a credential.
 
 ## See also
 
-- `magus config mcp connector list`: the names already in use.
+- `magus config mcp connector ls`: the names already in use.

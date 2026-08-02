@@ -1,16 +1,16 @@
 ---
 title: "MGS1013: cross-project output glob escapes its owner"
-description: Fires at load when the glob half of a cross-project ctx.outputs is absolute or contains .., so it would resolve outside the project that owns it.
+description: Fires at load when the glob half of a cross-project ctx.writesFiles is absolute or contains .., so it would resolve outside the project that owns it.
 tags: [MGS1013, magusfile, outputs, cross-project, globs, containment]
 ---
 
 # MGS1013: cross-project output glob escapes its owner
 
-The glob in a cross-project `ctx.outputs` is absolute or contains `..`, so it
+The glob in a cross-project `ctx.writesFiles` is absolute or contains `..`, so it
 does not name a path inside the project it is declared against.
 
 ```text
-[MGS1013] workspace://producer: target "build": ctx.outputs glob "../../etc/x"
+[MGS1013] workspace://producer: target "build": ctx.writesFiles glob "../../etc/x"
 must be relative to "site" and must not contain ..
 ```
 
@@ -20,7 +20,7 @@ A cross-project output has two halves, and they are validated for different
 reasons:
 
 ```buzz
-ctx.outputs(site.file("generated.txt"));
+ctx.writesFiles(site.file("generated.txt"));
 //          ^^^^      ^^^^^^^^^^^^^^
 //          owner     glob, relative to the OWNER's root
 ```
@@ -50,7 +50,7 @@ Write the path as the owner sees it. If `site` is at `site/` and the file belong
 at `site/gen/api.ts`, the owner is `site` and the glob is `gen/api.ts`:
 
 ```buzz
-ctx.outputs(site.file("gen/api.ts"));
+ctx.writesFiles(site.file("gen/api.ts"));
 ```
 
 If you find yourself reaching for `..` to get somewhere, the owner is wrong, not

@@ -2,8 +2,8 @@
 title: magus-memory
 description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
 tags: [agents, skills, magus-memory]
-skill_full_bytes: 3845
-skill_simple_bytes: 3167
+skill_full_bytes: 3843
+skill_simple_bytes: 3165
 ---
 
 # magus-memory
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `69d6b499f0a0` |
+| `skill-content` | `cbc13a3be57a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -74,7 +74,7 @@ There is no free-text/`note` type. A claim that is true about the code is a
 ## Read and write deliberately
 
 - At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory list`. Empty is normal; do not manufacture journal entries.
+  `magus memory ls`. Empty is normal; do not manufacture journal entries.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to
@@ -155,7 +155,7 @@ about the code is a `query` or `output` pointer, never stored prose.
 ## Read and write deliberately
 
 - At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory list`.
+  `magus memory ls`.
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to

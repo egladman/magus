@@ -78,45 +78,51 @@ can't feed back into its own key.
 ### Per-target inputs and outputs
 
 A spell contributes its globs to _every_ target on the project. To attach a glob
-to _one_ target, declare it in that target's body with `ctx.inputs(...)` /
-`ctx.outputs(...)`:
+to _one_ target, declare it in that target's body with `ctx.readsFiles(...)` /
+`ctx.writesFiles(...)`:
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("schema/**", "codegen.config.json");
-    ctx.outputs("dist/**");
+    ctx.readsFiles("schema/**", "codegen.config.json");
+    ctx.writesFiles("dist/**");
     go["go-build"](ctx);
 }
 ```
 
-An explicit `magus\inputs` call defines that target's source footprint; an explicit
-`magus\outputs` call defines its snapshot/replay footprint. Magus retains the
+An explicit `ctx.readsFiles(...)` declaration defines that target's source footprint;
+an explicit `ctx.writesFiles(...)` declaration defines its snapshot/replay footprint.
+Magus retains the
 magusfiles and any spell sources specific to that target, but it does not inherit
 the broad project baseline. This is what lets one target be precise without making
 its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-target)).
 
 ### Files a target edits rather than produces
 
-`ctx.outputs` claims a file magus owns end to end: magus may delete it
-(`magus clean`) and restore it wholesale from a cache snapshot. That is wrong for a
-file the target only edits _part_ of - a hand-written page with a generated region
-between markers, a manifest a tool rewrites in place. Declare those with
-`ctx.updates(...)`:
+The declaration names encode ownership, not merely direction:
+
+| Declaration | File relationship | Cache and clean behavior |
+| --- | --- | --- |
+| `ctx.readsFiles(...)` | the target reads the named files | hashes their current bytes into the cache key |
+| `ctx.writesFiles(...)` | the target creates or replaces complete generated files | snapshots and replays them; `magus clean` may remove them |
+| `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them |
+
+That last case is for a hand-written page with a generated region between markers,
+or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.
 
 ```buzz
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("reference/buzz/*.md");     // produced whole
-    ctx.updates("concepts/spells.md");      // hand-written page, generated table inside
+    ctx.writesFiles("reference/buzz/*.md");          // created and fully owned
+    ctx.modifiesExistingFiles("concepts/spells.md"); // existing page; only the table changes
 }
 ```
 
-An update is **never deleted** by `magus clean` and **never replayed** from a
+`ctx.modifiesExistingFiles` is **never deleted** by `magus clean` and **never replayed** from a
 snapshot, because the bytes magus produced are only part of the file. It still folds
 into the target's cache key exactly as an input does - so editing the prose _around_
 a generated region invalidates the target that maintains that region, which declaring
 the file as an output could not do (an output is excluded from its own source hash).
 
-Unlike `inputs` and `outputs`, an update infers no ordering edge in either direction:
+Unlike reads and writes, a modification infers no ordering edge in either direction:
 "I edit one region of a file someone else authored" says nothing about build order.
 Declare `ctx.needs` if you need it.
 
@@ -125,7 +131,7 @@ body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 **string-literal** globs. Two disciplines follow, both enforced:
 
-- A **non-literal argument** (`ctx.inputs(someVar)`) is a magusfile load error -
+- A **non-literal argument** (`ctx.readsFiles(someVar)`) is a magusfile load error -
   a computed glob is invisible to the static read, and silently dropping it would
   risk a stale hit.
 - A call the walk **can't reach** (in an unreferenced helper, or the identifier
@@ -315,10 +321,10 @@ Without a target declaration, `baseStep` seeds the cache key with the project
 sources, every bound spell's claims, and the magusfile. That conservative default
 keeps an undeclared target safe, but it can make unrelated work invalidate together.
 
-An explicit [`ctx.inputs(...)`](#per-target-inputs-and-outputs) call changes that
+An explicit [`ctx.readsFiles(...)`](#per-target-inputs-and-outputs) call changes that
 contract. It is the target's exact source footprint: magus keeps the magusfiles
 and that target's spell inputs, then hashes only the declared inputs. A
-`ctx.inputs("src/**")` build therefore does not re-run for a sibling Dockerfile.
+`ctx.readsFiles("src/**")` build therefore does not re-run for a sibling Dockerfile.
 Use it when a target has a genuinely narrower domain, and name every source that
 domain reads.
 
@@ -326,11 +332,12 @@ That gives a clean rule for **where to declare a glob**:
 
 - **affects every target** (a shared schema, a project-wide config) -> project-wide
   `magus\project({sources = [...]})`, declared once;
-- **affects one target** -> `ctx.inputs(...)` and `ctx.outputs(...)` in that target's body.
+- **affects one target** -> `ctx.readsFiles(...)`, `ctx.writesFiles(...)`, or
+  `ctx.modifiesExistingFiles(...)` in that target's body, according to the file relationship above.
 
 Outputs are almost always target-specific (`build` -> `dist/`, `test` ->
-`coverage/`), so a project-wide `outputs` - which makes every target snapshot it
-- is usually the wrong tool; prefer `ctx.outputs(...)`.
+`coverage/`), so a project-wide `outputs` - which makes every target snapshot
+it - is usually the wrong tool; prefer `ctx.writesFiles(...)`.
 
 ## Replay: a hit restores outputs, not execution
 

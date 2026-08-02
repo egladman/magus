@@ -6,14 +6,14 @@ tags: [MGS1005, magusfile, cache, outputs, doctor]
 
 # MGS1005: redundant footprint glob
 
-`magus doctor` found a per-target `ctx.outputs(...)` glob already declared in
+`magus doctor` found a per-target `ctx.writesFiles(...)` glob already declared in
 the project's `outputs` option. The per-target copy adds nothing.
 
 ```text
 [MGS1005] 1 per-target magus.outputs glob(s) duplicate a project-wide
 declaration; drop the duplicate (see
 .../MGS1005.md)
-  build: ctx.outputs("dist/**") already in project outputs
+  build: ctx.writesFiles("dist/**") already in project outputs
 ```
 
 ## Why
@@ -31,13 +31,13 @@ Keep the output declaration in exactly one place, chosen by scope:
 - if the glob is relevant to **every** target, keep the project-wide
   `sources`/`outputs` and drop the per-target copy;
 - if it is relevant to **one** target, drop the project-wide declaration and keep
-  `ctx.outputs(...)` in that target's body.
+  `ctx.writesFiles(...)` in that target's body.
 
 ```buzz
 // Before: "dist/**" declared twice - the per-target copy is a no-op.
 magus\project({outputs = ["dist/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("dist/**");
+    ctx.writesFiles("dist/**");
     go["go-build"]();
 }
 
@@ -49,7 +49,7 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 ## What this is NOT
 
 - **Not a hard error.** The duplicate is a no-op; nothing blocks the build.
-- **Not about inputs.** An explicit `ctx.inputs(...)` list narrows the target's
+- **Not about inputs.** An explicit `ctx.readsFiles(...)` list narrows the target's
   cache footprint, so repeating a project source there is valid.
 - **Not subsumption-aware.** This check matches globs exactly. A per-target glob
   that is _subsumed_ by a broader project-wide pattern (`src/config.go` under

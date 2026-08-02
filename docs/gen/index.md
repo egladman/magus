@@ -15,6 +15,12 @@ A fast, cross-platform task orchestrator for polyglot monorepos. One statically 
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
 
+<!-- Recorded by `magus run tapes` from tapes/core-loop.tape; regenerate and commit to refresh. -->
+
+<p align="center">
+  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them in 802ms reporting '0 cached, 4 ran', and the same command run again reports '4 cached, 0 ran' in 130ms, replaying the captured test output from cache." src="./assets/gen/core-loop.gif">
+</p>
+
 ## Why magus exists
 
 The tools you run in a monorepo, you run all day. Build, test, lint, switch

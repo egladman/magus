@@ -69,7 +69,7 @@
           "name": "man-generate",
           "declared": "man_generate",
           "doc": "Renders the roff man pages into manpage/ (repo root).",
-          "outputs": [
+          "writes_files": [
             {
               "glob": "manpage/*.1"
             },
@@ -79,10 +79,50 @@
           ]
         },
         {
+          "name": "changelog-generate",
+          "declared": "changelog_generate",
+          "doc": "CHANGELOG.md is a root artifact.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "releases/*.yaml"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-utils/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "go.work"
+            },
+            {
+              "project": ".",
+              "glob": "go.work.sum"
+            }
+          ],
+          "modifies_existing_files": [
+            {
+              "glob": "CHANGELOG.md"
+            }
+          ]
+        },
+        {
           "name": "types-generate",
           "declared": "types_generate",
           "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
-          "outputs": [
+          "writes_files": [
             {
               "glob": "types/buzzobject_gen.go"
             }
@@ -95,7 +135,7 @@
           "dependencies": [
             "types-generate"
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "internal/interp/bindings/gen/*.go"
             }
@@ -108,7 +148,7 @@
           "dependencies": [
             "types-generate"
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "internal/spellruntime/gen/*.bo"
             },
@@ -124,7 +164,7 @@
           "dependencies": [
             "types-generate"
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "**/gen/mocks/*.go"
             }
@@ -134,7 +174,7 @@
           "name": "skills-generate",
           "declared": "skills_generate",
           "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.",
-          "outputs": [
+          "writes_files": [
             {
               "glob": ".claude/skills/**"
             },
@@ -153,7 +193,7 @@
           "dependencies": [
             "types-generate"
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "cmd/magus/gen/*.go"
             },
@@ -172,7 +212,7 @@
           "name": "md-generate",
           "declared": "md_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
-          "outputs": [
+          "writes_files": [
             {
               "glob": "MAGUS.md"
             }
@@ -182,7 +222,7 @@
           "name": "graph-generate",
           "declared": "graph_generate",
           "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects.",
-          "outputs": [
+          "writes_files": [
             {
               "glob": "gen/*.json"
             }
@@ -210,7 +250,7 @@
               ]
             }
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "go.mod"
             }
@@ -229,6 +269,7 @@
           "dependencies": [
             "mod-sync",
             "man-generate",
+            "changelog-generate",
             "types-generate",
             "bindings-generate",
             "spells-generate",
@@ -240,6 +281,25 @@
           ],
           "charms": [
             "rw"
+          ]
+        },
+        {
+          "name": "tapes",
+          "doc": "Records every VHS tape in tapes/ into assets/gen/.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "tapes/*.tape"
+            },
+            {
+              "project": ".",
+              "glob": "tapes/demo-init.sh"
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "assets/gen/*.gif"
+            }
           ]
         },
         {
@@ -257,7 +317,7 @@
               ]
             }
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "dist/*"
             }
@@ -273,7 +333,7 @@
           "charms": [
             "cd"
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "go.mod"
             }
@@ -317,7 +377,7 @@
               ]
             }
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "assets/coverage.svg"
             }
@@ -568,18 +628,20 @@
         {
           "name": "md-generate",
           "declared": "md_generate",
-          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets."
-        },
-        {
-          "name": "changelog-generate",
-          "declared": "changelog_generate",
-          "doc": "changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.",
-          "spells": [
+          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+          "reads_files": [
             {
-              "spell": "go",
-              "ops": [
-                "go-run"
-              ]
+              "project": "docs",
+              "glob": "magusfile.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "**/magusfile.buzz"
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "MAGUS.md"
             }
           ]
         },
@@ -595,7 +657,69 @@
               ]
             }
           ],
-          "outputs": [
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "std/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "host/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "spells/**/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "internal/spellruntime/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/manpage/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/config/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/render/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/knowledge/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-docs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-spelldocs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-manpage/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-examples/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-skilldocs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/agent/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus/skills/**/*.md"
+            }
+          ],
+          "writes_files": [
             {
               "glob": "reference/buzz/*.md"
             },
@@ -612,7 +736,7 @@
               "glob": "reference/skills/*.md"
             }
           ],
-          "updates": [
+          "modifies_existing_files": [
             {
               "glob": "concepts/spells.md"
             },
@@ -622,20 +746,122 @@
           ]
         },
         {
+          "name": "site-generate",
+          "declared": "site_generate",
+          "doc": "site-generate owns publication.",
+          "charms": [
+            "rw"
+          ],
+          "reads_files": [
+            {
+              "project": "docs",
+              "glob": "render.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "lib/**/*.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "engine/**/*.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "site/**/*.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "**/*.md"
+            },
+            {
+              "project": "docs",
+              "glob": "src/**/*.js"
+            },
+            {
+              "project": "docs",
+              "glob": "src/**/*.ts"
+            },
+            {
+              "project": "docs",
+              "glob": "src/**/*.css"
+            },
+            {
+              "project": "docs",
+              "glob": "playground.html"
+            },
+            {
+              "project": "docs",
+              "glob": "tour/*.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "package.json"
+            },
+            {
+              "project": "docs",
+              "glob": "pnpm-lock.yaml"
+            },
+            {
+              "project": "docs",
+              "glob": "tsconfig.json"
+            },
+            {
+              "project": "docs",
+              "glob": "biome.json"
+            },
+            {
+              "project": "docs",
+              "glob": "retired.urls.lock"
+            },
+            {
+              "project": ".",
+              "glob": "README.md"
+            },
+            {
+              "project": ".",
+              "glob": "CONTRIBUTING.md"
+            },
+            {
+              "project": ".",
+              "glob": "blog/**"
+            },
+            {
+              "project": ".",
+              "glob": "assets/**"
+            },
+            {
+              "project": ".",
+              "glob": "releases/*.yaml"
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "gen/**"
+            },
+            {
+              "glob": "src/gen/**"
+            },
+            {
+              "glob": "active.urls.lock"
+            }
+          ]
+        },
+        {
           "name": "generate",
-          "doc": "generate is the full publication and drift gate.",
+          "doc": "generate is the one public docs publication target.",
           "dependencies": [
             "preflight",
             "content-generate",
             "md-generate",
-            "changelog-generate"
+            "site-generate"
           ],
           "charms": [
             "rw"
           ],
-          "outputs": [
+          "cross_dependencies": [
             {
-              "glob": "active.urls.lock"
+              "project": ".",
+              "target": "changelog-generate"
             }
           ]
         },
@@ -682,7 +908,6 @@
         },
         {
           "name": "ci",
-          "doc": "'ci' is the anchor `magus affected ci` keys off.",
           "dependencies": [
             "generate",
             "lint",
@@ -834,7 +1059,7 @@
               ]
             }
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "go.mod"
             }
@@ -949,7 +1174,7 @@
               ]
             }
           ],
-          "outputs": [
+          "writes_files": [
             {
               "glob": "go.mod"
             }

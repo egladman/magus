@@ -25,7 +25,7 @@ Exec\-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores \-
 Adopt server address as unix:// URL or bare path; default: auto\-detect from MAGUS_DAEMON_SOCKET or scan sock dir
 .TP
 \fB\-\-watch\fR \fIduration\fR
-Poll and reprint at this interval (e.g. \-\-watch=1s); 0 means one\-shot
+Poll and reprint at this interval (minimum 15s; 0 means one\-shot)
 .TP
 \fB\-\-workspace\fR \fIstring\fR
 Workspace root to check for readiness with \-\-probe=readiness (default: any loaded workspace)
@@ -37,16 +37,16 @@ Workspace root to check for readiness with \-\-probe=readiness (default: any loa
 magus status
 .EE
 .PP
-\fILive updates every second\fR
+\fILive updates every 15 seconds\fR
 .PP
 .EX
-magus status --watch=1s
+magus status --watch=15s
 .EE
 .PP
 \fISingle\-line snapshot for a multiplexer sidebar\fR
 .PP
 .EX
-magus status --compact --watch=1s
+magus status --compact --watch=15s
 .EE
 .PP
 \fIInspect a specific running parent\fR
