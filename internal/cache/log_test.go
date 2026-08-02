@@ -177,13 +177,43 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		assertPlain(t, buildRecord("cache.dry.banner"), "dry run - commands shown, not executed")
 	})
 
+	// A planned target renders like an executed one: the label on the glyph line,
+	// the target in the repro command underneath. It carries no duration because
+	// nothing ran, which is the only shape difference from cache.hit/cache.miss.
 	t.Run("cache.dry", func(t *testing.T) {
 		t.Parallel()
-		assertPlain(t, buildRecord(
+		rec := buildRecord(
 			"cache.dry",
+			slog.String("project", "."),
 			slog.String("label", "magus"),
 			slog.String("target", "ci"),
-		), "[dry] magus ci")
+		)
+		assertPlain(t, rec, "[dry] magus")
+		assertPlain(t, rec, "magus run ci")
+	})
+
+	// The dry footer is the same cache.summary event a real run ends with, so
+	// every output format keeps reporting a footer. Only the wording differs:
+	// nothing executed, so cached/ran/failed would all read 0.
+	t.Run("cache.summary dry", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.summary",
+			slog.Bool("dry", true),
+			slog.Int("planned", 3),
+			slog.Int64("elapsed", int64(2*time.Millisecond)),
+		), "summary: dry run - 3 targets would run")
+	})
+
+	// Pluralization is real rather than "target(s)".
+	t.Run("cache.summary dry singular", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.summary",
+			slog.Bool("dry", true),
+			slog.Int("planned", 1),
+			slog.Int64("elapsed", int64(time.Millisecond)),
+		), "1 target would run")
 	})
 
 	t.Run("run.exec", func(t *testing.T) {

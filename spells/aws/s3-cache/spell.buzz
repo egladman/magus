@@ -53,7 +53,12 @@ import "crypto"
 import "std"
 import "os"
 
-export fun mgs_getName() > str { return "s3-cache"; }
+// Named for the product (Amazon S3), not the capability it provides here. Its
+// siblings are named the same way - github-actions, gitlab-ci - and "s3-cache"
+// broke that by describing the job instead of identifying the thing, which reads
+// as a different kind of entity in a list of spells. See
+// CONTRIBUTING.md#naming.
+export fun mgs_getName() > str { return "aws-s3"; }
 
 // A cache backend exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact / prune), which the remote-cache subsystem detects

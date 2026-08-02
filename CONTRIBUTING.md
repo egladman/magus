@@ -102,6 +102,101 @@ magusfile uses, that change ships in a release *before* the magusfile
 change merges. The other way around is a breaking-change signal, not
 something to paper over.
 
+## Naming
+
+Names are the API most people meet first, so they get decided deliberately
+rather than by whatever the file was called. From the outside the results can
+look arbitrary - `go` lives in `spells/golang/`, `ls` and `describe` both list
+things - so here is the reasoning, which is not arbitrary.
+
+### Source layout and registered identity are independent
+
+A spell's directory and the name it registers answer different questions, and
+they are allowed to differ.
+
+The **directory** is where a contributor finds the code. The **registered name**
+(`mgs_getName`) is the identity users type and every listing prints.
+
+```text
+spells/golang/          <- idiomatic directory name for Go source
+  registers "go"        <- the language's actual name
+```
+
+Both are right. `golang` is the conventional directory spelling; `go` is what
+the language is called. Forcing one to match the other would make one of them
+wrong. Do not "fix" a mismatch on sight - check which question each is
+answering first.
+
+### A registered name has to stand alone
+
+The registered name appears in `magus describe spells`, in diagnostics, and in
+error text, always without the directory around it to supply context. So it must
+be unambiguous on its own:
+
+- **Name the thing, not the job it does here.** The S3 backend registers
+  `aws-s3`, not `s3-cache`. Its siblings are named for products, and a
+  capability name reads as a different kind of entity in the same list.
+- **Qualify when the bare word names nothing.** `spells/github/actions/`
+  registers `github-actions`, not `actions` - "GitHub Actions" is the product's
+  real name, and `actions` alone identifies nothing.
+- **Never take a word the core model already owns.** `spells/gitlab/ci/` used to
+  register `ci`, which collides with the `ci` *target* that `magus affected ci`
+  anchors on. A listing then showed a `ci` spell beside a `ci` target meaning
+  entirely different things. It registers `gitlab-ci`.
+
+### One verb, one job
+
+Subcommands are split by the question they answer, not by the noun they touch,
+so two verbs never differ only in verbosity:
+
+- **`ls` enumerates.** Breadth. What exists here, what can I run. Everyday.
+- **`describe` explains one thing fully.** Depth. A definition plus the complete
+  record. Occasional.
+
+That is why `magus ls` shows targets but not source globs: the globs are the
+full record, which is `magus describe project`'s job, and printing them in both
+would make the boundary mush. When adding output, ask which question it answers
+and put it in exactly one place.
+
+Prefer a **noun on an existing verb** over a new subcommand. `magus ls targets`
+rather than `magus targets`, because the latter invites `magus spells`, then
+`magus charms`, and the surface becomes a pile of noun-commands with no rule to
+learn. One verb, a noun that says what.
+
+Enumeration is spelled `ls` everywhere - `magus ls`, `magus run ls`,
+`magus memory ls` - never `list`.
+
+### Package names mirror the contract they serve
+
+Where a package exists to serve one wire contract, it takes that contract's name,
+so the two are correlated by reading rather than by grep. A wire-mapping
+subpackage `internal/handler/<name>` owns the over-the-wire concerns of the
+protobuf package `magus.<name>.v1`:
+
+```text
+proto/magus/graph/v1     <->  internal/handler/graph
+proto/magus/status/v1    <->  internal/handler/status
+proto/magus/viewer/v1    <->  internal/handler/viewer
+```
+
+Adding `proto/magus/foo/v1` means adding `internal/handler/foo` - same name, no
+exceptions for the wire packages. Two subpackages there are deliberately not
+proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
+`trailrpc` is a transport concern.
+
+[`internal/handler/README.md`](https://github.com/egladman/magus/blob/main/internal/handler/README.md) is the authority and
+carries the full table plus what does and does not belong in the layer; keep the
+rule there rather than restating it per package.
+
+### Hints belong in `clihint`
+
+A command path printed inside output goes through
+`internal/interactive/clihint`, never a string literal. A drift test walks every
+registered command and asserts it still resolves, so a rename cannot leave a
+hint pointing at a command that no longer exists. That has already happened once:
+a failing target printed `magus query <ref>` long after the command became
+`magus query output <ref>`.
+
 ## Workflow targets, not inline shell
 
 The GitHub Actions workflow files are intentionally thin. Every meaningful

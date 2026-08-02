@@ -836,13 +836,13 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	// positional, so a filtered slice would hand a spell another spell's claims.
 	if only := magusfileOverride(p, resolved, target); only >= 0 {
 		if err := dispatch(ctx, only, resolved[only]); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: resolved[only].Name(), Err: err}}}
+			return spellErr(p, target, types.SpellFailure{Spell: resolved[only].Name(), Err: err})
 		}
 		return nil
 	}
 	if len(resolved) == 1 {
 		if err := dispatch(ctx, 0, resolved[0]); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: resolved[0].Name(), Err: err}}}
+			return spellErr(p, target, types.SpellFailure{Spell: resolved[0].Name(), Err: err})
 		}
 		return nil
 	}
@@ -856,7 +856,7 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 		if len(failed) == 0 {
 			return nil
 		}
-		return &types.SpellErrors{Project: p.Path, Target: target, Failed: failed}
+		return spellErr(p, target, failed...)
 	}
 
 	lim := cache.LimiterFromContext(ctx)
@@ -906,7 +906,20 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	if len(failed) == 0 {
 		return nil
 	}
-	return &types.SpellErrors{Project: p.Path, Target: target, Failed: failed}
+	return spellErr(p, target, failed...)
+}
+
+// spellErr builds the aggregate error for a target's spell failures. It exists so
+// every construction site carries the project's DISPLAY label alongside its path:
+// the path of a root project is ".", and a message built from it read "magus lint
+// .:", where the dot lands as punctuation rather than as the project it names.
+func spellErr(p *types.Project, target string, failed ...types.SpellFailure) *types.SpellErrors {
+	return &types.SpellErrors{
+		Project:      p.Path,
+		ProjectLabel: types.ProjectDisplayName(p.Path, p.Name, p.Dir),
+		Target:       target,
+		Failed:       failed,
+	}
 }
 
 // forSpellNamed is like forEachSpell but targets only the spell whose Name
@@ -922,7 +935,7 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 			pctx = types.WithEffectiveClaims(ctx, effective)
 		}
 		if err := fn(pctx, s); err != nil {
-			return &types.SpellErrors{Project: p.Path, Target: target, Failed: []types.SpellFailure{{Spell: s.Name(), Err: err}}}
+			return spellErr(p, target, types.SpellFailure{Spell: s.Name(), Err: err})
 		}
 		return nil
 	}

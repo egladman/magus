@@ -40,7 +40,11 @@ import "serialize"
 import "os"
 import "std"
 
-export fun mgs_getName() > str { return "actions"; }
+// "GitHub Actions" is the product's canonical name; the bare leaf "actions" named
+// nothing on its own, and a spell's registered name has to stand alone - it is
+// what `magus describe spells` and every diagnostic show, with no directory
+// around it to supply the vendor. See CONTRIBUTING.md#naming.
+export fun mgs_getName() > str { return "github-actions"; }
 
 // A cache backend exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact), which the remote-cache subsystem detects by name

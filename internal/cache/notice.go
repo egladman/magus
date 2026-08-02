@@ -3,6 +3,7 @@ package cache
 import (
 	"bufio"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -57,22 +58,10 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 		return nil, 0
 	}
 
-	important := func(line string) bool {
-		line = strings.ToLower(strings.TrimSpace(line))
-		return strings.Contains(line, "error") ||
-			strings.Contains(line, "fatal") ||
-			strings.Contains(line, "panic") ||
-			strings.Contains(line, "fail") ||
-			strings.Contains(line, "mismatch") ||
-			strings.Contains(line, "undefined") ||
-			strings.Contains(line, "not found") ||
-			strings.Contains(line, "cannot ")
-	}
-
 	selected := make([]bool, len(lines))
 	count := 0
 	for i, line := range lines {
-		if !important(line) {
+		if !diagnosticLine.MatchString(line) {
 			continue
 		}
 		for j := max(0, i-1); j <= min(len(lines)-1, i+1); j++ {
@@ -87,15 +76,36 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 		return []byte(strings.Join(lines[start:], "\n") + "\n"), start
 	}
 
+	// Over budget, keep the LAST matches rather than the first. A tool prints its
+	// setup before it prints what went wrong, so filling the budget from the top
+	// spends it on whatever merely looked diagnostic early on and drops the actual
+	// failure - the one line the reader opened the output for.
 	var out []string
 	for i, line := range lines {
-		if !selected[i] {
-			continue
+		if selected[i] {
+			out = append(out, line)
 		}
-		if len(out) == limit {
-			break
-		}
-		out = append(out, line)
+	}
+	if len(out) > limit {
+		out = out[len(out)-limit:]
 	}
 	return []byte(strings.Join(out, "\n") + "\n"), len(lines) - len(out)
 }
+
+// diagnosticLine matches a line that looks like a real diagnostic.
+//
+// The keywords have to land as WHOLE WORDS that are not part of a path or
+// identifier, which is the whole subtlety here. A substring test for "error" put
+// this into the excerpt of every failing run in this repo:
+//
+//	{
+//	    "Path": "github.com/pkg/errors",
+//	    "Version": "v0.9.1",
+//
+// - an ordinary go.mod dependency, matched because its import path ends in
+// "errors", with the surrounding JSON dragged in as context. So the character
+// before and after a keyword must not be a word character, "/", "." or "-":
+// that rejects "pkg/errors", "go-errors" and "errors.go" while still accepting
+// "2 errors occurred", "error:" and "--- FAIL:".
+var diagnosticLine = regexp.MustCompile(
+	`(?i)(^|[^\w/.\-])(errors?|fatal|panics?|fail(s|ed|ure|ures)?|mismatch|undefined|not found|cannot)($|[^\w/.\-])`)

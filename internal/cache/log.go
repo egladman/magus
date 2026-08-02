@@ -297,16 +297,22 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.status.queued = recordInt(r, "queued")
 		h.paintStatus()
 	case "cache.summary":
-		cached := recordInt(r, "hits")
-		ran := recordInt(r, "misses")
-		failed := recordInt(r, "errors")
 		elapsed := recordDur(r, "elapsed")
+		// A dry run ends with the same footer a real one does - that is the whole
+		// point of routing it through this event - but it cannot borrow the real
+		// wording: nothing executed, so "cached / ran / failed" would all read 0
+		// for a plan that intends to run plenty. Dry-ness is stated here and
+		// nowhere else in the run, so the two outputs differ in one line.
+		lead := "summary: "
 		if colorize {
-			h.printf("\nSummary: %d cached, %d ran, %d failed (%s)\n",
-				cached, ran, failed, fmtDur(elapsed))
+			lead = "\nSummary: "
+		}
+		if recordBool(r, "dry") {
+			h.printf("%sdry run - %s would run (%s)\n",
+				lead, plural(recordInt(r, "planned"), "target"), fmtDur(elapsed))
 		} else {
-			h.printf("summary: %d cached, %d ran, %d failed (%s)\n",
-				cached, ran, failed, fmtDur(elapsed))
+			h.printf("%s%d cached, %d ran, %d failed (%s)\n",
+				lead, recordInt(r, "hits"), recordInt(r, "misses"), recordInt(r, "errors"), fmtDur(elapsed))
 		}
 		// End of run: release the sticky error region so the user's
 		// shell prompt returns to a clean full-screen terminal. Safe
@@ -319,8 +325,12 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			h.printf("dry run - commands shown, not executed\n")
 		}
 	case "cache.dry":
-		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes).
-		h.printf("%s %s %s\n", h.glyph(colorize, "dry", colDim), label, recordStr(r, "target"))
+		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes), and
+		// no duration for the same reason. Everything else matches the executed
+		// line - including the repro command underneath - so a plan and a run read
+		// the same way and only the glyph and the footer say which one you got.
+		h.printf("%s %s\n", h.glyph(colorize, "dry", colDim), label)
+		h.printRepro(colorize, recordStr(r, "project"), recordStr(r, "target"))
 	case "cache.scope":
 		label := recordStr(r, "label")
 		source := recordStr(r, "source")
@@ -596,6 +606,28 @@ func fmtDur(d time.Duration) string {
 	default:
 		return d.Round(time.Second).String()
 	}
+}
+
+// plural renders a count with its noun, pluralized. Written out rather than
+// emitted as "target(s)": the parenthesized form is a writer refusing to pick,
+// and it lands in output a reader is already scanning under pressure.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func recordBool(r slog.Record, key string) bool {
+	var v bool
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			v = a.Value.Bool()
+			return false
+		}
+		return true
+	})
+	return v
 }
 
 func recordInt(r slog.Record, key string) int {

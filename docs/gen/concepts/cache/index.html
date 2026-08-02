@@ -180,36 +180,61 @@ were never outputs.</li>
 can't feed back into its own key.</p>
 <h3 id="per-target-inputs-and-outputs">Per-target inputs and outputs</h3>
 <p>A spell contributes its globs to <em>every</em> target on the project. To attach a glob
-to <em>one</em> target, declare it in that target's body with <code>ctx.inputs(...)</code> /
-<code>ctx.outputs(...)</code>:</p>
+to <em>one</em> target, declare it in that target's body with <code>ctx.readsFiles(...)</code> /
+<code>ctx.writesFiles(...)</code>:</p>
 <pre><code class="language-buzz">export fun build(ctx: magus\Context, args: [str]) &gt; void {
-    ctx.inputs(&quot;schema/**&quot;, &quot;codegen.config.json&quot;);
-    ctx.outputs(&quot;dist/**&quot;);
+    ctx.readsFiles(&quot;schema/**&quot;, &quot;codegen.config.json&quot;);
+    ctx.writesFiles(&quot;dist/**&quot;);
     go[&quot;go-build&quot;](ctx);
 }
 </code></pre>
-<p>An explicit <code>magus\inputs</code> call defines that target's source footprint; an explicit
-<code>magus\outputs</code> call defines its snapshot/replay footprint. Magus retains the
+<p>An explicit <code>ctx.readsFiles(...)</code> declaration defines that target's source footprint;
+an explicit <code>ctx.writesFiles(...)</code> declaration defines its snapshot/replay footprint.
+Magus retains the
 magusfiles and any spell sources specific to that target, but it does not inherit
 the broad project baseline. This is what lets one target be precise without making
 its siblings under-declared (see <a href="#granularity-project-wide-vs-per-target">Granularity</a>).</p>
 <h3 id="files-a-target-edits-rather-than-produces">Files a target edits rather than produces</h3>
-<p><code>ctx.outputs</code> claims a file magus owns end to end: magus may delete it
-(<code>magus clean</code>) and restore it wholesale from a cache snapshot. That is wrong for a
-file the target only edits <em>part</em> of - a hand-written page with a generated region
-between markers, a manifest a tool rewrites in place. Declare those with
-<code>ctx.updates(...)</code>:</p>
+<p>The declaration names encode <a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>, not merely direction:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Declaration</th>
+<th>File relationship</th>
+<th>Cache and clean behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ctx.readsFiles(...)</code></td>
+<td>the target reads the named files</td>
+<td>hashes their current bytes into the cache key</td>
+</tr>
+<tr>
+<td><code>ctx.writesFiles(...)</code></td>
+<td>the target creates or replaces complete generated files</td>
+<td>snapshots and replays them; <code>magus clean</code> may remove them</td>
+</tr>
+<tr>
+<td><code>ctx.modifiesExistingFiles(...)</code></td>
+<td>the files already exist and the target changes only part of each one</td>
+<td>hashes their current bytes, but never snapshots, replays, or removes them</td>
+</tr>
+</tbody>
+</table></figure>
+<p>That last case is for a hand-written page with a generated region between markers,
+or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.</p>
 <pre><code class="language-buzz">export fun content_generate(ctx: magus\Context, args: [str]) &gt; void {
-    ctx.outputs(&quot;reference/buzz/*.md&quot;);     // produced whole
-    ctx.updates(&quot;concepts/spells.md&quot;);      // hand-written page, generated table inside
+    ctx.writesFiles(&quot;reference/buzz/*.md&quot;);          // created and fully owned
+    ctx.modifiesExistingFiles(&quot;concepts/spells.md&quot;); // existing page; only the table changes
 }
 </code></pre>
-<p>An update is <strong>never deleted</strong> by <code>magus clean</code> and <strong>never replayed</strong> from a
+<p><code>ctx.modifiesExistingFiles</code> is <strong>never deleted</strong> by <code>magus clean</code> and <strong>never replayed</strong> from a
 snapshot, because the bytes magus produced are only part of the file. It still folds
 into the target's cache key exactly as an input does - so editing the prose <em>around</em>
 a generated region invalidates the target that maintains that region, which declaring
 the file as an output could not do (an output is excluded from its own source hash).</p>
-<p>Unlike <code>inputs</code> and <code>outputs</code>, an update infers no ordering edge in either direction:
+<p>Unlike reads and writes, a modification infers no ordering edge in either direction:
 &quot;I edit one region of a file someone else authored&quot; says nothing about build order.
 Declare <code>ctx.needs</code> if you need it.</p>
 <p>The globs are read <strong>statically</strong>, before the target runs - a cache hit skips the
@@ -217,7 +242,7 @@ body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 <strong>string-literal</strong> globs. Two disciplines follow, both enforced:</p>
 <ul>
-<li>A <strong>non-literal argument</strong> (<code>ctx.inputs(someVar)</code>) is a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error -
+<li>A <strong>non-literal argument</strong> (<code>ctx.readsFiles(someVar)</code>) is a <a class="glossary-term" href="../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error -
 a computed glob is invisible to the static read, and silently dropping it would
 risk a stale hit.</li>
 <li>A call the walk <strong>can't reach</strong> (in an unreferenced helper, or the identifier
@@ -407,23 +432,22 @@ mirror that must not accumulate local entries.</p>
 <p>Without a target declaration, <code>baseStep</code> seeds the cache key with the project
 sources, every bound spell's claims, and the magusfile. That conservative default
 keeps an undeclared target safe, but it can make unrelated work invalidate together.</p>
-<p>An explicit <a href="#per-target-inputs-and-outputs"><code>ctx.inputs(...)</code></a> call changes that
+<p>An explicit <a href="#per-target-inputs-and-outputs"><code>ctx.readsFiles(...)</code></a> call changes that
 contract. It is the target's exact source footprint: magus keeps the magusfiles
 and that target's spell inputs, then hashes only the declared inputs. A
-<code>ctx.inputs(&quot;src/**&quot;)</code> build therefore does not re-run for a sibling Dockerfile.
+<code>ctx.readsFiles(&quot;src/**&quot;)</code> build therefore does not re-run for a sibling Dockerfile.
 Use it when a target has a genuinely narrower domain, and name every source that
 domain reads.</p>
 <p>That gives a clean rule for <strong>where to declare a glob</strong>:</p>
 <ul>
 <li><strong>affects every target</strong> (a shared schema, a project-wide <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>) -&gt; project-wide
 <code>magus\project({sources = [...]})</code>, declared once;</li>
-<li><strong>affects one target</strong> -&gt; <code>ctx.inputs(...)</code> and <code>ctx.outputs(...)</code> in that target's body.</li>
+<li><strong>affects one target</strong> -&gt; <code>ctx.readsFiles(...)</code>, <code>ctx.writesFiles(...)</code>, or
+<code>ctx.modifiesExistingFiles(...)</code> in that target's body, according to the file relationship above.</li>
 </ul>
 <p>Outputs are almost always target-specific (<code>build</code> -&gt; <code>dist/</code>, <code>test</code> -&gt;
-<code>coverage/</code>), so a project-wide <code>outputs</code> - which makes every target snapshot it</p>
-<ul>
-<li>is usually the wrong tool; prefer <code>ctx.outputs(...)</code>.</li>
-</ul>
+<code>coverage/</code>), so a project-wide <code>outputs</code> - which makes every target snapshot
+it - is usually the wrong tool; prefer <code>ctx.writesFiles(...)</code>.</p>
 <h2 id="replay-a-hit-restores-outputs-not-execution">Replay: a hit restores outputs, not execution</h2>
 <p>On a run, magus computes the key, then looks for a manifest stored under it:</p>
 <ol>
@@ -481,7 +505,7 @@ or a broken <code>magus clean</code>, so the model is worth stating once.</p>
 </table></figure>
 <p>The cache role is per-target on purpose. A miss snapshots exactly the outputs in
 that target's <code>Step</code>, and a hit replays exactly those - so an output must be
-declared on the target that <strong>produces</strong> it. This is the <strong>producer-<a class="glossary-term" href="../../glossary/#ownership" data-def="An insight lens: author concentration - the primary author and their share, the distinct-author count (the bus factor), and abandonment.">ownership</a>
+declared on the target that <strong>produces</strong> it. This is the <strong>producer-ownership
 rule</strong>, and violating it is a real bug, not a style nit: a glob declared
 project-wide is in <em>every</em> cacheable target's <code>Step.Outputs</code>, including targets
 that never write it. When one of those unrelated targets gets a cache hit, its
@@ -641,7 +665,7 @@ on.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../search/?q=tag%3A%22needs%22">needs</a><a class="tag" href="../../search/?q=tag%3A%22provides%22">provides</a><a class="tag" href="../../search/?q=tag%3A%22claims%22">claims</a><a class="tag" href="../../search/?q=tag%3A%22cache-key%22">cache-key</a><a class="tag" href="../../search/?q=tag%3A%22invalidation%22">invalidation</a><a class="tag" href="../../search/?q=tag%3A%22replay%22">replay</a><a class="tag" href="../../search/?q=tag%3A%22content-addressed%22">content-addressed</a></div>
-    <small>Last updated <time datetime="2026-07-30T19:08:00Z">July 30, 2026, 7:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292" data-tooltip="3e1b75ad3c15540050d36b2d7c67372f8e3ad292" title="3e1b75ad3c15540050d36b2d7c67372f8e3ad292">3e1b75ad</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b"><code>15118091</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - the execution context work into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-02T01:05:00Z">August 2, 2026, 1:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3da15dc98bfbc41b8c59289da5ee04e809d12fa9" data-tooltip="3da15dc98bfbc41b8c59289da5ee04e809d12fa9" title="3da15dc98bfbc41b8c59289da5ee04e809d12fa9">3da15dc9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292"><code>3e1b75ad</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - the agent harness generator layout</li><li><a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b"><code>15118091</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - the execution context work into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/cache.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/cache.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

@@ -215,7 +215,7 @@ func ghaBackend(t *testing.T) *spellRemoteBackend {
 	}
 	drv, err := resolveBackendSpell(context.Background(), path)
 	require.NoError(t, err, "load github spell")
-	require.Equal(t, "actions", drv.Name(), "spell name")
+	require.Equal(t, "github-actions", drv.Name(), "spell name")
 	return &spellRemoteBackend{drv: drv}
 }
 
@@ -574,13 +574,13 @@ func TestDedupStrings(t *testing.T) {
 
 func s3Backend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "s3-cache", "spell.buzz")
+	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "aws-s3", "spell.buzz")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("s3 spell not found at %s: %v", path, err)
 	}
 	drv, err := resolveBackendSpell(context.Background(), path)
 	require.NoError(t, err, "load s3 spell")
-	require.Equal(t, "s3-cache", drv.Name(), "spell name")
+	require.Equal(t, "aws-s3", drv.Name(), "spell name")
 	return &spellRemoteBackend{drv: drv}
 }
 

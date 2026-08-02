@@ -11,18 +11,32 @@ import (
 // instead of "\x1b[2K" and a wrong sequence is a compile error in one
 // place rather than a rendering bug in three.
 const (
-	cupFmt        = "\x1b[%d;%dH" // CUP - cursor position (row, col).
-	el            = "\x1b[K"      // EL - erase from cursor to end of line.
-	el2           = "\x1b[2K"     // EL - erase the whole line, cursor unmoved.
-	ed            = "\x1b[J"      // ED - erase from cursor to end of screen.
-	cuu1          = "\x1b[1A"     // CUU - cursor up one row.
-	cuuFmt        = "\x1b[%dA"    // CUU - cursor up n rows.
-	home          = "\x1b[H"      // CUP with no args - cursor to row 1, col 1.
-	ed2           = "\x1b[2J"     // ED - erase the entire screen.
-	decstbmFmt    = "\x1b[%d;%dr" // DECSTBM - set scroll margins (top, bottom).
-	decstbmReset  = "\x1b[r"      // DECSTBM reset (whole screen scrollable).
-	cursorSave    = "\x1b[s"
-	cursorRestore = "\x1b[u"
+	cupFmt       = "\x1b[%d;%dH" // CUP - cursor position (row, col).
+	el           = "\x1b[K"      // EL - erase from cursor to end of line.
+	el2          = "\x1b[2K"     // EL - erase the whole line, cursor unmoved.
+	ed           = "\x1b[J"      // ED - erase from cursor to end of screen.
+	cuu1         = "\x1b[1A"     // CUU - cursor up one row.
+	cuuFmt       = "\x1b[%dA"    // CUU - cursor up n rows.
+	home         = "\x1b[H"      // CUP with no args - cursor to row 1, col 1.
+	ed2          = "\x1b[2J"     // ED - erase the entire screen.
+	decstbmFmt   = "\x1b[%d;%dr" // DECSTBM - set scroll margins (top, bottom).
+	decstbmReset = "\x1b[r"      // DECSTBM reset (whole screen scrollable).
+	// DECSC / DECRC - save and restore the cursor. Deliberately the ESC 7 / ESC 8
+	// forms rather than the CSI s / CSI u ones this package used to emit.
+	//
+	// CSI s / CSI u are the ANSI.SYS (SCO) spelling, and they are not universally
+	// implemented: emacs `term` ignores both, so every "cursor-transparent" repaint
+	// silently was not - the cursor stayed wherever the paint left it. Worse, xterm
+	// reads CSI s as DECSLRM (set left/right margin) once margin mode is on, and
+	// this package is in the business of setting margins, so the one sequence meant
+	// to protect the cursor could instead reconfigure the terminal.
+	//
+	// ESC 7 / ESC 8 are the VT100 originals and are what xterm, iTerm2, Terminal.app,
+	// tmux, kitty, alacritty, vte and emacs all implement. They also save the SGR
+	// state and charset alongside the position, which is a superset of what the
+	// CSI pair claimed to do.
+	cursorSave    = "\x1b7"
+	cursorRestore = "\x1b8"
 	sgrFmt        = "\x1b[%sm"
 	sgrReset      = "\x1b[0m"
 	sgrBoldRed    = "\x1b[1;31m"

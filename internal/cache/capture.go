@@ -61,14 +61,28 @@ func (c *lineEmitter) emit(stream, text string) {
 // lineTap passes writes through to dest verbatim, then buffers and splits them into
 // newline-terminated lines, emitting one event per complete line. A trailing partial
 // line is emitted by flush() after the run finishes.
+//
+// Safe for concurrent use, which is a requirement rather than a courtesy: ONE pair of
+// taps is put on the context for a whole target body (captureRun), and a target that
+// fans out - `ctx.needs(lint, test)`, the shape every `ci` target has - runs those
+// children concurrently, so several goroutines reach the same tap. Unguarded, two
+// writers tore the buf slice header and magus PANICKED mid-run with
+// "slice bounds out of range [128:0]" at the reslice below, killing the writer
+// goroutine and leaving the child process reporting a broken pipe as `exit -1`.
+// (The shared log sink beside this already had the same guard via syncWriter; the
+// per-stream buffer here was missed.)
 type lineTap struct {
 	c      *lineEmitter
 	dest   io.Writer
 	stream string
-	buf    []byte
+
+	mu  sync.Mutex
+	buf []byte
 }
 
 func (t *lineTap) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	n, err := t.dest.Write(p) // verbatim passthrough first - terminal/logF unchanged
 	t.buf = append(t.buf, p[:n]...)
 	for {
@@ -84,6 +98,8 @@ func (t *lineTap) Write(p []byte) (int, error) {
 
 // flush emits any buffered bytes not terminated by a newline (a final partial line).
 func (t *lineTap) flush() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if len(t.buf) > 0 {
 		t.c.emit(t.stream, string(t.buf))
 		t.buf = nil

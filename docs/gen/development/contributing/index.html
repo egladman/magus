@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#dogfooding-how-magus-builds-magus" title="Dogfooding: how magus builds magus">Dogfooding: how magus builds magus</a></li><li><a href="#workflow-targets-not-inline-shell" title="Workflow targets, not inline shell">Workflow targets, not inline shell</a></li><li><a href="#workspace-references-workspacepath-and-friends" title="Workspace references: workspace://path and friends">Workspace references: workspace://path and friends</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
+        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#dogfooding-how-magus-builds-magus" title="Dogfooding: how magus builds magus">Dogfooding: how magus builds magus</a></li><li><a href="#naming" title="Naming">Naming</a><ul><li><a href="#source-layout-and-registered-identity-are-independent" title="Source layout and registered identity are independent">Source layout and registered identity are independent</a></li><li><a href="#a-registered-name-has-to-stand-alone" title="A registered name has to stand alone">A registered name has to stand alone</a></li><li><a href="#one-verb-one-job" title="One verb, one job">One verb, one job</a></li><li><a href="#package-names-mirror-the-contract-they-serve" title="Package names mirror the contract they serve">Package names mirror the contract they serve</a></li><li><a href="#hints-belong-in-clihint" title="Hints belong in clihint">Hints belong in clihint</a></li></ul></li><li><a href="#workflow-targets-not-inline-shell" title="Workflow targets, not inline shell">Workflow targets, not inline shell</a></li><li><a href="#workspace-references-workspacepath-and-friends" title="Workspace references: workspace://path and friends">Workspace references: workspace://path and friends</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -153,6 +153,80 @@ fallback carries a supply-chain gate - the commit must be reachable from
 magusfile uses, that change ships in a release <em>before</em> the magusfile
 change merges. The other way around is a breaking-change signal, not
 something to paper over.</p>
+<h2 id="naming">Naming</h2>
+<p>Names are the API most people meet first, so they get decided deliberately
+rather than by whatever the file was called. From the outside the results can
+look arbitrary - <code>go</code> lives in <code>spells/golang/</code>, <code>ls</code> and <code>describe</code> both list
+things - so here is the reasoning, which is not arbitrary.</p>
+<h3 id="source-layout-and-registered-identity-are-independent">Source layout and registered identity are independent</h3>
+<p>A spell's directory and the name it registers answer different questions, and
+they are allowed to differ.</p>
+<p>The <strong>directory</strong> is where a contributor finds the code. The <strong>registered name</strong>
+(<code>mgs_getName</code>) is the identity users type and every listing prints.</p>
+<pre><code class="language-text">spells/golang/          &lt;- idiomatic directory name for Go source
+  registers &quot;go&quot;        &lt;- the language's actual name
+</code></pre>
+<p>Both are right. <code>golang</code> is the conventional directory spelling; <code>go</code> is what
+the language is called. Forcing one to match the other would make one of them
+wrong. Do not &quot;fix&quot; a mismatch on sight - check which question each is
+answering first.</p>
+<h3 id="a-registered-name-has-to-stand-alone">A registered name has to stand alone</h3>
+<p>The registered name appears in <code>magus describe spells</code>, in diagnostics, and in
+error text, always without the directory around it to supply context. So it must
+be unambiguous on its own:</p>
+<ul>
+<li><strong>Name the thing, not the job it does here.</strong> The S3 backend registers
+<code>aws-s3</code>, not <code>s3-cache</code>. Its siblings are named for products, and a
+capability name reads as a different kind of entity in the same list.</li>
+<li><strong>Qualify when the bare word names nothing.</strong> <code>spells/github/actions/</code>
+registers <code>github-actions</code>, not <code>actions</code> - &quot;GitHub Actions&quot; is the product's
+real name, and <code>actions</code> alone identifies nothing.</li>
+<li><strong>Never take a word the core model already owns.</strong> <code>spells/gitlab/ci/</code> used to
+register <code>ci</code>, which collides with the <code>ci</code> <em>target</em> that <code>magus affected ci</code>
+anchors on. A listing then showed a <code>ci</code> spell beside a <code>ci</code> target meaning
+entirely different things. It registers <code>gitlab-ci</code>.</li>
+</ul>
+<h3 id="one-verb-one-job">One verb, one job</h3>
+<p>Subcommands are split by the question they answer, not by the noun they touch,
+so two verbs never differ only in verbosity:</p>
+<ul>
+<li><strong><code>ls</code> enumerates.</strong> Breadth. What exists here, what can I run. Everyday.</li>
+<li><strong><code>describe</code> explains one thing fully.</strong> Depth. A definition plus the complete
+record. Occasional.</li>
+</ul>
+<p>That is why <code>magus ls</code> shows targets but not source globs: the globs are the
+full record, which is <code>magus describe project</code>'s job, and printing them in both
+would make the boundary mush. When adding output, ask which question it answers
+and put it in exactly one place.</p>
+<p>Prefer a <strong>noun on an existing verb</strong> over a new subcommand. <code>magus ls targets</code>
+rather than <code>magus targets</code>, because the latter invites <code>magus spells</code>, then
+<code>magus charms</code>, and the surface becomes a pile of noun-commands with no rule to
+learn. One verb, a noun that says what.</p>
+<p>Enumeration is spelled <code>ls</code> everywhere - <code>magus ls</code>, <code>magus run ls</code>,
+<code>magus memory ls</code> - never <code>list</code>.</p>
+<h3 id="package-names-mirror-the-contract-they-serve">Package names mirror the contract they serve</h3>
+<p>Where a package exists to serve one wire contract, it takes that contract's name,
+so the two are correlated by reading rather than by grep. A wire-mapping
+subpackage <code>internal/handler/&lt;name&gt;</code> owns the over-the-wire concerns of the
+protobuf package <code>magus.&lt;name&gt;.v1</code>:</p>
+<pre><code class="language-text">proto/magus/graph/v1     &lt;-&gt;  internal/handler/graph
+proto/magus/status/v1    &lt;-&gt;  internal/handler/status
+proto/magus/viewer/v1    &lt;-&gt;  internal/handler/viewer
+</code></pre>
+<p>Adding <code>proto/magus/foo/v1</code> means adding <code>internal/handler/foo</code> - same name, no
+exceptions for the wire packages. Two subpackages there are deliberately not
+proto-backed and so are not part of the mapping: <code>mcp</code> is a protocol adapter and
+<code>trailrpc</code> is a transport concern.</p>
+<p><a href="https://github.com/egladman/magus/blob/main/internal/handler/README.md" rel="noopener noreferrer" target="_blank" data-external><code>internal/handler/README.md</code></a> is the authority and
+carries the full table plus what does and does not belong in the layer; keep the
+rule there rather than restating it per package.</p>
+<h3 id="hints-belong-in-clihint">Hints belong in <code>clihint</code></h3>
+<p>A command path printed inside output goes through
+<code>internal/interactive/clihint</code>, never a string literal. A drift test walks every
+registered command and asserts it still resolves, so a rename cannot leave a
+hint pointing at a command that no longer exists. That has already happened once:
+a failing target printed <code>magus query &lt;ref&gt;</code> long after the command became
+<code>magus query output &lt;ref&gt;</code>.</p>
 <h2 id="workflow-targets-not-inline-shell">Workflow targets, not inline shell</h2>
 <p>The GitHub Actions workflow files are intentionally thin. Every meaningful
 CI operation lives in a target in <code>magusfile.buzz</code>, not in a workflow YAML

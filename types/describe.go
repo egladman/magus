@@ -52,12 +52,21 @@ type Spell struct {
 	// than a literal import would lose its target-uses-spell edge and under-report the
 	// graph silently. Carrying the path keeps discovery dynamic and the import static:
 	// look the spell up, read what to write, then write it.
-	BuzzImport string   `json:"buzz_import"       yaml:"buzz_import"`
-	Sources    []string `json:"sources,omitempty" yaml:"sources,omitempty"`
-	Outputs    []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	Claims     []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
-	Targets    []string `json:"targets,omitempty" yaml:"targets,omitempty"`
-	Opaque     bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
+	BuzzImport string `json:"buzz_import"       yaml:"buzz_import"`
+	// BuiltIn reports whether this spell ships compiled into the binary, reachable
+	// from any workspace as `import "magus/spell/<name>"`.
+	//
+	// False means it is a spell THIS workspace loaded from a path
+	// (`import "spells/github/actions" as github`), registered when the magusfile
+	// evaluated. Both end up in the same registry, so a listing that did not
+	// distinguish them showed `github-actions` beside `go` as though a reader could
+	// import it by handle and find it documented - they cannot, on either count.
+	BuiltIn bool     `json:"built_in"          yaml:"built_in"`
+	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
+	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
+	Claims  []string `json:"claims,omitempty"  yaml:"claims,omitempty"`
+	Targets []string `json:"targets,omitempty" yaml:"targets,omitempty"`
+	Opaque  bool     `json:"opaque,omitempty" yaml:"opaque,omitempty"`
 	// Language is the canonical source language the spell adapts (e.g. "go",
 	// "typescript"), empty for a spell tied to no single language. It tags the spell
 	// node so `magus query language:go` reaches the adapter alongside that language's

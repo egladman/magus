@@ -42,29 +42,36 @@ ci:rw`, and `generate` writes its output locally. CI strips the default
 
 ## Which magus binary
 
-Locally, run HEAD with `go run ./cmd/magus <cmd>`. It compiles fresh each
-invocation (slow as a loop, fine for a command) and is NOT denied by the guard.
-Do not expect a release binary on PATH.
+`magus run build .` is the one-shot-per-session build. It works, and it writes
+`./magus` at the repo root; run `./magus <cmd>` after it to exercise your change.
+If a `./magus` is already present and newer than the tree (`magus doctor` reports
+this as the "guard binary" check), it is fine to keep using. Do not expect a
+release binary on PATH.
 
-`magus run build .` is the intended one-shot-per-session build, and it writes
-`./magus` at the repo root - but it currently ABORTS on MGS3001 before reaching
-its `go build` step (see the known-breakage note below), so treat it as
-unavailable until that is fixed. If a `./magus` is already present and newer than
-the tree (`magus doctor` reports this as the "guard binary" check), it is fine to
-keep using.
+BOTH raw Go entry points are DENIED by the agent guard:
 
-`go build` is DENIED by the agent guard at every output path, including the
-`-o /tmp/magus` form this file used to recommend. Producing a binary is a write,
-and writes go through magus - the toolchain verb is what has to change, not the
-destination. `magus run go::go-build .` is the one-op form when the whole build
-target is too broad.
+- `go build` at every output path, including the `-o /tmp/magus` form this file
+  once recommended.
+- `go run ./cmd/magus <cmd>`, which this file once recommended as the way to run
+  HEAD. It is not an exception; the guard reads the command being RUN, so a
+  wrapper, an env prefix, or `bash -c` all reach the same verdict.
 
-Known unrelated breakage: `magus run test .` currently fails to link with
-`fingerprint mismatch: github.com/egladman/magus ... import from
-.../cmd/magus expecting ...`. It is NOT a poisoned build cache - it survives
-`go clean -cache` - and it is not caused by raw builds. `magus run go::go-test .`
-passes, so the difference is in the `test` target's `-race -covermode=atomic`
-composition. Unresolved.
+Producing a binary is a write, and writes go through magus - the toolchain verb
+is what has to change, not the destination. `magus run go::go-build .` is the
+one-op form when the whole `build` target is too broad, but note it does NOT
+write `./magus` (only the `build` target's ldflags step does), so rebuild with
+`magus run build .` when you intend to run the result.
+
+`magus run test .` passes. It previously failed to link with `fingerprint
+mismatch: github.com/egladman/magus ...`, which was mise setting
+`GOEXPERIMENT=jsonv2` for this repo while a sandboxed child did not inherit it -
+two differently-fingerprinted builds of the same package in one cache. The
+`GO*` passthrough in `magus.yaml`'s `sandbox.env` is what fixed it; that block's
+comment is the long version.
+
+Flag placement matters when forwarding: magus flags go BEFORE `--`.
+`magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
+after `--` forwards it to the test binary, which rejects it.
 
 The compatibility contract lives in CI: `setup-magus` runs the pinned,
 checksum-verified release against this repo's magusfile. If `magusfile.buzz`
@@ -122,10 +129,14 @@ deliberately instead:
   SW and clear caches before trusting what you see.
 - Leftover `.claude/worktrees/` copies duplicate spell sources and trip
   MGS1002 when running magus at the repo root; remove dead worktrees first.
-- `magus affected ci` has known local-environment failures that are NOT your
-  change: the doctor console check needs a running daemon, and there are
-  pre-existing lint findings. Trust build and test; compare lint against a
-  stash if unsure.
+- `magus affected ci` has one known local-environment failure that is NOT your
+  change: the doctor console check needs a running daemon. `magus run lint .` is
+  otherwise GREEN as of 2026-08-02 - the "pre-existing lint findings" this file
+  used to warn about are gone, so treat a lint failure as yours rather than
+  assuming it is background noise.
+- The agent guard denies piping or redirecting magus output (`| head`,
+  `2>&1`, `> file`). Use `-s/--silent`, `-o json|name|template=`, or `--tee
+<file>` instead; `magus query output <ref>` is the one command you may pipe.
 
 ## Rules
 

@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2649 nodes** and **5419 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2367 nodes** and **5277 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,24 +45,24 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 10 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 95 | `magus query kind:target` | `content-generate`, `site-generate`, `skills-generate` |
-| spell | 13 | `magus query kind:spell` | `go`, `markdown`, `rust` |
+| target | 96 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| spell | 12 | `magus query kind:spell` | `go`, `rust`, `markdown` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS4001` |
-| doc | 271 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 452 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| diagnostic | 48 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
+| doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 167 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 223 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1151 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 121 | `magus query kind:import` | `std`, `magus`, `fs` |
+| function | 1152 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 120 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 31 | `magus query project:.` | `skills-generate`, `bindings-generate`, `changelog-generate` |
+| . | 32 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 15 | `magus query project:docs` | `content-generate`, `site-generate`, `md-generate` |
@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
+| `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
 | `release-build` | Builds one release binary for one platform. |
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `release` |  |

@@ -424,6 +424,12 @@ var commonSpellAliases = map[string]string{
 // interp.RegisterBuzzSpellImportCheck.
 func checkSpellImports(handles []string) error {
 	for _, h := range handles {
+		// The magusfile driver IS registered - dispatch needs it - so the generic
+		// check below would happily accept this import even though the handle it
+		// binds is now unusable. Rejected explicitly, with the migration.
+		if h == magusfileSpellName {
+			return magusfileNotASpellErr("importing it")
+		}
 		if isRegisteredSpell(h) {
 			continue
 		}

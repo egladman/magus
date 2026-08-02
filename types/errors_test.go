@@ -35,10 +35,59 @@ func TestSpellErrors_Error(t *testing.T) {
 			{Spell: "go", Err: errors.New("exit 1")},
 		},
 	}
-	msg := err.Error()
-	assert.Contains(t, msg, "build", "missing target")
-	assert.Contains(t, msg, "go", "missing spell name")
-	assert.Contains(t, msg, "exit 1", "missing underlying error")
+	// Error() is the standalone sentence: an SDK consumer holding nothing but this
+	// error still learns which target, in which project, and what broke.
+	assert.Equal(t, "build failed in api/: exit 1", err.Error())
+}
+
+// TestSpellErrorsErrorPrefersTheProjectLabel guards the readability fix: a root
+// project's Path is ".", and building the message from it produced "magus lint .:",
+// where the dot reads as punctuation rather than as the project it names.
+func TestSpellErrorsErrorPrefersTheProjectLabel(t *testing.T) {
+	err := &SpellErrors{
+		Project:      ".",
+		ProjectLabel: "magus",
+		Target:       "lint",
+		Failed:       []SpellFailure{{Spell: "magusfile", Err: errors.New("markdownlint exited 1")}},
+	}
+	assert.Equal(t, "lint failed in magus: markdownlint exited 1", err.Error())
+	assert.NotContains(t, err.Error(), ".:", "the bare-dot path must not reach the message")
+}
+
+// TestSpellErrorsCauseDropsWhatTheHeadingAlreadySaid pins the concise form the CLI
+// logs. The project and target are printed in the heading directly above it, so
+// repeating them there buried the one fact the line adds: the failing tool.
+func TestSpellErrorsCauseDropsWhatTheHeadingAlreadySaid(t *testing.T) {
+	err := &SpellErrors{
+		Project: ".", ProjectLabel: "magus", Target: "lint",
+		Failed: []SpellFailure{{Spell: "magusfile", Err: errors.New("markdownlint exited 1")}},
+	}
+	assert.Equal(t, "markdownlint exited 1", err.Cause())
+	assert.Equal(t, "markdownlint exited 1", CauseText(err), "CauseText must prefer Cause")
+}
+
+// TestSpellErrorsCauseKeepsSpellsWhenSeveralFail is the other half of that rule: a
+// lone failure needs no spell attribution, but across a fan-out the spell name is
+// what tells the failures apart.
+func TestSpellErrorsCauseKeepsSpellsWhenSeveralFail(t *testing.T) {
+	err := &SpellErrors{
+		Project: "web", Target: "ci",
+		Failed: []SpellFailure{
+			{Spell: "typescript", Err: errors.New("tsc exited 2")},
+			{Spell: "markdown", Err: errors.New("markdownlint exited 1")},
+		},
+	}
+	cause := err.Cause()
+	assert.Contains(t, cause, "2 spells failed")
+	assert.Contains(t, cause, "[typescript] tsc exited 2")
+	assert.Contains(t, cause, "[markdown] markdownlint exited 1")
+	assert.NotContains(t, cause, "spell(s)", "pluralization is real, not parenthesized")
+}
+
+// TestCauseTextFallsBackToTheFullMessage keeps CauseText total: an ordinary error
+// has no concise form to prefer.
+func TestCauseTextFallsBackToTheFullMessage(t *testing.T) {
+	assert.Equal(t, "boom", CauseText(errors.New("boom")))
 }
 
 func TestSpellErrors_Unwrap(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -43,6 +44,12 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 		if ctx.Err() != nil {
 			return nil, describeCancelled(ctx, "spells", i, len(all))
 		}
+		// Dispatch plumbing is not a spell a user can bind, and listing it here
+		// contradicted the reference: docs/concepts/spells.md's built-in table has
+		// never included magusfile. See spells.WithInternal.
+		if p.Internal() {
+			continue
+		}
 		var docs map[string]string
 		var opCommands map[string][]string
 		for _, t := range p.Targets() {
@@ -62,8 +69,10 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 				opCommands[t] = append([]string{cmd}, args...)
 			}
 		}
+		_, builtIn := spellruntime.Builtins()[p.Name()]
 		entries = append(entries, types.Spell{
 			Name:         p.Name(),
+			BuiltIn:      builtIn,
 			BuzzImport:   spells.ModulePath(p.Name()),
 			Sources:      p.Sources(),
 			Outputs:      p.Outputs(),
@@ -377,7 +386,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// describe.flagDynamic, which splits those execution overrides off as
 				// DynamicExec instead.
 				if n.DynamicIO {
-				return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's

@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS1013: cross-project output glob escapes its owner - magus</title>
-  <meta name="description" content="Fires at load when the glob half of a cross-project ctx.outputs is absolute or contains .., so it would resolve outside the project that owns it.">
+  <meta name="description" content="Fires at load when the glob half of a cross-project ctx.writesFiles is absolute or contains .., so it would resolve outside the project that owns it.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1013/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS1013: cross-project output glob escapes its owner - magus">
-  <meta property="og:description" content="Fires at load when the glob half of a cross-project ctx.outputs is absolute or contains .., so it would resolve outside the project that owns it.">
+  <meta property="og:description" content="Fires at load when the glob half of a cross-project ctx.writesFiles is absolute or contains .., so it would resolve outside the project that owns it.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1013/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -93,6 +93,7 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1014/" title="MGS1014: cross-project output was never produced">MGS1014: cross-project output was never produced</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1016/" title="MGS1016: workspace-local Go replace directives drifted">MGS1016: workspace-local Go replace directives drifted</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1017/" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -103,15 +104,15 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1013-cross-project-output-glob-escapes-its-owner">MGS1013: cross-project output glob escapes its owner</h1>
-<p>The glob in a cross-<a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> <code>ctx.outputs</code> is absolute or contains <code>..</code>, so it
+<p>The glob in a cross-<a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> <code>ctx.writesFiles</code> is absolute or contains <code>..</code>, so it
 does not name a <a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> inside the project it is declared against.</p>
-<pre><code class="language-text">[MGS1013] workspace://producer: target &quot;build&quot;: ctx.outputs glob &quot;../../etc/x&quot;
+<pre><code class="language-text">[MGS1013] workspace://producer: target &quot;build&quot;: ctx.writesFiles glob &quot;../../etc/x&quot;
 must be relative to &quot;site&quot; and must not contain ..
 </code></pre>
 <h2 id="why">Why</h2>
 <p>A cross-project output has two halves, and they are validated for different
 reasons:</p>
-<pre><code class="language-buzz">ctx.outputs(site.file(&quot;generated.txt&quot;));
+<pre><code class="language-buzz">ctx.writesFiles(site.file(&quot;generated.txt&quot;));
 //          ^^^^      ^^^^^^^^^^^^^^
 //          owner     glob, relative to the OWNER's root
 </code></pre>
@@ -135,7 +136,7 @@ failure in one project's declaration taking out an unrelated command.</li>
 <h2 id="resolution">Resolution</h2>
 <p>Write the path as the owner sees it. If <code>site</code> is at <code>site/</code> and the file belongs
 at <code>site/gen/api.ts</code>, the owner is <code>site</code> and the glob is <code>gen/api.ts</code>:</p>
-<pre><code class="language-buzz">ctx.outputs(site.file(&quot;gen/api.ts&quot;));
+<pre><code class="language-buzz">ctx.writesFiles(site.file(&quot;gen/api.ts&quot;));
 </code></pre>
 <p>If you find yourself reaching for <code>..</code> to get somewhere, the owner is wrong, not
 the glob. Import the project that actually contains the destination and declare
@@ -160,12 +161,12 @@ against that one. If nothing owns it, it is not a tracked output - see
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1011/"><span class="related-card-title">MGS1011: cross-project output names an unusable owner</span><span class="related-card-desc">Fires at load when a target declares ctx.outputs into another project that magus cannot resolve or did not discover, so nothing would own, clean, or regenerate the file.</span></a>
+        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1011/"><span class="related-card-title">MGS1011: cross-project output names an unusable owner</span><span class="related-card-desc">Fires at load when a target declares ctx.writesFiles into another project that magus cannot resolve or did not discover, so nothing would own, clean, or regenerate the file.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1013%22">MGS1013</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22cross-project%22">cross-project</a><a class="tag" href="../../../../search/?q=tag%3A%22globs%22">globs</a><a class="tag" href="../../../../search/?q=tag%3A%22containment%22">containment</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small>
+    <small>Last updated <time datetime="2026-08-02T01:05:00Z">August 2, 2026, 1:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3da15dc98bfbc41b8c59289da5ee04e809d12fa9" data-tooltip="3da15dc98bfbc41b8c59289da5ee04e809d12fa9" title="3da15dc98bfbc41b8c59289da5ee04e809d12fa9">3da15dc9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1013.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1013.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

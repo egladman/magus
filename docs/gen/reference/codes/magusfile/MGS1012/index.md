@@ -11,7 +11,7 @@ output into that same project. The two imply opposite build orders, so there is
 no order that satisfies both.
 
 ```text
-[MGS1012] renderer: ctx.outputs writes "out.html" into "site", so site must run
+[MGS1012] renderer: ctx.writesFiles writes "out.html" into "site", so site must run
 after renderer, but renderer already depends on site; a target cannot both read
 from and write into the same project
 ```
@@ -23,8 +23,8 @@ of having both:
 
 | Declaration | Meaning | Edge |
 | --- | --- | --- |
-| `ctx.inputs(site.file("src.md"))` | I read a file `site` owns | renderer depends on site |
-| `ctx.outputs(site.file("out.html"))` | I produce a file `site` owns | site depends on renderer |
+| `ctx.readsFiles(site.file("src.md"))` | I read a file `site` owns | renderer depends on site |
+| `ctx.writesFiles(site.file("out.html"))` | I produce a file `site` owns | site depends on renderer |
 
 An input says *build me after them, so I read finished bytes*. An output says
 *build them after me, so they see finished bytes*. Declare both against one
@@ -57,8 +57,8 @@ Pick whichever is true of your target.
 the cross-project output and write into its own tree:
 
 ```buzz
-ctx.inputs(site.file("src.md"));
-ctx.outputs("dist/out.html");
+ctx.readsFiles(site.file("src.md"));
+ctx.writesFiles("dist/out.html");
 ```
 
 **It is a producer.** If it genuinely generates part of `site`, drop the

@@ -1264,7 +1264,7 @@ connected and daemon-less sessions.</p>
 (a deliberate, user-owned handoff journal of per-repository records, each
 pointing into the codebase, kept in the user state directory outside the repo,
 and shared across branches and worktrees). Both are pull-based: nothing is
-injected into an agent's context. The journal is also available through <code>magus memory list|get|put|delete|verify</code>; use <code>verify</code> to surface stale, malformed,
+injected into an agent's context. The journal is also available through <code>magus memory <a class="code-xref" href="../../../reference/manpage/magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a>|get|put|delete|verify</code>; use <code>verify</code> to surface stale, malformed,
 or broken linked entries. Captured build output is addressed by
 <a href="../../../concepts/cache/output-refs/">output references</a>.</p>
 <h2 id="why-a-daemon-not-a-wrapper">Why a daemon, not a wrapper</h2>

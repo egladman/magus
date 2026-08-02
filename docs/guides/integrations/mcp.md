@@ -158,7 +158,7 @@ magus config mcp token revoke                     # delete it (daemon mints a fr
 
 magus config mcp connector create --name claude   # mint a connector token (prints the secret once)
 magus config mcp connector create --expires 30d    # override the default 90-day expiry (or "never")
-magus config mcp connector list                    # names, fingerprints, and expiry
+magus config mcp connector ls                    # names, fingerprints, and expiry
 magus config mcp connector revoke <name|fingerprint>
 ```
 

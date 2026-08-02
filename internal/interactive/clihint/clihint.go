@@ -69,6 +69,10 @@ var (
 	Watch            = cmd("watch")
 	Affected         = cmd("affected")
 	DescribeTargets  = cmd("describe", "targets")
+	DescribeProject  = cmd("describe", "project")
+	Ls               = cmd("ls")
+	LsTargets        = cmd("ls", "targets")
+	Where            = cmd("where")
 	MCPTokenGenerate = cmd("config", "mcp", "token", "generate")
 )
 
@@ -77,5 +81,5 @@ var (
 var All = []Command{
 	Run, QueryOutput, GraphOpen, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
-	DescribeTargets, MCPTokenGenerate,
+	DescribeTargets, DescribeProject, Ls, LsTargets, Where, MCPTokenGenerate,
 }

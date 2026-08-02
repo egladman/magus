@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS1004: unreached footprint declaration - magus</title>
-  <meta name="description" content="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
+  <meta name="description" content="Fires when a ctx.readsFiles or ctx.writesFiles call is not statically reachable from a target body, so the declared glob never enters a cache key.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1004/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS1004: unreached footprint declaration - magus">
-  <meta property="og:description" content="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">
+  <meta property="og:description" content="Fires when a ctx.readsFiles or ctx.writesFiles call is not statically reachable from a target body, so the declared glob never enters a cache key.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1004/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -93,6 +93,7 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1014/" title="MGS1014: cross-project output was never produced">MGS1014: cross-project output was never produced</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1016/" title="MGS1016: workspace-local Go replace directives drifted">MGS1016: workspace-local Go replace directives drifted</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1017/" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#what-this-is-not" title="What this is NOT">What this is NOT</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -103,19 +104,19 @@
     <small class="reading-time" title="Estimated reading time">2 min read</small>
     <article>
 <h1 id="mgs1004-unreached-footprint-declaration">MGS1004: unreached footprint declaration</h1>
-<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code> call that the
+<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a <code>ctx.readsFiles(...)</code> or <code>ctx.writesFiles(...)</code> call that the
 static extractor cannot reach from any <a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> body. magus reads these
 declarations from the source without running it (a <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> hit skips the body
 entirely), following a target's body and the helpers it calls by name. A call it
 can't reach never enters a cache key.</p>
-<pre><code class="language-text">[MGS1004] 1 magus.inputs/outputs call(s) are not statically reachable from a
+<pre><code class="language-text">[MGS1004] 1 ctx.readsFiles/writesFiles call(s) are not statically reachable from a
 target body, so they never enter a cache key; call them directly in the target
 body (see .../MGS1004.md)
-  magus.inputs in srcGlobs (web/magusfile.buzz:14)
+  ctx.readsFiles in srcGlobs (web/magusfile.buzz:14)
 </code></pre>
 <h2 id="why">Why</h2>
 <p>A per-target footprint has to be known <em>before</em> the target runs, because on a
-cache hit the body never executes. So magus recovers <code>magus\inputs</code>/<code>outputs</code>
+cache hit the body never executes. So magus recovers <code>ctx.readsFiles</code>/<code>ctx.writesFiles</code>
 statically: it walks each <code>export fun</code> target and the helper functions it calls
 by a plain name (<code>srcGlobs()</code>), and collects the string-literal globs it finds.</p>
 <p>A declaration outside that reach is invisible to the cache:</p>
@@ -123,26 +124,26 @@ by a plain name (<code>srcGlobs()</code>), and collects the string-literal globs
 <li>a call in a helper that no target (transitively) calls by name - often dead
 code;</li>
 <li>a call reached only through indirection - the identifier used as a value
-(<code>final f = magus\inputs; f(&quot;src/**&quot;)</code>) or dynamic dispatch, which the static
+(<code>final f = ctx.readsFiles; f(&quot;src/**&quot;)</code>) or dynamic dispatch, which the static
 read cannot follow.</li>
 </ul>
 <p>The danger is silent under-declaration: the input you thought you declared is not
 in the key, so editing it produces no miss and you replay a stale build. This
 check makes that loud. It is the counterpart to the hard load error you get for a
-non-literal argument in a <em>reached</em> call (<code>ctx.inputs(someVar)</code>) - that one
+non-literal argument in a <em>reached</em> call (<code>ctx.readsFiles(someVar)</code>) - that one
 magus can see and rejects immediately; an <em>unreached</em> call it can only warn about.</p>
 <p>This is a <strong>warning</strong>, not a load error: an unreached call may simply be dead
 code, which is harmless.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Call <code>magus\inputs</code>/<code>magus\outputs</code> directly in the target body, or from a helper
+<p>Call <code>ctx.readsFiles</code>/<code>ctx.writesFiles</code> directly in the target body, or from a helper
 the target invokes by name:</p>
 <pre><code class="language-buzz">// Before: the glob lives in a helper nothing calls, so it never keys anything.
-fun srcGlobs() &gt; void { ctx.inputs(&quot;src/**&quot;); }
+fun srcGlobs() &gt; void { ctx.readsFiles(&quot;src/**&quot;); }
 export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](ctx); }
 
 // After: declared in the body (or a bare-called helper), so it enters the key.
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
-    ctx.inputs(&quot;src/**&quot;);
+    ctx.readsFiles(&quot;src/**&quot;);
     go[&quot;go-build&quot;](ctx);
 }
 </code></pre>
@@ -151,16 +152,16 @@ export fun build(ctx: magus\Context, args: [str]) &gt; void {
 <ul>
 <li><strong>Not a hard error.</strong> Nothing blocks the build; it is a <code>magus <a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> finding.</li>
 <li><strong>Not the non-literal-argument error.</strong> A computed argument in a <em>reachable</em>
-call (<code>ctx.inputs(<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
-but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a magus\inputs or magus\outputs call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
+call (<code>ctx.readsFiles(<a class="code-xref" href="../../../manpage/magus-x/" data-kind="command" data-def="magus x: Interactive shorthand for magus run with a TTY picker for project and target, remembering the last target used per project.">x</a>)</code>) is a <a class="glossary-term" href="../../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> load error, because magus sees the call
+but cannot resolve the glob. <a class="code-xref" href="./" data-kind="code" data-def="Fires when a ctx.readsFiles or ctx.writesFiles call is not statically reachable from a target body, so the declared glob never enters a cache key.">MGS1004</a> is the opposite: magus resolves nothing
 because it never reaches the call.</li>
 </ul>
 <h2 id="see-also">See also</h2>
 <ul>
-<li><a href="../../../../concepts/cache/#per-target-inputs-and-outputs">cache</a>: how <code>magus\inputs</code> and
-<code>magus\outputs</code> declare a target's per-target footprint.</li>
+<li><a href="../../../../concepts/cache/#per-target-inputs-and-outputs">cache</a>: how <code>ctx.readsFiles</code> and
+<code>ctx.writesFiles</code> declare a target's per-target footprint.</li>
 <li><a href="../../../../concepts/dependencies/">dependencies</a>: the static-extraction discipline
-magus\inputs shares with <code>magus\needs</code>.</li>
+ctx.readsFiles shares with <code>magus\needs</code>.</li>
 </ul>
     </article>
     </div>
@@ -180,8 +181,8 @@ magus\inputs shares with <code>magus\needs</code>.</li>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1004%22">MGS1004</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
-    <small>Last updated <time datetime="2026-07-30T18:36:27Z">July 30, 2026, 6:36 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b" data-tooltip="15118091f0721e77ecf83d9ed32777facbca172b" title="15118091f0721e77ecf83d9ed32777facbca172b">15118091</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1004.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1004.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1004%22">MGS1004</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22reads-files%22">reads-files</a><a class="tag" href="../../../../search/?q=tag%3A%22writes-files%22">writes-files</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
+    <small>Last updated <time datetime="2026-08-02T01:05:00Z">August 2, 2026, 1:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3da15dc98bfbc41b8c59289da5ee04e809d12fa9" data-tooltip="3da15dc98bfbc41b8c59289da5ee04e809d12fa9" title="3da15dc98bfbc41b8c59289da5ee04e809d12fa9">3da15dc9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b"><code>15118091</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - the execution context work into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1004.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1004.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

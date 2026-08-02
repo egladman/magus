@@ -33,7 +33,7 @@ about the code is a `query` or `output` pointer, never stored prose.{{end}}
 ## Read and write deliberately
 
 - At a handoff or session start, use `magus_memory` `{op: "list"}` or
-  `magus memory list`.{{if .Full}} Empty is normal; do not manufacture journal entries.{{end}}
+  `magus memory ls`.{{if .Full}} Empty is normal; do not manufacture journal entries.{{end}}
 - Use `get` before revisiting a named decision. If evidence has changed, update
   that entry and its status instead of silently contradicting it.
 - Use `put` for a decision or plan another person would otherwise have to

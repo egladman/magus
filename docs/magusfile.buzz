@@ -33,7 +33,6 @@ import "render" as renderer;
 // op indexes them (via tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns
 // the dependency graph; informational) and does not run in this project's ci, which uses
 // the custom targets below; it just makes the project's TypeScript browsable as symbols.
-import "magus/spell/magusfile";
 import "magus/spell/typescript";
 // go is imported for its go-run op only (content-generate/changelog-generate drive
 // repo-root Go tools through it), NOT added to the project spells list below: docs is
@@ -41,7 +40,7 @@ import "magus/spell/typescript";
 import "magus/spell/go";
 
 magus\project({
-    "spells": [magusfile, typescript],
+    "spells": [typescript],
     "depends_on": [".."],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,

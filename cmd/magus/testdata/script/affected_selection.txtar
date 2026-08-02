@@ -17,7 +17,10 @@
 # with no git repo: affected treats an unusable diff as "run everything").
 exec magus affected list --dry-run
 stderr 'cannot compute affected set'
-stderr '\[dry\] .* list'
+# A planned target renders like an executed one: label on the glyph line, target
+# in the repro command underneath.
+stderr '\[dry\] '
+stderr 'magus run list'
 stderr 'proj-b'
 
 # Build a real git history: an initial commit with both projects, tagged "base" so
@@ -37,7 +40,7 @@ exec git commit -m touch-proj-b
 # project (spells/acme, untouched) must not appear.
 exec magus affected list --base=base --dry-run
 stderr 'projects: proj-b \(git diff vs base\)'
-stderr '\[dry\] proj-b list'
+stderr '\[dry\] proj-b'
 ! stderr 'projects: 2 projects'
 
 # --stdin reads changed paths from a pipe instead of asking git for a diff - the
@@ -45,13 +48,13 @@ stderr '\[dry\] proj-b list'
 # project's file selects only the root project; proj-b never comes up.
 stdin changed-root.txt
 exec magus affected list --stdin --dry-run
-stderr '\[dry\] .* list'
+stderr '\[dry\] '
 ! stderr 'proj-b'
 
 # Feeding it proj-b's file selects only proj-b.
 stdin changed-proj-b.txt
 exec magus affected list --stdin --dry-run
-stderr '\[dry\] proj-b list'
+stderr '\[dry\] proj-b'
 
 # Plan mode accepts the same explicit path source as a one-shot input. This lets
 # callers partition proposed work before any agent edits the tree.

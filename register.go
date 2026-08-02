@@ -136,7 +136,14 @@ func bindSpell(p *types.Project, spell *spells.Spell, name string, opts ...Bindi
 			return err
 		}
 	}
-	if p.Spell == "" {
+	// Internal plumbing never claims the primary slot. The magusfile registration
+	// binds first on every project - that is how a project is DISCOVERED - so it
+	// won this race everywhere, and `magus ls` reported "spell: magusfile" on 9 of
+	// this repo's 10 projects: a field that was true by construction and therefore
+	// told a reader nothing, while hiding the toolchain they wanted (the root
+	// project's real answer is `go`). A project with no toolchain spell now
+	// correctly reports none; its targets come from its magusfile.
+	if p.Spell == "" && !spell.Internal() {
 		p.Spell = name
 	}
 	p.Spells = append(p.Spells, name)

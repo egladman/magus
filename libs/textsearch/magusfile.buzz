@@ -28,11 +28,14 @@ import "vcs";
 // TypeScript spell so the shared src/ is symbol-capable - its `scip` op indexes it (via
 // tsconfig.json) for the knowledge graph. ts is opaque (pnpm owns the dependency graph;
 // informational) and does not run in ci, which uses the custom targets below.
-import "magus/spell/magusfile";
 import "magus/spell/typescript";
 
+// badge renders the coverage SVG; cov extracts the percentage from the lcov report.
+import "../../badge" as badge;
+import "../../coverage" as cov;
+
 magus\project({
-    "spells": [magusfile, typescript],
+    "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must
     // be named to be watched: the shared TypeScript, the build manifests (package.json +
     // pnpm-lock.yaml, where the dev-gate deps are pinned), and the tsconfig/biome configs
@@ -93,11 +96,45 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     os\exec("pnpm", ["run", "biome"], ".", {});
 }
 
-// test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).
+// test runs the node:test suite over the bundled *.test.ts and renders a line-
+// coverage badge from the run.
+//
+// The bundle is deliberate, not a workaround: this project is authored
+// bundler-first (tsconfig moduleResolution: "bundler", extensionless relative
+// imports, consumed as SOURCE through a paths alias rather than as a package), so
+// esbuild is the compiler and tsc is only the type gate. Coverage therefore has to
+// travel back through a sourcemap - hence --sourcemap here - or every record would
+// name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    ctx.writesFiles("coverage.svg");
+    final clean_before = vcs\isDirty(["coverage.svg"]) == false;
     install();
-    os\exec("pnpm", ["run", "test"], ".", {});
+
+    final tests = fs\glob("src/**/*.test.ts");
+    var bundle = mut ["exec", "esbuild"];
+    foreach (t in tests) { bundle.append(t); }
+    bundle.append("--bundle"); bundle.append("--platform=node");
+    bundle.append("--format=esm"); bundle.append("--sourcemap");
+    bundle.append("--outdir=.testcache");
+    os\exec("pnpm", bundle, ".", {});
+
+    // --enable-source-maps is what makes the coverage report name src/*.ts. Without
+    // it Node reads the sourcemap for stack traces only, and every lcov record
+    // stays SF:.testcache/<bundle>.js - a coverage figure about the bundle.
+    var run = mut ["--enable-source-maps", "--experimental-test-coverage",
+        "--test-reporter=spec", "--test-reporter-destination=stdout",
+        "--test-reporter=lcov", "--test-reporter-destination=coverage.lcov",
+        "--test"];
+    foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b); }
+    os\exec("node", run, ".", {});
+
+    final pct = cov\lcovPercent(fs\readFile("coverage.lcov"), keep: "src/");
+    fs\writeFile("coverage.svg", badge\coverage("textsearch coverage", percent: pct, radius: 3));
+    if (ctx.has_charm("rw")) { return; }
+    if (clean_before and vcs\isDirty(["coverage.svg"])) {
+        throw "test: libs/textsearch/coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
+    }
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.

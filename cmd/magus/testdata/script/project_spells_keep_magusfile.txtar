@@ -11,9 +11,10 @@
 # own proto project (spells: [buf]) had three no-op targets that way, including the
 # ci anchor `magus affected ci` gates on.
 #
-# The magusfile spell is now bound whether or not it is listed: it is not a
+# The magusfile driver is now bound whether or not it is listed: it is not a
 # language adapter you opt into like go or buf, it is what makes the file you are
-# writing runnable at all.
+# writing runnable at all. Listing it is now an error (MGS1017) rather than a
+# no-op, since it never did anything.
 
 # A target in a project that declares ONLY a tool spell still runs its own body.
 exec magus run check
@@ -23,10 +24,11 @@ stdout 'yes'
 # And still reaches the tool spell's op.
 exists MARKER
 
-# The declared spell stays PRIMARY, so labels and the graph are unchanged: the
-# implicit binding is appended, never prepended.
+# The declared spell is the PRIMARY one a listing reports. It no longer depends on
+# binding order: an internal registration never claims that slot, so the implicit
+# magusfile binding cannot take it whichever way round they are appended.
 exec magus ls
-stdout 'spell: acme'
+stdout '\(acme\)'
 
 -- magus.yaml --
 concurrency: 4

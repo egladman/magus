@@ -12,7 +12,6 @@ import "io";
 import "std";
 import "semver";
 
-import "magus/spell/magusfile";
 import "magus/spell/go";
 import "magus/spell/docker";
 import "magus/spell/cosign";
@@ -21,6 +20,7 @@ import "magus/spell/markdown";
 import "magus/spell/bash";
 
 import "badge" as badge;
+import "coverage" as cov;
 
 // Version-selection rules for the `release` target below. ALIASED deliberately:
 // an unaliased import flat-merges the module's exports into this file's scope,
@@ -54,7 +54,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [magusfile, go, buzz, markdown, bash],
+    "spells": [go, buzz, markdown, bash],
     "targets": {
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -76,6 +76,13 @@ magus\project({
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": true},
+        // Screen-records the CLI, so the bytes it writes are never the same twice
+        // (real target durations land in the frames). Caching would replay a GIF
+        // recorded against different code, which is the one thing a demo must not
+        // do. Deliberately NOT named *-generate: `generate` globs that suffix and
+        // drift-gates it, and a non-reproducible artifact under a drift gate fails
+        // every CI run by construction. See the tapes target below.
+        "tapes": {"skip_cache": true},
     },
 });
 
@@ -378,6 +385,33 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     }
 }
 
+// Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus
+// binary through a real terminal, so the GIFs are documentation that cannot quietly
+// go stale the way a pasted transcript does - re-record and the drift is visible.
+//
+// Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs
+// vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every
+// time. Run it when the CLI's output actually changes, then commit the result.
+//
+// The GIFs are declared outputs all the same, so `magus describe file` reports them
+// as generated and the agent guard warns on a hand-edit - the same treatment
+// assets/coverage.svg gets.
+export fun tapes(ctx: magus\Context, args: [str]) > void {
+    // Declared, or the tapes and the script that stages their workspace would be
+    // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
+    // editing a tape invalidated nothing and told a reader it affected no target.
+    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
+    ctx.writesFiles("assets/gen/*.gif");
+    if (os\which("vhs") == "") {
+        throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
+            + "(see tapes/README.md)";
+    }
+    foreach (tape in fs\glob("tapes/*.tape")) {
+        magus\info("recording {tape}");
+        os\exec("vhs", [tape], ".", {});
+    }
+}
+
 // Builds one (goos, goarch) release binary and archives it into dist/, writing a
 // standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format).
 // No cross-job aggregation needed: CD's publish job later does
@@ -670,7 +704,17 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
     ctx.needs(format);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
-    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    // Measure hand-written code only. Generated files (protobuf accessors, mocks,
+    // the Buzz mirrors) are hundreds of functions no test will ever call, so
+    // leaving them in makes the figure a statement about the code generators and
+    // rewards writing tests for getters to hold the floor up. coverage.buzz
+    // detects them by Go's canonical marker, never by path - this repo keeps
+    // hand-maintained files inside a gen/ directory. coverage.out stays on disk
+    // unfiltered so `go tool cover -html=coverage.out` still shows everything.
+    fs\writeFile("coverage.hand.out",
+        cov\stripGenerated(fs\readFile("coverage.out"),
+            prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
+    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }

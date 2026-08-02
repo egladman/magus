@@ -542,18 +542,21 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// skip instead of running. Sequential, so each project's commands stay grouped
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
 		recCtx := types.WithTrace(ctx)
+		dryStart := time.Now()
 		if m.cache != nil {
 			m.cache.LogDryBanner()
 		} else {
 			fmt.Println("dry run - commands shown, not executed")
 		}
+		planned := 0
 		for _, st := range stages {
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
+				planned++
 				if m.cache != nil {
-					m.cache.LogDry(label, st.target)
+					m.cache.LogDry(p.Path, label, st.target)
 				} else {
-					fmt.Printf("[dry] %s %s\n", label, st.target)
+					fmt.Printf("[dry] %s\n", label)
 				}
 				// Fresh memo per target so a shared dependency (e.g. format -> generate)
 				// records once, matching the real run's pool dedup.
@@ -563,6 +566,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
 				}
 			}
+		}
+		// A dry run ends with a footer like every other run. Without it the output
+		// simply stopped after the last plan line, so the one shape a reader looks
+		// for at the bottom was missing precisely when they were reviewing a plan.
+		if m.cache != nil {
+			m.cache.LogDrySummary(planned, time.Since(dryStart))
 		}
 		return nil
 	}

@@ -33,7 +33,17 @@ import "std";
 import "strings";
 import "magus/spell";
 
-export fun mgs_getName() > str { return "ci"; }
+// The registered name is the product's canonical name, because it is what
+// identifies this spell everywhere magus lists one - it stands alone, with no
+// directory around it to give it context. (That is a separate question from the
+// source layout: `go` lives in spells/golang/ and both are right, because
+// "golang" is the idiomatic directory name and "go" is the language's real name.)
+//
+// The bare leaf "ci" failed that test twice over: it names no product, and it
+// collided head-on with magus's own central concept - the ci TARGET that
+// `magus affected ci` anchors on - so a listing showed a "ci" spell beside a
+// "ci" target meaning entirely different things.
+export fun mgs_getName() > str { return "gitlab-ci"; }
 
 // ESC is built from its code point: a literal escape byte in source would be
 // invisible to anyone reading this file.

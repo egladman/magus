@@ -21,7 +21,7 @@ Nothing connects the path you **declare** to the path the target **writes**. The
 are two independent strings:
 
 ```buzz
-ctx.outputs(site.file("generated.txt"));   // the declaration
+ctx.writesFiles(site.file("generated.txt"));   // the declaration
 fs\writeFile("../site/generated.text", body);  // the write - note the typo
 ```
 
@@ -55,7 +55,7 @@ working directory, which is its own project directory. For a `producer` writing
 into a sibling `site`, those are spelled differently for the same file:
 
 ```buzz
-ctx.outputs(site.file("generated.txt"));       // relative to site/
+ctx.writesFiles(site.file("generated.txt"));       // relative to site/
 fs\writeFile("../site/generated.txt", body);   // relative to producer/
 ```
 

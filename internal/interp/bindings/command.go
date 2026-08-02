@@ -184,7 +184,10 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		if code <= 0 {
 			code = 1 // a start failure (binary not found) reports exit 1, as before
 		}
-		return res, fmt.Errorf("spell %s: exit %d", cmd, code)
+		// cmd is the executable that was exec'd (markdownlint, go, tsc), not a spell:
+		// a spell is the adapter that chose to run it. Calling it one taught readers
+		// a wrong mapping and sent them looking for a spell by the tool's name.
+		return res, fmt.Errorf("%s exited %d", cmd, code)
 	}
 	return res, nil
 }
