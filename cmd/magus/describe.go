@@ -300,7 +300,16 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	fmt.Printf("definition: %s\n\n", types.SpellDefinition)
 	fmt.Printf("spells (%d):\n", len(inventory))
 	for _, t := range inventory {
-		fmt.Printf("  %s\n", t.Name)
+		// A workspace-local spell is marked, because the two are not
+		// interchangeable and the listing used to imply they were: only a built-in
+		// is reachable as `import "magus/spell/<name>"` from anywhere and appears in
+		// the spell reference. A local one came from a path import in THIS
+		// workspace's magusfile.
+		if t.BuiltIn {
+			fmt.Printf("  %s\n", t.Name)
+		} else {
+			fmt.Printf("  %s  [workspace-local, not a built-in]\n", t.Name)
+		}
 		// "adapts", not "language": the record carries two different languages, and
 		// naming them both language is what made this ambiguous. This is the source
 		// language the spell teaches magus to build; the import below is written in
@@ -311,7 +320,11 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		// Rendered as the whole statement rather than the bare path, so it is
 		// copy-pasteable into a magusfile. It is the ONLY way to reach the spell's
 		// ops: written literally, so the target graph can see the edge.
-		if t.BuzzImport != "" {
+		//
+		// Built-ins only. `magus/spell/<name>` resolves nothing for a workspace-local
+		// spell, so printing it handed the reader a line that cannot work; that
+		// spell is reached by the path import its own magusfile already writes.
+		if t.BuzzImport != "" && t.BuiltIn {
 			fmt.Printf("    import:  import %q;  (buzz)\n", t.BuzzImport)
 		}
 		if len(t.Targets) > 0 {

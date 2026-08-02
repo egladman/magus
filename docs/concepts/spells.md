@@ -160,7 +160,7 @@ The go/docker relationship is exactly this **co-binding**, not an import: both a
 
 Two magus APIs take a spell handle as an argument, and both are a magus call consuming a spell rather than a spell importing a spell:
 
-- `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `actions`, `s3-cache`) as the remote cache backend. See [Remote caching](cache/remote.md).
+- `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `github-actions`, `aws-s3`) as the remote cache backend. See [Remote caching](cache/remote.md).
 - `magus\ci.provider(github)` wires a **CI-provider** spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See [CI providers](ci-providers.md).
 
 Both are extension points on purpose. magus itself knows neither a cache service's API nor a CI system's log syntax, so supporting one it has never heard of is a spell you write rather than a release you wait for.
@@ -360,8 +360,8 @@ Read these spells under [`spells/`](https://github.com/egladman/magus/tree/HEAD/
 | Spell                                            | Role            | What it demonstrates                                                                                                                                                                               |
 | ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`buf`](../../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files.        |
-| [`actions`](../../spells/github/actions/spell.buzz) | cache backend   | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus\cache.remote`. |
-| [`s3-cache`](../../spells/aws/s3-cache/spell.buzz)  | cache backend   | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
+| [`github-actions`](../../spells/github/actions/spell.buzz) | cache backend   | A **remote cache backend** over the GitHub Actions Cache API in pure Buzz: bearer auth, byte-level chunked upload/streamed download (the `http` byte primitives), wired with `magus\cache.remote`. |
+| [`aws-s3`](../../spells/aws/s3-cache/spell.buzz)  | cache backend   | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
 
 ## See also
 

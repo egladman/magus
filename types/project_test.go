@@ -7,6 +7,40 @@ import (
 	"testing"
 )
 
+// TestAttachSpellSkipsInternalForThePrimarySlot pins the rule that keeps
+// `magus ls` informative. Every project is DISCOVERED by having a magusfile, so
+// the magusfile registration attaches to all of them and, being first, used to
+// claim the primary slot everywhere - `magus ls` answered "spell: magusfile" for
+// 9 of this repo's 10 projects, which is true by construction and so tells a
+// reader nothing while hiding the toolchain they wanted.
+func TestAttachSpellSkipsInternalForThePrimarySlot(t *testing.T) {
+	t.Parallel()
+	internal := spells.NewSpell("magusfile", spells.WithInternal())
+	toolchain := spells.NewSpell("go")
+
+	p := &Project{}
+	p.AttachSpell(internal)
+	assert.Empty(t, p.Spell, "plumbing must not claim the primary slot")
+
+	p.AttachSpell(toolchain)
+	assert.Equal(t, "go", p.Spell, "the first real toolchain does")
+
+	// Both are still BOUND: only the display slot is affected, so dispatch through
+	// the magusfile registration is untouched.
+	assert.Equal(t, []string{"magusfile", "go"}, p.Spells)
+}
+
+// TestAttachSpellLeavesNoPrimaryWhenOnlyInternal covers a project whose targets
+// all come from its magusfile: it genuinely has no toolchain spell, and saying so
+// beats naming one it does not have.
+func TestAttachSpellLeavesNoPrimaryWhenOnlyInternal(t *testing.T) {
+	t.Parallel()
+	p := &Project{}
+	p.AttachSpell(spells.NewSpell("magusfile", spells.WithInternal()))
+	assert.Empty(t, p.Spell)
+	assert.Equal(t, []string{"magusfile"}, p.Spells)
+}
+
 func TestProjectAllOutputs(t *testing.T) {
 	// No per-target outputs: AllOutputs is exactly the project-wide set.
 	p := &Project{Outputs: []string{"dist/**"}}

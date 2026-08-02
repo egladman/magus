@@ -10,10 +10,8 @@
 
 import "magus";
 
-// go spell claims **/*.go and the module files; magusfile spell makes this file's
-// export-fun targets runnable. Listed explicitly because "spells" below replaces the
-// default set.
-import "magus/spell/magusfile";
+// go spell claims **/*.go and the module files. This file's own export-fun targets
+// need no declaration - magus binds the magusfile driver to every project.
 import "magus/spell/go";
 import "../../spells/golang/gomod" as gomod;
 
@@ -21,7 +19,7 @@ import "fs";
 import "vcs";
 
 magus\project({
-    "spells": [magusfile, go],
+    "spells": [go],
     // Generated catalog; cached so a hit restores it without re-describing.
     "outputs": ["MAGUS.md"],
     "targets": {

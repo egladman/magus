@@ -9,8 +9,13 @@ import (
 )
 
 func init() {
+	// Internal: this is the dispatch path for a magusfile's OWN targets, not a
+	// toolchain adapter, and it is not one of the spells a user binds. See
+	// [spells.WithInternal] for why the distinction is load-bearing rather than
+	// cosmetic.
 	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
 		"magusfile",
+		spells.WithInternal(),
 		spells.WithSources("magusfile.buzz"),
 		spells.WithInvoker(runTarget),
 		spells.WithDeclarationFiles("magusfile.buzz"),

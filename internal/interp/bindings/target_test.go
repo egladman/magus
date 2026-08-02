@@ -281,9 +281,9 @@ func TestBuildCacheNS(t *testing.T) {
 		ns := buildCacheNS(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("s3-cache"))
+		handle.MapSet("name", vm.StrValue("aws-s3"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "remote"), handle))
-		assert.Equal(t, "s3-cache", reg.RemoteBackend())
+		assert.Equal(t, "aws-s3", reg.RemoteBackend())
 	})
 
 	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
@@ -291,13 +291,13 @@ func TestBuildCacheNS(t *testing.T) {
 		// simply records nothing.
 		ns := buildCacheNS(context.Background(), nil)
 		handle := vm.NewMap()
-		handle.MapSet("name", vm.StrValue("s3-cache"))
+		handle.MapSet("name", vm.StrValue("aws-s3"))
 		require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "remote"), handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
 		ns := buildCacheNS(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.StrValue("s3-cache"))
+		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.StrValue("aws-s3"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})

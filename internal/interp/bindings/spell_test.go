@@ -75,8 +75,8 @@ export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 // which was the coverage gap: an absent host-owned mirror surfaced only when the
 // renderer actually loaded.
 func TestMagusGraphReturnTypesMatchMirrors(t *testing.T) {
-    dir := t.TempDir()
-    writeFile(t, dir, "magusfile.buzz", `import "magus";
+	dir := t.TempDir()
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
 export fun preflight(ctx: magus\Context, args: [str]) > void {
     final targets: TargetGraph = null;
     final graph: Graph = null;
@@ -416,13 +416,22 @@ func TestSuggestSpellName(t *testing.T) {
 // and an unknown handle yields a did-you-mean naming the right one.
 func TestCheckSpellImports(t *testing.T) {
 	require.NoError(t, checkSpellImports(nil))
-	require.NoError(t, checkSpellImports([]string{"go", "typescript", "markdown", "magusfile"}),
+	require.NoError(t, checkSpellImports([]string{"go", "typescript", "markdown"}),
 		"built-in and host-registered handles must pass")
+
+	// magusfile IS registered - dispatch needs it - so the generic registered-handle
+	// check would accept this import. It is rejected explicitly instead: the handle
+	// binds nothing an author can use, and accepting it taught readers magusfile was
+	// a toolchain adapter like go or buf.
+	err := checkSpellImports([]string{"magusfile"})
+	require.Error(t, err, "importing the magusfile driver must fail")
+	assert.Contains(t, err.Error(), string(types.MagusfileIsNotASpell))
+	assert.Contains(t, err.Error(), "magusfile is not a spell")
 
 	// javascript is a real SYNONYM for the typescript spell, not an abbreviation of
 	// it - the abbreviation aliases went away when spells took the names users
 	// already reach for.
-	err := checkSpellImports([]string{"go", "javascript"})
+	err = checkSpellImports([]string{"go", "javascript"})
 	require.Error(t, err)
 	msg := err.Error()
 	assert.Contains(t, msg, `"javascript"`)

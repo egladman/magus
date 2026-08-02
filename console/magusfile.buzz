@@ -14,7 +14,6 @@ import "project/.." as root;
 // TypeScript spell so the app's src/ is symbol-capable - its `scip` op indexes it (via tsconfig.json)
 // for the knowledge graph. ts is opaque (pnpm owns the dependency graph; informational) and does not
 // run in ci, which uses the custom targets below; it just makes the TypeScript browsable as symbols.
-import "magus/spell/magusfile";
 import "magus/spell/typescript";
 
 // The console is the standalone native PWA (dashboard, logs, graph, activity as tabs + tiling). It owns
@@ -22,7 +21,7 @@ import "magus/spell/typescript";
 // and vendored copies of the shared lib/ui/proto/styles - with NO dependency on the docs site. This
 // magusfile registers it as a first-class magus project so `magus affected ci` covers it.
 magus\project({
-    "spells": [magusfile, typescript],
+    "spells": [typescript],
     // Affected/drift tracks this sources glob, not the import graph, so every input must be named to be
     // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the
     // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the

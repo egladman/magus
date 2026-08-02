@@ -171,8 +171,8 @@ func TestRemoteBackend_RoundTrip(t *testing.T) {
 	r := NewWorkspaceRegistry()
 	assert.Empty(t, r.RemoteBackend())
 
-	r.SetRemoteBackend("s3-cache")
-	assert.Equal(t, "s3-cache", r.RemoteBackend())
+	r.SetRemoteBackend("aws-s3")
+	assert.Equal(t, "aws-s3", r.RemoteBackend())
 
 	// Last writer wins.
 	r.SetRemoteBackend("gcs-cache")

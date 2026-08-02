@@ -42,6 +42,7 @@ type Spell struct {
 	language            string          // canonical source language the spell adapts; "" when it adapts none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
+	internal            bool
 	targetSources       map[string][]string
 	targetCharms        map[string][]string // target name → charm names it declares (for discovery)
 	targetDocs          map[string]string   // target name → handler doc comment (for describe/doctor)
@@ -102,8 +103,12 @@ func (s *Spell) Language() string { return s.language }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
-func (s *Spell) IsServiceTarget(name string) bool   { return s.serviceTargets[name] }
-func (s *Spell) Opaque() bool                       { return s.opaque }
+func (s *Spell) IsServiceTarget(name string) bool { return s.serviceTargets[name] }
+func (s *Spell) Opaque() bool                     { return s.opaque }
+
+// Internal reports whether this registration is dispatch plumbing rather than a
+// spell a user binds. See [WithInternal].
+func (s *Spell) Internal() bool                     { return s.internal }
 func (s *Spell) TargetSources() map[string][]string { return s.targetSources }
 func (s *Spell) Charms(target string) []string      { return s.targetCharms[target] }
 
@@ -288,6 +293,23 @@ func WithOpaque() Option {
 // WithInvoker sets the function that runs a target; a spell with none is a no-op.
 // The invoker receives the full request (so function-ops can read Params) and
 // returns structured Data (nil for fork targets), surfaced via InvokeResponse.
+// WithInternal marks a registration as dispatch plumbing rather than a spell a
+// user binds, keeping it out of every surface that enumerates spells.
+//
+// It exists for exactly one registration: `magusfile`. A spell is defined as a
+// library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint) -
+// see docs/concepts/spells.md, whose built-in table has never listed magusfile.
+// The magusfile registration adapts no toolchain and contributes no ops; it reuses
+// the driver interface so a magusfile's own targets dispatch through the same
+// path. Registering it plainly made the code contradict the docs: `magus describe
+// spells` listed a spell the reference says does not exist, and because every
+// project is DISCOVERED by having a magusfile, `magus ls` stamped
+// "spell: magusfile" on all of them - a field that told a reader nothing, since it
+// was true by construction.
+func WithInternal() Option {
+	return func(s *Spell) { s.internal = true }
+}
+
 func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) Option {
 	return func(s *Spell) { s.invoke = fn }
 }

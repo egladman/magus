@@ -136,17 +136,17 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 	require.Equal(t, 2, count(), "after run 3 (toolchain change → expected miss)")
 }
 
-// TestExplicitRegisterDoesNotDoubleBind guards the idempotence of auto-bind: a
-// magusfile that explicitly binds the magusfile spell must not also get an
-// auto-bound copy, or its target would run twice.
-func TestExplicitRegisterDoesNotDoubleBind(t *testing.T) {
+// TestMagusfileTargetsRunWithoutBeingDeclared is the contract that replaced the
+// old double-bind guard: a magusfile declares no spell at all and its own targets
+// still run, exactly once. Binding the magusfile driver is magus's job - it is
+// what makes the file runnable, not a toolchain the author opts into.
+func TestMagusfileTargetsRunWithoutBeingDeclared(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "svc")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	src := `import "magus";
 import "os";
-import "magus/spell/magusfile";
-magus.project("svc", {"spells": [magusfile]});
+magus.project("svc", {});
 export fun hit(ctx: magus\Context, args: [str]) > void {
     os.execSh("printf x >> count", "");
 }
@@ -162,6 +162,32 @@ export fun hit(ctx: magus\Context, args: [str]) > void {
 	require.NoError(t, err, "ExpandPath")
 	require.NoError(t, m.Run(ctx, targets), "Run")
 	assert.Equal(t, 1, len(readFile(t, filepath.Join(dir, "count"))), "target ran more than once (double-bind regression)")
+}
+
+// TestDeclaringMagusfileAsASpellIsRejected pins the migration. Declaring it was a
+// no-op that still taught every reader magusfile was a toolchain adapter, so it
+// now fails with MGS1017 and the fix rather than being silently ignored.
+//
+// The import is the case a real magusfile hits: the `"spells": [magusfile]` entry
+// can only be written with the handle in scope, and the handle only comes from
+// this import, so the import check is what fires. The list check behind it stays
+// as the backstop for a locally-defined spell that names itself "magusfile".
+func TestDeclaringMagusfileAsASpellIsRejected(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "svc")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	src := `import "magus";
+import "magus/spell/magusfile";
+magus.project("svc", {"spells": [magusfile]});
+export fun hit(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
+
+	_, err := magus.Open(context.Background(), root)
+	require.Error(t, err, "declaring the magusfile driver must fail")
+	assert.Contains(t, err.Error(), string(types.MagusfileIsNotASpell))
+	assert.Contains(t, err.Error(), "magusfile is not a spell")
+	assert.Contains(t, err.Error(), "delete the", "the error must carry the fix")
 }
 
 // TestBuiltinSpellVersionProbeIsDataDriven proves the version probe is wired

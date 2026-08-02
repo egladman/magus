@@ -18,10 +18,32 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// magusfileSpellName is the spell that dispatches a magusfile's own exported
-// targets. It is bound implicitly for every project (see the "spells" handling
-// below), so a magusfile's targets run whether or not the author lists it.
+// magusfileSpellName is the internal driver that dispatches a magusfile's own
+// exported targets. It is bound implicitly for every project (see the "spells"
+// handling below), so a magusfile's targets run whether or not the author lists
+// it - and since listing it therefore changes nothing, listing it is now an
+// error rather than a no-op that implies otherwise. See magusfileNotASpellErr.
 const magusfileSpellName = "magusfile"
+
+// magusfileNotASpellErr is the migration diagnostic for a magusfile that still
+// declares the magusfile driver as one of its spells, or imports it.
+//
+// A spell is a library of tool-native ops for ONE TOOLCHAIN - go-build,
+// cargo-clippy, eslint (docs/concepts/spells.md, whose built-in table has never
+// listed magusfile). The magusfile driver adapts no toolchain and contributes no
+// ops; it is what makes the file you are writing runnable at all. Binding it was
+// made implicit precisely because "listing it should never have been the author's
+// job", which left the import and the list entry doing nothing while still
+// teaching every reader that magusfile is a spell. This finishes that change.
+func magusfileNotASpellErr(what string) error {
+	return fmt.Errorf(
+		"[%s] magusfile is not a spell, so %s does nothing: magus binds it to every "+
+			"project automatically (it is what makes a magusfile's targets runnable, "+
+			"not a toolchain adapter).\nfix: delete the `import \"magus/spell/magusfile\"` "+
+			"line and drop `magusfile` from the project's \"spells\" list; a project with "+
+			"no toolchain spell needs no list at all.\nsee: %s",
+		types.MagusfileIsNotASpell, what, types.CodeURL(types.MagusfileIsNotASpell))
+}
 
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
@@ -141,9 +163,6 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithExclusive())
 		}
 	}
-	// declaredMagusfileSpell tracks whether the author listed the magusfile spell
-	// themselves, so the implicit bind below does not double-register it.
-	declaredMagusfileSpell := false
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins
@@ -178,7 +197,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
 			}
 			if name == magusfileSpellName {
-				declaredMagusfileSpell = true
+				return nil, magusfileNotASpellErr("listing it in \"spells\"")
 			}
 			opts = append(opts, workspace.WithRegisteredSpell(name))
 		}
@@ -192,11 +211,11 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		// own proto project (spells: [buf]) had three no-op targets that way,
 		// including the ci anchor that `magus affected ci` gates on.
 		//
-		// Appended last so the FIRST declared spell stays the primary (p.Spell is set
-		// by the first binding), keeping `magus ls` and the graph labels unchanged.
-		if !declaredMagusfileSpell {
-			opts = append(opts, workspace.WithRegisteredSpell(magusfileSpellName))
-		}
+		// Unconditional: declaring it is now an error (see magusfileNotASpellErr), so
+		// there is no author-listed case left to avoid double-binding against. Order
+		// no longer matters for the primary slot either - an internal registration
+		// never claims it (spells.WithInternal).
+		opts = append(opts, workspace.WithRegisteredSpell(magusfileSpellName))
 	}
 	if wv, ok := v.MapGet("watch_ignore"); ok && wv.IsMap() {
 		var patterns []types.IgnorePattern

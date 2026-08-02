@@ -347,7 +347,7 @@ const ctxMarker = "__magus_context"
 //   - needs(...) dispatches the named dependencies - a target function, or a
 //     ctx.glob(...) list of them - deduped through the pool.
 //   - glob(pattern) resolves a pattern to matching target handles, feeding needs.
-	//   - readsFiles(...) / writesFiles(...) / modifiesExistingFiles(...) declare the cache footprint. They are no-ops at run
+//   - readsFiles(...) / writesFiles(...) / modifiesExistingFiles(...) declare the cache footprint. They are no-ops at run
 //     time: the footprint is read STATICALLY from the source by describe.Extract (both
 //     arms of any branch), the sole graph source - the body is never run to learn it. A
 //     non-literal argument is caught there as MGS-level DynamicIO at load, not here.

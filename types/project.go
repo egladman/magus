@@ -138,7 +138,7 @@ type Project struct {
 	// is also unioned into DependsOn so a change to it marks this project affected; a
 	// same-project input needs no such edge (it seeds by directory containment).
 	// Populated statically at load from describe.Extract.
-	TargetInputs  map[string][]InputRef
+	TargetInputs map[string][]InputRef
 	// TargetOutputs are per-target ctx.writesFiles refs. When a target has any, they
 	// replace the broad project/spell output baseline for that target's replay set.
 	TargetOutputs map[string][]OutputRef
@@ -226,7 +226,12 @@ func (p *Project) AllOutputs() []string {
 
 // AttachSpell associates spell with p without applying registration overrides.
 func (p *Project) AttachSpell(spell *spells.Spell) {
-	if p.Spell == "" {
+	// Internal plumbing never claims the primary slot - see the same rule in
+	// magus.bindSpell. The magusfile registration attaches on every project (it is
+	// how a project is discovered), so it won this race everywhere and `magus ls`
+	// answered "spell: magusfile" for almost every project: true by construction,
+	// and therefore no answer at all.
+	if p.Spell == "" && !spell.Internal() {
 		p.Spell = spell.Name()
 	}
 	p.Spells = append(p.Spells, spell.Name())

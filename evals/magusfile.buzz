@@ -2,14 +2,12 @@ import "magus";
 import "fs";
 import "os";
 
-import "magus/spell/magusfile";
 
 // The skill-eval harness. Measures whether an installed skill actually changes
 // agent behaviour, per permutation and per model, instead of leaving that to
 // judgement. Live model runs are opt-in: `ci` is lint-only so `magus affected ci`
 // stays offline and keyless.
 magus\project({
-    "spells": [magusfile],
     "sources": ["magusfile.buzz", "*.buzz",
                 "tasks/**/*.yaml", "lib/**/*.mjs", "tools/**/*.mjs", "tools/**/*.py",
                 "promptfooconfig.*.yaml",
