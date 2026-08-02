@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2371,
-  "edge_count": 5286,
+  "node_count": 2374,
+  "edge_count": 5290,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7531,6 +7531,16 @@
       "label": "isGeneratedSource",
       "doc": "isGeneratedSource reports whether a Go source body carries the marker.  The scan stops at the package clause: the convention places the marker in the header, and stopping there keeps a passing mention of the phrase in ordinary code (a comment ABOUT generated files, of which this repo has several) from silently excluding a hand-written file from coverage.",
       "source": "coverage.buzz:51",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:coverage.buzz:lcovPercent",
+      "kind": "function",
+      "label": "lcovPercent",
+      "doc": "lcovPercent totals LINE coverage across every lcov record whose source file path contains keep, as a one-decimal percentage string (\"85.7\") - the shape badge.coverage renders.  lcov rather than Node's printed table: the table is a display format that has changed shape across Node releases, while LF/LH are counts. Summing counts and dividing once is also the only correct way to combine files - averaging their per-file percentages would weight a three-line module the same as a three-hundred-line one.  keep ex",
+      "source": "coverage.buzz:109",
       "attrs": {
         "exported": "true"
       }
@@ -15328,7 +15338,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
-      "source": "libs/textsearch/magusfile.buzz:103",
+      "source": "libs/textsearch/magusfile.buzz:141",
       "attrs": {
         "exported": "true"
       }
@@ -15338,7 +15348,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/textsearch/magusfile.buzz:68",
+      "source": "libs/textsearch/magusfile.buzz:72",
       "attrs": {
         "exported": "true"
       }
@@ -15348,14 +15358,14 @@
       "kind": "function",
       "label": "install",
       "doc": "install restores the dev-only gate deps (typescript + biome) with pnpm, honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.",
-      "source": "libs/textsearch/magusfile.buzz:58"
+      "source": "libs/textsearch/magusfile.buzz:62"
     },
     {
       "id": "function:libs/textsearch/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "libs/textsearch/magusfile.buzz:88",
+      "source": "libs/textsearch/magusfile.buzz:92",
       "attrs": {
         "exported": "true"
       }
@@ -15365,7 +15375,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch/magusfile.buzz:80",
+      "source": "libs/textsearch/magusfile.buzz:84",
       "attrs": {
         "exported": "true"
       }
@@ -15374,7 +15384,7 @@
       "id": "function:libs/textsearch/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/textsearch/magusfile.buzz:53",
+      "source": "libs/textsearch/magusfile.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -15383,8 +15393,8 @@
       "id": "function:libs/textsearch/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "doc": "test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).",
-      "source": "libs/textsearch/magusfile.buzz:96",
+      "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.  The bundle is deliberate, not a workaround: this project is authored bundler-first (tsconfig moduleResolution: \"bundler\", extensionless relative imports, consumed as SOURCE through a paths alias rather than as a package), so esbuild is the compiler and tsc is only the type gate. Coverage therefore has to travel back through a sourcemap - hence --sourcemap here - or every record would name a .testcache",
+      "source": "libs/textsearch/magusfile.buzz:108",
       "attrs": {
         "exported": "true"
       }
@@ -17563,6 +17573,22 @@
       "kind": "function",
       "label": "vitest",
       "source": "spells/typescript/spell.buzz:105"
+    },
+    {
+      "id": "import:../../badge",
+      "kind": "import",
+      "label": "../../badge",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:../../coverage",
+      "kind": "import",
+      "label": "../../coverage",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
     },
     {
       "id": "import:../../spells/golang/gomod",
@@ -21695,7 +21721,7 @@
       "id": "target:libs/textsearch:test",
       "kind": "target",
       "label": "test",
-      "doc": "test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).",
+      "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.",
       "source": "libs/textsearch",
       "attrs": {
         "engine": "buzz"
@@ -21974,6 +22000,14 @@
     {
       "source": "charm:rw",
       "target": "target:libs/textsearch:generate",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/textsearch"
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:libs/textsearch:test",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37125,6 +37159,14 @@
     },
     {
       "source": "file:coverage.buzz",
+      "target": "function:coverage.buzz:lcovPercent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "coverage.buzz"
+    },
+    {
+      "source": "file:coverage.buzz",
       "target": "function:coverage.buzz:modulePath",
       "relation": "contains",
       "confidence": "extracted",
@@ -48617,6 +48659,22 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "libs/textsearch/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/textsearch/magusfile.buzz",
+      "target": "import:../../badge",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "libs/textsearch/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/textsearch/magusfile.buzz",
+      "target": "import:../../coverage",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "libs/textsearch/magusfile.buzz"
     },
     {

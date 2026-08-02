@@ -92,6 +92,74 @@ export fun stripGenerated(profile: str, prefix: str) > str {
     return kept;
 }
 
+// lcovPercent totals LINE coverage across every lcov record whose source file
+// path contains keep, as a one-decimal percentage string ("85.7") - the shape
+// badge.coverage renders.
+//
+// lcov rather than Node's printed table: the table is a display format that has
+// changed shape across Node releases, while LF/LH are counts. Summing counts and
+// dividing once is also the only correct way to combine files - averaging their
+// per-file percentages would weight a three-line module the same as a
+// three-hundred-line one.
+//
+// keep exists because the tests run against esbuild bundles in .testcache. With
+// sourcemaps the records point back at src/*.ts, but the bundles and anything
+// under node_modules still appear; filtering on the source path keeps the figure
+// about code someone wrote.
+export fun lcovPercent(lcov: str, keep: str) > str !> str {
+    var found = 0;
+    var hit = 0;
+    var counting = false;
+    foreach (line in lcov.split("\n")) {
+        if (line.startsWith("SF:")) {
+            final sf = line.sub(3).trim();
+            // Anchored at a path boundary, both forms: node:test writes paths
+            // relative to the cwd ("src/foo.ts") while other producers write
+            // absolute ones ("/w/src/foo.ts"). A bare substring test would also
+            // match "vendor/notsrc/..." and, worse, "node_modules/x/src/y.js".
+            counting = sf.startsWith(keep) or sf.indexOf("/" + keep) != null;
+            continue;
+        }
+        if (!counting) { continue; }
+        if (line.startsWith("LF:")) { found = found + std\parseInt(line.sub(3).trim()) ?? 0; }
+        if (line.startsWith("LH:")) { hit = hit + std\parseInt(line.sub(3).trim()) ?? 0; }
+    }
+    if (found == 0) {
+        throw "coverage: lcov report has no lines under \"" + keep + "\"; did the sourcemaps resolve?";
+    }
+    // Integer math throughout: a rounded tenth rendered by hand avoids depending
+    // on float formatting for a string that ends up in a committed SVG.
+    final tenths = (hit * 1000 + found / 2) / found;
+    return "{tenths / 10}.{tenths % 10}";
+}
+
+test "lcovPercent totals counts rather than averaging per-file percentages" {
+    // 1/1 in a tiny file and 1/9 in a big one is 20%, not the 55.6% an average gives.
+    final lcov = "SF:/w/src/small.ts\nLF:1\nLH:1\nend_of_record\n"
+        + "SF:/w/src/big.ts\nLF:9\nLH:1\nend_of_record\n";
+    assert\equal(lcovPercent(lcov, keep: "src/"), want: "20.0", message: "summed, not averaged");
+}
+
+test "lcovPercent ignores records outside the kept path" {
+    final lcov = "SF:/w/src/a.ts\nLF:4\nLH:3\nend_of_record\n"
+        + "SF:/w/node_modules/x/index.js\nLF:100\nLH:0\nend_of_record\n"
+        + "SF:/w/.testcache/a.test.js\nLF:50\nLH:50\nend_of_record\n";
+    assert\equal(lcovPercent(lcov, keep: "src/"), want: "75.0", message: "only src counted");
+}
+
+test "lcovPercent rounds to one decimal" {
+    assert\equal(lcovPercent("SF:/w/src/a.ts\nLF:3\nLH:2\nend_of_record\n", keep: "src/"),
+        want: "66.7", message: "2 of 3 rounds up");
+}
+
+test "lcovPercent refuses an empty report rather than reporting zero" {
+    // Reporting 0.0% here would look like a real regression; the actual cause is a
+    // report with nothing under src, which almost always means sourcemaps did not
+    // resolve and every record still points at the bundle.
+    assert\throws(fun () > void !> str { final _ = lcovPercent("SF:other/a.js\nLF:2\nLH:1\nend_of_record\n", keep: "src/"); },
+        message: "empty selection errors");
+}
+
 test "modulePath reads the module line" {
     assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n"), want: "github.com/egladman/magus", message: "module path");
 }

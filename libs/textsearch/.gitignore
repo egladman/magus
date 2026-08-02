@@ -7,3 +7,4 @@ node_modules/
 # under node --test (which skips node_modules, so the bundle can't live there). A build
 # artifact, not committed.
 .testcache/
+coverage.lcov

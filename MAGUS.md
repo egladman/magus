@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2371 nodes** and **5286 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2374 nodes** and **5290 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -56,8 +56,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 167 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 224 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1155 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 120 | `magus query kind:import` | `std`, `magus`, `fs` |
+| function | 1156 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 122 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
@@ -206,7 +206,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|---|
 | `generate` | Regenerates MAGUS.md and fails on drift. |
 | `lint` | lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `test` | test runs the node:test suite over the bundled *.test.ts (the search-grammar tests). |
+| `test` | test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests. |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |

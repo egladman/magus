@@ -40,5 +40,6 @@ libs/gopherbuzz/MAGUS.md merge=magus linguist-generated
 libs/gopherbuzz/go.mod merge=magus linguist-generated
 libs/textsearch/MAGUS.md merge=magus linguist-generated
 libs/textsearch/dist/** merge=magus linguist-generated
+libs/textsearch/coverage.svg merge=magus linguist-generated
 proto/gen/** merge=magus linguist-generated
 # END magus-generated
