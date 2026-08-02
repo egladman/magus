@@ -125,7 +125,7 @@ fun walk(rel: str, site: Site) > void {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: any, graph: any) > Site {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
@@ -307,4 +307,24 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: an
     // Hand the populated state back; the caller threads it into updateUrlLock (no
     // module-global carries it between the two calls).
     return site;
+}
+
+// site_publish is the cacheable publication unit used by docs:site-generate. Keep every
+// output that belongs to the completed site in this one phase: the page tree, pnpm-backed
+// vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
+export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void {
+    final site = site_render(root, docs, blog, outDir, targets, graph);
+    generateJsBundles();
+    writeSiteManifest(site);
+    if (updateUrls) { updateUrlLock(site); }
+}
+
+// generateJsBundles builds the committed browser bundles that import npm packages. pnpm
+// is pinned by package.json and pnpm-lock.yaml; a warm tree skips installation, while a
+// cold checkout restores the locked set before esbuild runs the declared build scripts.
+fun generateJsBundles() > void {
+    if (!fs\isDir("node_modules")) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    }
+    os\exec("pnpm", ["run", "build"], ".", {});
 }

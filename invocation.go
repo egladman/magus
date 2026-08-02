@@ -2,15 +2,12 @@ package magus
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/types"
 )
 
 // BeginInvocation opens the structured journal for one `magus` command (launch to exit). It
@@ -67,47 +64,14 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusV
 	ctx = withCaptureLogger(ctx, append([]slog.Handler{fileHandler}, extra...))
 	journal.Emit(ctx, started)
 
-	journalPath := filepath.Join(dir, id+".jsonl")
 	return ctx, func(runErr error) {
 		finish(ctx, runErr)
 		fileHandler.Flush()
 		_ = f.Close()
-		// The journal is closed, so this run's own results count toward the verdict.
-		warnStalledTargets(resolveCacheDir(m.ws.Root, m.cfg), journalPath)
+		// Cache-yield analysis remains available through `magus doctor`. Do not emit
+		// it on every slow invocation: nested/adopted runs can surface the same
+		// journal finding twice, and intentional uncached work made the hint noisy.
 	}
-}
-
-// slowRunMs is the execution time that makes a cache-yield scan worth doing. If a target
-// just spent this long, reading a few hundred small journals is noise beside it; if
-// nothing was slow, the scan never happens.
-const slowRunMs = 5_000
-
-// warnStalledTargets tells the user when a target they just waited on has never once
-// replayed from cache.
-//
-// This fires where the user already is, deliberately. The same finding is available from
-// `magus doctor`, but a diagnostic you have to remember to ask for is one you will not
-// see: this exact problem sat in the journals for dozens of runs, costing over an hour,
-// while every individual run looked perfectly healthy. Best-effort throughout - a
-// diagnostic must never be why a run fails.
-func warnStalledTargets(cacheDir, journalPath string) {
-	slow := cache.SlowExecutions(journalPath, slowRunMs)
-	if len(slow) == 0 {
-		return
-	}
-	stalled := cache.StalledTargets(cacheDir, slow)
-	if len(stalled) == 0 {
-		return
-	}
-	// The worst one only. A list of them is what `magus doctor` is for; the point here
-	// is to interrupt the habit, not to file a report.
-	s := stalled[0]
-	interactive.Emit(os.Stderr, fmt.Sprintf(
-		"[%s] %s %s has run %d times without ever replaying from cache (%.0fm spent). Its declared "+
-			"footprint is probably wider than it reads, so unrelated edits keep changing its key; "+
-			"run 'magus doctor' for the full list (see %s)",
-		types.TargetNeverReplays, s.Project, s.Target, s.Runs, float64(s.TotalMs)/60000,
-		types.CodeURL(types.TargetNeverReplays)))
 }
 
 // withCaptureLogger attaches a capture logger fanning to handlers onto ctx (or leaves ctx

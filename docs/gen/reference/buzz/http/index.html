@@ -121,7 +121,7 @@
 <h2 id="methods">Methods</h2>
 <h3 id="get">get</h3>
 <p>Send a GET request; returns {<a class="code-xref" href="../../manpage/magus-status/" data-kind="command" data-def="magus status: Show effective config plus the live concurrency pool state of any running parent magus process, with optional --watch polling and --compact output.">status</a>, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#get" data-kind="method" data-def="">http\get</a>(url, [headers], [opts]) → HTTPResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#get" data-kind="method" data-def="">http\get</a>(url, [headers], [opts]) → HttpResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L111" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -163,7 +163,7 @@ std\print(r.body.sub(0, 80) + &quot;...&quot;);
 </code></pre>
 <h3 id="post">post</h3>
 <p>Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#post" data-kind="method" data-def="">http\post</a>(url, body, [headers], [opts]) → HTTPResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L117" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#post" data-kind="method" data-def="">http\post</a>(url, body, [headers], [opts]) → HttpResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L117" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>
@@ -215,7 +215,7 @@ final r = http\post(
 </code></pre>
 <h3 id="request">request</h3>
 <p>Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); retry (int), retry_delay, retry_max_time, timeout (seconds, default 30); retry_all_errors, retry_connrefused (bool).</p>
-<p><strong>Signature:</strong> <code><a class="code-xref" href="./#request" data-kind="method" data-def="">http\request</a>(method, url, [body], [headers], [opts]) → HTTPResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L123" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
+<p><strong>Signature:</strong> <code><a class="code-xref" href="./#request" data-kind="method" data-def="">http\request</a>(method, url, [body], [headers], [opts]) → HttpResponse</code> · <a href="https://github.com/egladman/magus/blob/main/std/http.go#L123" rel="noopener noreferrer" target="_blank" data-external>source</a></p>
 <figure class="table-scroll"><table>
 <thead>
 <tr>

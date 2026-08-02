@@ -75,7 +75,7 @@ fun workspace_go_mods(ctx: magus\Context) > [any] {
 }
 
 export fun mod_sync(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("go.mod");
+    ctx.writesFiles("go.mod");
     final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});

@@ -301,22 +301,37 @@ func raceForcesNoCache(o run) bool {
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
 	step.Target = target
+	// An explicit target footprint is an ownership boundary, not an extra safety
+	// margin.  Keeping the project-wide baseline here made a target that declared
+	// its exact inputs indistinguishable from one that had not: unrelated spell
+	// claims still invalidated it.  Retain the magusfiles (they define the target)
+	// and the target-specific spell inputs, then let the body state the rest.
+	if len(p.TargetInputs[target]) > 0 {
+		step.Sources = append([]string(nil), magusfileGlobs(p.Path)...)
+		if p.Path != "." {
+			step.Sources = append(step.Sources, magusfileGlobs(".")...)
+		}
+	}
+	// ctx.writesFiles completes the same ownership boundary for replay: once a target
+	// names its own artifacts, do not inherit every project or spell output into
+	// its snapshot. Otherwise an unrelated target can restore a stale tree merely
+	// because it shares the project.
+	if len(p.TargetOutputs[target]) > 0 {
+		step.Outputs = nil
+		step.RequiredOutputs = nil
+	}
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)
 	}
-	// Per-target inputs declared via magus.inputs (one InputRef shape for same-project
-	// globs and cross-project files; each carries its owning project). This is the one
-	// place the declared "inputs" vocabulary folds into the cache Step's aggregate
-	// "sources" footprint: joinGlob(Project, Glob) - the SAME join the outputs fold
-	// below uses, so inputs and outputs treat an identical literal identically. Inputs
-	// ADD to this target's key (unioned onto the project-wide globs baseStep seeded,
-	// deduped so a glob declared both places isn't hashed twice); keyVersion is unchanged.
+	// Per-target inputs declared via ctx.readsFiles define the cache footprint whenever
+	// present. Each InputRef carries its owning project; joinGlob follows the same
+	// ownership rule as outputs below.
 	for _, ref := range p.TargetInputs[target] {
 		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)
 		}
 	}
-	// Per-target ctx.updates refs fold into Sources exactly as inputs do, and into
+	// Per-target ctx.modifiesExistingFiles refs fold into Sources exactly as inputs do, and into
 	// Outputs not at all. That asymmetry IS the feature: staying out of the output set
 	// keeps the file off the snapshot/replay path and out of magus clean's reach, while
 	// landing in the source set means editing the authored prose around a generated
@@ -366,7 +381,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 
 // outputWatchDirs are the base directories the race detector and the race-replay
 // snapshots must watch for one target: the project-wide Outputs plus every per-target
-// glob declared via ctx.outputs, each already resolved to an absolute directory. It keeps
+// glob declared via ctx.writesFiles, each already resolved to an absolute directory. It keeps
 // those diagnostics consistent with the cache, which sees the same union via buildStep's
 // step.Outputs.
 //
@@ -565,7 +580,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for _, st := range stages {
 		for _, p := range st.projects {
 			addProj(p)
-			// A target declaring ctx.outputs(<alias>.file(...)) mutates ANOTHER
+			// A target declaring ctx.writesFiles(<alias>.file(...)) mutates ANOTHER
 			// project's tree, so that project belongs in the lock set too. Without it the
 			// advisory lock's guarantee - no two magus invocations mutating one project at
 			// once - is false by construction here: a concurrent `magus clean` locks the

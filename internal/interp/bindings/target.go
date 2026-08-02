@@ -347,7 +347,7 @@ const ctxMarker = "__magus_context"
 //   - needs(...) dispatches the named dependencies - a target function, or a
 //     ctx.glob(...) list of them - deduped through the pool.
 //   - glob(pattern) resolves a pattern to matching target handles, feeding needs.
-//   - inputs(...) / outputs(...) declare the cache footprint. They are no-ops at run
+	//   - readsFiles(...) / writesFiles(...) / modifiesExistingFiles(...) declare the cache footprint. They are no-ops at run
 //     time: the footprint is read STATICALLY from the source by describe.Extract (both
 //     arms of any branch), the sole graph source - the body is never run to learn it. A
 //     non-literal argument is caught there as MGS-level DynamicIO at load, not here.
@@ -362,7 +362,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// pattern resolver that feeds ctx.needs (ctx.needs(ctx.glob("*-generate"))). It
 	// returns handles; ctx.needs dispatches them, so needs stays monomorphic.
 	c.MapSet("glob", directVal(obs, "ctx.glob", buildBuzzGlob(targets, exports)))
-	// inputs/outputs are declarations read statically by describe.Extract; at run time
+	// File declarations are read statically by describe.Extract; at run time
 	// they do nothing.
 	c.MapSet(ctxMarker, vm.BoolValue(true))
 	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
@@ -404,7 +404,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 			}
 			return execCtx(env, args[0]), nil
 		}))
-		for _, decl := range []string{"needs", "glob", "inputs", "outputs", "updates", "envInputs", "has_charm"} {
+		for _, decl := range []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "has_charm"} {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
 					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
@@ -422,11 +422,20 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 		}
 	}
 	footprintDecl := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.Null, nil }
-	c.MapSet("inputs", directVal(obs, "ctx.inputs", footprintDecl))
-	c.MapSet("outputs", directVal(obs, "ctx.outputs", footprintDecl))
-	// updates is outputs' counterpart for a file the target EDITS rather than produces,
-	// so magus never deletes it and never replays it from a snapshot. See types.UpdateRef.
-	c.MapSet("updates", directVal(obs, "ctx.updates", footprintDecl))
+	c.MapSet("readsFiles", directVal(obs, "ctx.readsFiles", footprintDecl))
+	c.MapSet("writesFiles", directVal(obs, "ctx.writesFiles", footprintDecl))
+	// modifiesExistingFiles is outputs' explicit counterpart: the target changes an
+	// existing file but does not own its whole contents, so magus neither deletes it
+	// nor restores it from a snapshot. See types.UpdateRef.
+	c.MapSet("modifiesExistingFiles", directVal(obs, "ctx.modifiesExistingFiles", footprintDecl))
+	for old, replacement := range map[string]string{
+		"inputs": "readsFiles", "outputs": "writesFiles", "updates": "modifiesExistingFiles",
+	} {
+		old, replacement := old, replacement
+		c.MapSet(old, directVal(obs, "ctx."+old, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+			return vm.Null, fmt.Errorf("ctx.%s was removed in v0.4; use ctx.%s instead", old, replacement)
+		}))
+	}
 	// env names variables whose PROCESS value folds into the key - the counterpart to
 	// withEnv, which carries a value written in the magusfile. Declaration only: the
 	// static read collects the names, and hashing reads the values.

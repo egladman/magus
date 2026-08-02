@@ -216,6 +216,13 @@ func (v OutputRef) BuzzObject() BuzzObject {
 	}
 }
 
+func (v UpdateRef) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"project": v.Project,
+		"glob":    v.Glob,
+	}
+}
+
 func (v TargetGraphNode) BuzzObject() BuzzObject {
 	items18 := make([]any, len(v.Spells))
 	for index19 := range v.Spells {
@@ -225,50 +232,55 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 	for index21 := range v.CrossDependencies {
 		items20[index21] = v.CrossDependencies[index21].BuzzObject()
 	}
-	items22 := make([]any, len(v.Inputs))
-	for index23 := range v.Inputs {
-		items22[index23] = v.Inputs[index23].BuzzObject()
+	items22 := make([]any, len(v.ReadsFiles))
+	for index23 := range v.ReadsFiles {
+		items22[index23] = v.ReadsFiles[index23].BuzzObject()
 	}
-	items24 := make([]any, len(v.Outputs))
-	for index25 := range v.Outputs {
-		items24[index25] = v.Outputs[index25].BuzzObject()
+	items24 := make([]any, len(v.WritesFiles))
+	for index25 := range v.WritesFiles {
+		items24[index25] = v.WritesFiles[index25].BuzzObject()
+	}
+	items26 := make([]any, len(v.ModifiesExistingFiles))
+	for index27 := range v.ModifiesExistingFiles {
+		items26[index27] = v.ModifiesExistingFiles[index27].BuzzObject()
 	}
 	return BuzzObject{
-		"name":              v.Name,
-		"declared":          v.Declared,
-		"doc":               v.Doc,
-		"dependencies":      v.Dependencies,
-		"charms":            v.Charms,
-		"spells":            items18,
-		"crossDependencies": items20,
-		"inputs":            items22,
-		"outputs":           items24,
-		"execOverrides":     v.ExecOverrides,
-		"envAllow":          v.EnvAllow,
+		"name":                  v.Name,
+		"declared":              v.Declared,
+		"doc":                   v.Doc,
+		"dependencies":          v.Dependencies,
+		"charms":                v.Charms,
+		"spells":                items18,
+		"crossDependencies":     items20,
+		"readsFiles":            items22,
+		"writesFiles":           items24,
+		"modifiesExistingFiles": items26,
+		"execOverrides":         v.ExecOverrides,
+		"envAllow":              v.EnvAllow,
 	}
 }
 
 func (v TargetGraphProject) BuzzObject() BuzzObject {
-	items26 := make([]any, len(v.Nodes))
-	for index27 := range v.Nodes {
-		items26[index27] = v.Nodes[index27].BuzzObject()
+	items28 := make([]any, len(v.Nodes))
+	for index29 := range v.Nodes {
+		items28[index29] = v.Nodes[index29].BuzzObject()
 	}
 	return BuzzObject{
 		"path":      v.Path,
 		"name":      v.Name,
 		"engine":    v.Engine,
-		"nodes":     items26,
+		"nodes":     items28,
 		"cycle":     v.Cycle,
 		"dependsOn": v.DependsOn,
 	}
 }
 
 func (v TargetGraphOutput) BuzzObject() BuzzObject {
-	items28 := make([]any, len(v.Projects))
-	for index29 := range v.Projects {
-		items28[index29] = v.Projects[index29].BuzzObject()
+	items30 := make([]any, len(v.Projects))
+	for index31 := range v.Projects {
+		items30[index31] = v.Projects[index31].BuzzObject()
 	}
 	return BuzzObject{
-		"projects": items28,
+		"projects": items30,
 	}
 }

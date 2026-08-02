@@ -30,7 +30,7 @@ Escape hatch: run `magus <args>` for any subcommand, in the target's project dir
 
 List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd("ls"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.
 
-**Signature:** `magus\ls() → ProjectsOutput` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L200)
+**Signature:** `magus\ls() → Projects` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L200)
 
 **Returns:** map[string]any
 
@@ -38,7 +38,7 @@ List the workspace's projects: {workspace, count, projects}, each project {path,
 
 The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.graph() does not carry: graph() is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body, and served in-process from the workspace on the context - no subprocess, no markdown to re-parse.
 
-**Signature:** `magus\targets() → TargetGraphOutput` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L212)
+**Signature:** `magus\targets() → TargetGraph` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L212)
 
 **Returns:** map[string]any
 
@@ -46,7 +46,7 @@ The TARGET dependency graph of every project: {projects}, each project {path, na
 
 Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.
 
-**Signature:** `magus\affected([base]) → AffectedResult` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L227)
+**Signature:** `magus\affected([base]) → Affected` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L227)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -72,7 +72,7 @@ Raise MGS1016 when this Go module's workspace-local replace directives drift fro
 
 The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.
 
-**Signature:** `magus\graph() → GraphView` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L443)
+**Signature:** `magus\graph() → Graph` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L443)
 
 **Returns:** map[string]any
 

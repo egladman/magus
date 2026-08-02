@@ -98,7 +98,7 @@
     <small class="reading-time" title="Estimated reading time">9 min read</small>
     <article>
 <h1 id="magus-delegate-ultra">magus-delegate-ultra</h1>
-<p><progress value="6403" max="8446" aria-label="The --simple permutation is 24% smaller: 6403 of 8446 bytes."></progress><small>The --simple permutation is 24% smaller: 6403 of 8446 bytes.</small></p>
+<p><progress value="6404" max="8447" aria-label="The --simple permutation is 24% smaller: 6404 of 8447 bytes."></progress><small>The --simple permutation is 24% smaller: 6404 of 8447 bytes.</small></p>
 <p>Plan and execute potentially expensive multi-agent work in a magus <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> as an acceptance-criteria loop, using <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> shard plans and knowledge-<a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a> evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user explicitly names magus-delegate-ultra or explicitly requests graph-planned parallel delegation; never auto-trigger it for ordinary implementation or a vague request to work faster.</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -137,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>12962ae67c6a</code></td>
+<td><code>69d6b499f0a0</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -297,7 +297,7 @@ messages, and completion. Use this to keep the root ledger aware of descendants.
 Use Magus to watch processes and shared workspace resources:
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 This shows Magus process state, lock holders and waiters, and shared-service
@@ -457,7 +457,7 @@ messages, and completion. Use this to keep the root ledger aware of descendants.
 Use Magus to watch processes and shared workspace resources:
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 This shows Magus process state, lock holders and waiters, and shared-service

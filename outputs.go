@@ -22,7 +22,7 @@ func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 // expanded against the working tree. Glob is carried alongside Path because the
 // declaration is what makes the file a build artifact rather than an incidental
 // file, and a reader chasing an unexpected artifact needs to know which
-// ctx.outputs(...) claimed it.
+// ctx.writesFiles(...) claimed it.
 type TargetArtifact struct {
 	Path string // workspace-relative
 	Glob string // the declaration it matched

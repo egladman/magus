@@ -128,19 +128,22 @@ type Project struct {
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via
-	// ctx.inputs(...), keyed by normalized target name (DefaultTargetNameNormalizer,
+	// ctx.readsFiles(...), keyed by normalized target name (DefaultTargetNameNormalizer,
 	// matching the TargetPolicies key space buildStep looks up). ONE representation
 	// covers both a same-project glob and a cross-project file: each InputRef carries its
 	// owning project (workspace-relative once resolved) and the glob/file relative to
-	// that project. They ADD to the target's cache key - buildStep folds each to a
-	// workspace-relative glob via path.Join(Project, Rel) and unions it onto the
-	// project-wide Sources, never replacing them. A cross-project input's owning project
+	// that project. When present they DEFINE the target's file footprint: buildStep
+	// retains the owning magusfiles and target-specific spell sources, then folds these
+	// refs to workspace-relative globs via path.Join(Project, Rel). A cross-project input's owning project
 	// is also unioned into DependsOn so a change to it marks this project affected; a
 	// same-project input needs no such edge (it seeds by directory containment).
 	// Populated statically at load from describe.Extract.
 	TargetInputs  map[string][]InputRef
-	TargetOutputs map[string][]OutputRef // per-target ctx.outputs refs, each carrying its owning project; added to the snapshot/replay set
-	// TargetUpdates are per-target ctx.updates refs: files the target edits in place.
+	// TargetOutputs are per-target ctx.writesFiles refs. When a target has any, they
+	// replace the broad project/spell output baseline for that target's replay set.
+	TargetOutputs map[string][]OutputRef
+	// TargetUpdates are per-target ctx.modifiesExistingFiles refs: existing files the
+	// target changes in place.
 	// Deliberately absent from AllOutputs, which is what makes magus clean skip them and
 	// the cache neither snapshot nor replay them. See types.UpdateRef.
 	TargetUpdates map[string][]UpdateRef
@@ -162,7 +165,7 @@ type Project struct {
 	// values fold into the cache key. See TargetGraphNode.EnvAllow.
 	TargetEnvAllow map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
-	// via ctx.outputs(<alias>.file(...)), keyed by the WRITING project's path. Globs are
+	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly - which is
 	// the whole reason they are filed here rather than left on the writer, whose own
 	// globs are relative to a different root. Without this a cross-project output would
@@ -176,7 +179,7 @@ type Project struct {
 }
 
 // AllOutputs is every output glob that lands in this project's tree, deduplicated and
-// PROJECT-ROOT RELATIVE: the project-wide Outputs, every per-target ctx.outputs glob
+// PROJECT-ROOT RELATIVE: the project-wide Outputs, every per-target ctx.writesFiles glob
 // this project declares for itself (TargetOutputs), and every glob another project
 // declares into it (InboundOutputs). It is the "what files appear in this tree" view -
 // consumed by `magus clean --outputs`, watch's rebuild-loop guard, output-ownership

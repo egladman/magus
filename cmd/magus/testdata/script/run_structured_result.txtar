@@ -3,7 +3,7 @@
 # From plans/dagger-typed-returns-plan.md: an agent that runs a build has to guess
 # where the artifact went, and then guess whether the file it found is generated or
 # hand-written. Both answers already live inside magus - the first in the target's
-# ctx.outputs declaration, the second in the same classification `magus describe file`
+# ctx.writesFiles declaration, the second in the same classification `magus describe file`
 # returns - so this turns two guesses into one command.
 #
 # run previously honored only -o jsonl, the streaming event log. That answers "what
@@ -61,7 +61,7 @@ import "os";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("dist/*.txt");
+    ctx.writesFiles("dist/*.txt");
     os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
 }
 -- spells/acme/spell.buzz --

@@ -64,8 +64,8 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 			// Outputs carry their OWNING project the same way inputs do, so a
 			// cross-project output produces an edge into the tree it actually writes
 			// rather than a phantom path under the declaring project.
-			outPats := make([]string, len(n.Outputs))
-			for i, ref := range n.Outputs {
+			outPats := make([]string, len(n.WritesFiles))
+			for i, ref := range n.WritesFiles {
 				owner := ref.Project
 				if owner == "" {
 					owner = p.Path
@@ -78,9 +78,9 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 			// cross-project input's is the other one. path.Join(Project, Glob) yields the
 			// workspace-relative file path uniformly, matched against the file node in the
 			// owning project directly - never re-anchored to the consumer's path.
-			if len(n.Inputs) > 0 {
-				pats := make([]string, len(n.Inputs))
-				for i, ref := range n.Inputs {
+			if len(n.ReadsFiles) > 0 {
+				pats := make([]string, len(n.ReadsFiles))
+				for i, ref := range n.ReadsFiles {
 					pats[i] = path.Join(ref.Project, ref.Glob)
 				}
 				linkPat(tID, p.Path, types.RelationConsumes, pats)

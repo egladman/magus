@@ -78,46 +78,51 @@ can't feed back into its own key.
 ### Per-target inputs and outputs
 
 A spell contributes its globs to _every_ target on the project. To attach a glob
-to _one_ target, declare it in that target's body with `ctx.inputs(...)` /
-`ctx.outputs(...)`:
+to _one_ target, declare it in that target's body with `ctx.readsFiles(...)` /
+`ctx.writesFiles(...)`:
 
 ```buzz
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("schema/**", "codegen.config.json");
-    ctx.outputs("dist/**");
+    ctx.readsFiles("schema/**", "codegen.config.json");
+    ctx.writesFiles("dist/**");
     go["go-build"](ctx);
 }
 ```
 
-`magus\inputs` adds source globs to that target's cache key; `magus\outputs` adds
-output globs to its snapshot/replay set. So a target's footprint is the **union**
-of three layers: the bound spells' globs, the project-wide `sources`/`outputs`,
-and the target's own `magus\inputs`/`magus\outputs`. Per-target declarations only
-ever _add_ - they never shrink the project-wide baseline (see
-[Granularity](#granularity-project-wide-vs-per-target)).
+An explicit `ctx.readsFiles(...)` declaration defines that target's source footprint;
+an explicit `ctx.writesFiles(...)` declaration defines its snapshot/replay footprint.
+Magus retains the
+magusfiles and any spell sources specific to that target, but it does not inherit
+the broad project baseline. This is what lets one target be precise without making
+its siblings under-declared (see [Granularity](#granularity-project-wide-vs-per-target)).
 
 ### Files a target edits rather than produces
 
-`ctx.outputs` claims a file magus owns end to end: magus may delete it
-(`magus clean`) and restore it wholesale from a cache snapshot. That is wrong for a
-file the target only edits _part_ of - a hand-written page with a generated region
-between markers, a manifest a tool rewrites in place. Declare those with
-`ctx.updates(...)`:
+The declaration names encode ownership, not merely direction:
+
+| Declaration | File relationship | Cache and clean behavior |
+| --- | --- | --- |
+| `ctx.readsFiles(...)` | the target reads the named files | hashes their current bytes into the cache key |
+| `ctx.writesFiles(...)` | the target creates or replaces complete generated files | snapshots and replays them; `magus clean` may remove them |
+| `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them |
+
+That last case is for a hand-written page with a generated region between markers,
+or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.
 
 ```buzz
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("reference/buzz/*.md");     // produced whole
-    ctx.updates("concepts/spells.md");      // hand-written page, generated table inside
+    ctx.writesFiles("reference/buzz/*.md");          // created and fully owned
+    ctx.modifiesExistingFiles("concepts/spells.md"); // existing page; only the table changes
 }
 ```
 
-An update is **never deleted** by `magus clean` and **never replayed** from a
+`ctx.modifiesExistingFiles` is **never deleted** by `magus clean` and **never replayed** from a
 snapshot, because the bytes magus produced are only part of the file. It still folds
 into the target's cache key exactly as an input does - so editing the prose _around_
 a generated region invalidates the target that maintains that region, which declaring
 the file as an output could not do (an output is excluded from its own source hash).
 
-Unlike `inputs` and `outputs`, an update infers no ordering edge in either direction:
+Unlike reads and writes, a modification infers no ordering edge in either direction:
 "I edit one region of a file someone else authored" says nothing about build order.
 Declare `ctx.needs` if you need it.
 
@@ -126,7 +131,7 @@ body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 **string-literal** globs. Two disciplines follow, both enforced:
 
-- A **non-literal argument** (`ctx.inputs(someVar)`) is a magusfile load error -
+- A **non-literal argument** (`ctx.readsFiles(someVar)`) is a magusfile load error -
   a computed glob is invisible to the static read, and silently dropping it would
   risk a stale hit.
 - A call the walk **can't reach** (in an unreferenced helper, or the identifier
@@ -312,36 +317,27 @@ mirror that must not accumulate local entries.
 
 ### Granularity: project-wide vs per-target
 
-A project's `Step.Sources` is not built per-target from scratch: `baseStep`
-seeds it with **every bound spell's `needs` globs, unioned, plus the
-magusfile itself**, and only then does the target-specific step add that
-target's own extra sources on top. So a project binding both `go` and
-`docker` has every one of its targets - `build`, `test`, `lint`, even a custom
-one - keying on the union of both spells' `needs`, not just the ones relevant
-to that particular target: a `Dockerfile` edit invalidates `magus run build`
-even though `build` only cares about `.go` files. This is deliberately coarse
-(it is a safety margin against under-declared inputs, not a bug), but it means
-`magus run ci` and `magus run build` on the same project invalidate together
-far more often than their names alone would suggest.
+Without a target declaration, `baseStep` seeds the cache key with the project
+sources, every bound spell's claims, and the magusfile. That conservative default
+keeps an undeclared target safe, but it can make unrelated work invalidate together.
 
-Per-target [`magus\inputs`/`magus\outputs`](#per-target-inputs-and-outputs) does
-**not** undo this. It _adds_ to a target's footprint; it cannot remove the
-project-wide baseline. Declaring `ctx.inputs("src/**")` on `build` does not stop
-a `Dockerfile` edit from busting it, because the `docker` spell's globs are still
-in the baseline. Per-target inputs are for attaching an input a target needs that
-nothing else declares - not for narrowing below the spell baseline.
+An explicit [`ctx.readsFiles(...)`](#per-target-inputs-and-outputs) call changes that
+contract. It is the target's exact source footprint: magus keeps the magusfiles
+and that target's spell inputs, then hashes only the declared inputs. A
+`ctx.readsFiles("src/**")` build therefore does not re-run for a sibling Dockerfile.
+Use it when a target has a genuinely narrower domain, and name every source that
+domain reads.
 
 That gives a clean rule for **where to declare a glob**:
 
 - **affects every target** (a shared schema, a project-wide config) -> project-wide
   `magus\project({sources = [...]})`, declared once;
-- **affects one target** -> `magus\inputs`/`magus\outputs` in that target's body.
+- **affects one target** -> `ctx.readsFiles(...)`, `ctx.writesFiles(...)`, or
+  `ctx.modifiesExistingFiles(...)` in that target's body, according to the file relationship above.
 
-Declaring the same glob in both layers is a no-op (the union already has it) and
-`magus doctor` flags it as [MGS1005](../reference/codes/magusfile/MGS1005.md). Outputs are
-almost always target-specific (`build` -> `dist/`, `test` -> `coverage/`), so a
-project-wide `outputs` - which makes _every_ target snapshot it - is usually the
-wrong tool; prefer per-target `magus\outputs`.
+Outputs are almost always target-specific (`build` -> `dist/`, `test` ->
+`coverage/`), so a project-wide `outputs` - which makes every target snapshot it
+- is usually the wrong tool; prefer `ctx.writesFiles(...)`.
 
 ## Replay: a hit restores outputs, not execution
 
@@ -381,7 +377,7 @@ or a broken `magus clean`, so the model is worth stating once.
 
 | Role                         | Question it answers                            | Scope         | Where it lives                                                                                                            |
 | ---------------------------- | ---------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: the project-wide `Outputs` plus that target's `magus\outputs`. |
+| **Cache footprint**          | "what does _this target_ snapshot and replay?" | one target    | `cache.Step.Outputs`, assembled per-target in `buildStep`: project-wide `Outputs` when no target output is declared, otherwise that target's `magus\outputs`. |
 | **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus\outputs`.                   |
 
 The cache role is per-target on purpose. A miss snapshots exactly the outputs in

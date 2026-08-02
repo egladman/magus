@@ -98,7 +98,7 @@
     <small class="reading-time" title="Estimated reading time">9 min read</small>
     <article>
 <h1 id="magus-run">magus-run</h1>
-<p><progress value="5139" max="8910" aria-label="The --simple permutation is 42% smaller: 5139 of 8910 bytes."></progress><small>The --simple permutation is 42% smaller: 5139 of 8910 bytes.</small></p>
+<p><progress value="5141" max="8912" aria-label="The --simple permutation is 42% smaller: 5141 of 8912 bytes."></progress><small>The --simple permutation is 42% smaller: 5141 of 8912 bytes.</small></p>
 <p><a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with <a class="glossary-term" href="../../../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>.<a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">buzz</a> at the root - a <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> covers the work, and the raw tool bypasses the <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>, the <a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a>, and <a class="glossary-term" href="../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (<a class="code-xref" href="../../manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> <a class="glossary-term" href="../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">ci</a>).</p>
 <p>Install it, rather than copying from this page:</p>
 <pre><code class="language-sh">magus agent install .claude/skills            # the full form below
@@ -137,7 +137,7 @@ magus agent install .claude/skills --simple   # the short form below
 </tr>
 <tr>
 <td><code>skill-content</code></td>
-<td><code>12962ae67c6a</code></td>
+<td><code>69d6b499f0a0</code></td>
 </tr>
 <tr>
 <td><code>skill-variant</code></td>
@@ -308,13 +308,13 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 ## When a target is waiting on another magus process
 
 Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
-message already names the holder, and `magus status --watch=2s` reads that same
+message already names the holder, and `magus status --watch=15s` reads that same
 lock state continuously: holder PID, command, directory, age, and waiters.
 Keep the status watch attached until the lock releases, then let the queued
 target continue. A long-running target is not evidence of a hang by itself.
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder
@@ -435,13 +435,13 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 ## When a target is waiting on another magus process
 
 Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
-message already names the holder, and `magus status --watch=2s` reads that same
+message already names the holder, and `magus status --watch=15s` reads that same
 lock state continuously: holder PID, command, directory, age, and waiters.
 Keep the status watch attached until the lock releases, then let the queued
 target continue. A long-running target is not evidence of a hang by itself.
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder

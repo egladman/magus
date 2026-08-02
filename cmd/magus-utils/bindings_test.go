@@ -36,3 +36,9 @@ func TestBuzzFilesUpToDate(t *testing.T) {
 		})
 	}
 }
+
+// TestObjectReturnContracts prevents host metadata from advertising a Go struct
+// name when the checker receives a differently named generated Buzz object.
+func TestObjectReturnContracts(t *testing.T) {
+	require.NoError(t, checkObjectDecls(std.All()))
+}

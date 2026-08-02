@@ -214,7 +214,7 @@ func TestApplyTargetFilter(t *testing.T) {
 }
 
 // TestCrossProjectOutputReplaysFromCache is the execution half of cross-project outputs:
-// a target declaring ctx.outputs(<sibling>.file(...)) writes into ANOTHER project's tree,
+// a target declaring ctx.writesFiles(<sibling>.file(...)) writes into ANOTHER project's tree,
 // and magus snapshots that file like any other output, so a cache hit restores it after
 // it is deleted. Getting this wrong is quiet: the second build reports success over a
 // file that is no longer there.
@@ -244,7 +244,7 @@ import "fs";
 import "project/../site" as site;
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs(site.file("generated.txt"));
+    ctx.writesFiles(site.file("generated.txt"));
     fs\writeFile("../site/body-ran.marker", "1");
     fs\writeFile("../site/generated.txt", "hello");
 }
@@ -302,7 +302,7 @@ import "fs";
 import "project/../site" as site;
 
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("own.txt", site.file("generated.txt"));
+    ctx.writesFiles("own.txt", site.file("generated.txt"));
     fs\writeFile("own.txt", "mine");
     fs\writeFile("../site/generated.text", "typo");
 }

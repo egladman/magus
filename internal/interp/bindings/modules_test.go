@@ -1220,6 +1220,13 @@ var testBoundaryTypesSource = strings.Join([]string{
 	spellruntime.ProjectsSource,
 	spellruntime.AffectedSource,
 	spellruntime.GraphSource,
+	spellruntime.CrossTargetRefSource,
+	spellruntime.TargetSpellUseSource,
+	spellruntime.InputRefSource,
+	spellruntime.OutputRefSource,
+	spellruntime.TargetGraphNodeSource,
+	spellruntime.TargetGraphProjectSource,
+	spellruntime.TargetGraphSource,
 	spellruntime.ModuleFieldEntrySource,
 	spellruntime.ModuleMethodEntrySource,
 	spellruntime.ModuleSource,
@@ -1251,6 +1258,7 @@ func TestEveryBoundaryTypeHasAMirror(t *testing.T) {
 		{"ProjectsOutput", "Projects"},
 		{"AffectedResult", "Affected"},
 		{"GraphView", "Graph"},
+		{"TargetGraphOutput", "TargetGraph"},
 		{"ModuleFieldEntry", "ModuleFieldEntry"},
 		{"ModuleMethodEntry", "ModuleMethodEntry"},
 		{"ModuleEntry", "Module"},
@@ -1336,7 +1344,7 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 	owners := []any{
 		types.ExecResult{}, types.Commit{}, types.FileInfo{}, types.HTTPResponse{},
 		types.SemverVersion{}, types.URL{}, types.VCSTag{}, types.ProjectEntry{},
-		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{},
+		types.ProjectsOutput{}, types.AffectedResult{}, types.GraphView{}, types.TargetGraphOutput{},
 		types.ModuleFieldEntry{}, types.ModuleMethodEntry{}, types.ModuleEntry{},
 	}
 	for _, v := range owners {
@@ -1344,6 +1352,6 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 		_, ok := rt.MethodByName("BuzzObject")
 		assert.True(t, ok, "%s is listed as a boundary type but has no BuzzObject; drop it from this list", rt.Name())
 	}
-	assert.Len(t, owners, 14,
+	assert.Len(t, owners, 15,
 		"a types/ struct gained or lost BuzzObject: add it to the mirror registry (cmd/magus-utils/types.go), generate it, wire it into RegisterSpellSourceModules, and list it in TestEveryBoundaryTypeHasAMirror")
 }

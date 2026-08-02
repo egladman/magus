@@ -58,7 +58,7 @@ import "magus";
 magus\project({"name": "chainflags", "spells": []});
 
 export fun bundle(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("dist/*.txt");
+    ctx.writesFiles("dist/*.txt");
     fs\mkdirall("dist");
     fs\writeFile("dist/a.txt", "ARTIFACT\n");
 }

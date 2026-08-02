@@ -287,7 +287,7 @@ func gitRoot(dir string) string {
 // collectTargetNodes returns src's target graph nodes, read statically from the
 // magusfile source by describe.Extract - the sole graph source. Both the cache-footprint
 // path (applyTargetDepsAndFootprint) and the graph render (TargetGraph) read through
-// here so a target's inputs/outputs/cross-deps reach the cache key and affected-tracking,
+// here so a target's reads/writes/modifications and cross-deps reach the cache key and affected-tracking,
 // not only MAGUS.md. The static read is deterministic and side-effect free (it never runs
 // a target body) and sees both arms of a runtime branch, which a trace could not.
 func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
@@ -296,13 +296,13 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 
 // applyTargetDepsAndFootprint folds the two things magus recovers statically from a
 // target body into the workspace's projects: cross-project dependencies and the
-// per-target cache footprint (magus.inputs / magus.outputs).
+// per-target cache footprint (ctx.readsFiles / ctx.writesFiles).
 //
 // Cross-project deps (project imports) union into DependsOn, so the affected set and
 // scheduling treat them exactly like a project-level depends_on: a magusfile declares a
 // cross-project dependency once, at the target, rather than also in magus.project.
-// Per-target inputs populate TargetInputs in one representation (each InputRef resolved
-// to its owning project's workspace-relative path); outputs populate TargetOutputs
+// Per-target reads populate TargetInputs in one representation (each InputRef resolved
+// to its owning project's workspace-relative path); writes populate TargetOutputs
 // (project-root relative). Both add to that target's cache/snapshot footprint, unioned
 // onto the project-wide globs, never replacing them. A cross-project input's owning
 // project is also unioned into DependsOn, so an input change marks the consumer affected
@@ -313,7 +313,7 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // It mutates projects in place. ctx is honored between projects. A project whose source
 // can't be read or whose dep path won't resolve contributes nothing (best-effort,
 // matching the static extractor's never-error contract). One deliberate exception: a
-// ctx.inputs/outputs call with a non-literal argument is a hard load error, because a
+// ctx.readsFiles/writesFiles/modifiesExistingFiles call with a non-literal argument is a hard load error, because a
 // computed footprint is invisible to this static read and silently under-declaring it
 // risks a stale cache hit.
 func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
@@ -337,7 +337,13 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			if src.Engine != "buzz" {
 				continue
 			}
-			nodes := collectTargetNodes(src)
+			source := concatSource(src)
+			if removed := describe.RemovedContextMethods(source); len(removed) > 0 {
+				first := removed[0]
+				return fmt.Errorf("%s: ctx.%s was removed in v0.4; use ctx.%s instead (line %d)",
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), first.Name, first.Replacement, first.Line)
+			}
+			nodes := describe.Extract(source)
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
 					r, rerr := file.ResolveImport(ref.Project, p.Path)
@@ -371,7 +377,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// describe.flagDynamic, which splits those execution overrides off as
 				// DynamicExec instead.
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.inputs/outputs/updates/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.inputs(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+				return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -383,7 +389,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// same-project owner is this project itself and is skipped - a self-edge is
 				// both unnecessary (it seeds by directory containment) and rejected by the
 				// depgraph as a self-loop.
-				for _, ref := range n.Inputs {
+				for _, ref := range n.ReadsFiles {
 					owner := ref.Project
 					if owner == "" {
 						owner = p.Path // same-project input: owned by this project
@@ -403,7 +409,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						extra = append(extra, owner)
 					}
 				}
-				for _, ref := range n.Outputs {
+				for _, ref := range n.WritesFiles {
 					owner := ref.Project
 					if owner == "" {
 						owner = p.Path // same-project output: owned by this project
@@ -417,7 +423,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// every later cache hit replays a build that leaves it missing -
 						// the exact stale-hit failure this footprint exists to prevent.
 						return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
-							"%s: target %q: ctx.outputs declares an output into %q, which does not resolve to a path in this workspace",
+							"%s: target %q: ctx.writesFiles declares an output into %q, which does not resolve to a path in this workspace",
 							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Project)
 					}
 					if p.TargetOutputs == nil {
@@ -434,7 +440,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// been walked yet.
 					if owner != p.Path {
 						// The glob half needs the same hygiene the project half just got.
-						// Nothing checked it before: ctx.outputs(site.file("../../etc/x"))
+						// Nothing checked it before: ctx.writesFiles(site.file("../../etc/x"))
 						// survived extraction and resolution and surfaced only once the target
 						// had already run - or, worse, made `magus clean` abort the WHOLE
 						// workspace, since clean expands globs for every project in one loop
@@ -442,7 +448,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// (internal/cache/snapshot.go): owner-relative, no "..".
 						if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
 							return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
-								"%s: target %q: ctx.outputs glob %q must be relative to %q and must not contain ..",
+								"%s: target %q: ctx.writesFiles glob %q must be relative to %q and must not contain ..",
 								types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
 						}
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path, glob: ref.Glob})
@@ -485,7 +491,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						}
 					}
 				}
-				for _, ref := range n.Updates {
+				for _, ref := range n.ModifiesExistingFiles {
 					owner := ref.Project
 					if owner == "" {
 						owner = p.Path // same-project update: owned by this project
@@ -503,7 +509,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// abort the WHOLE workspace (doublestar rejects it mid-loop).
 					if filepath.IsAbs(ref.Glob) || strings.Contains(ref.Glob, "..") {
 						return types.DiagnosticErrorf(types.CrossOutputGlobEscapes,
-							"%s: target %q: ctx.updates glob %q must be relative to %q and must not contain ..",
+							"%s: target %q: ctx.modifiesExistingFiles glob %q must be relative to %q and must not contain ..",
 							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Glob, owner)
 					}
 					resolved := types.UpdateRef{Project: owner, Glob: ref.Glob}
@@ -537,7 +543,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			// driver cannot regenerate it. The cross-INPUT side already fails loudly on
 			// the same typo (an unregistered dependency); outputs must not be quieter.
 			return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
-				"%s: ctx.outputs declares an output into %q, which magus did not discover as a project; it needs a project marker and must not sit under an ignored directory",
+				"%s: ctx.writesFiles declares an output into %q, which magus did not discover as a project; it needs a project marker and must not sit under an ignored directory",
 				co.writer, co.owner)
 		}
 		// The two cross-project edges run opposite ways, so declaring both against one
@@ -553,7 +559,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		// passes or fails depending on what was asked for.
 		if wp := m.ws.Get(co.writer); wp != nil && slices.Contains(wp.DependsOn, co.owner) {
 			return types.DiagnosticErrorf(types.CrossOutputCycle,
-				"%s: ctx.outputs writes %q into %q, so %s must run after %s, but %s already depends on %s; a target cannot both read from and write into the same project",
+				"%s: ctx.writesFiles writes %q into %q, so %s must run after %s, but %s already depends on %s; a target cannot both read from and write into the same project",
 				co.writer, co.glob, co.owner, co.owner, co.writer, co.writer, co.owner)
 		}
 		if !slices.Contains(op.DependsOn, co.writer) {
@@ -703,9 +709,9 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 			}
 			nodes[i].CrossDependencies = resolved
 		}
-		if len(nodes[i].Inputs) > 0 {
-			resolved := make([]types.InputRef, 0, len(nodes[i].Inputs))
-			for _, ref := range nodes[i].Inputs {
+		if len(nodes[i].ReadsFiles) > 0 {
+			resolved := make([]types.InputRef, 0, len(nodes[i].ReadsFiles))
+			for _, ref := range nodes[i].ReadsFiles {
 				if ref.Project == "" {
 					resolved = append(resolved, types.InputRef{Project: projectPath, Glob: ref.Glob})
 					continue
@@ -716,7 +722,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 				}
 				resolved = append(resolved, types.InputRef{Project: r, Glob: ref.Glob})
 			}
-			nodes[i].Inputs = resolved
+			nodes[i].ReadsFiles = resolved
 		}
 	}
 }
@@ -824,8 +830,8 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			continue
 		}
 		// buildStep, not baseStep: this entry describes ONE target, and baseStep
-		// carries only the project-wide globs. A target's own ctx.outputs (and
-		// ctx.inputs) were therefore missing from its own description - `magus
+		// carries only the project-wide globs. A target's own ctx.writesFiles (and
+		// ctx.readsFiles) were therefore missing from its own description - `magus
 		// describe target md-generate` reported no outputs while the target
 		// declares MAGUS.md - so the described plan disagreed with the plan the
 		// cache actually keys and snapshots.
@@ -1009,7 +1015,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	for _, p := range all {
 		step := m.baseStep(p)
 		// AllOutputs, not step.Outputs: the cache view is scoped to one target's
-		// project-wide globs, so a file declared only by a per-target ctx.outputs
+		// project-wide globs, so a file declared only by a per-target ctx.writesFiles
 		// (the root MAGUS.md) or written in by another project would report as a
 		// hand-editable source. This is the "what lands in this tree" question, the
 		// same one clean and the merge driver ask.

@@ -41,7 +41,7 @@ concurrency: 2
 import "magus";
 
 export fun build_generate(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("gen/*.txt");
+    ctx.writesFiles("gen/*.txt");
 }
 -- gen/output.txt --
 generated

@@ -80,7 +80,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestCtxFormCharms(t *testing.T) {
 	g := Extract(`import "magus";
 export fun release(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) { ctx.outputs("dist/pkg.tar.gz"); }
+    if (ctx.has_charm("cd")) { ctx.writesFiles("dist/pkg.tar.gz"); }
 }
 `)
 	release, _ := nodeByName(g, "release")
@@ -134,44 +134,44 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {}
 // is ignored, and a target that declares neither carries empty sets.
 func TestInputsOutputs(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("src/**", "tsconfig.json");
-    ctx.outputs("dist/**");
-    // ctx.inputs("ignored") in a comment must not count
+    ctx.readsFiles("src/**", "tsconfig.json");
+    ctx.writesFiles("dist/**");
+    // ctx.readsFiles("ignored") in a comment must not count
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("src/**");
+    ctx.readsFiles("src/**");
 }
 export fun plain(ctx: magus\Context, args: [str]) > void { }
 `)
 	build, _ := nodeByName(g, "build")
 	// A bare-literal glob is a same-project input: empty Project (meaning "this target's
 	// own project", filled at resolution), Rel the glob.
-	assert.Equal(t, []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}}, build.Inputs)
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}}, build.ReadsFiles)
 	// Same shape on the outputs side, in the type that carries the OPPOSITE edge: an
 	// empty Project means "this target's own project", filled at resolution.
-	assert.Equal(t, []types.OutputRef{{Glob: "dist/**"}}, build.Outputs)
+	assert.Equal(t, []types.OutputRef{{Glob: "dist/**"}}, build.WritesFiles)
 	assert.False(t, build.DynamicIO)
 	testNode, _ := nodeByName(g, "test")
-	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, testNode.Inputs)
-	assert.Empty(t, testNode.Outputs)
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, testNode.ReadsFiles)
+	assert.Empty(t, testNode.WritesFiles)
 	plain, _ := nodeByName(g, "plain")
-	assert.Empty(t, plain.Inputs)
-	assert.Empty(t, plain.Outputs)
+	assert.Empty(t, plain.ReadsFiles)
+	assert.Empty(t, plain.WritesFiles)
 }
 
-// TestInputsOutputsDynamic pins the loud-rejection signal: a magus.inputs/outputs
+// TestReadsWritesDynamic pins the loud-rejection signal: a ctx.readsFiles/writesFiles
 // argument that is not a string literal sets DynamicIO (the load path turns that into
 // an error), while any literal args in the same call are still collected.
-func TestInputsOutputsDynamic(t *testing.T) {
+func TestReadsWritesDynamic(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    ctx.inputs("src/**", extra);
+    ctx.readsFiles("src/**", extra);
 }
 `)
 	build, _ := nodeByName(g, "build")
-	assert.True(t, build.DynamicIO, "a computed magus.inputs argument must flag DynamicIO")
+	assert.True(t, build.DynamicIO, "a computed ctx.readsFiles argument must flag DynamicIO")
 	assert.False(t, build.DynamicExec, "a footprint declaration is not an execution override")
-	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, build.Inputs, "literal args are still collected")
+	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, build.ReadsFiles, "literal args are still collected")
 }
 
 // TestExecOverrideDynamic pins the other half of the split: a computed ctx.withEnv /
@@ -207,30 +207,43 @@ func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 	assert.False(t, build.DynamicIO, "an aliased execution override is not a footprint error")
 }
 
-// TestUnreachedIO pins orphan detection: a ctx.inputs/outputs reached from a target
+// TestUnreachedIO pins orphan detection: a ctx.readsFiles/writesFiles reached from a target
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
 // unreferenced helper or used as a value IS - it would never enter a cache key.
 func TestUnreachedIO(t *testing.T) {
 	orphans := UnreachedIO(`export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("src/**");
+    ctx.readsFiles("src/**");
     helper();
 }
-fun helper() > void { ctx.outputs("dist/**"); }
-fun orphan() > void { ctx.inputs("gen/**"); }
+fun helper() > void { ctx.writesFiles("dist/**"); }
+fun orphan() > void { ctx.readsFiles("gen/**"); }
 export fun test(ctx: magus\Context, args: [str]) > void {
-    final f = ctx.inputs;
+    final f = ctx.readsFiles;
     f("late/**");
 }
 `)
 	// build's direct inputs and helper's outputs (bare-called) are reached -> not orphans.
-	// orphan()'s inputs (never called) and test's `ctx.inputs` value reference are.
+	// orphan()'s inputs (never called) and test's `ctx.readsFiles` value reference are.
 	require.Len(t, orphans, 2)
 	kinds := map[string]string{} // fn -> kind
 	for _, o := range orphans {
 		kinds[o.Fn] = o.Kind
 	}
-	assert.Equal(t, "inputs", kinds["orphan"], "ctx.inputs in an uncalled helper is orphaned")
-	assert.Equal(t, "inputs", kinds["test"], "ctx.inputs used as a value is orphaned")
+	assert.Equal(t, "readsFiles", kinds["orphan"], "ctx.readsFiles in an uncalled helper is orphaned")
+	assert.Equal(t, "readsFiles", kinds["test"], "ctx.readsFiles used as a value is orphaned")
+}
+
+func TestRemovedContextMethods(t *testing.T) {
+	removed := RemovedContextMethods(`export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.inputs("src/**");
+    ctx.outputs("dist/**");
+    ctx.updates("CHANGELOG.md");
+}`)
+	require.Equal(t, []RemovedContextMethod{
+		{Name: "inputs", Replacement: "readsFiles", Line: 2},
+		{Name: "outputs", Replacement: "writesFiles", Line: 3},
+		{Name: "updates", Replacement: "modifiesExistingFiles", Line: 4},
+	}, removed)
 }
 
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
@@ -423,7 +436,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	assert.Empty(t, b.CrossDependencies, "the cross-project ref is inside a string literal")
 }
 
-// TestCrossFileInputs: ctx.inputs(<alias>.file("lit")) and a sibling bare string
+// TestCrossFileInputs: ctx.readsFiles(<alias>.file("lit")) and a sibling bare string
 // literal land on the SAME Inputs list in one shape - the literal a same-project input
 // (empty Project), the alias.file a cross-project input (raw dep path + rel); the
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
@@ -431,7 +444,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestCrossFileInputs(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs(lib.file("go.mod"), "src/**/*.go");
+    ctx.readsFiles(lib.file("go.mod"), "src/**/*.go");
     go["go-build"]();
 }
 `)
@@ -440,7 +453,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, []types.InputRef{
 		{Glob: "src/**/*.go"},               // same-project literal: empty Project (self)
 		{Project: "../lib", Glob: "go.mod"}, // cross-project: raw dep path for the caller to resolve
-	}, b.Inputs, "a literal and an alias.file input share one representation")
+	}, b.ReadsFiles, "a literal and an alias.file input share one representation")
 	assert.False(t, b.DynamicIO, "a recognized alias.file(lit) arg must not trip DynamicIO")
 	assert.Empty(t, b.CrossDependencies, "the reserved .file member mints no phantom cross-dependency")
 }
@@ -450,14 +463,14 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 func TestCrossFileInputsDynamic(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs(lib.file(args[0]));
+    ctx.readsFiles(lib.file(args[0]));
     go["go-build"]();
 }
 `)
 	b, ok := nodeByName(g, "build")
 	require.True(t, ok, "missing build; got %v", g)
 	assert.True(t, b.DynamicIO, "a computed rel is invisible to the static read and must trip DynamicIO")
-	assert.Empty(t, b.Inputs, "a non-literal rel contributes no input")
+	assert.Empty(t, b.ReadsFiles, "a non-literal rel contributes no input")
 }
 
 func TestCycle(t *testing.T) {

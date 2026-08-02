@@ -239,13 +239,13 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 	}
 
 	t.Run("reachable declaration is clean", func(t *testing.T) {
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.inputs(\"src/**\"); }\n")
+		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n")
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("orphan in uncalled helper is flagged", func(t *testing.T) {
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.outputs(\"dist/**\"); }\n")
+		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles(\"dist/**\"); }\n")
 		require.Equal(t, StatusFail, got.Status, got.Message)
-		assert.Contains(t, got.Details[0], "ctx.outputs")
+		assert.Contains(t, got.Details[0], "ctx.writesFiles")
 	})
 }
 
@@ -257,12 +257,11 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
-	t.Run("per-target glob duplicating project sources is flagged", func(t *testing.T) {
+	t.Run("explicit input duplicating a project source is clean", func(t *testing.T) {
 		p := &types.Project{Path: ".", Sources: []string{"src/**"},
 			TargetInputs: map[string][]types.InputRef{"build": {{Project: ".", Glob: "src/**"}}}}
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
-		require.Equal(t, StatusFail, got.Status, got.Message)
-		assert.Contains(t, got.Details[0], "build")
+		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 	t.Run("cross-project input is never flagged redundant", func(t *testing.T) {
 		// A cross input's Rel is relative to the OTHER project, so it must not be

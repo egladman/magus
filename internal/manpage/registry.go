@@ -425,7 +425,7 @@ TTY the screen is cleared between reprints; piped output appends each
 snapshot on its own line for log capture.`,
 	Usage: "magus status [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Duration("watch", 0, "Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
+		fs.Duration("watch", 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
 		fs.Bool("compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 		fs.String("socket", "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
 		fs.String("probe", "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
@@ -433,8 +433,8 @@ snapshot on its own line for log capture.`,
 	},
 	Examples: []Example{
 		{"One-shot status snapshot", "magus status"},
-		{"Live updates every second", "magus status --watch=1s"},
-		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=1s"},
+		{"Live updates every 15 seconds", "magus status --watch=15s"},
+		{"Single-line snapshot for a multiplexer sidebar", "magus status --compact --watch=15s"},
 		{"Inspect a specific running parent", "magus status --socket=unix:///run/user/1000/magus/daemon.sock"},
 	},
 }

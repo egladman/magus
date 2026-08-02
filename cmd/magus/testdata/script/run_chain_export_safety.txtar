@@ -51,7 +51,7 @@ import "os";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("dist/*.txt");
+    ctx.writesFiles("dist/*.txt");
     // Executable on purpose: the +x is what case 3 asserts survives an export over
     // an existing, non-executable destination.
     os\exec("sh", ["-c", "mkdir -p dist && echo PRECIOUS-ARTIFACT-DATA > dist/a.txt && chmod 755 dist/a.txt"]);

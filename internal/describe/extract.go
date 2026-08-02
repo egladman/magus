@@ -48,7 +48,7 @@ func Extract(source string) []types.TargetGraphNode {
 }
 
 // extractNodes is the shared core: it returns the target nodes, the set of
-// ctx.inputs/outputs member-access positions the per-target walk *attributed* to some
+// ctx.readsFiles/writesFiles member-access positions the per-target walk *attributed* to some
 // target (reached by the body/helper walk), and the parsed program. UnreachedIO diffs
 // every io member access in the program against the attributed set to find the ones the
 // static read can't see. Extract discards the latter two. prog is nil on a parse failure.
@@ -149,7 +149,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
 					}
-					// Per-target cache footprint: ctx.inputs(...) / ctx.outputs(...).
+					// Per-target cache footprint: ctx.readsFiles(...) / ctx.writesFiles(...).
 					// Every argument must be a string literal; a non-literal one is not
 					// collected, so len(globs) < len(args) means the call had a computed
 					// argument - flag it so the load path can decide (a computed glob is
@@ -163,7 +163,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						flagDynamic(&node, me.Name)
 					}
 					if kind, globs, ok := ioCall(e); ok {
-						// Record the callee (ctx.inputs) position so UnreachedIO knows this
+						// Record the callee (ctx.readsFiles) position so UnreachedIO knows this
 						// call was reached; keyed on the MemberExpr, matching its full-program scan.
 						attributedIO[ast.NodePos(e.Callee)] = true
 						// recognized counts every argument the static read could attribute:
@@ -172,7 +172,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
-						case "inputs":
+						case "readsFiles":
 							// One representation for every input: a bare-literal glob is a
 							// same-project input (empty Project, meaning "this target's own
 							// project", filled at resolution); a <alias>.file("lit") arg is a
@@ -180,19 +180,19 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// entries land first (in arg order), cross entries after, matching
 							// the fold order buildStep produced before the two were unified.
 							for _, g := range globs {
-								node.Inputs = appendUniq(node.Inputs, types.InputRef{Glob: g})
+								node.ReadsFiles = appendUniq(node.ReadsFiles, types.InputRef{Glob: g})
 							}
 							// A cross-project file input counts as recognized (so it does NOT
 							// trip DynamicIO); a computed rel is not recognized and trips it.
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Inputs = appendUniq(node.Inputs, ref)
+									node.ReadsFiles = appendUniq(node.ReadsFiles, ref)
 								}
 							}
-						case "outputs":
+						case "writesFiles":
 							for _, g := range globs {
-								node.Outputs = appendUniq(node.Outputs, types.OutputRef{Glob: g})
+								node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef{Glob: g})
 							}
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
@@ -203,7 +203,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									// visibly crossed. If OutputRef ever grows a field InputRef
 									// lacks, this fails to compile instead of silently zeroing it -
 									// do not collapse it back into a field-by-field struct literal.
-									node.Outputs = appendUniq(node.Outputs, types.OutputRef(ref))
+									node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef(ref))
 								}
 							}
 						case "withCwd":
@@ -247,14 +247,14 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							for _, g := range globs {
 								node.EnvAllow = appendUniq(node.EnvAllow, g)
 							}
-						case "updates":
+						case "modifiesExistingFiles":
 							for _, g := range globs {
-								node.Updates = appendUniq(node.Updates, types.UpdateRef{Glob: g})
+								node.ModifiesExistingFiles = appendUniq(node.ModifiesExistingFiles, types.UpdateRef{Glob: g})
 							}
 							for _, a := range e.Args {
 								if ref, ok := crossFileArg(a, projectAliases); ok {
 									recognized++
-									node.Updates = appendUniq(node.Updates, types.UpdateRef(ref))
+									node.ModifiesExistingFiles = appendUniq(node.ModifiesExistingFiles, types.UpdateRef(ref))
 								}
 							}
 						}
@@ -309,8 +309,8 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 	return nodes, attributedIO, prog
 }
 
-// IORef is one ctx.inputs/outputs member access UnreachedIO found that the static
-// extractor could not attribute to a target: Kind is "inputs" or "outputs", Fn the
+// IORef is one ctx.readsFiles/writesFiles member access UnreachedIO found that the static
+// extractor could not attribute to a target: Kind is "readsFiles" or "writesFiles", Fn the
 // enclosing function's raw name, Line its 1-based source line.
 type IORef struct {
 	Kind string
@@ -318,7 +318,53 @@ type IORef struct {
 	Line int
 }
 
-// UnreachedIO returns every ctx.inputs/outputs member access in source that the
+// RemovedContextMethod is a use of a declaration name removed in v0.4. Its
+// replacement is carried with the finding so callers can reject it without
+// pretending the old operation still exists.
+type RemovedContextMethod struct {
+	Name        string
+	Replacement string
+	Line        int
+}
+
+var removedContextMethods = map[string]string{
+	"inputs":  "readsFiles",
+	"outputs": "writesFiles",
+	"updates": "modifiesExistingFiles",
+}
+
+// RemovedContextMethods finds direct uses of declaration methods removed from
+// magus.Context. This is intentionally a migration diagnostic, not an alias:
+// the runtime does not bind the old members and every caller must move to the
+// replacement named here.
+func RemovedContextMethods(source string) []RemovedContextMethod {
+	_, _, prog := extractNodes(source)
+	if prog == nil {
+		return nil
+	}
+	var found []RemovedContextMethod
+	for _, stmt := range prog.Stmts {
+		ast.Inspect(stmt, func(n ast.Node) bool {
+			me, ok := n.(*ast.MemberExpr)
+			if !ok || !ctxRooted(me.Object) {
+				return true
+			}
+			replacement, ok := removedContextMethods[me.Name]
+			if !ok {
+				return true
+			}
+			found = append(found, RemovedContextMethod{
+				Name:        me.Name,
+				Replacement: replacement,
+				Line:        ast.NodePos(me).Line,
+			})
+			return true
+		})
+	}
+	return found
+}
+
+// UnreachedIO returns every ctx.readsFiles/writesFiles member access in source that the
 // per-target walk did not reach - a call in an unreferenced or indirectly-dispatched
 // helper, or the identifier used as a value. Such a declaration never enters any cache
 // key, so surfacing it turns a silent footprint omission into a diagnostic (the loud
@@ -375,7 +421,7 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"inputs": true, "outputs": true, "updates": true, "envInputs": true, "withEnv": true, "withCwd": true,
+	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "withEnv": true, "withCwd": true,
 }
 
 // ctxExecNames is the execution half of ctxDeclNames: the members that steer HOW an op
@@ -388,7 +434,7 @@ var ctxExecNames = map[string]bool{"withEnv": true, "withCwd": true}
 // policy is only loaded on the CLI path, so scoping on it made a bare library caller's
 // magus.Open reject a magusfile the CLI accepts.
 //
-// A footprint declaration (inputs/outputs/updates/envInputs) is a cache-correctness
+// A footprint declaration (readsFiles/writesFiles/modifiesExistingFiles/envInputs) is a cache-correctness
 // statement with no runtime counterpart: it is a no-op when the body runs, so a computed
 // argument is not merely unread, it is unreadable, and the target caches against a
 // footprint narrower than what it touches. That is a stale hit, and it stays a hard load
@@ -428,8 +474,8 @@ func ctxRooted(n ast.Node) bool {
 	}
 }
 
-// ioCall recognizes a ctx.inputs(...) / ctx.outputs(...) call and returns its
-// kind ("inputs"/"outputs") and the string-literal glob arguments. ok is false for any
+// ioCall recognizes a ctx.readsFiles(...) / ctx.writesFiles(...) call and returns its
+// kind and the string-literal glob arguments. ok is false for any
 // other call. Only string literals are collected; the caller detects a non-literal
 // (dynamic) argument as len(globs) < len(e.Args) and rejects it at load. A call with no
 // arguments is recognized (ok=true) but contributes no globs - harmless.
@@ -452,10 +498,10 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	return me.Name, globs, true
 }
 
-// crossFileArg recognizes a <alias>.file("literal") argument to ctx.inputs, where
+// crossFileArg recognizes a <alias>.file("literal") argument to ctx.readsFiles, where
 // <alias> names a project import in aliases. It returns the cross-project file input as
 // an InputRef (the dep project path as written and the file path relative to it) so
-// ctx.inputs(alias.file("x")) registers a cross-project input without hand-counting
+// ctx.readsFiles(alias.file("x")) registers a cross-project input without hand-counting
 // "..". ok is false for any other argument shape - notably a computed, non-literal rel,
 // which the caller treats as dynamic (DynamicIO).
 func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool) {

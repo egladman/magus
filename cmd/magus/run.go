@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
@@ -111,6 +112,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	})
 	if err != nil {
 		return err
+	}
+	// -s deliberately suppresses the usual target progress. That is useful to an
+	// agent, but a person otherwise has no positive signal that a slow invocation
+	// is alive. Say it once, before any potentially long workspace load, and point
+	// at the existing observer rather than inventing another progress surface.
+	if global.silent {
+		interactive.Emit(os.Stderr, "running quietly; follow progress in another terminal with `magus status --watch 15s`")
 	}
 
 	if *step && !isInteractiveTTY() {

@@ -219,6 +219,13 @@ func buzzValueMagusOutputRef(v types.OutputRef) vm.Value {
 	return out
 }
 
+func buzzValueMagusUpdateRef(v types.UpdateRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	return out
+}
+
 func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
@@ -244,26 +251,31 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		items25[index26] = buzzValueMagusCrossTargetRef(v.CrossDependencies[index26])
 	}
 	out.MapSet("crossDependencies", vm.ListValue(items25))
-	items27 := make([]vm.Value, len(v.Inputs))
-	for index28 := range v.Inputs {
-		items27[index28] = buzzValueMagusInputRef(v.Inputs[index28])
+	items27 := make([]vm.Value, len(v.ReadsFiles))
+	for index28 := range v.ReadsFiles {
+		items27[index28] = buzzValueMagusInputRef(v.ReadsFiles[index28])
 	}
-	out.MapSet("inputs", vm.ListValue(items27))
-	items29 := make([]vm.Value, len(v.Outputs))
-	for index30 := range v.Outputs {
-		items29[index30] = buzzValueMagusOutputRef(v.Outputs[index30])
+	out.MapSet("readsFiles", vm.ListValue(items27))
+	items29 := make([]vm.Value, len(v.WritesFiles))
+	for index30 := range v.WritesFiles {
+		items29[index30] = buzzValueMagusOutputRef(v.WritesFiles[index30])
 	}
-	out.MapSet("outputs", vm.ListValue(items29))
-	items31 := make([]vm.Value, len(v.ExecOverrides))
-	for index32 := range v.ExecOverrides {
-		items31[index32] = vm.StrValue(v.ExecOverrides[index32])
+	out.MapSet("writesFiles", vm.ListValue(items29))
+	items31 := make([]vm.Value, len(v.ModifiesExistingFiles))
+	for index32 := range v.ModifiesExistingFiles {
+		items31[index32] = buzzValueMagusUpdateRef(v.ModifiesExistingFiles[index32])
 	}
-	out.MapSet("execOverrides", vm.ListValue(items31))
-	items33 := make([]vm.Value, len(v.EnvAllow))
-	for index34 := range v.EnvAllow {
-		items33[index34] = vm.StrValue(v.EnvAllow[index34])
+	out.MapSet("modifiesExistingFiles", vm.ListValue(items31))
+	items33 := make([]vm.Value, len(v.ExecOverrides))
+	for index34 := range v.ExecOverrides {
+		items33[index34] = vm.StrValue(v.ExecOverrides[index34])
 	}
-	out.MapSet("envAllow", vm.ListValue(items33))
+	out.MapSet("execOverrides", vm.ListValue(items33))
+	items35 := make([]vm.Value, len(v.EnvAllow))
+	for index36 := range v.EnvAllow {
+		items35[index36] = vm.StrValue(v.EnvAllow[index36])
+	}
+	out.MapSet("envAllow", vm.ListValue(items35))
 	return out
 }
 
@@ -277,16 +289,16 @@ func buzzValueMagusTargetGraphProject(v types.TargetGraphProject) vm.Value {
 		items15[index16] = buzzValueMagusTargetGraphNode(v.Nodes[index16])
 	}
 	out.MapSet("nodes", vm.ListValue(items15))
-	items35 := make([]vm.Value, len(v.Cycle))
-	for index36 := range v.Cycle {
-		items35[index36] = vm.StrValue(v.Cycle[index36])
+	items37 := make([]vm.Value, len(v.Cycle))
+	for index38 := range v.Cycle {
+		items37[index38] = vm.StrValue(v.Cycle[index38])
 	}
-	out.MapSet("cycle", vm.ListValue(items35))
-	items37 := make([]vm.Value, len(v.DependsOn))
-	for index38 := range v.DependsOn {
-		items37[index38] = vm.StrValue(v.DependsOn[index38])
+	out.MapSet("cycle", vm.ListValue(items37))
+	items39 := make([]vm.Value, len(v.DependsOn))
+	for index40 := range v.DependsOn {
+		items39[index40] = vm.StrValue(v.DependsOn[index40])
 	}
-	out.MapSet("dependsOn", vm.ListValue(items37))
+	out.MapSet("dependsOn", vm.ListValue(items39))
 	return out
 }
 
@@ -303,53 +315,53 @@ func buzzValueMagusTargetGraphOutput(v types.TargetGraphOutput) vm.Value {
 func buzzValueMagusAffectedResult(v types.AffectedResult) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
-	items39 := make([]vm.Value, len(v.Changed))
-	for index40 := range v.Changed {
-		items39[index40] = vm.StrValue(v.Changed[index40])
+	items41 := make([]vm.Value, len(v.Changed))
+	for index42 := range v.Changed {
+		items41[index42] = vm.StrValue(v.Changed[index42])
 	}
-	out.MapSet("changed", vm.ListValue(items39))
-	items41 := make([]vm.Value, len(v.Seed))
-	for index42 := range v.Seed {
-		items41[index42] = vm.StrValue(v.Seed[index42])
+	out.MapSet("changed", vm.ListValue(items41))
+	items43 := make([]vm.Value, len(v.Seed))
+	for index44 := range v.Seed {
+		items43[index44] = vm.StrValue(v.Seed[index44])
 	}
-	out.MapSet("seed", vm.ListValue(items41))
-	mapped43 := vm.NewMap()
-	for key44, item45 := range v.FilesBySeed {
-		items46 := make([]vm.Value, len(item45))
-		for index47 := range item45 {
-			items46[index47] = vm.StrValue(item45[index47])
+	out.MapSet("seed", vm.ListValue(items43))
+	mapped45 := vm.NewMap()
+	for key46, item47 := range v.FilesBySeed {
+		items48 := make([]vm.Value, len(item47))
+		for index49 := range item47 {
+			items48[index49] = vm.StrValue(item47[index49])
 		}
-		mapped43.MapSet(key44, vm.ListValue(items46))
+		mapped45.MapSet(key46, vm.ListValue(items48))
 	}
-	out.MapSet("filesBySeed", mapped43)
-	items48 := make([]vm.Value, len(v.Affected))
-	for index49 := range v.Affected {
-		items48[index49] = vm.StrValue(v.Affected[index49])
+	out.MapSet("filesBySeed", mapped45)
+	items50 := make([]vm.Value, len(v.Affected))
+	for index51 := range v.Affected {
+		items50[index51] = vm.StrValue(v.Affected[index51])
 	}
-	out.MapSet("affected", vm.ListValue(items48))
+	out.MapSet("affected", vm.ListValue(items50))
 	return out
 }
 
 func buzzValueMagusGraphView(v types.GraphView) vm.Value {
 	out := vm.NewMap()
-	items50 := make([]vm.Value, len(v.Nodes))
-	for index51 := range v.Nodes {
-		items50[index51] = vm.StrValue(v.Nodes[index51])
+	items52 := make([]vm.Value, len(v.Nodes))
+	for index53 := range v.Nodes {
+		items52[index53] = vm.StrValue(v.Nodes[index53])
 	}
-	out.MapSet("nodes", vm.ListValue(items50))
-	mapped52 := vm.NewMap()
-	for key53, item54 := range v.DependsOn {
-		items55 := make([]vm.Value, len(item54))
-		for index56 := range item54 {
-			items55[index56] = vm.StrValue(item54[index56])
+	out.MapSet("nodes", vm.ListValue(items52))
+	mapped54 := vm.NewMap()
+	for key55, item56 := range v.DependsOn {
+		items57 := make([]vm.Value, len(item56))
+		for index58 := range item56 {
+			items57[index58] = vm.StrValue(item56[index58])
 		}
-		mapped52.MapSet(key53, vm.ListValue(items55))
+		mapped54.MapSet(key55, vm.ListValue(items57))
 	}
-	out.MapSet("dependsOn", mapped52)
-	mapped57 := vm.NewMap()
-	for key58, item59 := range v.BlastRadius {
-		mapped57.MapSet(key58, vm.IntValue(int64(item59)))
+	out.MapSet("dependsOn", mapped54)
+	mapped59 := vm.NewMap()
+	for key60, item61 := range v.BlastRadius {
+		mapped59.MapSet(key60, vm.IntValue(int64(item61)))
 	}
-	out.MapSet("blastRadius", mapped57)
+	out.MapSet("blastRadius", mapped59)
 	return out
 }

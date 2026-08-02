@@ -75,7 +75,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#changelog-generate" title="changelog-generate">changelog-generate</a></li><li><a href="#content-generate" title="content-generate">content-generate</a></li><li><a href="#generate" title="generate">generate</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li><li><a href="#ci" title="ci">ci</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#render" title="render">render</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
+        <ul><li><a href="#md-generate" title="md-generate">md-generate</a></li><li><a href="#content-generate" title="content-generate">content-generate</a></li><li><a href="#site-generate" title="site-generate">site-generate</a></li><li><a href="#generate" title="generate">generate</a></li><li><a href="#lint" title="lint">lint</a></li><li><a href="#buzz-test" title="buzz-test">buzz-test</a></li><li><a href="#build-playground" title="build-playground">build-playground</a></li><li><a href="#build-mermaid" title="build-mermaid">build-mermaid</a></li><li><a href="#build-hljs" title="build-hljs">build-hljs</a></li><li><a href="#render" title="render">render</a></li><li><a href="#run-order" title="Run order">Run order</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -102,18 +102,18 @@
 <td>-</td>
 </tr>
 <tr>
-<td><code>changelog-generate</code></td>
-<td>-</td>
-<td>go</td>
-</tr>
-<tr>
 <td><code>content-generate</code></td>
 <td>-</td>
 <td>go</td>
 </tr>
 <tr>
+<td><code>site-generate</code></td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
 <td><code>generate</code></td>
-<td><code>preflight</code>, <code>content-generate</code>, <code>md-generate</code>, <code>changelog-generate</code></td>
+<td><code>preflight</code>, <code>content-generate</code>, <code>md-generate</code>, <code>site-generate</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -170,18 +170,16 @@
 </table></figure>
 <h3 id="md-generate"><code>md-generate</code></h3>
 <p>md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.</p>
-<h3 id="changelog-generate"><code>changelog-generate</code></h3>
-<p>changelog-generate regenerates CHANGELOG.md from releases/*.yaml, preserving the [Unreleased] section verbatim.</p>
 <h3 id="content-generate"><code>content-generate</code></h3>
 <p>content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph).</p>
+<h3 id="site-generate"><code>site-generate</code></h3>
+<p>site-generate owns publication.</p>
 <h3 id="generate"><code>generate</code></h3>
-<p>generate is the full publication and drift gate.</p>
+<p>generate is the one public docs publication target.</p>
 <h3 id="lint"><code>lint</code></h3>
 <p>lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no <code>any</code>, no non-null assertions - see biome.json).</p>
 <h3 id="buzz-test"><code>buzz-test</code></h3>
 <p>buzz-test runs render's in-file <code>test &quot;...&quot; {}</code> blocks through <code>magus buzz</code>, in --embedded mode so render's markdown/encoding imports resolve.</p>
-<h3 id="ci"><code>ci</code></h3>
-<p>'ci' is the anchor <code>magus affected ci</code> keys off.</p>
 <h3 id="build-playground"><code>build-playground</code></h3>
 <p>build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.</p>
 <h3 id="build-mermaid"><code>build-mermaid</code></h3>
@@ -195,7 +193,7 @@
     preflight --&gt; generate
     content-generate --&gt; generate
     md-generate --&gt; generate
-    changelog-generate --&gt; generate
+    site-generate --&gt; generate
     generate --&gt; format
     format --&gt; lint
     generate --&gt; build

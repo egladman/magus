@@ -30,9 +30,9 @@ func TestAssembleIO(t *testing.T) {
 		Nodes: []types.TargetGraphNode{
 			// Inputs carry the owning project's workspace-relative path (as resolved in
 			// TargetGraph); a same-project input's owner is this project ("docs").
-			{Name: "gen", Outputs: []types.OutputRef{{Glob: "spells/*.md"}}, Inputs: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
-			{Name: "ghost", Outputs: []types.OutputRef{{Glob: "nowhere/*.md"}}}, // matches no node
-			{Name: "wide", Outputs: []types.OutputRef{{Glob: "**/*.md"}}},       // too broad -> guard drops it
+			{Name: "gen", WritesFiles: []types.OutputRef{{Glob: "spells/*.md"}}, ReadsFiles: []types.InputRef{{Project: "docs", Glob: "src/foo.go"}}},
+			{Name: "ghost", WritesFiles: []types.OutputRef{{Glob: "nowhere/*.md"}}}, // matches no node
+			{Name: "wide", WritesFiles: []types.OutputRef{{Glob: "**/*.md"}}},       // too broad -> guard drops it
 		},
 	}}
 	out := mergeAll([]Shard{assembleIO(projects, pathToNode)}).Output()
@@ -65,7 +65,7 @@ func TestAssembleIOCrossInputs(t *testing.T) {
 		Nodes: []types.TargetGraphNode{
 			// A cross-project input carries the owning project's workspace-relative path
 			// (as resolved in TargetGraph), so the file node lives in "lib", not "consumer".
-			{Name: "build", Inputs: []types.InputRef{{Project: "lib", Glob: "go.mod"}}},
+			{Name: "build", ReadsFiles: []types.InputRef{{Project: "lib", Glob: "go.mod"}}},
 		},
 	}}
 	out := mergeAll([]Shard{assembleIO(projects, pathToNode)}).Output()

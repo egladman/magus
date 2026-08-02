@@ -2,8 +2,8 @@
 title: magus-delegate-ultra
 description: "Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers."
 tags: [agents, skills, magus-delegate-ultra]
-skill_full_bytes: 8446
-skill_simple_bytes: 6403
+skill_full_bytes: 8447
+skill_simple_bytes: 6404
 ---
 
 # magus-delegate-ultra
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `12962ae67c6a` |
+| `skill-content` | `69d6b499f0a0` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -189,7 +189,7 @@ messages, and completion. Use this to keep the root ledger aware of descendants.
 Use Magus to watch processes and shared workspace resources:
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 This shows Magus process state, lock holders and waiters, and shared-service
@@ -354,7 +354,7 @@ messages, and completion. Use this to keep the root ledger aware of descendants.
 Use Magus to watch processes and shared workspace resources:
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 This shows Magus process state, lock holders and waiters, and shared-service

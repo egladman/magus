@@ -86,7 +86,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	// Collect output globs from all registered projects to avoid
 	// build → output-write → rebuild loops.
 	//
-	// AllOutputs, not the project-wide Outputs alone: a per-target ctx.outputs glob and a
+	// AllOutputs, not the project-wide Outputs alone: a per-target ctx.writesFiles glob and a
 	// glob another project writes into this tree both land in the same loop otherwise.
 	// The cross-project case closes it fastest - the writer produces the file, watch fires
 	// on the owner, the owner's depends_on drags the writer back in, and its cache hit

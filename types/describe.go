@@ -173,30 +173,27 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
-	// Inputs are the per-target file inputs the body declares via ctx.inputs(...),
+	// ReadsFiles are the per-target file inputs the body declares via ctx.readsFiles(...),
 	// captured statically in ONE representation where each entry carries its owning
-	// project (InputRef). A bare-literal glob (ctx.inputs("glob")) is a same-project
-	// input whose owning project is the target's own project; a ctx.inputs(<alias>.
+	// project (InputRef). A bare-literal glob (ctx.readsFiles("glob")) is a same-project
+	// input whose owning project is the target's own project; a ctx.readsFiles(<alias>.
 	// file("lit")) entry is a cross-project input whose owning project is the imported
-	// one. Inputs ADD to the target's cache key - unioned onto the project-wide and
-	// spell-contributed globs, never replacing them, so the footprint can only grow. The
+	// one. When present, inputs define the target's file cache footprint rather than
+	// extending the project-wide baseline; the target's magusfiles and target-specific
+	// spell sources remain included. The
 	// single shape feeds the cache footprint, the affected-tracking depends_on edge (a
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
-	Inputs []InputRef `json:"inputs,omitempty" yaml:"inputs,omitempty"`
-	// Outputs are the per-target ctx.outputs(...) refs, each carrying its owning project
-	// (empty means this target's own). They ADD to the target's snapshot/replay set -
-	// unioned onto the project-wide and spell-contributed globs, never replacing them.
-	Outputs []OutputRef `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-	// Updates are the per-target ctx.updates(...) refs: files the target edits in place
+	ReadsFiles []InputRef `json:"reads_files,omitempty" yaml:"reads_files,omitempty"`
+	// WritesFiles are the per-target ctx.writesFiles(...) refs, each carrying its owning project
+	// (empty means this target's own). When present, they define the target's
+	// snapshot/replay set instead of inheriting project-wide and spell outputs.
+	WritesFiles []OutputRef `json:"writes_files,omitempty" yaml:"writes_files,omitempty"`
+	// ModifiesExistingFiles are the per-target ctx.modifiesExistingFiles(...) refs: existing files the target edits in place
 	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
 	// UpdateRef for why magus must neither delete nor restore one.
 	//
-	// buzz:"-": TargetGraphNode.BuzzObject() does not emit an "updates" key
-	// (JSON/YAML carry it; the Buzz boundary map does not), so a generated mirror
-	// field would promise a key the runtime value never has. Same reasoning as
-	// TargetGraphOutput.Definition / TargetGraphProject.RelPath just below.
-	Updates []UpdateRef `json:"updates,omitempty" yaml:"updates,omitempty" buzz:"-"`
+	ModifiesExistingFiles []UpdateRef `json:"modifies_existing_files,omitempty" yaml:"modifies_existing_files,omitempty"`
 	// ExecOverrides are the canonical per-op execution overrides this target declares
 	// via ctx.withEnv / ctx.withCwd, as "env:K=V" / "cwd:V" strings in declaration
 	// order (hash.go sorts a copy at hash time; nothing sorts the stored value). They fold into the target's
@@ -213,7 +210,7 @@ type TargetGraphNode struct {
 	// env is genuinely derived from the environment stay cacheable instead of having to
 	// opt out of the cache entirely.
 	EnvAllow []string `json:"env_allow,omitempty" yaml:"env_allow,omitempty"`
-	// DynamicIO is set when a ctx.inputs/outputs/updates/envInputs call carries a
+	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs call carries a
 	// non-literal argument. A computed glob is invisible to this static read, so the load
 	// path rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
@@ -234,13 +231,13 @@ type CrossTargetRef struct {
 	Target  string `json:"target"  yaml:"target"`
 }
 
-// InputRef names one file input a target declares via ctx.inputs, in a single shape
+// InputRef names one file input a target declares via ctx.readsFiles, in a single shape
 // that carries the owning project for both a same-project glob and a cross-project file -
 // maximally explicit: a local input's project is simply itself. Project is the owning
 // project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
-// same-project input (ctx.inputs("glob")) Project is empty at extraction, meaning "this
+// same-project input (ctx.readsFiles("glob")) Project is empty at extraction, meaning "this
 // target's own project", and is filled to the project's path when resolved. For a
-// cross-project input (ctx.inputs(<alias>.file("rel"))) Project names the imported
+// cross-project input (ctx.readsFiles(<alias>.file("rel"))) Project names the imported
 // project (dot-/repo-relative as written in the magusfile until resolved to
 // workspace-relative, mirroring CrossTargetRef). Folding into the cache key, the
 // affected-tracking depends_on edge, and the consumes edge all read this one shape.
@@ -249,9 +246,9 @@ type InputRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// OutputRef names one file output a target declares via ctx.outputs, in the same shape
+// OutputRef names one file output a target declares via ctx.writesFiles, in the same shape
 // as InputRef: Project is the OWNING project (the tree written into) and Glob is relative
-// to that root. For a same-project output (ctx.outputs("glob")) Project is empty at
+// to that root. For a same-project output (ctx.writesFiles("glob")) Project is empty at
 // extraction and filled to the project's own path when resolved.
 //
 // A separate type from InputRef despite the identical shape, because the dependency edge
@@ -264,8 +261,8 @@ type OutputRef struct {
 	Glob    string `json:"glob" yaml:"glob"`
 }
 
-// UpdateRef names one file a target EDITS IN PLACE rather than produces, declared via
-// ctx.updates. Same shape as OutputRef, and a third type for the same reason OutputRef
+// UpdateRef names one EXISTING file a target edits in place rather than produces, declared via
+// ctx.modifiesExistingFiles. Same shape as OutputRef, and a third type for the same reason OutputRef
 // is not InputRef: what magus is allowed to DO with the file differs, and sharing a
 // type would let a caller pass one where the other belongs.
 //

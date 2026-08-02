@@ -166,13 +166,13 @@ Each target's result line mints an output reference id (`ref1a2b3c`).
 ## When a target is waiting on another magus process
 
 Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
-message already names the holder, and `magus status --watch=2s` reads that same
+message already names the holder, and `magus status --watch=15s` reads that same
 lock state continuously: holder PID, command, directory, age, and waiters.
 Keep the status watch attached until the lock releases, then let the queued
 target continue. A long-running target is not evidence of a hang by itself.
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 If the lock has crossed its stale warning threshold, report the exact holder

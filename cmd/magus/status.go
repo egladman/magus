@@ -28,16 +28,24 @@ type statusFlags struct {
 	watchInterval time.Duration
 	socket        string
 	compact       bool
+	symbols       bool
 	probe         string
 	workspace     string
 }
 
+// statusWatchMin keeps status cheap enough to leave running beside real work.
+// A tighter loop adds no useful signal: locks, services, and pool snapshots do
+// not need sub-second animation, and a slow workspace probe otherwise overlaps
+// its next poll before the last one has finished.
+const statusWatchMin = 15 * time.Second
+
 func (f *statusFlags) bind(fs *flag.FlagSet) {
-	fs.DurationVar(&f.watchInterval, "watch", 0, "poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot")
+	fs.DurationVar(&f.watchInterval, "watch", 0, "poll and reprint at this interval (minimum 15s; 0 means one-shot)")
 	fs.DurationVar(&f.watchInterval, "W", 0, "Short for --watch")
 	fs.StringVar(&f.socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
 	fs.BoolVar(&f.compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
 	fs.BoolVar(&f.compact, "c", false, "Short for --compact")
+	fs.BoolVar(&f.symbols, "symbols", false, "Include the expensive symbol-index freshness scan")
 	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness, readiness, mcp (comma-combinable, e.g. liveness,mcp); exits 0=healthy, 1=unhealthy; ignores --watch/--compact")
 	fs.StringVar(&f.workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
 	fs.Usage = func() {
@@ -72,14 +80,15 @@ func status(ctx context.Context, args []string) error {
 	}
 
 	if f.watchInterval == 0 {
-		return printStatus(ctx, f.socket, opts, 0, f.compact)
+		return printStatus(buildStatusReport(ctx, f.socket, f.symbols), opts, 0, f.compact)
 	}
+	f.watchInterval = clampStatusWatch(f.watchInterval)
 
 	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
 	useGrid := gridEnabled(opts, isTTY) && !f.compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
-	// but re-query the daemon only at the user-specified watchInterval.
+	// while retaining the last snapshot until the next real poll.
 	// Compact mode has no animation: only the queryTick drives reprints.
 	animTick := time.NewTicker(150 * time.Millisecond)
 	defer animTick.Stop()
@@ -87,13 +96,14 @@ func status(ctx context.Context, args []string) error {
 	defer queryTick.Stop()
 
 	animFrame := 0
+	report := buildStatusReport(ctx, f.socket, f.symbols)
 	for {
 		if opts.Format == outputText && isTTY {
 			// Repaint in place. This is a plain clear, never the alternate
 			// screen buffer, so the user keeps their scrollback after quitting.
 			_ = tty.ClearScreen(os.Stdout)
 		}
-		if err := printStatus(ctx, f.socket, opts, animFrame, f.compact); err != nil {
+		if err := printStatus(report, opts, animFrame, f.compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -101,6 +111,7 @@ func status(ctx context.Context, args []string) error {
 			case <-ctx.Done():
 				return nil
 			case <-queryTick.C:
+				report = buildStatusReport(ctx, f.socket, f.symbols)
 			}
 			continue
 		}
@@ -110,8 +121,16 @@ func status(ctx context.Context, args []string) error {
 		case <-animTick.C:
 			animFrame++
 		case <-queryTick.C:
+			report = buildStatusReport(ctx, f.socket, f.symbols)
 		}
 	}
+}
+
+func clampStatusWatch(interval time.Duration) time.Duration {
+	if interval > 0 && interval < statusWatchMin {
+		return statusWatchMin
+	}
+	return interval
 }
 
 // statusReport is the type alias for the shared StatusReport; kept as an alias
@@ -128,8 +147,7 @@ type telemetryStatus = types.TelemetryStatus
 type cacheStatus = types.CacheStatus
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(ctx context.Context, socket string, opts OutputOptions, animFrame int, compact bool) error {
-	r := buildStatusReport(ctx, socket)
+func printStatus(r statusReport, opts OutputOptions, animFrame int, compact bool) error {
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, r)
@@ -163,16 +181,13 @@ func buildStatusBase() types.StatusBase {
 	}
 }
 
-func buildStatusReport(ctx context.Context, socket string) statusReport {
+func buildStatusReport(ctx context.Context, socket string, symbols bool) statusReport {
 	report := statusReport{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Build: buildStatus{
 			SelfUpdate: selfUpdateCompiled,
 		},
-		// Symbol-index freshness is workspace-local (a cache probe), independent of the
-		// daemon, so it is populated regardless of pool reachability.
-		SymbolIndexes: loadSymbolIndexStatus(ctx),
 		// Held locks are read from the workspace cache, not the daemon: a lock is taken by
 		// whichever process is mutating a project, which is usually a plain `magus run`
 		// with no daemon involved at all. Populated before any proc-socket early return
@@ -182,6 +197,11 @@ func buildStatusReport(ctx context.Context, socket string) statusReport {
 		// endpoint an agent host connects to can be down while the proc daemon is up, or
 		// vice versa, so it is set before any early return on a proc-socket error.
 		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
+	}
+	if symbols {
+		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
+		// status remains a cheap operational snapshot rather than a second workspace scan.
+		report.SymbolIndexes = loadSymbolIndexStatus(ctx)
 	}
 	addr, err := resolveStatusSocket(ctx, socket)
 	if err != nil {
@@ -346,7 +366,11 @@ func printStatusText(w *os.File, r statusReport, useGrid bool, animFrame int) {
 			fmt.Fprintf(w, "capacity: %d   running: %d   queued: %d\n",
 				r.Pool.Capacity, r.Pool.Running, r.Pool.Queued)
 			if len(r.Pool.RunningTargets) == 0 {
-				fmt.Fprintln(w, "nothing running")
+				if r.Pool.Running > 0 {
+					fmt.Fprintln(w, "local work active; detailed target data unavailable")
+				} else {
+					fmt.Fprintln(w, "nothing running")
+				}
 			} else {
 				fmt.Fprintf(w, "\n%-4s  %-30s  %s\n", "#", "workspace", "args")
 				fmt.Fprintln(w, strings.Repeat("-", 60))

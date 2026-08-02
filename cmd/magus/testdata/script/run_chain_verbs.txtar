@@ -6,7 +6,7 @@
 #
 # Where magus improves on Dagger's version: Dagger makes you construct and RETURN a
 # File. magus needs no return statement at all, because the target already declared
-# ctx.outputs(...) for the cache. The artifact set is known without asking the author
+# ctx.writesFiles(...) for the cache. The artifact set is known without asking the author
 # for anything, and it has been sitting there powering `magus clean` the whole time.
 #
 # The separator is "--then", not "--": "--" already forwards extra args to spells
@@ -97,7 +97,7 @@ import "os";
 import "spells/acme" as acme;
 magus.project({ "spells": [acme] });
 export fun bundle(ctx: magus\Context, args: [str]) > void {
-    ctx.outputs("dist/*.txt");
+    ctx.writesFiles("dist/*.txt");
     os\exec("sh", ["-c", "mkdir -p dist && echo built > dist/app.txt"]);
 }
 -- spells/acme/spell.buzz --

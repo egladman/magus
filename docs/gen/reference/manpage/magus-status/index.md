@@ -34,7 +34,7 @@ snapshot on its own line for log capture.
 : Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir
 
 **--watch** *duration*
-: Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot
+: Poll and reprint at this interval (minimum 15s; 0 means one-shot)
 
 **--workspace** *string*
 : Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)
@@ -47,16 +47,16 @@ snapshot on its own line for log capture.
 magus status
 ```
 
-*Live updates every second*
+*Live updates every 15 seconds*
 
 ```sh
-magus status --watch=1s
+magus status --watch=15s
 ```
 
 *Single-line snapshot for a multiplexer sidebar*
 
 ```sh
-magus status --compact --watch=1s
+magus status --compact --watch=15s
 ```
 
 *Inspect a specific running parent*

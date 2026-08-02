@@ -179,6 +179,7 @@ var magusOwnedTypeSource = strings.Join([]string{
 	spellruntime.TargetSpellUseSource,
 	spellruntime.InputRefSource,
 	spellruntime.OutputRefSource,
+	spellruntime.UpdateRefSource,
 	spellruntime.TargetGraphNodeSource,
 	spellruntime.TargetGraphProjectSource,
 	spellruntime.TargetGraphSource,

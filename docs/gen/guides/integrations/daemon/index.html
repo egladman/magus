@@ -105,7 +105,7 @@ MAGUS_CONCURRENCY=4 magus run build
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
 magus status                # live pool + MCP endpoint health (reports the reason when down)
-magus status -W 1s          # poll and reprint every second
+magus status -W 15s         # poll and reprint every 15 seconds
 </code></pre>
 <p><code><a class="code-xref" href="../../../reference/manpage/magus-server/" data-kind="command" data-def="Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">magus server</a> start</code> runs in the <strong>foreground</strong> and blocks. It does not daemonize itself;
 you background it with <code>&amp;</code>, <code>nohup</code>, or - better - a process supervisor so it stays up

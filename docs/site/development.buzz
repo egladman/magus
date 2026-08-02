@@ -221,10 +221,7 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 // identical content (the drift gate holds them equal), and the four with none are no
 // longer invisible. MAGUS.md stays committed for the offline and agent read paths.
 export fun renderDevelopment(site: Site) > void {
-    // The cast is where the typing lands: every field read below is compile-checked
-    // against the generated mirror of types.TargetGraphOutput.
-    final graph = site.targets as TargetGraph;
-    final projects = graph.projects;
+    final projects = site.targets.projects;
     if (projects.len() == 0) { return; }
 
     foreach (proj in projects) {
@@ -263,7 +260,7 @@ export fun renderDevelopment(site: Site) > void {
     // Mermaid block and then spliced into the raw landing. renderContentHTML is skipped
     // for the same reason the landing is raw at all: its link rewrite would strip the
     // trailing slash off every project href here.
-    final depsMd = workspaceDependencies(site.graph as Graph);
+    final depsMd = workspaceDependencies(site.graph);
     var depsSection = "";
     if (depsMd != "") {
         depsSection = wrapTables(tagMermaid(markdown\toHtml(depsMd)));

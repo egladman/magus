@@ -130,7 +130,7 @@ var ModuleMethodEntrySource string
 //go:embed gen/types/module.buzz
 var ModuleSource string
 
-// CrossTargetRefSource / TargetSpellUseSource / InputRefSource / OutputRefSource /
+// CrossTargetRefSource / TargetSpellUseSource / InputRefSource / OutputRefSource / UpdateRefSource /
 // TargetGraphNodeSource / TargetGraphProjectSource / TargetGraphSource are the
 // generated Buzz mirrors of magus.targets's result (types.TargetGraphOutput and the
 // node/ref types it nests). Ship with "magus" (magus.targets is a magus.* method).
@@ -139,12 +139,10 @@ var ModuleSource string
 // for it at all.
 //
 // Declare-before-use order, since each nested type is referenced by the one after
-// it: the four leaves (CrossTargetRef, TargetSpellUse, InputRef, OutputRef) have no
+// it: the five leaves (CrossTargetRef, TargetSpellUse, InputRef, OutputRef, UpdateRef) have no
 // struct-valued fields of their own, so their relative order doesn't matter; then
-// TargetGraphNode (which references all four), then TargetGraphProject (nodes:
+// TargetGraphNode (which references all five), then TargetGraphProject (nodes:
 // [TargetGraphNode]), then TargetGraph (projects: [TargetGraphProject]).
-// TargetGraphNode.Updates is buzz:"-" (see types/describe.go) - the runtime
-// BuzzObject never emits an "updates" key, so UpdateRef needs no mirror here.
 //
 //go:generate go run ../../cmd/magus-utils types -type CrossTargetRef -out gen/types/crosstargetref.buzz
 //go:embed gen/types/crosstargetref.buzz
@@ -161,6 +159,10 @@ var InputRefSource string
 //go:generate go run ../../cmd/magus-utils types -type OutputRef -out gen/types/outputref.buzz
 //go:embed gen/types/outputref.buzz
 var OutputRefSource string
+
+//go:generate go run ../../cmd/magus-utils types -type UpdateRef -out gen/types/updateref.buzz
+//go:embed gen/types/updateref.buzz
+var UpdateRefSource string
 
 //go:generate go run ../../cmd/magus-utils types -type TargetGraphNode -out gen/types/targetgraphnode.buzz
 //go:embed gen/types/targetgraphnode.buzz

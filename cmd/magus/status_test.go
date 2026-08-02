@@ -110,6 +110,13 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 1/4 running · ?:?(0.1s)\n")
 }
 
+func TestClampStatusWatch(t *testing.T) {
+	assert.Equal(t, time.Duration(0), clampStatusWatch(0))
+	assert.Equal(t, statusWatchMin, clampStatusWatch(time.Second))
+	assert.Equal(t, statusWatchMin, clampStatusWatch(statusWatchMin))
+	assert.Equal(t, 30*time.Second, clampStatusWatch(30*time.Second))
+}
+
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
@@ -617,6 +624,19 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 	assert.Contains(t, out, "telemetry is disabled.")
 	assert.Contains(t, out, "shared services (1)")
 	assert.Contains(t, out, "2 dependent(s)")
+}
+
+func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "status-*")
+	require.NoError(t, err)
+	printStatusText(f, statusReport{Pool: &types.StatusOutput{
+		Mode: "proc", Capacity: 8, Running: 1,
+	}}, false, 0)
+	require.NoError(t, f.Close())
+	body, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "local work active; detailed target data unavailable")
+	assert.NotContains(t, string(body), "nothing running")
 }
 
 func TestApplyStatusReplyCarriesSharedServices(t *testing.T) {

@@ -133,19 +133,20 @@ export object Site {
     // config-agnostic. This is the authoritative project inventory (magus's own, not a
     // filesystem scan) and it carries each project's targets, so /development/ renders
     // from typed data with no subprocess and no markdown to re-parse.
-    // Opaque here, cast to TargetGraph by the consumer (site/development.buzz). Site
-    // stays a plain data carrier that imports only leaf modules - the field is left
-    // untyped here to keep this file's own declarations decoupled from magus's shape,
-    // consistent with the header rule above.
-    targets: any = {},
+    // TargetGraph is the generated return type of magus.targets(). Keeping it here makes
+    // the renderer and every consumer compile-check their graph access at the boundary.
+    // Host-owned mirror types are available to the checker, but their values arrive
+    // from magus.targets() at the render boundary; they are not constructors in a
+    // file-imported renderer module. null is only this pre-injection placeholder.
+    targets: TargetGraph = null,
 
     // The PROJECT dependency DAG, injected the same way from magus.graph(). targets
     // above carries the targets inside each project; this carries how the projects
     // themselves relate - nodes in topological order, each node's direct dependencies,
     // and its blast radius. /development/ needs both: one answers "what can I run in
     // this project", the other "what does changing it reach".
-    // Opaque here for the same reason as targets; the consumer casts it to target\Graph.
-    graph: any = {},
+    // Graph is the generated Buzz return type of magus.graph().
+    graph: Graph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.
     // Immutable input kept beside the mutable build state so every engine function that

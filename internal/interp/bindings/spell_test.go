@@ -46,7 +46,7 @@ func TestProjectImportFileResolver(t *testing.T) {
 	writeFile(t, root, "a/magusfile.buzz", `import "magus";
 import "project/../b" as b;
 export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs(b.file("go.mod"));
+    ctx.readsFiles(b.file("go.mod"));
 }`)
 	writeFile(t, root, "b/magusfile.buzz", `import "magus";
 export fun compile(ctx: magus\Context, args: [str]) > void {}`)
@@ -68,6 +68,22 @@ export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 		_, err := interp.RunDir(context.Background(), filepath.Join(root, "a"), "build", nil)
 		require.NoError(t, err, "a bare script must degrade the resolver, not error")
 	})
+}
+
+// TestMagusGraphReturnTypesMatchMirrors executes the exact typed magusfile
+// boundary a renderer uses. Parsing only a target declaration skips its body,
+// which was the coverage gap: an absent host-owned mirror surfaced only when the
+// renderer actually loaded.
+func TestMagusGraphReturnTypesMatchMirrors(t *testing.T) {
+    dir := t.TempDir()
+    writeFile(t, dir, "magusfile.buzz", `import "magus";
+export fun preflight(ctx: magus\Context, args: [str]) > void {
+    final targets: TargetGraph = null;
+    final graph: Graph = null;
+}`)
+
+	_, err := interp.RunDir(context.Background(), dir, "preflight", nil)
+	require.NoError(t, err)
 }
 
 // writeFile writes content under dir/rel, creating parent dirs.

@@ -75,9 +75,9 @@ func resolveProjectImport(ctx context.Context, importPath string, ext *externalH
 	// The reserved `.file(rel)` member: a general cross-project path resolver, not a
 	// target. It returns the authoritative WORKSPACE-relative path of a file in the
 	// imported project, resolved with the SAME file.ResolveImport formula describe.go
-	// applies to the extracted ref, so a ctx.inputs(<alias>.file(...)) declaration agrees
+	// applies to the extracted ref, so a ctx.readsFiles(<alias>.file(...)) declaration agrees
 	// between static analysis and runtime. (The extractor itself stores the path as
-	// written and never resolves; resolution happens in describe.go.) The returned path is a usable value: pass it to ctx.inputs
+	// written and never resolves; resolution happens in describe.go.) The returned path is a usable value: pass it to ctx.readsFiles
 	// to declare a cross-project input, or use it directly (e.g. an exec argv). It
 	// registers nothing itself.
 	// Set after the target loop so it reserves the name even if a target is called file.

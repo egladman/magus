@@ -38,7 +38,7 @@ earlier and cheaper: it catches _declared_ overlaps before any code runs.
 
 The observational behavior above covers projects that declare overlapping globs
 for their **own** trees. A **cross-project** output - one project declaring
-`ctx.outputs(<other>.file(...))` into another project's tree - is checked at
+`ctx.writesFiles(<other>.file(...))` into another project's tree - is checked at
 **load** instead, and is fatal:
 
 ```text

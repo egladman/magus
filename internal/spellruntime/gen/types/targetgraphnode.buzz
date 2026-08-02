@@ -13,8 +13,9 @@ export object TargetGraphNode {
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
     crossDependencies: [CrossTargetRef] = [],
-    inputs: [InputRef] = [],
-    outputs: [OutputRef] = [],
+    readsFiles: [InputRef] = [],
+    writesFiles: [OutputRef] = [],
+    modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],
     envAllow: [str] = [],
 }

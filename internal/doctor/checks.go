@@ -587,7 +587,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 	}
 }
 
-// checkUnreachedFootprintDecls is MGS1004: a ctx.inputs/outputs call the static
+// checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static
 // extractor can't reach from a target body - one in an unreferenced or
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration
 // never enters a cache key, so the target silently under-declares its footprint (a
@@ -608,39 +608,27 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) Check {
 		}
 	}
 	if len(details) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no unreached ctx.inputs/outputs declarations"}
+		return Check{Name: name, Status: StatusOK, Message: "no unreached ctx.readsFiles/writesFiles declarations"}
 	}
 	slices.Sort(details)
 	return Check{
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf(
-			"%d ctx.inputs/outputs call(s) are not statically reachable from a target body, so they never enter a cache key; "+
+			"%d ctx.readsFiles/writesFiles call(s) are not statically reachable from a target body, so they never enter a cache key; "+
 				"call them directly in the target body (see %s)",
 			len(details), types.CodeURL(types.UnreachedFootprintDecl)),
 		Details: details,
 	}
 }
 
-// checkRedundantFootprintGlobs is MGS1005: a per-target ctx.inputs/outputs glob that
-// is already present project-wide (in p.Sources/p.Outputs, which include the bound
-// spells' contributed globs). Under the additive footprint model the duplicate is a
-// harmless no-op, but it reads as if it narrowed something when it did not. A warning:
-// drop the per-target copy, or the project-wide one if only that target needs it.
+// checkRedundantFootprintGlobs is MGS1005: a per-target output glob already
+// present project-wide. Explicit inputs intentionally do not participate because
+// they narrow a target's source footprint even when a glob is also project-wide.
 func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 	const name = "redundant footprint globs"
 	var details []string
 	for _, p := range projects {
-		for target, refs := range p.TargetInputs {
-			for _, ref := range refs {
-				// Only a same-project input (owner == this project) shares the project
-				// source namespace; a cross-project input's Rel is relative to another
-				// project, so it can never redundantly duplicate p.Sources.
-				if ref.Project == p.Path && slices.Contains(p.Sources, ref.Glob) {
-					details = append(details, fmt.Sprintf("%s: ctx.inputs(%q) already in project sources", target, ref.Glob))
-				}
-			}
-		}
 		for target, refs := range p.TargetOutputs {
 			for _, ref := range refs {
 				// A cross-project output is never redundant with THIS project's globs:
@@ -649,7 +637,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 					continue
 				}
 				if slices.Contains(p.Outputs, ref.Glob) {
-					details = append(details, fmt.Sprintf("%s: ctx.outputs(%q) already in project outputs", target, ref.Glob))
+					details = append(details, fmt.Sprintf("%s: ctx.writesFiles(%q) already in project outputs", target, ref.Glob))
 				}
 			}
 		}
@@ -662,8 +650,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf(
-			"%d per-target ctx.inputs/outputs glob(s) duplicate a project-wide declaration (a no-op under the additive model); "+
-				"drop the duplicate (see %s)",
+			"%d per-target ctx.writesFiles glob(s) duplicate a project-wide declaration; drop the duplicate (see %s)",
 			len(details), types.CodeURL(types.RedundantFootprintGlob)),
 		Details: details,
 	}

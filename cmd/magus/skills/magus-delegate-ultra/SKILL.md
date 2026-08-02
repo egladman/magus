@@ -153,7 +153,7 @@ messages, and completion. Use this to keep the root ledger aware of descendants.
 Use Magus to watch processes and shared workspace resources:
 
 ```sh
-magus status --watch=2s
+magus status --watch=15s
 ```
 
 This shows Magus process state, lock holders and waiters, and shared-service

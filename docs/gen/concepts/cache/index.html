@@ -188,12 +188,11 @@ to <em>one</em> target, declare it in that target's body with <code>ctx.inputs(.
     go[&quot;go-build&quot;](ctx);
 }
 </code></pre>
-<p><code>magus\inputs</code> adds source globs to that target's cache key; <code>magus\outputs</code> adds
-output globs to its snapshot/replay set. So a target's footprint is the <strong>union</strong>
-of three layers: the bound spells' globs, the project-wide <code>sources</code>/<code>outputs</code>,
-and the target's own <code>magus\inputs</code>/<code>magus\outputs</code>. Per-target declarations only
-ever <em>add</em> - they never shrink the project-wide baseline (see
-<a href="#granularity-project-wide-vs-per-target">Granularity</a>).</p>
+<p>An explicit <code>magus\inputs</code> call defines that target's source footprint; an explicit
+<code>magus\outputs</code> call defines its snapshot/replay footprint. Magus retains the
+magusfiles and any spell sources specific to that target, but it does not inherit
+the broad project baseline. This is what lets one target be precise without making
+its siblings under-declared (see <a href="#granularity-project-wide-vs-per-target">Granularity</a>).</p>
 <h3 id="files-a-target-edits-rather-than-produces">Files a target edits rather than produces</h3>
 <p><code>ctx.outputs</code> claims a file magus owns end to end: magus may delete it
 (<code>magus clean</code>) and restore it wholesale from a cache snapshot. That is wrong for a
@@ -405,34 +404,26 @@ the odd one out: it does not force anything to re-run, it just stops the cache
 from ever writing - the common case is a read-only CI runner or a shared cache
 mirror that must not accumulate local entries.</p>
 <h3 id="granularity-project-wide-vs-per-target">Granularity: project-wide vs per-target</h3>
-<p>A project's <code>Step.Sources</code> is not built per-target from scratch: <code>baseStep</code>
-seeds it with <strong>every bound spell's <code>needs</code> globs, unioned, plus the
-magusfile itself</strong>, and only then does the target-specific step add that
-target's own extra sources on top. So a project binding both <code>go</code> and
-<code>docker</code> has every one of its targets - <code>build</code>, <code>test</code>, <code>lint</code>, even a custom
-one - keying on the union of both spells' <code>needs</code>, not just the ones relevant
-to that particular target: a <code>Dockerfile</code> edit invalidates <code>magus run build</code>
-even though <code>build</code> only cares about <code>.go</code> files. This is deliberately coarse
-(it is a safety margin against under-declared inputs, not a bug), but it means
-<code>magus run ci</code> and <code>magus run build</code> on the same project invalidate together
-far more often than their names alone would suggest.</p>
-<p>Per-target <a href="#per-target-inputs-and-outputs"><code>magus\inputs</code>/<code>magus\outputs</code></a> does
-<strong>not</strong> undo this. It <em>adds</em> to a target's footprint; it cannot remove the
-project-wide baseline. Declaring <code>ctx.inputs(&quot;src/**&quot;)</code> on <code>build</code> does not stop
-a <code>Dockerfile</code> edit from busting it, because the <code>docker</code> spell's globs are still
-in the baseline. Per-target inputs are for attaching an input a target needs that
-nothing else declares - not for narrowing below the spell baseline.</p>
+<p>Without a target declaration, <code>baseStep</code> seeds the cache key with the project
+sources, every bound spell's claims, and the magusfile. That conservative default
+keeps an undeclared target safe, but it can make unrelated work invalidate together.</p>
+<p>An explicit <a href="#per-target-inputs-and-outputs"><code>ctx.inputs(...)</code></a> call changes that
+contract. It is the target's exact source footprint: magus keeps the magusfiles
+and that target's spell inputs, then hashes only the declared inputs. A
+<code>ctx.inputs(&quot;src/**&quot;)</code> build therefore does not re-run for a sibling Dockerfile.
+Use it when a target has a genuinely narrower domain, and name every source that
+domain reads.</p>
 <p>That gives a clean rule for <strong>where to declare a glob</strong>:</p>
 <ul>
 <li><strong>affects every target</strong> (a shared schema, a project-wide <a class="code-xref" href="../../reference/manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>) -&gt; project-wide
 <code>magus\project({sources = [...]})</code>, declared once;</li>
-<li><strong>affects one target</strong> -&gt; <code>magus\inputs</code>/<code>magus\outputs</code> in that target's body.</li>
+<li><strong>affects one target</strong> -&gt; <code>ctx.inputs(...)</code> and <code>ctx.outputs(...)</code> in that target's body.</li>
 </ul>
-<p>Declaring the same glob in both layers is a no-op (the union already has it) and
-<code>magus <a class="code-xref" href="../../reference/manpage/magus-doctor/" data-kind="command" data-def="magus doctor: Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">doctor</a></code> flags it as <a href="../../reference/codes/magusfile/MGS1005/">MGS1005</a>. Outputs are
-almost always target-specific (<code>build</code> -&gt; <code>dist/</code>, <code>test</code> -&gt; <code>coverage/</code>), so a
-project-wide <code>outputs</code> - which makes <em>every</em> target snapshot it - is usually the
-wrong tool; prefer per-target <code>magus\outputs</code>.</p>
+<p>Outputs are almost always target-specific (<code>build</code> -&gt; <code>dist/</code>, <code>test</code> -&gt;
+<code>coverage/</code>), so a project-wide <code>outputs</code> - which makes every target snapshot it</p>
+<ul>
+<li>is usually the wrong tool; prefer <code>ctx.outputs(...)</code>.</li>
+</ul>
 <h2 id="replay-a-hit-restores-outputs-not-execution">Replay: a hit restores outputs, not execution</h2>
 <p>On a run, magus computes the key, then looks for a manifest stored under it:</p>
 <ol>
@@ -478,7 +469,7 @@ or a broken <code>magus clean</code>, so the model is worth stating once.</p>
 <td><strong>Cache footprint</strong></td>
 <td>&quot;what does <em>this target</em> snapshot and replay?&quot;</td>
 <td>one target</td>
-<td><code>cache.Step.Outputs</code>, assembled per-target in <code>buildStep</code>: the project-wide <code>Outputs</code> plus that target's <code>magus\outputs</code>.</td>
+<td><code>cache.Step.Outputs</code>, assembled per-target in <code>buildStep</code>: project-wide <code>Outputs</code> when no target output is declared, otherwise that target's <code>magus\outputs</code>.</td>
 </tr>
 <tr>
 <td><strong>Generated-files manifest</strong></td>

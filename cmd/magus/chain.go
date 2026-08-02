@@ -27,7 +27,7 @@ import (
 //
 // The point Dagger gets right is that a result is not a string the CLI prints, it
 // is an object the CLI knows verbs for. The point magus improves on is that the
-// object needs no return statement: a target already declared ctx.outputs(...) for
+// object needs no return statement: a target already declared ctx.writesFiles(...) for
 // the cache, so the artifact set is known without asking the author for anything.
 //
 // The verb set is deliberately tiny and mirrors the returnable types: `outputs` is

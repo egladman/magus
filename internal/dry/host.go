@@ -106,7 +106,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 
 	// Dependency and footprint declarations live only on the magus.Context a target
-	// receives (ctx.needs / ctx.glob / ctx.inputs / ctx.outputs; see buildCtx), not on
+	// receives (ctx.needs / ctx.glob / ctx.readsFiles / ctx.writesFiles; see buildCtx), not on
 	// the magus.* global - mirroring the real bindings.
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, ...); stub as
@@ -305,15 +305,16 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 // buildCtx builds the magus.Context value a target receives as its first argument in a
 // dry run. Its methods mirror the tracing magus.* members - needs/glob trace and expand
 // graph edges, has_charm reads the active charm set - so a ctx-form body traces exactly
-// as the old global form did. inputs/outputs are inert: the dry graph reads the footprint
+// as the old global form did. File declarations are inert: the dry graph reads the footprint
 // statically (describe.Extract), never by tracing the body.
 func buildCtx(tr *Tracer) vm.Value {
 	c := vm.NewMap()
 	c.MapSet("needs", fn("ctx.needs", traceNeeds(tr)))
 	c.MapSet("glob", fn("ctx.glob", traceGlob(tr)))
 	c.MapSet("has_charm", fn("ctx.has_charm", traceHasCharm(tr)))
-	c.MapSet("inputs", fn("ctx.inputs", retNull))
-	c.MapSet("outputs", fn("ctx.outputs", retNull))
+	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
+	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
+	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
 	return c
 }
 

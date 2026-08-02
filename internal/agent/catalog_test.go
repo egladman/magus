@@ -98,7 +98,7 @@ func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
 		text := string(body)
 		assert.Contains(t, text, "acceptance criteria")
 		assert.Contains(t, text, "magus affected <target> --plan")
-		assert.Contains(t, text, "magus status --watch=2s")
+		assert.Contains(t, text, "magus status --watch=15s")
 		assert.Contains(t, text, "Nested delegation is allowed")
 		assert.NotContains(t, text, "{{")
 	}

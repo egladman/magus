@@ -192,9 +192,10 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 // step.Outputs), joined to the project path, without leaking to a sibling target.
 func TestInputsOutputsColocation(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
-    ctx.inputs("src/**", "tsconfig.json");
-    ctx.outputs("dist/**");
+	const mf = `magus\project({"outputs": ["legacy/**"]});
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("src/**", "tsconfig.json");
+    ctx.writesFiles("dist/**");
 }
 export fun test(ctx: magus\Context, args: [str]) > void {}
 `
@@ -210,8 +211,12 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 	buildStep := m.buildStep(p, "build")
 	assert.Subset(t, buildStep.Sources, []string{"src/**", "tsconfig.json"},
 		"build's declared inputs must be in its cache-key sources")
+	assert.NotContains(t, buildStep.Sources, "**/*.go",
+		"explicit inputs narrow the project-wide source baseline")
 	assert.Contains(t, buildStep.Outputs, "dist/**",
 		"build's declared output must be in its snapshot/replay set")
+	assert.NotContains(t, buildStep.Outputs, "legacy/**",
+		"explicit outputs narrow the project-wide replay baseline")
 
 	testStep := m.buildStep(p, "test")
 	assert.NotContains(t, testStep.Sources, "src/**",
@@ -227,7 +232,7 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
-    ctx.inputs(extra);
+    ctx.readsFiles(extra);
 }
 `
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))

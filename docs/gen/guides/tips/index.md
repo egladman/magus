@@ -26,7 +26,7 @@ Non-obvious ways to combine magus subcommands.
 `magus status` is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine `--compact` (a single densely-packed line) with `--watch` to keep a tmux/screen sidebar pane current:
 
 ```sh
-magus status --compact --watch=1s
+magus status --compact --watch=15s
 ```
 
 Sample output:

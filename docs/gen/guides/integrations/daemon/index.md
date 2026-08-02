@@ -46,7 +46,7 @@ magus server start &        # foreground process; & or a supervisor backgrounds 
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
 magus status                # live pool + MCP endpoint health (reports the reason when down)
-magus status -W 1s          # poll and reprint every second
+magus status -W 15s         # poll and reprint every 15 seconds
 ```
 
 `magus server start` runs in the **foreground** and blocks. It does not daemonize itself;

@@ -335,11 +335,23 @@ func objectName(goType reflect.Type) string {
 	return ""
 }
 
-// buzzObjectName is the public Buzz object name for t. Names normally match
-// their Go structs; VCSTag is the one intentional boundary alias.
+// buzzObjectName is the public Buzz object name for t. The generated mirror is
+// authoritative: a Go type sometimes keeps a descriptive suffix while the Buzz
+// surface exposes the concise domain name.
 func buzzObjectName(t reflect.Type) string {
-	if t == reflect.TypeFor[types.VCSTag]() {
+	switch t {
+	case reflect.TypeFor[types.VCSTag]():
 		return "Tag"
+	case reflect.TypeFor[types.HTTPResponse]():
+		return "HttpResponse"
+	case reflect.TypeFor[types.ProjectsOutput]():
+		return "Projects"
+	case reflect.TypeFor[types.AffectedResult]():
+		return "Affected"
+	case reflect.TypeFor[types.GraphView]():
+		return "Graph"
+	case reflect.TypeFor[types.TargetGraphOutput]():
+		return "TargetGraph"
 	}
 	return t.Name()
 }

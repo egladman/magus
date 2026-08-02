@@ -125,7 +125,7 @@ TTY the screen is cleared between reprints; piped output appends each
 <dt><strong>--socket</strong> <em>string</em></dt>
 <dd>Adopt <a class="code-xref" href="../magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> address as unix:// URL or bare <a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a>; default: auto-detect from MAGUS_<a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">DAEMON</a>_SOCKET or scan sock dir</dd>
 <dt><strong>--watch</strong> <em>duration</em></dt>
-<dd>Poll and reprint at this interval (e.g. --watch=1s); 0 means one-shot</dd>
+<dd>Poll and reprint at this interval (minimum 15s; 0 means one-shot)</dd>
 <dt><strong>--<a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a></strong> <em>string</em></dt>
 <dd>Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)</dd>
 </dl>
@@ -133,11 +133,11 @@ TTY the screen is cleared between reprints; piped output appends each
 <p><em>One-shot status snapshot</em></p>
 <pre><code class="language-sh">magus status
 </code></pre>
-<p><em>Live updates every second</em></p>
-<pre><code class="language-sh">magus status --watch=1s
+<p><em>Live updates every 15 seconds</em></p>
+<pre><code class="language-sh">magus status --watch=15s
 </code></pre>
 <p><em>Single-line snapshot for a multiplexer sidebar</em></p>
-<pre><code class="language-sh">magus status --compact --watch=1s
+<pre><code class="language-sh">magus status --compact --watch=15s
 </code></pre>
 <p><em>Inspect a specific running parent</em></p>
 <pre><code class="language-sh">magus status --socket=unix:///run/user/1000/magus/daemon.sock

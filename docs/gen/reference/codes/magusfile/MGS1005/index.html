@@ -7,12 +7,12 @@
   <meta name="generator" content="magus">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
   <title>MGS1005: redundant footprint glob - magus</title>
-  <meta name="description" content="Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <meta name="description" content="Fires when a per-target magus\outputs glob is already declared project-wide, making it redundant.">
   <link rel="canonical" href="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1005/">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="magus">
   <meta property="og:title" content="MGS1005: redundant footprint glob - magus">
-  <meta property="og:description" content="Fires when a per-target magus\inputs or magus\outputs glob is already declared project-wide, making it a no-op under the additive footprint model.">
+  <meta property="og:description" content="Fires when a per-target magus\outputs glob is already declared project-wide, making it redundant.">
   <meta property="og:url" content="https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1005/">
   <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -100,53 +100,45 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">1 min read</small>
     <article>
 <h1 id="mgs1005-redundant-footprint-glob">MGS1005: redundant footprint glob</h1>
-<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a per-<a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> <code>ctx.inputs(...)</code> or <code>ctx.outputs(...)</code>
-glob that is already declared <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>-wide - either in the project's <code>sources</code>
-/<code>outputs</code> options or contributed by a bound <a class="glossary-term" href="../../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>. Under the additive footprint
-model, the per-target copy adds nothing.</p>
-<pre><code class="language-text">[MGS1005] 1 per-target magus.inputs/outputs glob(s) duplicate a project-wide
-declaration (a no-op under the additive model); drop the duplicate (see
+<p><code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> found a per-<a class="glossary-term" href="../../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> <code>ctx.outputs(...)</code> glob already declared in
+the <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>'s <code>outputs</code> option. The per-target copy adds nothing.</p>
+<pre><code class="language-text">[MGS1005] 1 per-target magus.outputs glob(s) duplicate a project-wide
+declaration; drop the duplicate (see
 .../MGS1005.md)
-  build: ctx.inputs(&quot;src/**&quot;) already in project sources
+  build: ctx.outputs(&quot;dist/**&quot;) already in project outputs
 </code></pre>
 <h2 id="why">Why</h2>
-<p>A target's <a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint is the <strong>union</strong> of three layers: the globs a bound
-spell contributes, the project-wide <code>sources</code>/<code>outputs</code>, and the per-target
-<code>magus\inputs</code>/<code>magus\outputs</code>. Per-target declarations only ever <em>add</em> to the
-footprint - they never shrink the project-wide baseline.</p>
-<p>So a per-target glob that repeats one already present project-wide changes
-nothing about the cache key or the <a class="glossary-term" href="../../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a> set. It is harmless, but it reads as
-if it narrowed or specialized the target's footprint when it did not - a
-misleading no-op worth removing.</p>
-<p>This most often happens by copy-paste: the same glob declared both in
-<code>magus\project({sources = [...]})</code> and in a target body, or a <code>magus\inputs</code>
-glob that a bound spell's <code>needs</code> already covers.</p>
+<p>Outputs are always additive: the project owns its declared outputs, and a target
+declaring the same glob does not make that output more precise. This is usually
+copy-paste from a project-wide declaration.</p>
 <p>This is a <strong>warning</strong>, not a load error: a duplicate is a no-op, not a fault.</p>
 <h2 id="resolution">Resolution</h2>
-<p>Keep the declaration in exactly one place, chosen by scope:</p>
+<p>Keep the output declaration in exactly one place, chosen by scope:</p>
 <ul>
 <li>if the glob is relevant to <strong>every</strong> target, keep the project-wide
 <code>sources</code>/<code>outputs</code> and drop the per-target copy;</li>
 <li>if it is relevant to <strong>one</strong> target, drop the project-wide declaration and keep
-the <code>magus\inputs</code>/<code>magus\outputs</code> in that target's body.</li>
+<code>ctx.outputs(...)</code> in that target's body.</li>
 </ul>
-<pre><code class="language-buzz">// Before: &quot;src/**&quot; declared twice - the per-target copy is a no-op.
-magus\project({sources = [&quot;src/**&quot;]});
+<pre><code class="language-buzz">// Before: &quot;dist/**&quot; declared twice - the per-target copy is a no-op.
+magus\project({outputs = [&quot;dist/**&quot;]});
 export fun build(ctx: magus\Context, args: [str]) &gt; void {
-    ctx.inputs(&quot;src/**&quot;);
+    ctx.outputs(&quot;dist/**&quot;);
     go[&quot;go-build&quot;]();
 }
 
 // After: one home. Here it affects every target, so keep it project-wide.
-magus\project({sources = [&quot;src/**&quot;]});
+magus\project({outputs = [&quot;dist/**&quot;]});
 export fun build(ctx: magus\Context, args: [str]) &gt; void { go[&quot;go-build&quot;](); }
 </code></pre>
 <h2 id="what-this-is-not">What this is NOT</h2>
 <ul>
 <li><strong>Not a hard error.</strong> The duplicate is a no-op; nothing blocks the build.</li>
+<li><strong>Not about inputs.</strong> An explicit <code>ctx.inputs(...)</code> list narrows the target's
+<a class="glossary-term" href="../../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a> footprint, so repeating a project source there is valid.</li>
 <li><strong>Not subsumption-aware.</strong> This check matches globs exactly. A per-target glob
 that is <em>subsumed</em> by a broader project-wide pattern (<code>src/<a class="code-xref" href="../../../manpage/magus-config/" data-kind="command" data-def="magus config: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">config</a>.go</code> under
 <code>**/*.go</code>) is also redundant but is not flagged here.</li>
@@ -172,11 +164,11 @@ project-wide vs per-target declarations.</li>
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
         <a class="related-card" href="../../../../reference/codes/magusfile/MGS1014/"><span class="related-card-title">MGS1014: cross-project output was never produced</span><span class="related-card-desc">Fires when a target declares an output into another project&#39;s tree but the run produced no file matching it, so the cache would record an incomplete result.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
+        <a class="related-card" href="../../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1005%22">MGS1005</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22inputs%22">inputs</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1005%22">MGS1005</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22cache%22">cache</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22doctor%22">doctor</a></div>
     <small>Last updated <time datetime="2026-07-30T19:08:00Z">July 30, 2026, 7:08 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292" data-tooltip="3e1b75ad3c15540050d36b2d7c67372f8e3ad292" title="3e1b75ad3c15540050d36b2d7c67372f8e3ad292">3e1b75ad</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b"><code>15118091</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - the execution context work into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1005.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1005.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -191,9 +183,6 @@ binds its spells. See <a href="../../../../concepts/targets/">targets</a>.</p>
 <p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
 may compose a spell's tool-native operations and depend on other targets. See
 <a href="../../../../concepts/targets/">targets</a>.</p>
-<h3 id="spell">Spell</h3>
-<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
-toolchain's real commands. See <a href="../../../../concepts/spells/">spells</a>.</p>
 <h3 id="buzz">Buzz</h3>
 <p>The language magusfiles are written in (the <code>.buzz</code> engine). See
 <a href="../../../../concepts/engines/">engines</a>.</p>
@@ -206,9 +195,6 @@ magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially
 that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
 and a selected scope with no project declaring it is a load error rather than
 a silent no-op. See <a href="../../../../concepts/targets/#the-target-name">targets</a>.</p>
-<h3 id="snapshot">Snapshot</h3>
-<p>A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See <a href="../../../../guides/daemon/">daemon</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>
