@@ -48,7 +48,16 @@ magus\project({
 // SPELL today, and which plugins a buf project runs is decided by ITS buf.gen.yaml,
 // so the built-in spell cannot name them. This wants a per-target declaration - a
 // ctx.versions sibling to ctx.readsFiles.
-export fun generate(ctx: magus\Context, args: [str]) > void { buf["buf-generate"](ctx); }
+// buf-build alongside the codegen emits a descriptor set carrying SourceCodeInfo - the proto
+// comments, which protoc-gen-go strips from the rawDesc it embeds. cmd/magus-protodocs reads
+// that file to generate the daemon API reference. It is produced HERE, not shelled out to from
+// the generator, so the chain (.proto -> descriptor -> docs pages) is visible to the graph and
+// buf's own version probe enters this project's cache key rather than nothing's.
+// It lands in gen/, already declared as this project's output, so it needs no new declaration.
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    buf["buf-generate"](ctx);
+    buf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
+}
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate, lint);

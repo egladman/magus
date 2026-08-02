@@ -298,10 +298,13 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
 	// event - there is never a live listener with a dead token or vice versa.
-	//nolint:gosec // G118: cancel is stored on active.cancel below (m.cur.cancel) and
-	// invoked later by Manager.Close, Manager.CloseIf, and the supersede branch just
-	// below on the NEXT Start - not leaked, just called through a field gosec cannot
-	// trace across a struct and its owner's methods.
+	//
+	// cancel is stored on active.cancel below (m.cur.cancel) and invoked later by
+	// Manager.Close, Manager.CloseIf, and the supersede branch just below on the NEXT
+	// Start - not leaked, just called through a field. This used to carry a
+	// //nolint:gosec for G118; gosec no longer flags it, so nolintlint reported the
+	// directive as unused and it is gone. The reasoning stays: it is why the pattern
+	// is safe, not merely why a linter was quiet.
 	ctx, cancel := context.WithTimeout(m.parent, ttl)
 
 	// Supersede any current share and publish this one under the lock BEFORE starting

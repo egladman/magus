@@ -1,3 +1,9 @@
+---
+title: Changelog
+description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.
+tags: [changelog, releases, versions, upgrade, breaking-changes]
+---
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -9,50 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
-### Fixed
-
-- The sandbox no longer denies a write into a directory the run has yet to create.
-  A non-existent write target is normalized by resolving its parent, but when that
-  parent was missing too the whole path stayed lexical, so a symlink anywhere above
-  it went unresolved and could never match a rule path (which IS resolved). Any
-  workspace under a symlinked prefix - on macOS that is every path under `/var` or
-  `/tmp` - had nested creates denied. It now walks up to the nearest ancestor that
-  exists and re-attaches the missing tail.
-- magus no longer panics mid-run on a target that fans out. `captureRun` puts one
-  pair of output taps on the context for a whole target body, and `ctx.needs(lint,
-  test)` - the shape of every `ci` target - runs its children concurrently, so
-  several goroutines reached the same tap. Its line buffer was unguarded, so two
-  writers tore the slice header and the process died with `slice bounds out of
-  range` inside `lineTap.Write`. The panic killed the writer goroutine, after which
-  the child process reported its broken output pipe as `exit -1` - surfacing as an
-  unrelated-looking tool failure rather than as a crash. The shared log sink beside
-  it already had the equivalent guard.
-
 ### Removed
 
-- Breaking: `magusfile` is no longer a spell. `import "magus/spell/magusfile"` and a
-  `magusfile` entry in a project's `"spells"` list now fail with
-  [MGS1017](docs/reference/codes/magusfile/MGS1017.md) and the one-line fix: delete
-  both. Neither did anything already - magus binds that driver to every project it
-  discovers, because it is what makes a magusfile's own targets runnable rather than
-  a toolchain an author opts into. Leaving the declarations accepted kept teaching
-  readers that `magusfile` was a spell like `go` or `buf`, which the spell reference
-  has never listed it as. Consequences: `magus describe spells` no longer lists it,
-  and `magus ls` reports the toolchain a project actually binds (or none) instead of
-  answering `magusfile` for almost every project - a fact true by construction, since
-  having a magusfile is how a project is discovered at all.
-- Breaking: `magus memory list` and `magus config mcp connector list` are now
-  `... ls`, matching `magus ls` and `magus run ls`. The old spelling errors with a
-  message naming the new one.
-- Breaking: the three vendor spells register canonical, vendor-qualified names -
-  `actions` is now `github-actions`, `s3-cache` is now `aws-s3`, and the GitLab CI
-  provider's `ci` is now `gitlab-ci`. A registered name is what identifies a spell
-  in every listing and diagnostic, with no directory around it to supply context,
-  so it has to stand alone: `actions` named no product, and `ci` collided outright
-  with the `ci` TARGET that `magus affected ci` anchors on. Source paths are
-  unchanged (`spells/github/actions`, `spells/aws/s3-cache`, `spells/gitlab/ci`),
-  so the path imports in magusfiles keep working; only the registered name moved.
-  The reasoning is written down in [CONTRIBUTING.md](CONTRIBUTING.md#naming).
 - Breaking: `magus tail` is gone. It streamed the most recent cached log for the
   project in the current directory - a view `magus query output <ref>` already gives
   from the reference every run prints. A whole subcommand, flag surface, and man page
@@ -240,7 +204,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   toolchain inventory - a target reaches its tool via its existing `target --uses--> op`
   edge. Plus test `coverage` with a `test_refs` count folded onto file and symbol nodes
   from the coverage profile magus already produces, and `magus refs` now returns the
-  definition's `file:line`. Query recipes: [the knowledge graph](docs/concepts/knowledge.md).
+  definition's `file:line`. Query recipes: [the knowledge graph](concepts/knowledge.md).
 - `daemon.enabled` (flag `--daemon-enabled`, env `MAGUS_DAEMON_ENABLED`, default true):
   set false to run each invocation self-contained in its own per-process pool instead
   of discovering and adopting the shared `magus server start` daemon - handy for a
@@ -257,7 +221,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
   completion to an editor over stdio.
 - `buf-breaking` op in the buf spell: gates a proto schema against a baseline
-  branch, composable into a `lint` target. See [Breaking changes](docs/migrating/breaking-changes.md).
+  branch, composable into a `lint` target. See [Breaking changes](migrating/breaking-changes.md).
 - `describe target --explain` prints the charm trace behind a target's resolved
   command, so a stacked argv patch is inspectable before a run.
 - Silent-failure diagnostics: an invalid charm patch (MGS6001), a `has_charm` typo,
