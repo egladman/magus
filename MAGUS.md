@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2367 nodes** and **5277 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2371 nodes** and **5286 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -55,8 +55,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 48 | `magus query kind:diagnostic` | `MGS2001`, `MGS4001`, `MGS5002` |
 | doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 167 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 223 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1152 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| file | 224 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1155 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 120 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 

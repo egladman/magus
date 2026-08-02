@@ -20,6 +20,7 @@ import "magus/spell/markdown";
 import "magus/spell/bash";
 
 import "badge" as badge;
+import "coverage" as cov;
 
 // Version-selection rules for the `release` target below. ALIASED deliberately:
 // an unaliased import flat-merges the module's exports into this file's scope,
@@ -703,7 +704,17 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
     ctx.needs(format);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
-    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.out"]).stdout);
+    // Measure hand-written code only. Generated files (protobuf accessors, mocks,
+    // the Buzz mirrors) are hundreds of functions no test will ever call, so
+    // leaving them in makes the figure a statement about the code generators and
+    // rewards writing tests for getters to hold the floor up. coverage.buzz
+    // detects them by Go's canonical marker, never by path - this repo keeps
+    // hand-maintained files inside a gen/ directory. coverage.out stays on disk
+    // unfiltered so `go tool cover -html=coverage.out` still shows everything.
+    fs\writeFile("coverage.hand.out",
+        cov\stripGenerated(fs\readFile("coverage.out"),
+            prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
+    final pct = total_coverage(os\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }

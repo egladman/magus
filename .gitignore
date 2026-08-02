@@ -1,6 +1,7 @@
 # Go coverage profile — throwaway intermediate from `magus run coverage`. The
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out
+coverage.hand.out
 
 # Local build artifacts: `go build ./cmd/<name>` at the repo root drops the bare
 # basename here. /magus-* is a wildcard so a newly added cmd/magus-* tool is covered
