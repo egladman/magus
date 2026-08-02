@@ -49,10 +49,34 @@ func (c *Cache) LogDryBanner() {
 	c.log.Info("cache.dry.banner")
 }
 
-// LogDry emits a per-target dry-run line ("[dry] <label> <target>") through the cache
-// logger. Used by the dry-run path in place of the executed pass/fail lines.
-func (c *Cache) LogDry(label, target string) {
-	c.log.Info("cache.dry", slog.String("label", label), slog.String("target", target))
+// LogDry emits a per-target dry-run line through the cache logger, in place of the
+// executed pass/fail line. project is the workspace-relative path, carried so the
+// line can print the same repro command an executed one does.
+func (c *Cache) LogDry(project, label, target string) {
+	c.log.Info("cache.dry",
+		slog.String("project", project),
+		slog.String("label", label),
+		slog.String("target", target))
+}
+
+// LogDrySummary emits the end-of-run footer for a dry run: the same cache.summary
+// event a real run ends with, marked dry and carrying what WOULD have run.
+//
+// It is the same event on purpose. A dry run previously just stopped after its last
+// [dry] line, so the one shape a reader had learned to look for at the bottom of a
+// run - the summary - was missing exactly when they were checking a plan. Reusing
+// cache.summary also means every output format (json, jsonl, template) keeps
+// reporting a footer rather than only the text renderer growing one.
+//
+// The cache's own counters are not consulted: nothing executed, so they are all
+// zero and would report "0 ran" for a plan that intends to run plenty.
+func (c *Cache) LogDrySummary(planned int, elapsed time.Duration) {
+	c.log.Info(
+		"cache.summary",
+		slog.Bool("dry", true),
+		slog.Int("planned", planned),
+		slog.Int64("elapsed", int64(elapsed)),
+	)
 }
 
 // LogSummary emits an end-of-run [summary] footer through the cache logger, drawn
