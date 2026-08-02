@@ -2,6 +2,9 @@ package activity
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,9 +26,19 @@ func actions(events []*activityv1.ActivityEvent) []string {
 	return out
 }
 
+// svc builds a Service over one workspace per dir, rooted at "/ws/<dir>" so every seeded trail
+// has an owning workspace to attribute its events to.
+func svc(dirs ...string) *Service {
+	ws := make([]Workspace, len(dirs))
+	for i, d := range dirs {
+		ws[i] = Workspace{Root: "/ws" + d, CacheDir: d}
+	}
+	return NewService(func() []Workspace { return ws })
+}
+
 func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
 	t.Helper()
-	resp, err := NewService(dir).ListActivity(context.Background(),
+	resp, err := svc(dir).ListActivity(context.Background(),
 		connect.NewRequest(&activityv1.ListActivityRequest{Filter: q}))
 	require.NoError(t, err)
 	return resp.Msg.GetEvents()
@@ -36,7 +49,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	dir = t.TempDir()
 	respRef, _ = trail.WriteBlob(dir, "mcp", []byte("the result body"))
 	trail.Append(dir, trail.Event{
-		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude",
+		Ts: 1, Kind: trail.KindMCPToolCall, Actor: "claude", UserAgent: "claude-code/1.2.3",
 		Action: "magus_query", Outcome: trail.OutcomeOK,
 		ResponseRef: respRef, Preview: "the result body", DurMs: 12,
 	})
@@ -54,6 +67,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	agentResp, _ := trail.WriteBlob(dir, "agent", agentRespBody)
 	trail.Append(dir, trail.Event{
 		Ts: 4, Kind: trail.KindAgentCommand, Actor: "session:abc", Workspace: "/ws/a",
+		Host: "codex", Session: "abc",
 		Action: "Bash", Outcome: trail.OutcomeOK, RequestRef: agentReq, ResponseRef: agentResp,
 		RequestBytes: int64(len(agentReqBody)), ResponseBytes: int64(len(agentRespBody)), Preview: "guard: deny",
 	})
@@ -62,7 +76,7 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 
 func TestListActivity_MapsAndOrdersNewestFirst(t *testing.T) {
 	dir, _ := seedTrail(t)
-	resp, err := NewService(dir).ListActivity(context.Background(),
+	resp, err := svc(dir).ListActivity(context.Background(),
 		connect.NewRequest(&activityv1.ListActivityRequest{}))
 	require.NoError(t, err)
 
@@ -72,6 +86,8 @@ func TestListActivity_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, "Bash", events[0].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_AGENT_COMMAND, events[0].GetKind())
 	assert.Equal(t, "session:abc", events[0].GetActor())
+	assert.Equal(t, "codex", events[0].GetHost())
+	assert.Equal(t, "abc", events[0].GetSession())
 	assert.Equal(t, "/ws/a", events[0].GetWorkspace())
 	assert.Equal(t, "guard: deny", events[0].GetPreview())
 	assert.NotEmpty(t, events[0].GetRequestRef())
@@ -84,16 +100,33 @@ func TestListActivity_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, "boom", events[1].GetError())
 	assert.Equal(t, "connector.create", events[2].GetAction())
 	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, events[2].GetKind())
-	assert.Empty(t, events[2].GetWorkspace()) // a non-workspace action leaves it empty
+	// A daemon-wide action carries NO workspace, and the merge must not invent one. Event.Workspace
+	// means "the root this action pertained to" (trail.go), and a token rotation genuinely pertains
+	// to no single workspace - substituting whichever trail happened to record it would make the
+	// field mean two different things depending on the row.
+	assert.Empty(t, events[2].GetWorkspace())
 	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[3].GetKind())
 	assert.Equal(t, activityv1.Outcome_OUTCOME_OK, events[3].GetOutcome())
 	assert.Equal(t, "magus_query", events[3].GetAction())
+	// An MCP call has no hook wrapper to name its host, so its User-Agent fills the same field
+	// and one view can group hook and MCP events together.
+	assert.Equal(t, "claude-code/1.2.3", events[3].GetHost())
 	require.NotNil(t, events[3].GetDuration())
+}
+
+func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindAgentCommand, Host: "codex"}))
+	assert.Equal(t, "claude-code/1.2.3", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, UserAgent: "claude-code/1.2.3"}))
+	// A recorded host is what its producer observed, so it wins over the header reading.
+	assert.Equal(t, "codex", encodeHost(trail.Event{Kind: trail.KindMCPToolCall, Host: "codex", UserAgent: "curl/8"}))
+	// Only an MCP call's User-Agent stands in for a host; no other kind borrows one.
+	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindJob, UserAgent: "curl/8"}))
+	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindAgentCommand}))
 }
 
 func TestListActivity_FilterByKind(t *testing.T) {
 	dir, _ := seedTrail(t)
-	resp, err := NewService(dir).ListActivity(context.Background(),
+	resp, err := svc(dir).ListActivity(context.Background(),
 		connect.NewRequest(&activityv1.ListActivityRequest{
 			Filter: &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_MCP_TOOL_CALL}},
 		}))
@@ -113,15 +146,15 @@ func TestListActivity_FilterAgentCommand(t *testing.T) {
 
 func TestGetPayload_RoundTripAndReject(t *testing.T) {
 	dir, ref := seedTrail(t)
-	svc := NewService(dir)
+	s := svc(dir)
 
-	pr, err := svc.GetPayload(context.Background(),
+	pr, err := s.GetPayload(context.Background(),
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: ref}))
 	require.NoError(t, err)
 	assert.Equal(t, "the result body", string(pr.Msg.GetBody()))
 	assert.Equal(t, int64(len("the result body")), pr.Msg.GetBytes())
 
-	_, err = svc.GetPayload(context.Background(),
+	_, err = s.GetPayload(context.Background(),
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: "mcpdeadbeef"}))
 	require.Error(t, err) // unknown/short ref
 }
@@ -169,12 +202,149 @@ func TestListActivity_PageSizeDefaultAndCap(t *testing.T) {
 	// Both still return all seeded events (fewer than the cap), proving the request
 	// is accepted rather than rejected.
 	for _, size := range []int32{0, -5, maxPageSize + 100} {
-		resp, err := NewService(dir).ListActivity(context.Background(),
+		resp, err := svc(dir).ListActivity(context.Background(),
 			connect.NewRequest(&activityv1.ListActivityRequest{PageSize: size}))
 		require.NoError(t, err)
 		assert.Len(t, resp.Msg.GetEvents(), 4, "page_size=%d", size)
 		assert.Empty(t, resp.Msg.GetNextPageToken())
 	}
+}
+
+// row is the merged view's identity for an assertion: which action, from which workspace, when.
+// Comparing whole rows keeps ordering and attribution in a single assert.
+type row struct {
+	Action    string
+	Workspace string
+	Ts        int64
+}
+
+func rows(events []*activityv1.ActivityEvent) []row {
+	out := make([]row, len(events))
+	for i, e := range events {
+		out[i] = row{Action: e.GetAction(), Workspace: e.GetWorkspace(), Ts: e.GetTime().AsTime().UnixMilli()}
+	}
+	return out
+}
+
+// seedAt writes one minimal job event per timestamp into a fresh trail dir, using the timestamp
+// as the action so a merged page reads back unambiguously.
+//
+// Each event RECORDS its workspace, the way a real per-workspace producer does (a job runs against
+// one workspace and says so). The merge deliberately does not invent an attribution for events that
+// omit it, so a fixture that wants to assert on workspace has to supply it - which is the honest
+// shape anyway.
+func seedAt(t *testing.T, ts ...int64) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, at := range ts {
+		trail.Append(dir, trail.Event{
+			Ts: at, Kind: trail.KindJob, Actor: "daemon", Workspace: "/ws" + dir,
+			Action: fmt.Sprintf("job-%d", at), Outcome: trail.OutcomeOK,
+		})
+	}
+	return dir
+}
+
+func listAll(t *testing.T, s *Service, pageSize int32) []*activityv1.ActivityEvent {
+	t.Helper()
+	resp, err := s.ListActivity(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityRequest{PageSize: pageSize}))
+	require.NoError(t, err)
+	return resp.Msg.GetEvents()
+}
+
+func TestListActivity_MergesWorkspacesNewestFirst(t *testing.T) {
+	// Two workspaces whose events interleave in time. Concatenating the trails would group them
+	// by workspace; the merged page must be in time order across both.
+	a, b := seedAt(t, 1, 3, 5), seedAt(t, 2, 4, 6)
+
+	assert.Equal(t, []row{
+		{Action: "job-6", Workspace: "/ws" + b, Ts: 6},
+		{Action: "job-5", Workspace: "/ws" + a, Ts: 5},
+		{Action: "job-4", Workspace: "/ws" + b, Ts: 4},
+		{Action: "job-3", Workspace: "/ws" + a, Ts: 3},
+		{Action: "job-2", Workspace: "/ws" + b, Ts: 2},
+		{Action: "job-1", Workspace: "/ws" + a, Ts: 1},
+	}, rows(listAll(t, svc(a, b), 0)))
+}
+
+func TestListActivity_PageSizeCapsTheMergedSet(t *testing.T) {
+	// page_size=3 over two trails must be the 3 most recent DAEMON-WIDE, not 3 from each.
+	a, b := seedAt(t, 1, 3, 5), seedAt(t, 2, 4, 6)
+
+	assert.Equal(t, []row{
+		{Action: "job-6", Workspace: "/ws" + b, Ts: 6},
+		{Action: "job-5", Workspace: "/ws" + a, Ts: 5},
+		{Action: "job-4", Workspace: "/ws" + b, Ts: 4},
+	}, rows(listAll(t, svc(a, b), 3)))
+}
+
+func TestListActivity_SkipsUnreadableWorkspace(t *testing.T) {
+	// A workspace that cannot be read must not blank the panel for the ones that can: a cache dir
+	// that is a FILE (every path under it fails), and one that never recorded anything.
+	broken := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(broken, []byte("x"), 0o644))
+	silent := t.TempDir()
+	ok := seedAt(t, 7, 8)
+
+	assert.Equal(t, []row{
+		{Action: "job-8", Workspace: "/ws" + ok, Ts: 8},
+		{Action: "job-7", Workspace: "/ws" + ok, Ts: 7},
+	}, rows(listAll(t, svc(broken, ok, silent), 0)))
+}
+
+func TestListActivity_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t *testing.T) {
+	// Event.Workspace means "the root this action pertained to", and it is deliberately empty for a
+	// daemon-wide action (trail.go). Merging trails must not change that: an earlier revision filled
+	// blanks from the trail that happened to hold them, which made a daemon-wide MCP call or token
+	// rotation claim a workspace it was never bound to, and left the field meaning one thing on some
+	// rows and something else on others.
+	//
+	// So the invariant is per-event, not blanket: what the producer recorded survives the merge, and
+	// what it left blank stays blank.
+	dir, _ := seedTrail(t)
+	other := seedAt(t, 9)
+
+	byAction := map[string]string{}
+	for _, e := range listAll(t, svc(dir, other), 0) {
+		byAction[e.GetAction()] = e.GetWorkspace()
+	}
+	assert.Equal(t, "/ws/a", byAction["Bash"], "a workspace-bound agent command keeps its own root")
+	assert.Equal(t, "/ws/a", byAction["graph build"], "a workspace-bound job keeps its own root")
+	assert.Equal(t, "/ws"+other, byAction["job-9"], "an event from the other trail keeps its root")
+	assert.Empty(t, byAction["connector.create"], "a daemon-wide token event stays unattributed")
+	assert.Empty(t, byAction["magus_query"], "a daemon-wide MCP call stays unattributed")
+}
+
+func TestListActivity_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
+	// The common case does not regress: one workspace returns its own events...
+	dir, _ := seedTrail(t)
+	assert.Len(t, listAll(t, svc(dir), 0), 4)
+
+	// ...and a daemon reporting no workspaces at all serves an empty page, not an error.
+	assert.Empty(t, listAll(t, NewService(nil), 0))
+	assert.Empty(t, listAll(t, NewService(func() []Workspace { return nil }), 0))
+	// A workspace with no cache dir to read is dropped rather than read as the process cwd.
+	assert.Empty(t, listAll(t, NewService(func() []Workspace { return []Workspace{{Root: "/ws/a"}} }), 0))
+}
+
+func TestGetPayload_FindsTheHoldingWorkspace(t *testing.T) {
+	// The ref lives in the SECOND workspace's blob store; a daemon-wide view must still serve it.
+	dir, ref := seedTrail(t)
+	s := svc(t.TempDir(), dir)
+
+	pr, err := s.GetPayload(context.Background(),
+		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: ref}))
+	require.NoError(t, err)
+	assert.Equal(t, "the result body", string(pr.Msg.GetBody()))
+
+	// No workspace holds it, and no workspace exists at all: both are NotFound, never a panic.
+	_, err = s.GetPayload(context.Background(),
+		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: "mcp0000000000000000"}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = NewService(nil).GetPayload(context.Background(),
+		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: ref}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
 func TestEncodeKindAndOutcome_Defaults(t *testing.T) {

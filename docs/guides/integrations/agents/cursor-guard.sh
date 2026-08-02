@@ -27,6 +27,10 @@
 #     generated files rather than blocking them, so reporting after the write is
 #     the intended behavior everywhere, not a Cursor concession. What Cursor
 #     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
+#
+# Both calls pass --host cursor so the observation magus records says which host
+# produced it. Neither Cursor event carries a session id, so none is sent; that
+# is attribution missing, not a verdict changing.
 
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -40,7 +44,7 @@ case "$event" in
 	fi
 	# -o name prints the bare decision word, which is all this needs. magus
 	# re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path -o name 2>/dev/null)
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --host cursor -o name 2>/dev/null)
 	[ "$verdict" = "advise" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
 	# prose rather than as a verdict it would not read.
@@ -62,5 +66,5 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 	exit 0
 fi
 
-printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook \
+printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --host cursor \
 	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'

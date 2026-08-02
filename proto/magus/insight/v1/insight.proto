@@ -1,0 +1,191 @@
+syntax = "proto3";
+
+// Package magus.insight.v1 is the versioned wire contract for magus insight: where a
+// codebase's attention and risk concentrate. Five lenses ride one message - four read VCS
+// history (hotspots, affinity, ownership, trend) from a single bounded git-log scan the
+// daemon caches, and volatility reads run-outcome history instead. They travel together
+// because the dashboard renders them as one board; splitting them into five RPCs would cost
+// five round trips for one paint and would let the four git lenses disagree about the window
+// they were scanned over.
+//
+// It is a sibling of the other console tool-page contracts (magus.status.v1, magus.activity.v1,
+// magus.metrics.v1). It mirrors types.InsightView, which the CLI also renders; the mapping to
+// this wire lives in the handler, so the domain type stays free of protobuf. buf-breaking
+// gates this file.
+//
+// It deliberately does NOT carry the knowledge-graph axis (types.InsightReport's graph_stats):
+// the console read never touches the knowledge graph, and folding it in here would make every
+// dashboard poll pay for a graph load.
+package magus.insight.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// InsightService serves the assembled lenses to the console dashboard. One read-only unary
+// RPC: the four git lenses come from a server-cached scan (~10s TTL) and volatility from a
+// fresh file read, so the client polls rather than subscribes.
+service InsightService {
+  // GetInsight returns every lens in one message.
+  rpc GetInsight(GetInsightRequest) returns (GetInsightResponse);
+}
+
+message GetInsightRequest {}
+
+message GetInsightResponse {
+  Insight insight = 1;
+}
+
+// Insight bundles the five lenses. volatility is absent (not an empty report) when the
+// workspace has no run-outcome history to score - the distinction matters to a reader, which
+// renders "no runs recorded yet" rather than "no volatile targets".
+message Insight {
+  HotspotOutput hotspots = 1;
+  AffinityOutput affinity = 2;
+  OwnershipOutput ownership = 3;
+  TrendOutput trend = 4;
+  VolatilityReport volatility = 5;
+}
+
+// Every git lens repeats definition/commits/since because each is independently renderable:
+// the CLI prints one lens at a time, so the lens - not the envelope - has to say what it
+// means and what window it read. definition is the prose blurb a reader shows as a caption;
+// commits is how many commits the scan covered; since is the raw bound the operator gave
+// (a git date expression such as "3 months ago"), empty when the scan was bounded by count
+// alone. since stays a STRING rather than a Timestamp: it is the request's expression, not a
+// resolved instant, and resolving it here would discard what the operator actually asked for.
+
+// HotspotOutput ranks where churn meets complexity - the canonical "fix this first" view.
+// nodes is the project-level heatmap; files is the per-file ranking, populated only when the
+// scan ran at file granularity.
+message HotspotOutput {
+  string definition = 1;
+  int32 commits = 2;
+  string since = 3;
+  repeated ProjectNode nodes = 4;
+  repeated FileHotspot files = 5;
+}
+
+// ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node
+// the hotspots lens reuses, which is why it carries graph shape (children, spell_name,
+// exclusive) alongside the churn fields - the same message serves a reader that wants to draw
+// the dependency edges under the heat. It is NOT magus.graph.v1.Node: that one is a
+// knowledge-graph node (id/kind/relation), this one is a project in the build graph.
+//
+// churn, authors and last_commit are the heatmap overlay and are absent on a plain dependency
+// graph; blast_radius and duration_ms come from the graph itself.
+message ProjectNode {
+  string path = 1;  // the stable machine key
+  string name = 2;  // the declared display name, empty when the project never set one
+  string spell_name = 3;
+  repeated string children = 4;
+  string dir = 5;
+  bool exclusive = 6;
+  int32 blast_radius = 7;
+  int64 duration_ms = 8;
+  int32 churn = 9;    // recent commits touching the project
+  int32 authors = 10; // distinct authors behind them
+  google.protobuf.Timestamp last_commit = 11;
+}
+
+// FileHotspot is one file's hotspot score: edit frequency weighted by complexity. score is
+// commits x complexity, sent rather than derived so a reader ranks by the same number the CLI
+// printed even if the weighting changes.
+message FileHotspot {
+  string path = 1;
+  int32 commits = 2;
+  int32 complexity = 3;
+  int32 score = 4;
+  int32 authors = 5;
+  google.protobuf.Timestamp last_commit = 6;
+}
+
+// AffinityOutput reports projects that change together (temporal coupling).
+message AffinityOutput {
+  string definition = 1;
+  int32 commits = 2;
+  string since = 3;
+  repeated CoChange pairs = 4;
+}
+
+// CoChange is a pair of projects that changed in the same commit, how often, and whether the
+// coupling is hidden - no dependency edge connects them, which is the candidate architectural
+// smell the lens exists to surface. a/b are the stable project paths; a_name/b_name are the
+// declared display names, carried alongside rather than resolved into the path so a reader can
+// label the pair without a second lookup.
+message CoChange {
+  string a = 1;
+  string a_name = 2;
+  string b = 3;
+  string b_name = 4;
+  int32 count = 5;
+  bool hidden = 6;
+}
+
+// OwnershipOutput reports author concentration per project - the knowledge-risk view.
+message OwnershipOutput {
+  string definition = 1;
+  int32 commits = 2;
+  string since = 3;
+  repeated Ownership projects = 4;
+}
+
+// Ownership is one project's authorship. bus_factor_1 and stale are the two risk flags the
+// server decides (single author; no commits in the recent half of the window) - they ride the
+// wire rather than being recomputed by a reader so the console and the CLI cannot disagree
+// about what counts as abandoned.
+message Ownership {
+  string path = 1;
+  string name = 2;
+  int32 commits = 3;
+  int32 authors = 4;
+  string primary = 5;        // the author with the most commits
+  int32 primary_share = 6;   // that author's share, in percent
+  bool bus_factor_1 = 7;
+  bool stale = 8;
+  google.protobuf.Timestamp last_commit = 9;
+}
+
+// TrendOutput ranks projects by whether their activity is rising or cooling: the window is
+// split at its midpoint and the halves compared.
+message TrendOutput {
+  string definition = 1;
+  int32 commits = 2;
+  string since = 3;
+  repeated Trend projects = 4;
+}
+
+// Trend is one project's churn across the window's two halves. delta is recent - earlier,
+// sent explicitly because it is the sort key and a reader should not have to know the sign
+// convention (positive is rising).
+message Trend {
+  string path = 1;
+  string name = 2;
+  int32 recent = 3;
+  int32 earlier = 4;
+  int32 delta = 5;
+}
+
+// VolatilityReport is the run-outcome lens: the one lens that does not read git. It is
+// computed from the shared runtime-history file, so it is present even in a workspace with no
+// VCS history, and absent in one that has never recorded a run.
+message VolatilityReport {
+  // The configured Wilson lower bound at or above which a target is treated as volatile.
+  // Sent so a reader renders the same threshold line the server scored against.
+  double threshold = 1;
+  repeated VolatilityTarget targets = 2;
+}
+
+// VolatilityTarget is one (project, target) pair's recorded flakiness: the Wilson lower-bound
+// score against the report's threshold, plus the tallies it was computed from. pass/fail/
+// volatile_count count the retained window and samples is how many outcomes that window holds,
+// so a reader can tell a genuinely stable target from one with two runs on record.
+message VolatilityTarget {
+  string project = 1;
+  string target = 2;
+  double score = 3;
+  bool volatile = 4;  // score >= the report's threshold
+  int32 pass = 5;
+  int32 fail = 6;
+  int32 volatile_count = 7;
+  int32 samples = 8;
+  google.protobuf.Timestamp last_pass = 9;  // the most recent passing run, unset when never
+}

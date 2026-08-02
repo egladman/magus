@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
+	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
@@ -342,6 +343,23 @@ func (r *wsRegistry) status() []proc.Workspace {
 			CacheError: st.Error,
 			CacheBytes: e.m.CacheDiskBytes(),
 		})
+	}
+	return out
+}
+
+// activityWorkspaces returns every loaded workspace paired with its cache dir - the trails the
+// daemon-wide ActivityService merges. It walks the SAME entries map as status(), so the activity
+// view and the status view can never disagree about which workspaces exist, and it takes the cache
+// dir off the already-open Magus rather than resolving root -> cache dir a second way.
+func (r *wsRegistry) activityWorkspaces() []activityhandler.Workspace {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]activityhandler.Workspace, 0, len(r.entries))
+	for _, e := range r.entries {
+		if e.m == nil {
+			continue // still loading or failed
+		}
+		out = append(out, activityhandler.Workspace{Root: e.root, CacheDir: e.m.CacheDir()})
 	}
 	return out
 }

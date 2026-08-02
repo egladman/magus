@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
+	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
@@ -38,6 +39,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/insight/v1/insightv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
@@ -49,9 +51,10 @@ import (
 // Daemon assembles and runs the daemon HTTP server from a set of MCP server
 // options. It satisfies magus.Daemon.
 type Daemon struct {
-	opts     mcp.Options
-	runs     func() []types.StatusRun
-	services func() []types.StatusService
+	opts       mcp.Options
+	runs       func() []types.StatusRun
+	services   func() []types.StatusService
+	workspaces func() []activityhandler.Workspace
 }
 
 // Option customizes a Daemon.
@@ -71,6 +74,15 @@ func WithServices(fn func() []types.StatusService) Option {
 	return func(d *Daemon) { d.services = fn }
 }
 
+// WithActivityWorkspaces supplies the daemon's live workspace set (the same per-workspace
+// registry snapshot that feeds the proc Status RPC), so the activity view merges every loaded
+// workspace's trail instead of only the bridge workspace's. Sharing one source keeps the activity
+// view and the status view from disagreeing about which workspaces exist. When unset, the
+// activity view still serves the bridge workspace's own trail.
+func WithActivityWorkspaces(fn func() []activityhandler.Workspace) Option {
+	return func(d *Daemon) { d.workspaces = fn }
+}
+
 // New returns a Daemon that will serve the MCP endpoint (plus health routes and
 // the console) described by opts.
 func New(opts mcp.Options, options ...Option) *Daemon {
@@ -79,6 +91,30 @@ func New(opts mcp.Options, options ...Option) *Daemon {
 		o(d)
 	}
 	return d
+}
+
+// activityWorkspaces is the trail source the ActivityService reads: the bridge workspace plus
+// every workspace the registry reports loaded, deduplicated by cache dir (the registry adopts the
+// bridge workspace too, and reading one trail twice would double every event on the page). The
+// bridge workspace is unconditional so a daemon whose registry is empty - a single-workspace
+// daemon, or a bridge started without the multi-workspace server - still serves its own trail.
+func (s *Daemon) activityWorkspaces() func() []activityhandler.Workspace {
+	bridge := activityhandler.Workspace{Root: s.opts.Magus.Root(), CacheDir: s.opts.Magus.CacheDir()}
+	return func() []activityhandler.Workspace {
+		out := []activityhandler.Workspace{bridge}
+		seen := map[string]bool{bridge.CacheDir: true}
+		if s.workspaces == nil {
+			return out
+		}
+		for _, w := range s.workspaces() {
+			if seen[w.CacheDir] {
+				continue
+			}
+			seen[w.CacheDir] = true
+			out = append(out, w)
+		}
+		return out
+	}
 }
 
 // Serve starts the daemon HTTP server, blocking until ctx is cancelled or the
@@ -282,10 +318,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			}
 
 			// Activity-trail Connect service for the /dashboard + log viewer: recent agent
-			// and governance activity, read-only over the workspace trail. Mounted with the
-			// same cross-origin guards as metrics (the dashboard is a hosted-site browser
-			// client) and unconditionally - the trail is readable even when metrics are off.
-			activityPath, activityHandler := activityv1connect.NewActivityServiceHandler(activityhandler.NewService(opts.Magus.CacheDir()))
+			// and governance activity, read-only over every loaded workspace's trail. Mounted
+			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
+			// browser client) and unconditionally - the trail is readable even when metrics are off.
+			activityPath, activityHandler := activityv1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()))
 			activityAllowed := allowed
 			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
 				activityAllowed = allowed.Allow(u.Host)
@@ -304,6 +340,17 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, statusConnectHandler))))
 			shareGuarded[statusPath] = statusConnectHandler
 			log.Info("[BRIDGE] status service mounted", slog.String("path", statusPath))
+
+			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
+			// the SAME cached scan through the same console service. The console dashboard reads
+			// it here; the JSON route stays mounted above for its documented non-console callers.
+			// Same cross-origin guards as the other read services, and read-only, so it joins the
+			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
+			// reaches it over this route now rather than the JSON one.
+			insightPath, insightConnectHandler := insightv1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
+			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, insightConnectHandler))))
+			shareGuarded[insightPath] = insightConnectHandler
+			log.Info("[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and

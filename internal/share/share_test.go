@@ -97,8 +97,12 @@ func TestResolveTTL(t *testing.T) {
 		{"zero uses default", 0, 15 * time.Minute},
 		{"negative uses default", -time.Hour, 15 * time.Minute},
 		{"in range passes through", time.Hour, time.Hour},
+		// A multi-week lifetime is now IN range, not clamped: the wall-display case is what
+		// raised the ceiling, and this pins that the long durations the console offers
+		// actually survive the clamp rather than being silently cut back to a day.
+		{"long display lifetime passes through", 30 * 24 * time.Hour, 30 * 24 * time.Hour},
 		{"below min clamps up", 10 * time.Second, MinTTL},
-		{"above max clamps down", 48 * time.Hour, MaxTTL},
+		{"above max clamps down", 365 * 24 * time.Hour, MaxTTL},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

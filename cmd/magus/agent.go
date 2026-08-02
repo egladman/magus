@@ -298,6 +298,15 @@ const guardSchemaVersion = 1
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
+	// Attribution, not policy: these name WHO produced the observation, and the
+	// guard's verdict never reads them. Every one is optional and unvalidated -
+	// including the host name, which is an opaque label the caller chooses rather
+	// than a set magus knows, because a magus that enumerated hosts would need a
+	// release per host. A wrapper that cannot extract a session id must still get
+	// a verdict; erroring here would block a tool call over metadata.
+	host := fset.String("host", "", "Name of the agent host this invocation came from, recorded on the activity event")
+	session := fset.String("session", "", "The host's own session id for this invocation, recorded on the activity event")
+	event := fset.String("event", "", "The host's hook event name (e.g. PreToolUse), recorded on the activity event")
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -316,6 +325,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 
 	input, hasInput := readGuardInput(in)
+	who := hookAttribution{Host: *host, Session: *session, Event: *event}
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if hasInput {
@@ -331,7 +341,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Context = context
 			}
 		}
-		appendHookActivity(ctx, input, true, verdict)
+		appendHookActivity(ctx, input, who, true, verdict)
 		return writeGuardVerdict(out, opts, verdict)
 	}
 	if hasInput {
@@ -344,7 +354,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Context = v.Context
 		}
 	}
-	appendHookActivity(ctx, input, false, verdict)
+	appendHookActivity(ctx, input, who, false, verdict)
 	return writeGuardVerdict(out, opts, verdict)
 }
 
@@ -451,6 +461,16 @@ func readGuardInput(in io.Reader) (guardInput, bool) {
 	return guardInput{Value: value}, true
 }
 
+// hookAttribution is what the host wrapper knows about itself and cannot be
+// derived here: a hook runs as a short-lived client process with no way to
+// discover which agent host started it. It travels beside the input rather than
+// inside guardInput because the guard's verdict must never depend on it.
+type hookAttribution struct {
+	Host    string
+	Session string
+	Event   string
+}
+
 type hookActivityLocation struct {
 	base      string
 	workspace string
@@ -462,7 +482,7 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, input guardInput, asPath bool, verdict guardVerdict) {
+func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, asPath bool, verdict guardVerdict) {
 	if input.Value == "" {
 		return
 	}
@@ -477,6 +497,9 @@ func appendHookActivity(ctx context.Context, input guardInput, asPath bool, verd
 	command := trail.AgentCommand{
 		Actor:     "agent",
 		Workspace: location.workspace,
+		Host:      who.Host,
+		Session:   who.Session,
+		Event:     who.Event,
 		Tool:      tool,
 		Decision:  verdict.Decision,
 		Reason:    verdict.Reason,

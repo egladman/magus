@@ -42,9 +42,22 @@ const DefaultTTL = 15 * time.Minute
 // display on a TV), and the daemon clamps the request to this range so a leaked QR
 // can never be made to live indefinitely. The token stays read-only regardless, so
 // a longer window only widens who may look, never what they may change.
+//
+// MaxTTL is 90 days rather than the 24 hours it started at, because the ceiling was
+// set for the phone-glance case and the wall-display one has different arithmetic: a
+// dashboard left running on a TV outlives any session, and a link that expires nightly
+// turns an ambient display into a daily chore, which in practice means people stop
+// using the feature rather than re-mint it.
+//
+// It stays BOUNDED, and deliberately short of a year. This is a bearer credential -
+// whoever holds the URL is the audience - and it ends up in the places URLs end up:
+// pasted into chat, photographed off a screen, left in a kiosk browser's history. An
+// unexpiring share would make each of those permanent. A quarter is long enough that
+// re-minting is a habit rather than an interruption, and short enough that anything
+// leaked has a definite end.
 const (
 	MinTTL = 1 * time.Minute
-	MaxTTL = 24 * time.Hour
+	MaxTTL = 90 * 24 * time.Hour
 )
 
 // Iface is the minimal, testable projection of a network interface that
