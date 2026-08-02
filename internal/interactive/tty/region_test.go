@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -338,7 +339,27 @@ func TestResetScrollMarginsClearsMargins(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	require.NoError(t, ResetScrollMargins(&buf, terminal(80, 24)))
-	assert.Equal(t, decstbmReset, buf.String())
+	assert.Equal(t, cursorSave+decstbmReset+cursorRestore, buf.String())
+}
+
+// TestResetScrollMarginsLeavesTheCursorAlone is the `magus help` regression.
+// This runs on every exit path, including commands that never opened a region,
+// so on a plain `magus help` it is the only escape emitted at all. DECSTBM
+// homes the cursor, so the bare reset left it at row 1; the shell drew its
+// prompt there and erased the help text on its first redraw. The output
+// appeared for a split second and vanished.
+func TestResetScrollMarginsLeavesTheCursorAlone(t *testing.T) {
+	t.Parallel()
+	var buf ttyBuf
+	require.NoError(t, ResetScrollMargins(&buf, terminal(80, 24)))
+	got := buf.String()
+
+	assert.Contains(t, got, decstbmReset, "the margins still have to be cleared")
+	assert.True(t, strings.HasPrefix(got, cursorSave),
+		"the cursor is saved before DECSTBM homes it")
+	assert.True(t, strings.HasSuffix(got, cursorRestore),
+		"and put back after - a reset emitted last would undo the restore")
+	assert.Empty(t, stripANSI(got), "teardown prints no visible characters")
 }
 
 // stripANSI removes every ANSI escape sequence from s: CSI sequences
@@ -489,6 +510,155 @@ func balancedSaves(t *testing.T, out string) (saves int, nested bool) {
 	return saves, nested
 }
 
+// cursorModel is a minimal terminal that tracks only what this package's contract
+// depends on: which row the cursor is on.
+//
+// It exists because the other tests here assert byte ORDER within one method, and
+// that is exactly the shape of assertion the DECSTBM bug slipped past - the old
+// Release emitted a correct-looking save/CUP/restore and then appended the margin
+// reset, which was "last" as its test demanded and homed the cursor anyway. Order
+// is a proxy; the contract is the cursor's final position. This measures that.
+//
+// It models only the sequences the package emits. Crucially it models DECSTBM as
+// homing the cursor, which is the real terminal behaviour (VT100 and every emulator
+// that follows it) and the thing the bug turned on.
+type cursorModel struct {
+	row      int
+	saved    int
+	hasSaved bool
+}
+
+func (m *cursorModel) feed(t *testing.T, s string) {
+	t.Helper()
+	for i := 0; i < len(s); {
+		if s[i] == '\n' {
+			m.row++
+			i++
+			continue
+		}
+		// DECSC / DECRC are two-byte sequences with no CSI introducer.
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '7' {
+			m.saved, m.hasSaved = m.row, true
+			i += 2
+			continue
+		}
+		if s[i] == 0x1b && i+1 < len(s) && s[i+1] == '8' {
+			if !m.hasSaved {
+				t.Fatal("cursor restore with nothing saved: the save register is a single global slot")
+			}
+			m.row = m.saved
+			i += 2
+			continue
+		}
+		if s[i] != 0x1b || i+1 >= len(s) || s[i+1] != '[' {
+			i++
+			continue
+		}
+		j := i + 2
+		for j < len(s) && (s[j] < 0x40 || s[j] > 0x7E) {
+			j++
+		}
+		if j >= len(s) {
+			t.Fatalf("unterminated CSI in %q", s[i:])
+		}
+		params, final := s[i+2:j], s[j]
+		switch final {
+		case 's':
+			m.saved, m.hasSaved = m.row, true
+		case 'u':
+			if !m.hasSaved {
+				t.Fatal("cursor restore with nothing saved: the save register is a single global slot")
+			}
+			m.row = m.saved
+		case 'H': // CUP: row;col
+			m.row = csiParam(t, params, 0, 1)
+		case 'A': // CUU: up n
+			m.row -= csiParam(t, params, 0, 1)
+		case 'r':
+			// DECSTBM, set OR reset, homes the cursor. This single line is the whole
+			// reason the bug existed and the whole reason this model is worth having.
+			m.row = 1
+		}
+		i = j + 1
+	}
+}
+
+// csiParam reads the nth semicolon-separated CSI parameter, or def when absent.
+func csiParam(t *testing.T, params string, n, def int) int {
+	t.Helper()
+	if params == "" {
+		return def
+	}
+	parts := strings.Split(params, ";")
+	if n >= len(parts) || parts[n] == "" {
+		return def
+	}
+	v, err := strconv.Atoi(parts[n])
+	require.NoError(t, err, "CSI param %q", params)
+	return v
+}
+
+// TestEveryRegionOperationLeavesTheCursorWhereItFoundIt is the regression guard for
+// the whole class of bug, not just the two sites that had it.
+//
+// A caller is mid-transcript at some row; after ANY region operation it must still
+// be there, or the shell prompt lands somewhere it did not write and its next
+// redraw erases the run's output - which reads as output that flashed up and
+// vanished. Each operation is fed to a fresh model at a known row and checked.
+//
+// Run against the pre-fix code this fails twice: Release ends at row 1 (margin
+// reset after the restore) and ResetScrollMargins ends at row 1 (bare reset).
+func TestEveryRegionOperationLeavesTheCursorWhereItFoundIt(t *testing.T) {
+	const startRow = 12
+
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, r *Region)
+	}{
+		{"Reserve", func(t *testing.T, r *Region) { require.NoError(t, r.Reserve()) }},
+		{"WriteLine", func(t *testing.T, r *Region) { require.NoError(t, r.WriteLine("boom")) }},
+		{"SetStatus", func(t *testing.T, r *Region) { require.NoError(t, r.SetStatus("running")) }},
+		{"Release", func(t *testing.T, r *Region) {
+			require.NoError(t, r.Reserve())
+			require.NoError(t, r.Release())
+		}},
+		{"full lifecycle", func(t *testing.T, r *Region) {
+			require.NoError(t, r.Reserve())
+			require.NoError(t, r.SetStatus("running"))
+			require.NoError(t, r.WriteLine("first"))
+			require.NoError(t, r.WriteLine("second"))
+			require.NoError(t, r.SetStatus("running, 2 failed"))
+			require.NoError(t, r.Release())
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf ttyBuf
+			r := NewRegion(&buf, 3, terminal(80, 24))
+			tc.run(t, r)
+
+			m := &cursorModel{row: startRow}
+			m.feed(t, buf.String())
+			assert.Equal(t, startRow, m.row,
+				"%s moved the caller's cursor from row %d to row %d; the shell prompt "+
+					"would land there and its next redraw would erase the transcript",
+				tc.name, startRow, m.row)
+		})
+	}
+
+	// The process-exit path is the one `magus help` hits - a command that opens no
+	// region at all, where this was the ONLY escape emitted for the whole run.
+	t.Run("ResetScrollMargins", func(t *testing.T) {
+		var buf ttyBuf
+		require.NoError(t, ResetScrollMargins(&buf, terminal(80, 24)))
+
+		m := &cursorModel{row: startRow}
+		m.feed(t, buf.String())
+		assert.Equal(t, startRow, m.row,
+			"teardown moved the cursor to row %d; this runs on EVERY exit path, "+
+				"including commands that never opened a region", m.row)
+	})
+}
+
 // TestReserveMakesRoomWithoutMovingTheCallersCursor pins the reservation half of
 // the transparency contract. The newlines guarantee the zone exists; the matching
 // cursor-up means the caller's cursor ends where its own text left it, so nothing
@@ -560,8 +730,10 @@ func TestReleaseGivesTheRowsBackWithoutRepositioning(t *testing.T) {
 
 	assert.Contains(t, got, ed, "the zone is cleared so the footer does not linger")
 	assert.Contains(t, got, decstbmReset, "and the rows are given back")
-	assert.True(t, strings.HasSuffix(got, decstbmReset),
-		"margins are reset last, after the cursor has been put back")
+	assert.True(t, strings.HasSuffix(got, cursorRestore),
+		"the restore comes last: DECSTBM homes the cursor, so a reset emitted "+
+			"after it would park the cursor at row 1 and let the shell prompt "+
+			"paint over the run's transcript")
 	assert.Equal(t, 1, strings.Count(got, cursorRestore),
 		"one restore, pairing the clear's own save - not a session-old position")
 }

@@ -280,17 +280,23 @@ func (r *Region) WriteLine(msg string) error {
 // region opened, thousands of scrolled lines earlier in a long run, which put
 // the prompt back into the middle of the transcript and let it overwrite the
 // output the run had just produced.
+//
+// Which is why the margin reset sits INSIDE the cursor-transparent write rather
+// than after it. DECSTBM homes the cursor - the same behaviour Reserve already
+// works around when it saves before setting margins - so a reset emitted after
+// the restore silently undoes it and parks the cursor at row 1. The shell then
+// draws its prompt at the top of the screen and its first redraw erases
+// everything below, wiping the transcript the run had just produced. It looks
+// like the output flashed up and vanished.
 func (r *Region) Release() error {
 	if !r.enabled || !r.open {
 		return nil
 	}
-	// Clear the zone through paint (cursor-transparent), then give the rows back.
+	// Clear the zone and give the rows back in one cursor-transparent write.
 	if err := r.paint(r.firstRow(), func() {
 		r.buf = append(r.buf, ed...)
+		r.buf = append(r.buf, decstbmReset...)
 	}); err != nil {
-		return err
-	}
-	if _, err := r.w.Write([]byte(decstbmReset)); err != nil {
 		return err
 	}
 	r.open = false
@@ -446,12 +452,20 @@ func Clip(msg string, n int) string {
 // them, so one reset on the way out restores the user's shell regardless
 // of which component was responsible.
 //
+// It runs on every exit path, including those of commands that never opened a
+// region at all, so it has to be inert on a terminal it did not touch. DECSTBM
+// homes the cursor, which makes a bare reset anything but inert: on `magus
+// help` it was the only escape the whole command emitted, and it left the
+// cursor at row 1 for the shell to draw its prompt over the help text. Hence
+// the save/restore bracket - taken and released inside this one write, per the
+// register rule in [Region].
+//
 // No-op when w is not a terminal, so callers do not have to branch.
 func ResetScrollMargins(w io.Writer, p Probe) error {
 	fd, ok := Fd(w)
 	if !ok || !p.IsTerminal(fd) {
 		return nil
 	}
-	_, err := io.WriteString(w, decstbmReset)
+	_, err := io.WriteString(w, cursorSave+decstbmReset+cursorRestore)
 	return err
 }
