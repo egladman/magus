@@ -11,6 +11,11 @@ export function servicesTile(): Tile {
   const card = new Card("services", "Shared services", {
     term: "Service",
     label: "shared services",
+    why:
+      "Long-lived processes magus keeps warm between runs - a database, a queue - so your tests" +
+      " do not pay to start one every time. The dependent count is the thing to read: a service" +
+      " running with zero dependents is holding a port and memory for nobody, which is usually a" +
+      " run that exited without releasing it.",
   });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");

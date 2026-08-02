@@ -11,6 +11,7 @@ import {
   scenarioRuns,
   scenarioActivity,
   scenarioInsight,
+  SCENARIO_CATALOG,
   PRUNED_REF,
   WORKSPACE,
   INV_BUILD_FRESH,
@@ -106,11 +107,11 @@ test("the failed output lookup names the pruned ref; the sandbox denial mirrors 
   assert.match(must(generate.error), /sandbox/);
 });
 
-test("insight names scenario files, dates derive from now, and svc/api:test is the volatile one", () => {
+test("insight names scenario files, dates derive from now, and identity:test is the volatile one", () => {
   const si = scenarioInsight(NOW);
   assert.ok(
-    si.hotspots.some((h) => h.name === "lib/core/users.go"),
-    "the edit that broke the test leads",
+    si.hotspots.some((h) => h.name === "libs/authkit/claims.go"),
+    "the shared-library edit that broke both consumers leads",
   );
   for (const h of si.hotspots) {
     assert.ok(
@@ -120,8 +121,39 @@ test("insight names scenario files, dates derive from now, and svc/api:test is t
   }
   const flaky = si.volatility.targets.find((t) => t.volatile);
   assert.ok(
-    flaky && flaky.project === "svc/api" && flaky.target === "test",
-    "svc/api:test is volatile",
+    flaky && flaky.project === "services/identity" && flaky.target === "test",
+    "services/identity:test is volatile",
   );
   assert.ok(flaky.lastPassMs <= NOW, "last pass derives from now");
+});
+
+// The whole point of one shared scenario is that no surface can name a project or target the others
+// have never heard of. The dashboard's live gantt schedules from SCENARIO_CATALOG, so every target
+// the scripted history names has to be in it - otherwise the board drifts into a second workspace.
+test("every run in the history is a target the live catalog also knows", () => {
+  const known = new Set(SCENARIO_CATALOG.map((c) => c.project + ":" + c.target));
+  for (const r of scenarioRuns(NOW)) {
+    assert.ok(
+      known.has(r.project + ":" + r.target),
+      r.project + ":" + r.target + " is in the catalog",
+    );
+  }
+  // The volatility lens must name a target that is allowed to fail in the live scheduler too.
+  const flaky = new Set(
+    SCENARIO_CATALOG.filter((c) => c.flaky).map((c) => c.project + ":" + c.target),
+  );
+  for (const v of scenarioInsight(NOW).volatility.targets) {
+    if (v.volatile)
+      assert.ok(flaky.has(v.project + ":" + v.target), "the volatile target is flaky");
+  }
+});
+
+// The typecheck failure at ~84m and the pass at ~76m are the same project and target: that pairing
+// is what makes the web side of the story a closed thread rather than a loose end a reader notices.
+test("the failing typecheck is followed by a passing run of the same target", () => {
+  const runs = scenarioRuns(NOW);
+  const broke = must(runs.find((r) => r.target === "typecheck" && r.state === "failed"));
+  const fixed = must(runs.find((r) => r.target === "typecheck" && r.state === "passed"));
+  assert.equal(fixed.project, broke.project, "same project");
+  assert.ok(fixed.endMs > broke.endMs, "the pass comes after the failure");
 });

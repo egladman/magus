@@ -34,6 +34,71 @@ export function showRefreshToast(source: string, message: string): void {
   notify({ source, message, kind: "ok" });
 }
 
+// showCountdownToast announces something that is ABOUT TO HAPPEN, counts down to it, and then does
+// it - as opposed to showRefreshToast above, which asks and waits.
+//
+// The two exist because there are two situations and only one of them has a person in it. At a
+// keyboard, a page that reloads itself out from under you is hostile: it can lose a scroll position,
+// a half-read log, a filter you just typed, so asking is right. On an unattended display - Big
+// Picture on a TV or a spare monitor - "click to refresh" is a prompt nobody will ever click, and
+// the screen simply sits on a stale build indefinitely, which is the failure this replaces.
+//
+// It still ANNOUNCES rather than acting silently: anyone who happens to be looking gets told what
+// is about to happen and roughly when, and Cancel is there for the case where someone is in fact
+// standing at the screen. Cancelling is remembered by the caller, not here.
+//
+// Returns a canceller so the caller can call the whole thing off (leaving the mode, say).
+export function showCountdownToast(
+  source: string,
+  message: (secondsLeft: number) => string,
+  seconds: number,
+  onElapsed: () => void,
+): () => void {
+  document.querySelector(".console-shell-toast--transient")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "console-shell-toast console-shell-toast--transient";
+  toast.dataset.kind = "ok";
+  toast.setAttribute("role", "status");
+  toast.append(sourceChip(source));
+
+  const msg = document.createElement("span");
+  let left = Math.max(1, Math.round(seconds));
+  msg.textContent = message(left);
+  toast.appendChild(msg);
+
+  let timer = 0;
+  const stop = (): void => {
+    if (timer) window.clearInterval(timer);
+    timer = 0;
+    toast.remove();
+  };
+
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", stop);
+  toast.appendChild(cancel);
+
+  // Tick the text in place rather than re-calling showToast each second: that would replace the
+  // element (losing the Cancel button mid-press) and record a fresh notification-history entry for
+  // every tick, turning one event into ten.
+  timer = window.setInterval(() => {
+    left -= 1;
+    if (left <= 0) {
+      stop();
+      onElapsed();
+      return;
+    }
+    msg.textContent = message(left);
+  }, 1000);
+
+  document.body.appendChild(toast);
+  // Recorded ONCE, at announcement time, so the history says a refresh was scheduled even though
+  // the reload that follows wipes the page.
+  notify({ source, message: message(left), kind: "ok" });
+  return stop;
+}
+
 // Options for a transient toast: how long it lingers, an optional deep link rendered as an action, and
 // an optional dedupe key forwarded to the notification history.
 export interface ToastOptions {

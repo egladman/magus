@@ -1,6 +1,6 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "serve", "runtimeExecutable": "go", "runtimeArgs": ["run", "./cmd/magus", "run", "serve"], "port": 8081 }
+    { "name": "serve", "runtimeExecutable": "magus", "runtimeArgs": ["run", "serve"], "port": 8080 }
   ]
 }

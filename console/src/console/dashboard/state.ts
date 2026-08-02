@@ -23,6 +23,7 @@ import type {
   Sandbox,
   Sample as ProtoSample,
 } from "../../gen/magus/metrics/v1/metrics_pb";
+import type { Insight } from "../../gen/magus/insight/v1/insight_pb";
 import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------
@@ -566,88 +567,17 @@ export function mapSample(s: ProtoSample): SampleView {
   };
 }
 
-// ---- insight view-model (on-demand JSON) -----------------------------------
-// GET /api/v1/insight returns types.InsightView as PLAIN JSON (json.Marshal, not
-// protobuf), so this axis has no generated proto: the wire shapes below mirror the
-// Go json tags exactly, and mapInsight folds them into camelCase view-models the
-// tiles read. Times arrive as RFC3339 strings (a zero time.Time serializes to the
-// year-0001 sentinel), so fmtDateStr renders them and treats the sentinel as blank.
+// ---- insight view-model (magus.insight.v1) ---------------------------------
+// InsightService.GetInsight returns the five lenses as a generated proto message, so
+// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1.Insight
+// into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
+// with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
+// simply an absent field rather than the year-0001 sentinel the JSON route emitted.
 
-export function fmtDateStr(iso: string | undefined): string {
-  if (!iso) return "-";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t) || t <= 0) return "-"; // the 0001-01-01 zero-value parses negative
-  return new Date(t).toLocaleDateString();
-}
-
-// Raw wire shapes (snake_case json tags from types/*.go). Not exported: only the
-// mapped view-models below cross into tiles.
-interface HotspotNodeWire {
-  path: string;
-  churn?: number;
-  authors?: number;
-  blast_radius?: number;
-  last_commit?: string;
-}
-interface HotspotWire {
-  commits: number;
-  since?: string;
-  nodes: HotspotNodeWire[] | null;
-}
-interface CoChangeWire {
-  a: string;
-  b: string;
-  count: number;
-  hidden?: boolean;
-}
-interface AffinityWire {
-  commits: number;
-  pairs: CoChangeWire[] | null;
-}
-interface OwnershipWire {
-  path: string;
-  commits: number;
-  authors: number;
-  primary: string;
-  primary_share: number;
-  bus_factor_1?: boolean;
-  stale?: boolean;
-}
-interface OwnershipOutWire {
-  commits: number;
-  projects: OwnershipWire[] | null;
-}
-interface TrendWire {
-  path: string;
-  recent: number;
-  earlier: number;
-  delta: number;
-}
-interface TrendOutWire {
-  commits: number;
-  projects: TrendWire[] | null;
-}
-interface VolatilityTargetWire {
-  project: string;
-  target: string;
-  score: number;
-  volatile?: boolean;
-  pass: number;
-  fail: number;
-  volatile_count: number;
-  samples: number;
-  last_pass?: string;
-}
-interface VolatilityWire {
-  threshold: number;
-  targets: VolatilityTargetWire[] | null;
-}
-export interface InsightWire {
-  hotspots: HotspotWire;
-  affinity: AffinityWire;
-  ownership: OwnershipOutWire;
-  trend: TrendOutWire;
-  volatility: VolatilityWire | null;
+// fmtDate renders a wire Timestamp as a local date, blank when unset.
+export function fmtDate(ts: Timestamp | undefined): string {
+  if (!ts) return "-";
+  return new Date(tsMillis(ts)).toLocaleDateString();
 }
 
 export interface HotspotNodeView {
@@ -701,29 +631,29 @@ export interface InsightView {
   volatility: VolatilityView | null;
 }
 
-export function mapInsight(w: InsightWire): InsightView {
+export function mapInsight(w: Insight): InsightView {
   return {
     commits: w.hotspots?.commits ?? 0,
     hotspots: (w.hotspots?.nodes ?? []).map((n) => ({
       name: n.path,
-      churn: n.churn ?? 0,
-      authors: n.authors ?? 0,
-      blastRadius: n.blast_radius ?? 0,
-      lastCommit: fmtDateStr(n.last_commit),
+      churn: n.churn,
+      authors: n.authors,
+      blastRadius: n.blastRadius,
+      lastCommit: fmtDate(n.lastCommit),
     })),
     affinity: (w.affinity?.pairs ?? []).map((p) => ({
       a: p.a,
       b: p.b,
       count: p.count,
-      hidden: !!p.hidden,
+      hidden: p.hidden,
     })),
     ownership: (w.ownership?.projects ?? []).map((o) => ({
       path: o.path,
       primary: o.primary || "-",
-      primaryShare: o.primary_share,
+      primaryShare: o.primaryShare,
       authors: o.authors,
-      busFactor1: !!o.bus_factor_1,
-      stale: !!o.stale,
+      busFactor1: o.busFactor1,
+      stale: o.stale,
     })),
     trend: (w.trend?.projects ?? []).map((t) => ({
       path: t.path,
@@ -734,25 +664,172 @@ export function mapInsight(w: InsightWire): InsightView {
     volatility: w.volatility
       ? {
           threshold: w.volatility.threshold,
-          targets: (w.volatility.targets ?? []).map((v) => ({
+          targets: w.volatility.targets.map((v) => ({
             label: v.project ? v.project + ":" + v.target : v.target,
             score: v.score,
-            volatile: !!v.volatile,
+            volatile: v.volatile,
             pass: v.pass,
             fail: v.fail,
-            volatileCount: v.volatile_count,
+            volatileCount: v.volatileCount,
             samples: v.samples,
-            lastPass: fmtDateStr(v.last_pass),
+            lastPass: fmtDate(v.lastPass),
           })),
         }
       : null,
   };
 }
 
+// ---- agent activity view-model ---------------------------------------------
+// Derived from the activity trail (magus.activity.v1), which records one event per agent tool
+// invocation a guard hook observed, plus one per MCP tool call.
+//
+// WHAT THIS CAN AND CANNOT SAY. A hook fires BEFORE a tool call and there is no matching end
+// signal - no session-open, no session-close, nothing that says an agent stopped. So the trail can
+// answer "which agents did something recently" and cannot answer "how many agents are running now".
+// Those differ: an agent that is thinking, or waiting on a long build, has an open session and no
+// recent events, and would be invisible to any "currently running" count derived from this.
+//
+// The view therefore reports ACTIVE IN A WINDOW and is named for it, rather than presenting a
+// recency count as a concurrency one. Getting that wrong would be the kind of number that looks
+// authoritative and is quietly false.
+
+export const AGENT_WINDOW_MS = 5 * 60 * 1000;
+
+// One agent host's slice of the window. `sessions` counts distinct session ids; a host whose wrapper
+// does not supply one contributes a single "unattributed" bucket rather than inflating the count.
+export interface AgentHostView {
+  host: string;
+  sessions: number;
+  calls: number;
+  denied: number;
+  advised: number;
+  lastMs: number;
+}
+
+// One observed agent call, kept so the tile can show WHAT agents actually did rather than only how
+// much. The counts answer "is anything happening"; this answers "what", which is the question a
+// denial or a spike immediately raises and which aggregates structurally cannot answer.
+export interface AgentCallView {
+  atMs: number;
+  host: string;
+  tool: string; // the host tool name: shell.command, file.write, or an MCP tool
+  decision: "deny" | "advise" | "pass" | "";
+  mcp: boolean;
+}
+
+export interface AgentActivityView {
+  windowMs: number;
+  hosts: AgentHostView[]; // busiest first
+  totalCalls: number;
+  totalSessions: number;
+  denied: number;
+  mcpCalls: number;
+  // The most recent calls, newest first, capped. Denied and advised calls are kept in preference to
+  // passes when the cap bites: a board with room for ten lines should spend them on the ten that
+  // might need a human, not the ten that happened to be most recent.
+  recent: AgentCallView[];
+}
+
+// How many recent calls the view retains. Enough to fill the tile at Big Picture scale without
+// keeping an unbounded slice of a busy daemon's trail in the store.
+const RECENT_CAP = 12;
+
+// The wire shape the poll hands over: the fields of magus.activity.v1.ActivityEvent this reads,
+// already decoded. Kept structural so state.ts stays free of the generated enums.
+export interface AgentEventWire {
+  atMs: number;
+  isAgentCommand: boolean;
+  isMcpCall: boolean;
+  host: string;
+  session: string;
+  preview: string;
+  // The event's `action`: the host tool name for an agent command (shell.command, file.write) or
+  // the tool name for an MCP call. What the call actually WAS, as opposed to how it was judged.
+  action: string;
+}
+
+// guardDecision reads the verdict off the event LINE rather than fetching its response blob.
+//
+// trail.AppendAgentCommand writes preview as "guard: deny" / "guard: advise" / "guard: pass", so
+// the decision is already in the listing. Fetching it properly would mean one GetPayload round trip
+// per row, which for a 200-event window is 200 requests to render one tile.
+function guardDecision(preview: string): "deny" | "advise" | "pass" | "" {
+  const m = /^guard:\s*(deny|advise|pass)$/.exec(preview.trim());
+  return m ? (m[1] as "deny" | "advise" | "pass") : "";
+}
+
+export function mapAgentActivity(events: AgentEventWire[], now: number): AgentActivityView {
+  const cutoff = now - AGENT_WINDOW_MS;
+  const byHost = new Map<string, { sessions: Set<string>; view: AgentHostView }>();
+  let totalCalls = 0;
+  let denied = 0;
+  let mcpCalls = 0;
+  const allSessions = new Set<string>();
+  const recent: AgentCallView[] = [];
+
+  for (const e of events) {
+    if (e.atMs < cutoff) continue;
+    if (e.isMcpCall) {
+      mcpCalls++;
+      recent.push({ atMs: e.atMs, host: "mcp", tool: e.action, decision: "", mcp: true });
+    }
+    if (!e.isAgentCommand) continue;
+    // An unattributed event still counts as work done - it is only its ATTRIBUTION that is missing,
+    // and dropping it would undercount the very traffic the tile exists to show. Wrappers on an
+    // older magus produce these (the --host flag postdates the current release).
+    const host = e.host || "unattributed";
+    let slot = byHost.get(host);
+    if (!slot) {
+      slot = {
+        sessions: new Set<string>(),
+        view: { host, sessions: 0, calls: 0, denied: 0, advised: 0, lastMs: 0 },
+      };
+      byHost.set(host, slot);
+    }
+    // Sessions are counted per HOST but also globally, and the two are not summable: one operator
+    // running two hosts is two sessions, so the global figure is a sum of distinct ids, not of the
+    // per-host counts, which could double-count a shared id.
+    const session = e.session || host + ":unattributed";
+    slot.sessions.add(session);
+    allSessions.add(session);
+    slot.view.calls++;
+    totalCalls++;
+    const decision = guardDecision(e.preview);
+    if (decision === "deny") {
+      slot.view.denied++;
+      denied++;
+    } else if (decision === "advise") {
+      slot.view.advised++;
+    }
+    if (e.atMs > slot.view.lastMs) slot.view.lastMs = e.atMs;
+    recent.push({ atMs: e.atMs, host, tool: e.action, decision, mcp: false });
+  }
+
+  // Newest first, then denials and advisories promoted ahead of passes. The cap is small enough
+  // that a busy daemon would otherwise fill it entirely with routine passes and bury the one denial
+  // in the window - which is the single entry the tile exists to surface.
+  recent.sort((a, b) => b.atMs - a.atMs);
+  const rank = (d: string): number => (d === "deny" ? 0 : d === "advise" ? 1 : 2);
+  const kept = [...recent].sort((a, b) => rank(a.decision) - rank(b.decision)).slice(0, RECENT_CAP);
+  kept.sort((a, b) => b.atMs - a.atMs);
+
+  const hosts = [...byHost.values()].map((s) => ({ ...s.view, sessions: s.sessions.size }));
+  hosts.sort((a, b) => b.calls - a.calls || a.host.localeCompare(b.host));
+  return {
+    windowMs: AGENT_WINDOW_MS,
+    hosts,
+    totalCalls,
+    totalSessions: allSessions.size,
+    denied,
+    mcpCalls,
+    recent: kept,
+  };
+}
+
 // ---- the store shape -------------------------------------------------------
 // One value published on every tick. Slices are filled independently: `status`
 // arrives on the SSE frame, `metrics`/`samples` on the Connect stream, `insight`
-// on a polled on-demand JSON read. Tiles read only the slice they render.
+// on a polled Connect unary read. Tiles read only the slice they render.
 // `liveHost` deep-links running calls into live logs.
 
 export interface DashboardState {
@@ -762,6 +839,9 @@ export interface DashboardState {
   metrics: MetricsView | null;
   samples: SampleView[];
   insight: InsightView | null;
+  // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
+  // produced a frame, or when the daemon serves no trail.
+  agents: AgentActivityView | null;
   // logLines is a rolling buffer of raw captured-output lines for the live-activity
   // preview. Only the demo feed (demo.ts) synthesizes it; live mode leaves it empty,
   // because the daemon's status SSE carries pool/health frames, not a raw-output
@@ -785,6 +865,7 @@ export function initialState(): DashboardState {
     metrics: null,
     samples: [],
     insight: null,
+    agents: null,
     logLines: [],
     observingSince: null,
     config: null,

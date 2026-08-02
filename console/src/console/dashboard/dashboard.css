@@ -1,3 +1,9 @@
+/* The line-level renderer styles, shared with the log viewer and the activity trail. The
+   live-activity tile paints its captured-output preview through the same render/sections.ts helpers
+   they do, so it gets the identical ANSI colors, status badges and line markup instead of a plain
+   monospace dump. Bundled at build time, so this is an inline, not a runtime request. */
+@import "../render/render.css";
+
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
    dense tiles and the connect/landing screen.
 
@@ -58,6 +64,16 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 [data-card][data-collapsed] [data-caret] { transform: rotate(-90deg); }
 [data-card][data-collapsed] > .pf-v6-c-card__body { display: none; }
 
+/* Card title + its "?" affordance on ONE line. PF's card__title is a block, so the glyph wrapped
+   underneath the heading and read as a stray character rather than as part of the title. */
+.pf-v6-c-card__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.pf-v6-c-card__title .console-render-help-glyph { align-self: center; }
+
 /* Header note (in PF card__actions): small muted text, or a count chip / rich legend a tile swaps in. */
 .console-dashboard-tile__note { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
 
@@ -92,10 +108,31 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-stat[data-accent="err"] .console-dashboard-stat__value { color: var(--console-status-danger); }
 
 /* Pool occupancy grid: airplane-seating cubes. Running = filled (info blue), free = outlined,
-   queued = dashed (saturation red). Wraps to fill the tile at any capacity. */
-.console-dashboard-pool__grid { display: flex; flex-wrap: wrap; gap: 4px; margin: 0.1rem 0 0.55rem; }
+   queued = dashed (saturation red).
+
+   A real GRID of --pool-cols columns (set by pool.ts as ceil(sqrt(total)), floored at 4), not a
+   flex strip that wraps only when it runs out of room. The strip drew a thin line of small cubes
+   across the top of the panel at every common capacity, which reads as a progress bar rather than
+   as occupancy and left the panel's height empty. A square-ish block is what makes the seating
+   metaphor legible: the eye judges a filled fraction of an AREA instantly, and cannot do the same
+   with a line.
+
+   The cubes take their size from the column count rather than a fixed pixel width, so they are
+   chunky at a small capacity and still fit at a large one. aspect-ratio keeps them square while
+   the width tracks the column, and max-width stops a four-slot pool from rendering four enormous
+   tiles. */
+.console-dashboard-pool__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--pool-cols, 8), minmax(0, 1fr));
+  justify-content: start;
+  gap: 4px;
+  margin: 0.1rem 0 0.55rem;
+  max-width: calc(var(--pool-cols, 8) * 2.6rem);
+}
 .console-dashboard-pool__slot {
-  width: 15px; height: 15px; border-radius: 2px;
+  width: 100%; aspect-ratio: 1; height: auto;
+  max-width: 2.2rem;
+  border-radius: 2px;
   border: 1px solid var(--pf-t--global--border--color--default); background: transparent;
 }
 .console-dashboard-pool__slot[data-state="running"] { background: var(--console-status-running); border-color: var(--console-status-running); }
@@ -107,6 +144,80 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 .console-dashboard-pool__legend .console-dashboard-legend--running::before { background: var(--console-status-running); border-color: var(--console-status-running); }
 .console-dashboard-pool__legend .console-dashboard-legend--queued::before { border-style: dashed; border-color: var(--console-status-queued); background: transparent; }
+
+/* Agent seats: one cell per recently-active agent session, coloured by which host it came from.
+   Deliberately the same visual language as the pool grid above - a block of cells you read as a
+   filled fraction rather than a number - because the two are the same question from opposite ends:
+   the pool is magus's capacity, this is the demand arriving at it.
+
+   A warm seat (a call within the last minute) is solid; a cooling one is outlined, so a session
+   winding down visibly fades rather than vanishing between polls. */
+.console-dashboard-agents__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(1.1rem, 1.4rem));
+  gap: 4px;
+  margin: 0.1rem 0 0.6rem;
+}
+.console-dashboard-agents__seat {
+  aspect-ratio: 1; border-radius: 2px;
+  border: 1px solid var(--console-stone);
+  background: transparent;
+}
+.console-dashboard-agents__seat[data-warm="yes"] { background: var(--console-stone); }
+/* Per-host hues from the console's earthy accent set, not the status palette: a host is an
+   identity, not a severity, and reusing the status colours here would make "codex" read as an
+   error. */
+.console-dashboard-agents__seat[data-host="claude-code"] { border-color: var(--console-clay); }
+.console-dashboard-agents__seat[data-host="claude-code"][data-warm="yes"] { background: var(--console-clay); }
+.console-dashboard-agents__seat[data-host="codex"] { border-color: var(--console-spruce); }
+.console-dashboard-agents__seat[data-host="codex"][data-warm="yes"] { background: var(--console-spruce); }
+.console-dashboard-agents__seat[data-host="cursor"] { border-color: var(--console-indigo); }
+.console-dashboard-agents__seat[data-host="cursor"][data-warm="yes"] { background: var(--console-indigo); }
+.console-dashboard-agents__seat[data-host="opencode"] { border-color: var(--console-moss); }
+.console-dashboard-agents__seat[data-host="opencode"][data-warm="yes"] { background: var(--console-moss); }
+
+/* The recent-calls list under the per-host totals: what agents actually did, not just how much.
+   A denial takes the danger accent and an advisory the warning one, so the entries that might need
+   a human are findable without reading every row. */
+/* The recent list's own box. On the board it simply grows; in Big Picture it takes the height left
+   over after the seat grid and the host rows, and fitRows trims the list to whatever that is - it
+   cannot share card.body with a second fitRows, since both would claim the full height. */
+.console-dashboard-agents__recentwrap { min-height: 0; }
+[data-bigpicture] [data-card="agents"] .pf-v6-c-card__body { display: flex; flex-direction: column; }
+/* Board only. The panel is two grid rows in Big Picture and already carries the seat grid and the
+   per-host rows, so the density budget correctly trimmed this list to nothing and left a heading
+   above a bare "+5 more" - technically honest and useless to look at. The per-host totals and the
+   denial count are the right altitude for a wall display; WHICH call was denied is a lean-in
+   question, and the board has the room to answer it. */
+[data-bigpicture] .console-dashboard-agents__recentwrap { display: none; }
+
+.console-dashboard-agents__subhead {
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-dashboard-agents__recent .console-dashboard-row[data-decision="deny"] {
+  border-color: var(--console-status-danger);
+}
+.console-dashboard-agents__recent .console-dashboard-row[data-decision="advise"] {
+  border-color: var(--console-status-warn);
+}
+[data-bigpicture] .console-dashboard-agents__subhead { font-size: calc(var(--bp-u) * 1); }
+
+[data-bigpicture] .console-dashboard-agents__grid {
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--bp-u) * 1.6), calc(var(--bp-u) * 2.2)));
+  gap: calc(var(--bp-u) * 0.35);
+  margin-bottom: calc(var(--bp-u) * 0.5);
+}
+/* The explanatory caption is board-only. It earns its space where someone is reading the tile up
+   close and may not know what "sessions" counts; on a wall display it is a paragraph nobody can read
+   from across the room, and it was the single tallest thing in the shortest panel on the canvas -
+   pushing the host rows straight out of the slot. */
+/* Both explanatory captions are board-only. They earn their space where someone is reading the tile
+   up close; on a wall display they are a paragraph nobody can read from across the room, and they
+   are the tallest FIXED element in a panel whose other content already knows how to shrink. */
+[data-bigpicture] [data-card="agents"] .console-dashboard-activity__caption,
+[data-bigpicture] [data-card="activity"] .console-dashboard-activity__caption { display: none; }
 
 /* Legend swatches, shared by the charts and the utilization grid. */
 .console-dashboard-legend::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
@@ -156,7 +267,29 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-gantt__axislabel { fill: var(--pf-t--global--text--color--subtle); font-size: 8px; font-family: var(--pf-t--global--font--family--mono); }
 .console-dashboard-gantt__runlabel { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); }
 .console-dashboard-gantt__targetlabel { fill: var(--pf-t--global--text--color--regular); font-size: 10px; font-family: var(--pf-t--global--font--family--mono); }
+/* Per-bar duration and per-run summary. Both quiet and monospace: they are read as figures beside
+   the shapes, and a bar's LENGTH is only ever a comparison within the window - it cannot tell you
+   how long anything took. tabular-nums so a column of durations lines up on the decimal instead of
+   jittering as digits change every second. */
+.console-dashboard-gantt__dur {
+  fill: var(--pf-t--global--text--color--subtle); font-size: 9px;
+  font-family: var(--pf-t--global--font--family--mono); font-variant-numeric: tabular-nums;
+}
+.console-dashboard-gantt__runsummary {
+  fill: var(--pf-t--global--text--color--subtle); font-size: 9px;
+  font-family: var(--pf-t--global--font--family--mono); font-variant-numeric: tabular-nums;
+}
 .console-dashboard-gantt__bar { stroke: var(--pf-t--global--border--color--default); stroke-width: 0.5; }
+/* Queue wait: the stretch between a run being submitted and this target starting. Half-height and
+   hollow so it reads as elapsed-but-not-working, and never competes with the bar itself - the point
+   is to separate "took 40s of work" from "sat in the queue for 35s", which the bar alone conflates
+   and which are opposite problems. */
+.console-dashboard-gantt__wait {
+  fill: none;
+  stroke: var(--pf-t--global--border--color--default);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
 .console-dashboard-gantt__bar[data-state="running"] { fill: var(--console-status-running); }
 .console-dashboard-gantt__bar[data-state="queued"]  { fill: var(--console-status-queued); fill-opacity: 0.55; }
 .console-dashboard-gantt__bar[data-state="passed"]  { fill: var(--console-status-ok); }
@@ -191,9 +324,73 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
+  /* The row CLIPS. __meta is white-space: nowrap, and without this a long value (a lock holder's
+     worktree path is the usual offender) simply painted straight out of the row and over its own
+     border - most visibly over the amber rule that marks a stale lock, which is the one row where
+     the border is carrying meaning. */
+  overflow: hidden;
 }
-.console-dashboard-row__cmd { font-family: var(--pf-t--global--font--family--mono); font-size: 0.8rem; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
-.console-dashboard-row__meta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
+/* min-width: 0 on both children, or flex refuses to shrink either below its content width and the
+   row overflows anyway - the clip above would then just hide the end of the meta rather than
+   letting it fit. */
+.console-dashboard-row__cmd { min-width: 0; font-family: var(--pf-t--global--font--family--mono); font-size: 0.8rem; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
+.console-dashboard-row__meta {
+  min-width: 0; flex: 0 1 auto;
+  font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
+  overflow: hidden;
+}
+/* At rest (and under reduced motion, where density.ts never sets [data-marquee]) an over-long value
+   ellipsises. The inner span is what carries the text so the marquee below has something to move
+   that is not the clipping box itself. */
+.console-dashboard-row__meta > .console-dashboard-row__scroll {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Marquee: out to the end, hold, and back. `alternate` rather than a wrapping loop because a value
+   that jumps back to its start reads as a glitch, and because the animation's resting state is then
+   translateX(0) - so a tab the browser has throttled shows the BEGINNING of the path, which is the
+   same thing the ellipsis would have shown, rather than parking mid-string. */
+.console-dashboard-row__meta[data-marquee] > .console-dashboard-row__scroll {
+  display: inline-block; overflow: visible; text-overflow: clip;
+  animation: console-dashboard-marquee var(--marquee-dur, 8s) ease-in-out infinite alternate;
+}
+@keyframes console-dashboard-marquee {
+  /* Most of the cycle is spent parked at one end or the other: the value has to be READ, and a line
+     in constant motion is exactly what makes a long string unreadable at a distance. */
+  0%, 22% { transform: translateX(0); }
+  78%, 100% { transform: translateX(var(--marquee-dx, 0)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-dashboard-row__meta[data-marquee] > .console-dashboard-row__scroll { animation: none; }
+}
+/* Live-activity rows arrive and leave rather than blinking in and out. A running call ending is the
+   one moment on this panel where something is genuinely changing, and it used to be the least
+   legible - the row vanished between status frames and everything below jumped up.
+   Leaving slides right and collapses its own height, which is what carries the stack smoothly
+   upward; entering is the same motion in reverse, minus the collapse.
+   Transitions, not keyframes: a row whose transition never gets to run is simply already at its
+   resting style, rather than stuck invisible (see --console-motion in tokens.css). */
+.console-dashboard-rowlist .console-dashboard-row {
+  transition:
+    opacity var(--console-motion) var(--console-ease),
+    transform var(--console-motion) var(--console-ease),
+    max-height var(--console-motion) var(--console-ease),
+    margin-block var(--console-motion) var(--console-ease),
+    padding-block var(--console-motion) var(--console-ease);
+}
+.console-dashboard-row[data-entering] { opacity: 0; transform: translateX(-0.6rem); }
+.console-dashboard-row[data-leaving] {
+  opacity: 0;
+  transform: translateX(1.5rem);
+  overflow: hidden;
+  padding-block: 0;
+  margin-block: 0;
+  border-width: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-dashboard-rowlist .console-dashboard-row { transition: none; }
+}
+
 /* A clickable running call: deep-links to its live log. */
 a.console-dashboard-row { text-decoration: none; color: inherit; cursor: pointer; }
 a.console-dashboard-row:hover { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
@@ -223,20 +420,50 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    pinned to the top-right via margin-left: auto. Always visible, first in the panels grid, above
    both the board tiles and the Big Picture summary it swaps to. */
 .console-dashboard-viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 0.2rem; }
-.console-dashboard-viewbar__workspaces { display: flex; align-items: center; }
-/* A bare icon button, same escape hatch as the card collapse caret (button[data-collapse] above):
-   no PF button skin, just a themed square that lights up on hover and on [data-active] (set
-   alongside aria-pressed) while Big Picture mode is on. */
-.console-dashboard-viewbar__bigpicture {
-  margin-left: auto; width: 1.9rem; height: 1.9rem; padding: 0; border: 0; background: none;
-  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  color: var(--pf-t--global--text--color--subtle); cursor: pointer;
-  border-radius: var(--pf-t--global--border--radius--small);
-  transition: color 0.12s ease, background 0.12s ease;
+/* Label ABOVE the control, not beside it - the standard form-field stack.
+   Inline, the label read as a stray word that happened to sit next to some chips: nothing tied the
+   two together, so it looked like loose text rather than part of one control. Stacked, the label
+   and the group read as a single labelled field, which is the same shape every other labelled
+   control in the console uses and is why it now looks deliberate rather than appended. */
+.console-dashboard-viewbar__workspaces {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
 }
-.console-dashboard-viewbar__bigpicture:hover,
+/* Quiet - a standing field label, not a heading - but present, because two bare chips reading
+   "acme" and "magus" do not say what choosing one does. Sentence case, per the console's
+   no-all-caps convention. */
+.console-dashboard-viewbar__label {
+  font-size: 0.7rem;
+  line-height: 1.2;
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+/* A labelled PatternFly SECONDARY button (bordered, not filled). It was a bare icon-only glyph and
+   nobody could find it: a muted square in the corner of an empty row, with a monitor outline that
+   does not read as "present this on a TV" unless you already know the feature exists. It keeps
+   PF's own skin now, so only the position and the pressed state are set here.
+
+   Secondary and not primary on purpose - the attention hero is directly below and must win the
+   first glance, and the console's filled blue already means running work. */
+.console-dashboard-viewbar__bigpicture {
+  margin-left: auto; flex: 0 0 auto;
+  /* Centre the glyph against the LABEL rather than letting it sit on the text baseline. An SVG is
+     an inline replaced element, so by default its bottom edge lands on the baseline and the icon
+     rides visibly high next to the words. Centring both children fixes it for any icon size. */
+  display: inline-flex;
+  align-items: center;
+}
+.console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon {
+  display: inline-flex;
+  align-items: center;
+}
+/* Pressed: while the mode is on, the control reads as engaged. [data-active] is set alongside
+   aria-pressed, so the visual and the accessible state cannot drift apart. */
 .console-dashboard-viewbar__bigpicture[data-active] {
-  color: var(--console-status-running); background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--console-status-running);
+  border-color: var(--console-status-running);
 }
 
 /* Board vs Big Picture: main.ts toggles this attribute (never a class - it is transient view
@@ -245,33 +472,594 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    the next store tick. */
 #dash-panels [data-view-hide] { display: none; }
 
-/* Big Picture: the TV-friendly summary the fullscreen button swaps in - one verdict line, five
-   oversized numbers, one card per workspace. Meant to read from across a room, so type runs much
-   larger than the board's dense tiles and the workspace count is not capped or scrolled. */
-.console-dashboard-bigpicture { display: flex; flex-direction: column; gap: 1.2rem; padding: 1rem 0.2rem; }
-.console-dashboard-bigpicture__verdict { margin: 0; font-size: 2.6rem; font-weight: 700; line-height: 1.1; }
-.console-dashboard-bigpicture[data-state="clear"] .console-dashboard-bigpicture__verdict     { color: var(--console-status-ok); }
-.console-dashboard-bigpicture[data-state="warn"] .console-dashboard-bigpicture__verdict      { color: var(--console-status-warn); }
-.console-dashboard-bigpicture[data-state="attention"] .console-dashboard-bigpicture__verdict { color: var(--console-status-danger); }
-.console-dashboard-bigpicture__detail { margin: 0; font-size: 1.2rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-bigpicture__metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-.console-dashboard-bigpicture__metric {
-  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
-  padding: 1rem 0.5rem;
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
+/* ============================================================================================
+   BIG PICTURE: the presentation canvas.
+
+   Big Picture is a MODE, not a view. There is no Big-Picture-only component anywhere - it is the
+   SAME board tiles main.ts already built, most of them hidden, and the survivors re-laid-out by
+   the rules below. That is the whole reason this is a stylesheet section rather than a second
+   TypeScript module: a fix to the pool tile or the attention hero lands in both modes at once,
+   and a new panel is one new tile file plus one grid-area line here.
+
+   It replaced a `.console-dashboard-bigpicture` tile that re-drew the verdict, the counts, and the
+   workspaces itself at TV scale. That copy had already drifted from the hero it duplicated (the
+   hero deep-links its failing count into the failing run's log; the copy did not), which is the
+   argument against ever reintroducing one.
+
+   Everything here is scoped to [data-bigpicture] on the document element, and every size resolves
+   through a var() with the board's own value as the FALLBACK, so the board cannot regress: with
+   the attribute absent, not one declaration below applies. */
+
+/* The unit. Every size in the mode derives from it, which is what lets one stylesheet be legible
+   at 3 metres on a 55-inch panel and still usable on a phone, with no per-element breakpoints.
+   vmin, not vw: on a very wide or very short window the SHORTER axis is what limits how much can
+   be shown, and sizing off vw there overflows vertically. The clamp floors it so a phone stays
+   readable and ceilings it so a 4K panel does not turn into three enormous words. */
+[data-bigpicture] #dash-panels {
+  --bp-u: clamp(0.5rem, 1.15vmin, 2.2rem);
+  --bp-gap: calc(var(--bp-u) * 0.9);
+  --bp-pad: calc(var(--bp-u) * 1.2);
 }
-.console-dashboard-bigpicture__n { font-size: 3.4rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-bigpicture__l { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.3rem; }
-.console-dashboard-bigpicture__metric[data-n="some"] .console-dashboard-bigpicture__n { color: var(--console-status-danger); }
-.console-dashboard-bigpicture__wsgrid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.console-dashboard-bigpicture__wscard {
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+
+/* The canvas: fixed to the viewport and never scrolling. Fixed rather than merely tall because
+   the mode has to escape the console's own layout entirely - the shell insets this container for
+   the title bar, the status bar, and the reference drawer, and a wall display must not be paying
+   for chrome that is no longer drawn. overflow: hidden is the load-bearing half of the density
+   budget: a panel cannot quietly grow a scrollbar nobody is standing there to scroll, so it has
+   to compact instead. */
+[data-bigpicture] #dash-panels {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  /* --bp-alert-h is written by tiles/alerts.ts from the rail's measured height (0 when it is not
+     showing), so the canvas gives back exactly the space the rail takes and the bottom row of
+     panels is never covered by it. Measured, not a constant: the rail is one to three lines tall
+     depending on how much is wrong, and each line scales with --bp-u. */
+  padding: var(--bp-pad);
+  padding-bottom: calc(var(--bp-pad) + var(--bp-alert-h, 0px));
+  gap: var(--bp-gap);
+  overflow: hidden;
+  background: var(--pf-t--global--background--color--primary--default);
+  align-items: stretch; /* board mode uses start; here every panel fills its slot */
+  grid-auto-flow: row; /* no `dense` backfill: the areas below are explicit */
+}
+
+/* The slot grid. Explicit areas, NOT repeat(auto-fit, minmax(...)): auto-fit leaves a ragged
+   final row and swings its column count on a few pixels of width, which is exactly the wasted
+   space this mode exists to eliminate. Every track is a fraction of the canvas, so the grid
+   always fills it exactly at any size.
+
+   Chosen by ASPECT RATIO rather than width, because what decides whether panels can sit side by
+   side is the shape of the screen, not how many pixels it has: a 1024-wide TV and a 1024-wide
+   portrait tablet want opposite layouts. */
+
+/* Wide (16:10 and wider): a TV, a monitor, a landscape tablet. 12 x 8.
+ *
+ * Placed by LINE NUMBER rather than grid-template-areas, because the vertical split between the
+ * left stack and the activity column is adjustable (tiles/split.ts) and an areas string cannot be
+ * parameterised - it is a literal map, so every reachable split would need its own copy. The line
+ * form takes the boundary from --bp-split-next, which split.ts publishes as a plain integer (CSS
+ * cannot do arithmetic on a grid line, so the +1 is done in TS).
+ *
+ * The fallbacks are the default 8/4 split, so the layout is correct before any script runs and
+ * stays correct if the preference is discarded as out of range. */
+@media (min-aspect-ratio: 8 / 5) {
+  [data-bigpicture] #dash-panels {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: repeat(8, minmax(0, 1fr));
+  }
+  /* The rotating slot sits UNDER the live-activity column, not in a band of its own.
+     A full-width band was the obvious placement and the wrong one: adding rows without taking any
+     away shrank every track from 1/8 of the canvas to 1/10, and six panels that previously fit
+     started clipping. Space on a fixed canvas is conserved - a new panel has to come out of a
+     specific existing one, chosen deliberately. It comes out of live-activity, which at six rows
+     was the tallest thing on the board and is perfectly readable at four.
+     Every member is placed in the SAME area and stacked; the rotator marks one
+     [data-rotate-active] and the rules further down reveal exactly that one. */
+  [data-bigpicture] #dash-panels > [data-rotate] {
+    grid-row: 4 / 7;
+    grid-column: var(--bp-split-next, 9) / -1;
+  }
+  [data-bigpicture] #dash-panels > .console-dashboard-hero {
+    grid-row: 1 / 3; grid-column: 1 / var(--bp-split-next, 9);
+  }
+  [data-bigpicture] #dash-panels > [data-card="gantt"] {
+    grid-row: 3 / 7; grid-column: 1 / var(--bp-split-next, 9);
+  }
+  [data-bigpicture] #dash-panels > [data-card="activity"] {
+    grid-row: 1 / 4; grid-column: var(--bp-split-next, 9) / -1;
+  }
+  /* The bottom rail is independent of the split: these five are read as a strip, and re-cutting
+     them as the column above moves would make the whole board shuffle on every drag.
+     EVERY panel that Big Picture shows must be placed explicitly here - an unplaced one is
+     auto-placed into an implicit row and pushes the canvas past the viewport. */
+  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-row: 7 / 9; grid-column: 1 / 3; }
+  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-row: 7 / 9; grid-column: 3 / 6; }
+  /* Three columns, not two: the host names are the content here ("claude-code", "opencode"), and at
+     two they wrapped mid-word into a second line. */
+  [data-bigpicture] #dash-panels > [data-card="agents"] { grid-row: 7 / 9; grid-column: 6 / 9; }
+  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-row: 7 / 9; grid-column: 9 / 11; }
+  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-row: 7 / 9; grid-column: 11 / -1; }
+  /* The drag affordance is a GRID ITEM, placed in the column the split names and spanning the same
+     rows as the two panels it divides. The grid positions it - there is no measuring, no
+     ResizeObserver and no absolute positioning, which is how the pane tiler's divider works too
+     (tileView.ts gives it a real track). The negative margin nudges it from that column's leading
+     edge into the middle of the gap; it is static CSS, not a runtime calculation. */
+  [data-bigpicture] #dash-panels > .console-dashboard-split {
+    display: block;
+    grid-row: 1 / 7;
+    grid-column: var(--bp-split-next, 9);
+    justify-self: start;
+    margin-left: calc((var(--bp-gap) + var(--bp-u) * 0.55) / -2);
+  }
+}
+
+/* Square-ish (between 4:5 and 16:10): a portrait monitor, a tablet, a half-tiled window. 6 x 12. */
+@media (min-aspect-ratio: 4 / 5) and (max-aspect-ratio: 8 / 5) {
+  [data-bigpicture] #dash-panels {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(14, minmax(0, 1fr));
+    grid-template-areas:
+      "verdict verdict verdict verdict verdict verdict"
+      "verdict verdict verdict verdict verdict verdict"
+      "runs    runs    runs    runs    runs    runs"
+      "runs    runs    runs    runs    runs    runs"
+      "runs    runs    runs    runs    runs    runs"
+      "runs    runs    runs    runs    runs    runs"
+      "now     now     now     now     now     now"
+      "now     now     now     now     now     now"
+      "pool    pool    cache   cache   cache   cache"
+      "pool    pool    cache   cache   cache   cache"
+      "agents  agents  agents  agents  agents  agents"
+      "agents  agents  agents  agents  agents  agents"
+      "ws      ws      ws      locks   locks   locks"
+      "ws      ws      ws      locks   locks   locks";
+  }
+}
+
+/* Narrow (taller than 4:5): a phone, a thin tiled pane. One column, and this is the ONE case that
+   is allowed to scroll. Seven panels cannot be made legible in a phone's width without shrinking
+   them past the point of the mode, and unlike a wall display there is someone holding this screen
+   who can scroll it. Pretending otherwise would mean either clipping data or unreadable type. */
+@media (max-aspect-ratio: 4 / 5) {
+  [data-bigpicture] #dash-panels {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(calc(var(--bp-u) * 14), auto);
+    grid-template-areas: "verdict" "runs" "now" "agents" "pool" "cache" "ws" "locks";
+    overflow-y: auto;
+  }
+  /* Stack the hero. It is a space-between row of verdict-and-detail against the three counts, which
+     at a phone's width does not fit: the counts ran past the panel's right edge and "queued" was
+     clipped away entirely - a count silently missing from the one panel that exists to carry
+     counts. Wrapping to two rows costs vertical space, which this layout has (it scrolls) and the
+     wide one does not. */
+  [data-bigpicture] .console-dashboard-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    /* nowrap is load-bearing, not tidying. The hero carries flex-wrap: wrap for its row layout, and
+       `column` + `wrap` against a bounded height does not stack - it wraps into a SECOND COLUMN to
+       the right. That put the counts at x=233 in a 390px viewport, running off the panel with
+       "queued" clipped away, while every computed style (column, flex-start) read as correct. */
+    flex-wrap: nowrap;
+  }
+  /* Stacked on a phone the counts get the full width, so equal FRACTIONS rather than the fixed
+     columns the wide layout pins them to - there is no verdict beside them to stay clear of. */
+  [data-bigpicture] .console-dashboard-hero__metrics {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Placement for the two AREA-based layouts (square and narrow). The wide layout places by line
+   number instead, inside its own media query above, because its split is adjustable - so these must
+   NOT be stated generically here: they and the wide rules score identically at (1,2,0), and being
+   later in the file these would win on source order and quietly undo the split.
+
+   A tile's root already carries [data-card] (tiles/card.ts stamps it), so the areas bind to an
+   attribute that exists rather than needing a new hook. The attention hero is not a Card and has no
+   [data-card], so it is placed by its own class.
+
+   Every selector is qualified with `#dash-panels >` for SPECIFICITY, not for clarity. The board's
+   own `#dash-panels > * { grid-column: 1 / -1 }` scores (1,0,0), and an unqualified
+   `[data-bigpicture] [data-card="x"]` scores (0,2,0) - a lone id outranks any number of
+   attributes, so the board rule won and forced every panel to full width. grid-area sets both
+   axes, so losing only the column half left each panel with the right ROW and a full-width column:
+   the panels stacked in DOM order and overlapped each other (the live-activity panel painted
+   straight over the verdict, which simply vanished). Qualified, these score (1,2,0) and win. */
+@media (max-aspect-ratio: 8 / 5) {
+  [data-bigpicture] #dash-panels > .console-dashboard-hero { grid-area: verdict; }
+  [data-bigpicture] #dash-panels > [data-card="gantt"] { grid-area: runs; }
+  [data-bigpicture] #dash-panels > [data-card="activity"] { grid-area: now; }
+  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-area: pool; }
+  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-area: cache; }
+  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-area: ws; }
+  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-area: locks; }
+  [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
+}
+
+/* The split handle: a thin vertical grab strip parked on the boundary between the left stack and
+   the activity column. Absolutely positioned and MEASURED into place by split.ts from the real
+   layout, rather than computed from column widths, gaps and padding - which would be a second
+   implementation of the grid's own arithmetic.
+
+   Hidden by default and revealed only in the wide layout (the media query above): the other two
+   layouts have no such split to adjust. Nearly invisible until approached, because this is a
+   presentation surface that is looked at far more often than it is touched - but it opts back into
+   pointer events, which the canvas as a whole disables. */
+.console-dashboard-split { display: none; }
+/* Qualified with `#dash-panels >` so it beats the canvas's own `> *` rule (1,1,0), which would
+   otherwise force display:flex and its own overflow onto the handle. */
+[data-bigpicture] #dash-panels > .console-dashboard-split {
+  height: 100%;
+  /* NARROWER THAN THE GAP between panels (--bp-gap, 0.9u). At 1.1u the handle was wider than the
+     seam it sits in, so it spilled onto both neighbours - and because it re-enables pointer events,
+     that sliver sat ON TOP of the live-activity panel's heading and ate clicks meant for the text.
+     Any width above the gap has that problem; 0.55u leaves clearance on both sides, and stays a
+     usable col-resize target the way an IDE splitter is. */
+  width: calc(var(--bp-u) * 0.55);
+  z-index: 41;
+  cursor: col-resize;
+  pointer-events: auto;
+  background: transparent;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+/* Grey, not the running accent it used to take. --console-status-running is the colour the pool
+   grid, the gantt bars and the timeline all use to mean "work is executing"; spending it on a
+   divider made a piece of inert chrome look like a status readout, and put a second purple on the
+   screen competing with the one that carries meaning. A splitter is furniture - it should read as
+   an edge, which is what the border token already is. */
+[data-bigpicture] .console-dashboard-split:hover,
+[data-bigpicture] .console-dashboard-split:focus-visible,
+[data-bigpicture] .console-dashboard-split[data-dragging] {
+  opacity: 1;
+  background: var(--pf-t--global--border--color--default);
+}
+[data-bigpicture] .console-dashboard-split[data-dragging] {
+  background: var(--pf-t--global--text--color--subtle);
+}
+[data-bigpicture] .console-dashboard-split:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) {
+  [data-bigpicture] .console-dashboard-split { transition: none; }
+}
+
+/* The rotating band: every member stacked in one area, exactly one revealed.
+ *
+ * visibility + opacity rather than display, so the crossfade has something to interpolate - display
+ * is not animatable, and toggling it makes each turn a hard cut. The inactive members keep their
+ * grid placement (they are all in the same area), so nothing reflows as the slot changes hands.
+ *
+ * A TRANSITION, not a keyframe animation: an element whose transition never runs sits at its final
+ * style, while one whose animation never completes sits on its `from` frame - which for a fade is
+ * invisible. A wall display is very often a tab the browser declines to animate, so that difference
+ * decides whether this band shows a panel or a blank rectangle. */
+[data-bigpicture] #dash-panels > [data-rotate] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--console-motion) var(--console-ease),
+    visibility 0s linear var(--console-motion);
+}
+[data-bigpicture] #dash-panels > [data-rotate][data-rotate-active] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity var(--console-motion) var(--console-ease),
+    visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-bigpicture] #dash-panels > [data-rotate],
+  [data-bigpicture] #dash-panels > [data-rotate][data-rotate-active] { transition: none; }
+}
+/* On the board the rotation attributes mean nothing - every tile is simply itself, in its own row,
+   and the mode-only rules above do not apply. Stated so the attributes can never leak a hidden
+   panel onto the board if a future change reorders these rules. */
+:not([data-bigpicture]) #dash-panels > [data-rotate] { opacity: 1; visibility: visible; }
+
+/* Panels fill their slot and clip rather than overflow. min-height: 0 is required: a grid item
+   defaults to min-content in the block axis, so without it a tall panel pushes its row past the
+   track and the whole canvas overflows despite every track being a fraction. */
+[data-bigpicture] #dash-panels > * {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* Re-assert the hide AFTER the display above, and at a higher specificity than it. Both
+   `#dash-panels [data-view-hide]` and `[data-bigpicture] #dash-panels > *` score (1,1,0), so the
+   generic display: flex was winning the tie on source order alone and every board-only tile stayed
+   on screen - the whole board rendered into a grid with areas for seven of its twenty children,
+   and the unplaced ones spilled into implicit rows past the canvas. */
+[data-bigpicture] #dash-panels > [data-view-hide] { display: none; }
+[data-bigpicture] .pf-v6-c-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--bp-pad);
+}
+
+/* A card the operator folded on the board must not render as an empty slot here. The mode has no
+   collapse affordance, so the board's persisted fold is meaningless in it and is overridden
+   outright rather than being something to notice and undo. */
+[data-bigpicture] [data-card][data-collapsed] > .pf-v6-c-card__body { display: flex; }
+
+/* Card chrome: the title stays (it is what names the panel from across a room) but scales up and
+   loses the interactive parts. The collapse caret goes because nothing here is clickable. */
+[data-bigpicture] .pf-v6-c-card__header {
+  padding: var(--bp-pad) var(--bp-pad) 0;
+  flex: 0 0 auto;
+}
+[data-bigpicture] .pf-v6-c-card__header-toggle { display: none; }
+[data-bigpicture] .pf-v6-c-card__title-text { font-size: calc(var(--bp-u) * 1.5); }
+[data-bigpicture] .console-dashboard-tile__note { font-size: calc(var(--bp-u) * 1.1); }
+
+/* Nothing in the mode is interactive: it is read from a distance, and on a shared or cast screen
+   there is frequently no pointer at all. Killing pointer events also stops a stray tap from
+   following the hero's deep-link out of the mode entirely. The exit strip below opts back in. */
+[data-bigpicture] #dash-panels { pointer-events: none; }
+[data-bigpicture] .console-dashboard-viewbar { pointer-events: auto; }
+/* The alert rail opts back in: its cards carry the deep link to whatever just broke, and that link
+   is the whole reason the rail is more than a status strip. On a cast screen with no pointer this
+   costs nothing; on a fullscreened desktop it is the difference between being told and being able
+   to go and look. */
+[data-bigpicture] .console-dashboard-alertrail { pointer-events: auto; }
+
+/* Type scale for the placed panels. Each rule sets only what has to grow; anything unstated keeps
+   its board value, which is why this section is short. */
+[data-bigpicture] .console-dashboard-hero__verdict { font-size: calc(var(--bp-u) * 4); }
+[data-bigpicture] .console-dashboard-hero__detail { font-size: calc(var(--bp-u) * 1.6); }
+[data-bigpicture] .console-dashboard-hero__n { font-size: calc(var(--bp-u) * 6); }
+[data-bigpicture] .console-dashboard-hero__l { font-size: calc(var(--bp-u) * 1.2); }
+/* The card width scales with the type, or the fixed board-sized columns would clip a 6u digit. Wide
+   enough for the longest label plus the deep-link arrow the linked counts append. */
+[data-bigpicture] .console-dashboard-hero__metrics {
+  grid-template-columns: repeat(3, calc(var(--bp-u) * 9.5));
+  gap: calc(var(--bp-u) * 0.6);
+}
+[data-bigpicture] .console-dashboard-stat__value { font-size: calc(var(--bp-u) * 2.1); }
+[data-bigpicture] .console-dashboard-stat__key { font-size: calc(var(--bp-u) * 0.95); }
+/* A KPI never wraps or hyphenates. "742 MB" broken across two lines, or "3,979" losing its last
+   digit, is not a smaller version of the number - it is a different one, and the whole panel exists
+   to be read at a glance. If it genuinely cannot fit, clipping with an ellipsis at least LOOKS
+   wrong, where a silent wrap reads as intentional. */
+.console-dashboard-stat__value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.console-dashboard-stat { min-width: 0; }
+/* The stat strip has to FIT rather than be trimmed. Its board minimum of 130px gives two columns in
+   a Big Picture slot, so the local-cache tile's five stats wrapped to three rows and the third was
+   silently cut off by the canvas's overflow: hidden - hit rate and cache size simply vanished, with
+   nothing to say they had. There is no residual line worth showing for five KPIs, so the fix is a
+   narrower minimum that packs them into rows that do fit. Sized in --bp-u so it tracks the type. */
+/* The column minimum has to clear the VALUE it holds, which is the constraint I got backwards once
+   already. Squeezing the minimum to 6u to win a row made each cell ~62px while the value renders at
+   ~27px mono - "3,979" is about 85px - so the numbers wrapped, truncated and stopped being
+   readable, which on a KPI strip is total failure: the number IS the panel.
+   9.5u gives three columns in the cache panel's width, so five stats still land in two rows, and
+   each cell is wide enough for the value plus its key. */
+[data-bigpicture] .console-dashboard-statstrip {
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--bp-u) * 9.5), 1fr));
+  gap: calc(var(--bp-u) * 0.4);
+}
+/* Left-aligned, like the board: a KPI strip is scanned down its left edge, and centring the values
+   would leave each number starting at a different x for the eye to hunt for.
+ *
+ * The left inset is larger than the other three on purpose. Each stat carries a 3px coloured rule
+ * at x=0 (.console-dashboard-stat::before), so padding that looks generous on the other edges still
+ * leaves the text almost touching that rule. This padding had been tightened to squeeze five stats
+ * into a three-column panel; the panel is four columns wide now, so the squeeze bought nothing and
+ * cost the breathing room. */
+[data-bigpicture] .console-dashboard-stat {
+  padding: calc(var(--bp-u) * 0.7) calc(var(--bp-u) * 0.8) calc(var(--bp-u) * 0.75)
+    calc(var(--bp-u) * 1.3);
+}
+[data-bigpicture] .console-dashboard-row { font-size: calc(var(--bp-u) * 1.15); }
+/* Chunkier in Big Picture, but sized against the panel's HEIGHT rather than its width. The pool
+   panel is deliberately the narrowest in the bottom row (two of twelve columns) because a compact
+   square block needs far less width than the cache KPIs beside it - so the binding constraint is
+   how many cube ROWS fit above the legend, not how many cubes fit across. At 3.4u a 3x3 block plus
+   its legend clears a two-row panel with room to spare; the 4.4u it started at fit the width fine
+   and quietly clipped the legend off the bottom. */
+[data-bigpicture] .console-dashboard-pool__grid {
+  gap: calc(var(--bp-u) * 0.4);
+  max-width: calc(var(--pool-cols, 8) * var(--bp-u) * 3.9);
+  /* The board's 0.1rem/0.55rem margins are absolute, so they do not shrink with the fluid scale and
+     were the last 5px of overflow that clipped the legend off a 3-row block. Scaled here like
+     everything else in the mode. */
+  margin: 0 0 calc(var(--bp-u) * 0.4);
+}
+[data-bigpicture] .console-dashboard-pool__slot { max-width: calc(var(--bp-u) * 3.4); border-radius: 3px; }
+[data-bigpicture] .console-dashboard-pool__legend { font-size: calc(var(--bp-u) * 1); }
+
+/* The exit strip: the dashboard header row, reduced to a hairline that reveals on hover or focus.
+   A person at the machine needs a way out that is not "guess that Escape works" - and Escape in
+   fact does nothing when the mode was entered by route rather than by fullscreen. It stays out of
+   the way otherwise, and out of the tab order it never leaves, so a cast screen shows nothing. */
+[data-bigpicture] .console-dashboard-viewbar {
+  position: fixed;
+  top: 0; right: 0;
+  z-index: 41;
+  margin: 0;
+  padding: calc(var(--bp-u) * 0.6);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+[data-bigpicture] .console-dashboard-viewbar:hover,
+[data-bigpicture] .console-dashboard-viewbar:focus-within { opacity: 1; }
+/* The workspace picker is a board control; the strip is only an exit. */
+[data-bigpicture] .console-dashboard-viewbar__workspaces { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-bigpicture] .console-dashboard-viewbar { transition: none; }
+}
+
+/* The residual line a trimmed list spends its last row on (tiles/density.ts). Quiet but never
+   invisible: it is the only thing distinguishing "that is all of them" from "there are more", so
+   styling it as throwaway chrome would defeat the mechanism. */
+.console-dashboard-row__residual {
+  list-style: none;
+  padding: 0.2rem 0.1rem;
+  font-size: 0.75rem;
+  color: var(--pf-t--global--text--color--subtle);
+  font-variant-numeric: tabular-nums;
+}
+[data-bigpicture] .console-dashboard-row__residual { font-size: calc(var(--bp-u) * 1.05); }
+
+/* --- The alert rail (tiles/alerts.ts) ------------------------------------------------------------
+   Docked to the bottom edge of the canvas: the verdict lives at the top, and an alert that could
+   cover it would defeat the display, so the geometry makes that impossible rather than careful.
+
+   Welded, not floating - square, no radius, no shadow, a single top hairline. A drop-shadowed
+   rounded card would read as a web app's popup pasted over the board; this should read as part of
+   the graphic, the way a status line on a broadcast overlay does.
+
+   position: fixed keeps it out of the grid entirely. As an ordinary child of #dash-panels it would
+   be auto-placed into an implicit row, growing the canvas past the viewport the moment it fired -
+   the layout would break precisely when something had gone wrong. */
+.console-dashboard-alertrail { display: none; }
+/* Qualified with `#dash-panels >` for SPECIFICITY. The rail is a direct child of the panels
+   container, so the canvas's `[data-bigpicture] #dash-panels > *` rule - which makes every panel a
+   COLUMN flex container - also applied here at (1,1,0) and beat an unqualified rail rule at
+   (0,2,0). The rail then stacked vertically: its card row became a column item, flex-grow worked on
+   the wrong axis, and the cards sat centred at their content width instead of spanning the bottom
+   edge. Same lone-id-outranks-any-attributes trap as the grid placements above. */
+[data-bigpicture] #dash-panels > .console-dashboard-alertrail {
+  display: flex;
+  flex-direction: row;
+  /* Out of view but still laid out, so arriving and leaving are transitions rather than a
+     display flip. visibility is delayed out and immediate in, which keeps the rail out of the
+     accessibility tree and off the pointer while it is faded away without cutting the fade short. */
+  opacity: 0;
+  transform: translateY(35%);
+  visibility: hidden;
+  transition:
+    opacity var(--console-motion) var(--console-ease),
+    transform var(--console-motion) var(--console-ease),
+    visibility 0s linear var(--console-motion);
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 42; /* over the canvas (40) and the exit strip (41) */
+  align-items: center;
+  gap: calc(var(--bp-u) * 1.2);
+  padding: calc(var(--bp-u) * 0.9) calc(var(--bp-u) * 1.4);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+
+/* Qualified to match the base rule's (1,2,0): unqualified this scored (0,3,0) and LOST to it, so
+   the rail would have kept the base opacity: 0 and never appeared at all. */
+[data-bigpicture] #dash-panels > .console-dashboard-alertrail[data-shown] {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition:
+    opacity var(--console-motion) var(--console-ease),
+    transform var(--console-motion) var(--console-ease),
+    visibility 0s;
+}
+
+/* The canvas gives back its padding on the SAME curve, so the bottom row of panels grows and
+   shrinks with the rail instead of jumping a frame before or after it. */
+[data-bigpicture] #dash-panels {
+  transition: padding-bottom var(--console-motion) var(--console-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-bigpicture] .console-dashboard-alertrail,
+  [data-bigpicture] .console-dashboard-alertrail[data-shown],
+  [data-bigpicture] #dash-panels { transition: none; }
+}
+
+/* A TRANSITION, never a keyframe animation - and that distinction is a rule here, not a preference.
+ *
+ * It had a 240ms slide-up (`from { transform: translateY(100%) }`). In testing the rail measured at
+ * y=900 on a 900px-tall viewport - entirely below the fold - with a computed transform still sitting
+ * on the `from` keyframe. A browser does not advance CSS animations in a tab it considers
+ * non-visible, and animation-fill-mode: none only restores the base style once an animation
+ * COMPLETES. One that never starts leaves the element parked at its starting offset indefinitely.
+ *
+ * That is the worst possible failure for this element: a wall display is very often exactly the
+ * backgrounded, unfocused, never-interacted-with tab that gets throttled, so the rail would have
+ * been reliably invisible in precisely the setting it was built for, and visible on the developer's
+ * focused laptop where it was tested. An alert channel whose delivery depends on an animation frame
+ * is not an alert channel.
+ *
+ * A fade has the same defect in the same direction (stuck at opacity 0). So the resting state IS the
+ * only state, and the rail is legible the instant it is unhidden regardless of what the compositor
+ * is doing. It loses nothing: at this size and contrast the rail is unmissable without motion, and
+ * appearing instantly reads as more authoritative than sliding in. */
+
+/* Cards sit side by side, not stacked: side by side they stay one band along the bottom edge no
+   matter how many there are, so the canvas above gives back a constant amount of height. Stacked,
+   every arriving alert would re-flow the whole board underneath it. */
+.console-dashboard-alertrail__lines {
+  display: flex; align-items: stretch;
+  gap: calc(var(--bp-u) * 0.8);
+  flex: 1 1 auto; min-width: 0;
+}
+
+/* An alert CARD. The severity rides the left edge rather than colouring the message: coloured body
+   text is harder to read at distance and would collide with the ANSI colours elsewhere on the
+   board, while an edge carries the same information in the periphery - which is where an alert is
+   noticed before it is read. */
+.console-dashboard-alertrail__card {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column;
+  gap: calc(var(--bp-u) * 0.2);
+  padding: calc(var(--bp-u) * 0.6) calc(var(--bp-u) * 0.9);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-left: 4px solid var(--pf-t--global--border--color--default);
+  border-radius: 2px;
   background: var(--pf-t--global--background--color--primary--default);
 }
-.console-dashboard-bigpicture__wsroot { font-size: 1.15rem; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
-.console-dashboard-bigpicture__wsstats { margin-top: 0.25rem; font-size: 0.9rem; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-alertrail__card[data-kind="error"] { border-left-color: var(--console-status-danger); }
+.console-dashboard-alertrail__card[data-kind="warn"] { border-left-color: var(--console-status-warn); }
+.console-dashboard-alertrail__card[data-kind="ok"] { border-left-color: var(--console-status-ok); }
+
+.console-dashboard-alertrail__head {
+  display: flex; align-items: baseline; gap: calc(var(--bp-u) * 0.6);
+}
+.console-dashboard-alertrail__source {
+  flex: 0 0 auto;
+  font-size: calc(var(--bp-u) * 1);
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+}
+.console-dashboard-alertrail__msg {
+  min-width: 0;
+  font-size: calc(var(--bp-u) * 1.6);
+  line-height: 1.25;
+  /* Two lines, then ellipsis. One line was too tight for a real failure message; unbounded wrapping
+     would let a long message change the rail's height and shove the board around underneath it. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* The action link. Underlined rather than button-shaped: it sits inside a card that is already
+   heavily bordered, and a third box inside it reads as clutter at this scale. */
+.console-dashboard-alertrail__action {
+  align-self: flex-start;
+  font-size: calc(var(--bp-u) * 1.1);
+  color: var(--console-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.console-dashboard-alertrail__action::after { content: " \2197"; text-decoration: none; }
+.console-dashboard-alertrail__count,
+.console-dashboard-alertrail__more {
+  flex: 0 0 auto;
+  font-size: calc(var(--bp-u) * 1.1);
+  color: var(--pf-t--global--text--color--subtle);
+  font-variant-numeric: tabular-nums;
+}
+
 
 /* Loaded-workspaces row, picked as the active workspace by the dashboard header's picker above. */
 .console-dashboard-row[data-active] { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
@@ -295,15 +1083,122 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero[data-state="warn"] .console-dashboard-hero__verdict      { color: var(--console-status-warn); }
 .console-dashboard-hero[data-state="attention"] .console-dashboard-hero__verdict { color: var(--console-status-danger); }
 .console-dashboard-hero__detail { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-hero__metrics { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+/* The failing-target list. Full width under the verdict and counts, so it reads as the ANSWER to
+   the headline rather than as a fourth metric. Chips rather than a bulleted column: the common case
+   is two or three short labels, and a column of them would push the hero taller than its Big
+   Picture slot for no gain. */
+/* Dropped well clear of the detail line above it. Sitting tight under the text the chips read as a
+   continuation of the sentence rather than as controls, while the hero had obvious empty space
+   below them doing nothing - the visual weight sat all in the top third. The margin spends that
+   space and lets the row breathe. */
+.console-dashboard-hero__faillist {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  list-style: none; margin: 0.9rem 0 0.15rem; padding: 0;
+}
+.console-dashboard-hero__failrow { display: inline-flex; min-width: 0; }
+.console-dashboard-hero__failchip { position: relative; min-width: 0; }
+.console-dashboard-hero__failbtn {
+  display: inline-block; max-width: 100%;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.74rem;
+  border: 1px solid var(--console-status-danger);
+  border-radius: 2px;
+  color: var(--console-status-danger);
+  background: var(--pf-t--global--background--color--primary--default);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
+}
+.console-dashboard-hero__failbtn:hover,
+.console-dashboard-hero__failbtn[aria-expanded="true"] {
+  background: var(--console-status-danger);
+  color: var(--pf-t--global--background--color--primary--default);
+}
+/* The chip's menu. Anchored above the chip rather than below: the hero sits at the top of the
+   board, but in Big Picture the panel it lives in is only two grid rows tall, so a menu dropping
+   downward would be clipped by the panel's overflow. Opening upward keeps it inside the viewport in
+   both modes. */
+.console-dashboard-hero__failmenu {
+  position: absolute;
+  bottom: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 50;
+  min-width: max-content;
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+.console-dashboard-hero__failmenu[hidden] { display: none; }
+
+/* The live-activity "open in log viewer" picker, shown only when several targets are running and
+   the link therefore has no single destination. Same anchored-menu treatment as the failing chips
+   above; it hangs BELOW its trigger, which sits in a card header with room under it. */
+.console-dashboard-activity__note { position: relative; }
+.console-dashboard-activity__openmenu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 50;
+  min-width: max-content;
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+.console-dashboard-activity__openmenu[hidden] { display: none; }
+.console-dashboard-hero__failmore {
+  align-self: center;
+  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
+}
+/* At Big Picture scale the chips grow with everything else - a failing target name is the single
+   most useful string on the board and has to be readable from the same distance as the verdict. */
+[data-bigpicture] .console-dashboard-hero__faillist {
+  gap: calc(var(--bp-u) * 0.5);
+  margin-top: calc(var(--bp-u) * 1.2);
+}
+[data-bigpicture] .console-dashboard-hero__failbtn {
+  font-size: calc(var(--bp-u) * 1.3);
+  padding: calc(var(--bp-u) * 0.25) calc(var(--bp-u) * 0.6);
+}
+[data-bigpicture] .console-dashboard-hero__failmore { font-size: calc(var(--bp-u) * 1.2); }
+
+/* The counts are ANCHORED: three equal columns, pinned to the right edge, that do not move when
+   anything else on the hero changes.
+ *
+ * They were flex items sized to their own content, which made them move for two unrelated reasons.
+ * The labels differ in length ("failing" / "running" / "queued"), so the three cards were three
+ * different widths; and a count gaining a digit widened its own card and shoved its siblings along.
+ * The verdict changing between "All clear" and "Attention needed" moved them again. So the numbers
+ * an operator is trying to read at a glance were the least stable thing on the panel - and on a
+ * board that updates every second, motion reads as change even when the value has not changed.
+ *
+ * A fixed three-column grid fixes both: every card is identical, and the block's width is a
+ * constant, so it stays put whatever the verdict says or the counts reach. */
+/* The verdict and its "?" on one line, the glyph centred against the text rather than sitting on
+   its baseline. */
+.console-dashboard-hero__verdictrow { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+
+.console-dashboard-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 5.2rem);
+  gap: 0.6rem;
+  flex: 0 0 auto;
+  justify-content: end;
+}
+/* The headline takes whatever is left and never pushes the counts. min-width: 0 lets it shrink
+   rather than forcing the row wider, which is what would put the counts back in motion. */
+.console-dashboard-hero__headline { flex: 1 1 auto; min-width: 0; }
 .console-dashboard-hero__metric {
-  display: flex; flex-direction: column; align-items: center; min-width: 4.6rem;
-  padding: 0.35rem 0.7rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 0;
+  padding: 0.35rem 0.4rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-dashboard-hero__metriclink { display: flex; flex-direction: column; align-items: center; color: inherit; text-decoration: none; }
-.console-dashboard-hero__n { font-size: 1.6rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1; }
+/* tabular-nums so every digit occupies the same advance width. Without it a 1 is narrower than a 0
+   in most proportional-figure fonts, so a count ticking 9 -> 10 -> 11 visibly jitters even inside a
+   fixed-width card. */
+.console-dashboard-hero__n {
+  font-size: 1.6rem; font-weight: 700; line-height: 1;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-variant-numeric: tabular-nums;
+}
 .console-dashboard-hero__l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; }
 /* Counts stay quiet at zero and only light up when there is something to report. */
 .console-dashboard-hero__metric .console-dashboard-hero__n { color: var(--pf-t--global--text--color--subtle); }
@@ -312,9 +1207,18 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero__queue[data-n="some"] .console-dashboard-hero__n { color: var(--console-status-queued); }
 .console-dashboard-hero__fail[data-n="some"] { border-color: var(--console-status-danger); }
 /* A live-mode failing count deep-links to the failing run's log. */
-.console-dashboard-hero__fail[data-linked] { cursor: pointer; }
-.console-dashboard-hero__fail[data-linked]:hover { border-color: var(--console-status-danger); background: var(--pf-t--global--background--color--primary--default); }
-.console-dashboard-hero__fail[data-linked] .console-dashboard-hero__l::after { content: " \2197"; }
+/* A linked count reads as clickable: pointer cursor, an arrow on the label, and a hover that picks
+   up its own status colour. Generalised from the failing count to any metric that has somewhere to
+   go, so the affordance means the same thing wherever it appears rather than being a special case
+   of one number. */
+.console-dashboard-hero__metric[data-linked] { cursor: pointer; }
+.console-dashboard-hero__metric[data-linked]:hover { background: var(--pf-t--global--background--color--primary--default); }
+.console-dashboard-hero__metric[data-linked] .console-dashboard-hero__l::after { content: " \2197"; }
+.console-dashboard-hero__fail[data-linked]:hover { border-color: var(--console-status-danger); }
+.console-dashboard-hero__run[data-linked]:hover { border-color: var(--console-status-running); }
+/* Queued carries a cause in its title rather than a link, so it gets the help cursor - the signal
+   that there is something to read here, not somewhere to go. */
+.console-dashboard-hero__queue[data-n="some"] { cursor: help; }
 
 /* Live activity / log preview: running rows, an "open in log viewer" deep-link, and a streaming
    output tail (fed only when a raw-output buffer is present, i.e. the demo). */
@@ -324,12 +1228,44 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-activity__open:hover { text-decoration: underline; }
 .console-dashboard-activity__caption { margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-activity__log {
-  margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; max-height: 200px; overflow-y: auto;
+  /* 340px, not the 200px this used to be. The tile is the board's "what is running right now"
+     panel and the preview is the only part of it carrying actual output, so a cap that showed
+     roughly a dozen lines meant the interesting part had usually already scrolled past. Padding
+     moved onto the LINES (render.css owns their gutter via --log-pad) so a zebra stripe runs the
+     full width of the row instead of stopping short of the container's edge. */
+  margin: 0.5rem 0 0; padding: 0.35rem 0; max-height: 340px; overflow-y: auto;
+  --log-pad: 0.7rem;
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem; line-height: 1.5;
   color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  white-space: pre-wrap; overflow-wrap: anywhere;
+  /* AFTER the `border` shorthand, which would otherwise reset it back to 1px - the same ordering
+     trap as any longhand-then-shorthand pair.
+     A continuous left rule down the whole tail, the device the attention hero uses for its verdict.
+     Zebra striping gives the eye horizontal rails but nothing vertical, so the rows read as a stack
+     of separate bands rather than one body of output; the rule binds them together and marks where
+     the output starts, which matters most when a wrapped line makes the left edge ragged. Neutral
+     grey: this is structure, not status - the badges and ANSI colours carry the meaning. */
+  border-left: 3px solid var(--pf-t--global--border--color--default);
+  overflow-wrap: anywhere;
 }
+
+/* In Big Picture the preview FILLS its slot instead of being capped. The `now` panel is 654px tall
+   on a 1600x900 canvas while the cap held the output to 200px of it - two thirds of the tallest
+   panel on the board given over to whitespace, on the one panel whose whole job is to show what is
+   happening. min-height: 0 is required or the flex item refuses to shrink below its content and
+   the panel overflows instead of the preview scrolling. */
+[data-bigpicture] .console-dashboard-activity__log {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  font-size: calc(var(--bp-u) * 1.15);
+  line-height: 1.55;
+  --log-pad: calc(var(--bp-u) * 0.9);
+}
+/* The card body is already a column flex container (the canvas rules above), so the tile's own
+   children have to agree to let the preview take the leftover height. */
+[data-bigpicture] [data-card="activity"] .pf-v6-c-card__body { display: flex; flex-direction: column; }
+[data-bigpicture] .console-dashboard-activity__caption { flex: 0 0 auto; }
 
 @media (max-width: 720px) {
   .console-dashboard-cols { grid-template-columns: 1fr; }

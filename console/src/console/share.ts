@@ -27,11 +27,26 @@ import { encodeToCanvas } from "../lib/qr";
 
 // The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds).
 // The daemon clamps to [share.MinTTL, share.MaxTTL]; the default is the first entry.
+// Two clusters, because there are two different jobs here and they were being served by one.
+//
+// The short end is a glance: hand someone a link, they look, it dies. The long end is an AMBIENT
+// DISPLAY - Big Picture on a TV or a spare monitor - which outlives any session, and for which a
+// link that expired nightly meant re-minting every morning. In practice that does not produce
+// diligent re-minting, it produces people not using the feature.
+//
+// The ceiling is a quarter, matching share.MaxTTL, and there is deliberately no never-expires
+// option. This is a bearer credential: whoever holds the URL is the audience, and URLs end up
+// pasted into chat, photographed off screens, and left in a kiosk browser's history. Every one of
+// those becomes permanent the moment the link does. A bounded worst case is the whole point.
+const DAY = 24 * 60 * 60;
 const DURATIONS: readonly { label: string; seconds: number }[] = [
   { label: "15 min", seconds: 15 * 60 },
   { label: "1 hour", seconds: 60 * 60 },
   { label: "8 hours", seconds: 8 * 60 * 60 },
-  { label: "24 hours", seconds: 24 * 60 * 60 },
+  { label: "24 hours", seconds: DAY },
+  { label: "7 days", seconds: 7 * DAY },
+  { label: "30 days", seconds: 30 * DAY },
+  { label: "90 days", seconds: 90 * DAY },
 ];
 
 export interface SharePanel {

@@ -59,7 +59,16 @@ function fmtDurMs(ms: number): string {
 }
 
 export function ganttTile(): Tile {
-  const card = new Card("gantt", "Live execution", { term: "Trace", label: "trace", note: "idle" });
+  const card = new Card("gantt", "Live execution", {
+    term: "Trace",
+    label: "trace",
+    note: "idle",
+    why:
+      "Where a run's wall-clock actually went. The dashed leader on a bar is time the target spent" +
+      " QUEUED, not working - a row that is mostly dashes is waiting on the pool, and a row that is" +
+      " mostly bar is genuinely slow. The two look identical as a single duration and need opposite" +
+      " fixes. A run whose bars step down one after another is serialised by its dependencies.",
+  });
   const wrap = h("div", "console-dashboard-gantt__scroll");
   const empty = h("p", "console-dashboard-row__empty", "No active runs.");
   const legend = h("div", "console-dashboard-gantt__legend");
@@ -122,12 +131,39 @@ export function ganttTile(): Tile {
     rowY: number,
     t0: number,
     now: number,
+    runStart: number | null,
   ): void {
     const span = barSpan(t, now);
     if (!span) return;
     const x1 = timeX(span.s, t0, now);
     const x2 = timeX(span.e, t0, now);
     const w = Math.max(MIN_BAR_W, x2 - x1);
+
+    // WAIT SEGMENT: the stretch between the run being submitted and this target actually starting.
+    //
+    // The bar alone conflates two very different facts. A target that took 40s because it ran for
+    // 40s and one that took 40s because it sat in the queue for 35s and ran for 5 look identical,
+    // and the second is the one worth acting on - it says the pool is the constraint, not the work.
+    // Both times are already in the frame (the run's first start, and this target's), so the
+    // distinction costs a rectangle rather than any new data.
+    //
+    // Drawn hollow and behind the bar so it reads as elapsed-but-not-working.
+    if (runStart != null && t.startMs != null && t.startMs > runStart) {
+      const wx1 = timeX(runStart, t0, now);
+      const ww = x1 - wx1;
+      if (ww > 1) {
+        const wait = svg("rect");
+        wait.setAttribute("x", wx1.toFixed(2));
+        wait.setAttribute("y", String(rowY + (ROW_H - BAR_H / 2) / 2));
+        wait.setAttribute("width", ww.toFixed(2));
+        wait.setAttribute("height", String(BAR_H / 2));
+        wait.setAttribute("class", "console-dashboard-gantt__wait");
+        const wt = svg("title");
+        wt.textContent = t.label + " waited " + fmtDurMs(t.startMs - runStart) + " to start";
+        wait.appendChild(wt);
+        root.appendChild(wait);
+      }
+    }
     // A queued pip sits just left of the now-line so it reads as "waiting to start".
     const x = t.state === "queued" ? Math.max(LABEL_W, timeX(now, t0, now) - MIN_BAR_W) : x1;
     const rect = svg("rect");
@@ -143,6 +179,27 @@ export function ganttTile(): Tile {
     const title = svg("title");
     title.textContent = t.label + " - " + t.state + (dur ? " (" + dur + ")" : "");
     rect.appendChild(title);
+
+    // The duration, printed after the bar.
+    //
+    // A bar's LENGTH is a comparison, not a measurement: it says this took longer than that, within
+    // a 60s window, and nothing about how long either actually was. Reading a number off it means
+    // hovering for the tooltip, which on a board that is watched rather than used is no answer at
+    // all. The value is already computed for that tooltip; printing it costs one <text>.
+    //
+    // Suppressed for a bar that ends flush against the right edge (a still-running target keeps
+    // moving) only when there is no room, so the label never overprints the "now" line.
+    if (dur) {
+      const labelX = x + w + 4;
+      if (labelX < VIEW_W - RIGHT_PAD - 26) {
+        const durText = svg("text");
+        durText.setAttribute("x", labelX.toFixed(2));
+        durText.setAttribute("y", String(rowY + ROW_H / 2 + 3));
+        durText.setAttribute("class", "console-dashboard-gantt__dur");
+        durText.textContent = dur;
+        root.appendChild(durText);
+      }
+    }
 
     // Finished bars with a ref deep-link to the log viewer for that ref, carrying the
     // live host so the viewer can resolve it - same relative path the running-targets
@@ -210,7 +267,43 @@ export function ganttTile(): Tile {
       const inv = run.inv ? run.inv.slice(0, 12) : "run";
       head.textContent = (run.trigger || "run") + " " + inv;
       root.appendChild(head);
+
+      // A per-run summary, right-aligned on the header row: how many targets, how much wall clock
+      // the invocation has burned, and how many of its targets are still going.
+      //
+      // This is the line an operator actually reads off a run - "is this sweep nearly done, and is
+      // it slower than usual" - and it was recoverable only by squinting along the rows and adding
+      // up bars. Wall clock is first-start to last-end (or now, while anything is still running),
+      // which is the elapsed time of the INVOCATION rather than the sum of its targets: with work
+      // running concurrently, the sum is always larger than the time anyone waited.
+      const starts = run.targets.map((t) => t.startMs).filter((v): v is number => v != null);
+      const stillRunning = run.targets.filter((t) => t.state === "running").length;
+      if (starts.length > 0) {
+        const first = Math.min(...starts);
+        const ends = run.targets
+          .map((t) => (t.state === "running" ? now : t.endMs))
+          .filter((v): v is number => v != null);
+        const last = ends.length > 0 ? Math.max(...ends) : now;
+        const bits = [
+          run.targets.length + (run.targets.length === 1 ? " target" : " targets"),
+          fmtDurMs(last - first),
+        ];
+        if (stillRunning > 0) bits.push(stillRunning + " running");
+        const summary = svg("text");
+        summary.setAttribute("x", String(VIEW_W - RIGHT_PAD));
+        summary.setAttribute("y", String(y + 12));
+        summary.setAttribute("text-anchor", "end");
+        summary.setAttribute("class", "console-dashboard-gantt__runsummary");
+        summary.textContent = bits.join(" - ");
+        root.appendChild(summary);
+      }
       y += RUN_H;
+      // When this invocation's first target actually began. Every later target's gap from here is
+      // queue wait rather than work, which is what drawBar shades.
+      const runStart = run.targets.reduce<number | null>(
+        (min, t) => (t.startMs == null ? min : min == null ? t.startMs : Math.min(min, t.startMs)),
+        null,
+      );
       for (const t of run.targets) {
         if (t.state === "running") running++;
         const label = svg("text");
@@ -222,7 +315,7 @@ export function ganttTile(): Tile {
         lt.textContent = t.label;
         label.appendChild(lt);
         root.appendChild(label);
-        drawBar(root, t, y, t0, now);
+        drawBar(root, t, y, t0, now, runStart);
         y += ROW_H;
       }
     }

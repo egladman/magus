@@ -34,6 +34,20 @@
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
 }
+/* --- Big Picture: suppress the shell's own chrome ------------------------------------------------
+ * The dashboard's presentation mode (dashboard.css) stamps [data-bigpicture] on the document
+ * element. The canvas it draws is fixed and opaque, so it already COVERS the chrome - but covering
+ * is not enough. A shared or cast screen must not be rendering a tab strip and a status bar behind
+ * the picture, and the reference drawer stays focusable (and so reachable by keyboard) while merely
+ * hidden behind something. Hiding them outright is the only version that is true from the outside.
+ *
+ * These live here rather than in dashboard.css because the elements are the SHELL's, not the
+ * dashboard's, and this file is where shell IDs are already addressed. The attribute-plus-id
+ * selector outranks the plain-id rules above without needing !important. */
+[data-bigpicture] #console-titlebar,
+[data-bigpicture] #console-statusbar,
+[data-bigpicture] #console-refdrawer .pf-v6-c-drawer__panel { display: none; }
+
 #console-statusbar > div { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 #console-statusbar [data-cluster] { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
 /* .console-shell-statusbar__right: kept as a hook - the log viewer injects its zoom control here via

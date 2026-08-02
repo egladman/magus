@@ -9,7 +9,15 @@ import { Card, h, type Tile } from "./card";
 const SLOT_CAP = 256; // soft cap on rendered cubes so a huge pool never bloats the DOM
 
 export function poolTile(): Tile {
-  const card = new Card("pool", "Pool", { term: "Pool", note: "0 / 0 slots" });
+  const card = new Card("pool", "Pool", {
+    term: "Pool",
+    note: "0 / 0 slots",
+    why:
+      "How much of magus's concurrency is actually in use. A pool sitting full with work queued behind" +
+      " it means the machine, not the build graph, is the constraint - raising concurrency will help." +
+      " A pool that stays mostly empty while runs feel slow means the opposite: the graph is" +
+      " serialised, and more slots will change nothing.",
+  });
   const grid = h("div", "console-dashboard-pool__grid");
   grid.setAttribute("aria-label", "Concurrency slots");
   const legend = h("div", "console-dashboard-pool__legend");
@@ -31,6 +39,22 @@ export function poolTile(): Tile {
     card.setNote(cap > 0 ? `${used} / ${cap} slots` : `${used} running, unlimited`);
     const slots = cap > 0 ? cap : used;
     const total = Math.min(slots + queued, SLOT_CAP);
+
+    // Lay the cubes out as a BLOCK rather than a single wrapping strip. A flex row that wraps only
+    // when it runs out of width gives a different silhouette at every pool size and, at the common
+    // capacities, just a thin line of cubes across the top of the panel - which reads as a progress
+    // bar, not as occupancy, and wastes the panel's whole height.
+    //
+    // Columns are ceil(sqrt(total)), so the block stays roughly square as the pool grows: 8 slots
+    // is 3x3, 16 is 4x4, 64 is 8x8. Square is what makes the airplane-seating read work - the eye
+    // takes in a filled FRACTION of an area at a glance, which a line of cubes cannot convey.
+    //
+    // Floored at 4 columns so a tiny pool does not turn into two enormous squares, and the cubes
+    // size themselves from the column count (dashboard.css), which is what makes them chunky at
+    // small capacities and still fit at large ones.
+    const cols = Math.max(4, Math.ceil(Math.sqrt(total)));
+    grid.style.setProperty("--pool-cols", String(cols));
+
     const frag = document.createDocumentFragment();
     for (let i = 0; i < total; i++) {
       const s = h("div", "console-dashboard-pool__slot");

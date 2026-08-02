@@ -292,22 +292,39 @@ function svgIcon(): SVGElement {
   return svg;
 }
 
-// phoneIcon is the status-bar Share-to-phone button's glyph: a phone body with a home indicator.
-function phoneIcon(): SVGElement {
+// shareGlyph is the status-bar Share button's icon: the conventional three-nodes-and-two-edges
+// share mark.
+//
+// It replaced a PHONE. The phone was accurate when sharing meant "scan this QR with the handset in
+// your pocket", and it is wrong now: the same link is what puts Big Picture on a TV, a spare
+// monitor, an HDMI stick, or a teammate's laptop. An icon that names ONE of the destinations reads
+// as a restriction - people looked for a separate control to cast to a screen - so the glyph names
+// the action instead, which is the one thing every destination has in common.
+function shareGlyph(): SVGElement {
   const NS = "http://www.w3.org/2000/svg";
   const svg = svgIcon();
-  const rect = document.createElementNS(NS, "rect");
-  rect.setAttribute("x", "7");
-  rect.setAttribute("y", "2");
-  rect.setAttribute("width", "10");
-  rect.setAttribute("height", "20");
-  rect.setAttribute("rx", "2");
-  const line = document.createElementNS(NS, "line");
-  line.setAttribute("x1", "11");
-  line.setAttribute("y1", "18");
-  line.setAttribute("x2", "13");
-  line.setAttribute("y2", "18");
-  svg.append(rect, line);
+  const node = (cx: string, cy: string): SVGElement => {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", cx);
+    c.setAttribute("cy", cy);
+    c.setAttribute("r", "2.6");
+    return c;
+  };
+  const edge = (x1: string, y1: string, x2: string, y2: string): SVGElement => {
+    const l = document.createElementNS(NS, "line");
+    l.setAttribute("x1", x1);
+    l.setAttribute("y1", y1);
+    l.setAttribute("x2", x2);
+    l.setAttribute("y2", y2);
+    return l;
+  };
+  svg.append(
+    node("18", "5"),
+    node("6", "12"),
+    node("18", "19"),
+    edge("8.3", "10.7", "15.7", "6.3"),
+    edge("8.3", "13.3", "15.7", "17.7"),
+  );
   return svg;
 }
 
@@ -465,10 +482,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
     share.dataset.shareToggle = "";
     share.setAttribute("aria-label", "Share a read-only view");
-    share.title = "Share a read-only view (a time-boxed link any device on this network can open)";
+    share.title =
+      "Share a read-only view: a time-boxed link any device on this network can open - a phone, a TV, a spare monitor";
     const shareIcon = document.createElement("span");
     shareIcon.className = "pf-v6-c-button__icon";
-    shareIcon.append(phoneIcon());
+    shareIcon.append(shareGlyph());
     share.append(shareIcon);
     right.append(share);
   }

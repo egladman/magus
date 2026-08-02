@@ -16,7 +16,7 @@
 import type { DashboardState, SampleView } from "../state";
 import { clock } from "../state";
 import { cssVar, onThemeChange } from "../charts/uplot";
-import { h, type Tile } from "./card";
+import { h, helpGlyph, type Tile } from "./card";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const GRID_ROWS = 7;
@@ -30,7 +30,16 @@ export function utilizationTile(): Tile {
   const headerMain = h("div", "pf-v6-c-card__header-main");
   const titleWrap = h("div", "pf-v6-c-card__title");
   const title = h("h2", "pf-v6-c-card__title-text", "Pool utilization");
-  titleWrap.append(title);
+  titleWrap.append(
+    title,
+    helpGlyph(
+      "Pool occupancy over time, one square per sample, so saturation reads as a PATTERN rather" +
+        " than as a single instant. A band of saturated squares with work queued behind them means" +
+        " the machine was the constraint for that whole stretch - which the instantaneous pool tile" +
+        " cannot tell you, because by the time you look at it the moment has passed.",
+      "pool utilization",
+    ),
+  );
   headerMain.append(titleWrap);
   header.append(headerMain);
 

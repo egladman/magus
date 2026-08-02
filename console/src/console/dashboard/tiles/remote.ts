@@ -12,6 +12,12 @@ export function remoteTile(): Tile {
     term: "Remote cache",
     label: "remote cache",
     note: "get / put over the network",
+    why:
+      "Whether the team is sharing build results or everyone is paying for the same work. A low" +
+      " remote hit rate on a shared cache usually means keys are not matching across machines -" +
+      " an absolute path, a toolchain version, or an undeclared input differing between them -" +
+      " rather than genuinely new work. Errors matter more than misses: they mean the network" +
+      " round trip happened AND bought nothing.",
   });
   const strip = new StatStrip([
     { key: "hits", label: "Hits", accent: "hit" },

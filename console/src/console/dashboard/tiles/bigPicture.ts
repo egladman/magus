@@ -1,17 +1,28 @@
-// bigPicture.ts - the dashboard's header control row plus "Big Picture" mode. The header holds
-// the active-workspace switcher (an "Active workspace" ToggleGroup, shown only when the daemon
-// serves more than one workspace, so the common single-workspace case stays unobtrusive) and the
-// Big Picture button. Board-mode data is daemon-wide (the wire carries no per-workspace run
-// attribution to filter by); the picker anchors the loaded-workspaces tile's highlight for now.
+// bigPicture.ts - the dashboard's header control row plus the "Big Picture" MODE SWITCH. The
+// header holds the active-workspace switcher (an "Active workspace" ToggleGroup, shown only when
+// the daemon serves more than one workspace, so the common single-workspace case stays
+// unobtrusive) and the Big Picture button. Board-mode data is daemon-wide (the wire carries no
+// per-workspace run attribution to filter by); the picker anchors the loaded-workspaces tile's
+// highlight for now.
 //
-// Big Picture fullscreens the whole app for a TV-readable presentation view, like SteamOS. The
-// button calls requestFullscreen() on document.documentElement; a single fullscreenchange listener
-// is the one source of truth for viewMode, so Escape, the browser chrome, and the button itself
-// all keep the fullscreen state and the swapped-in layout in sync.
+// Big Picture is a MODE, NOT A VIEW. There is deliberately no bigPictureTile() here and no second
+// component tree anywhere: Big Picture is the same board tiles, a subset of them, laid out by a
+// different grid and scaled up. main.ts decides which tiles survive the switch; dashboard.css does
+// the rest off [data-bigpicture]. This file owns only the switch itself.
+//
+// It used to be a view - a tile that re-rendered the attention hero's verdict and metrics under
+// different class names, plus a second workspace-card renderer over the same WorkspaceView[]. That
+// meant a new metric had to be written twice, in two files and two stylesheets, and the two copies
+// were already drifting (the hero linked its failing count to the failing run's log; the copy did
+// not). Placing the real tiles instead means one renderer per concept, which is the rule any future
+// panel has to keep: a new metric family is one new tile file plus one grid-area line.
+//
+// The switch drives two things that must not disagree: the viewMode signal (which main.ts binds to
+// pick the surviving tiles) and a [data-bigpicture] attribute on the document element (which the
+// stylesheets key every layout and chrome-suppression rule off). A single fullscreenchange listener
+// sets both, so Escape, the browser chrome, and the button itself all stay in sync.
 
-import type { DashboardState, StatusView, WorkspaceView } from "../state";
-import { fmtCount, fmtPct } from "../state";
-import { countFailing, verdictFor } from "./attention";
+import type { DashboardState, WorkspaceView } from "../state";
 import { persisted } from "../../../lib/persist";
 import { signal, bind, h } from "../../view";
 import type { Tile } from "./card";
@@ -28,12 +39,44 @@ export const viewMode = signal<ViewMode>("board");
 // remembering across a reload, the way the collapsed-card picks are.
 export const activeWorkspace = persisted<string>("dashboard-active-workspace", "");
 
-// The single source of truth for viewMode: whatever the browser's fullscreen state actually is,
-// module-scoped so it is wired exactly once regardless of how many times dashboardHeader() (and
-// therefore mountTiles) runs across a console tab's close/reopen.
+// [data-bigpicture] on the DOCUMENT element is what every stylesheet keys off: dashboard.css turns
+// the panels container into the fixed canvas, and console.css suppresses the console's own chrome
+// (title bar, tab strip, status bar, reference panel). It lives on the document element rather than
+// on the panels container because the chrome it hides is the shell's, not the dashboard's.
+//
+// Kept in lockstep with the viewMode signal by setting both in one place. Nothing else may write
+// either: two writers is how a mode ends up half-applied.
+function setViewMode(mode: ViewMode): void {
+  viewMode.set(mode);
+  document.documentElement.toggleAttribute("data-bigpicture", mode === "bigPicture");
+}
+
+// pinned marks a mode entered by ROUTE rather than by the button, which changes what leaving
+// fullscreen means. On a wall display the page is opened at #big-picture and left alone; someone
+// toggling the browser's own fullscreen (F11) on and off must not drop that display back to the
+// board, because nobody is standing there to put it back. Entered from the button, the opposite is
+// true: leaving fullscreen IS the request to leave, and Escape has to work.
+let pinned = false;
+
+// enterBigPictureRoute is the no-gesture entry: a #big-picture link a TV, an HDMI stick, or a kiosk
+// browser can simply be pointed at. It asks for no fullscreen at all (the API would refuse without
+// a user gesture anyway) - the chrome suppression is entirely attribute-driven, so the mode is
+// complete without one.
+export function enterBigPictureRoute(): void {
+  pinned = true;
+  setViewMode("bigPicture");
+}
+
+// The single source of truth for viewMode WHILE FULLSCREEN IS DRIVING IT: whatever the browser's
+// fullscreen state actually is. Module-scoped so it is wired exactly once regardless of how many
+// times dashboardHeader() (and therefore mountTiles) runs across a console tab's close/reopen.
 if (typeof document !== "undefined") {
   document.addEventListener("fullscreenchange", () => {
-    viewMode.set(document.fullscreenElement ? "bigPicture" : "board");
+    if (document.fullscreenElement) {
+      setViewMode("bigPicture");
+      return;
+    }
+    if (!pinned) setViewMode("board");
   });
 }
 
@@ -46,14 +89,14 @@ function wsLabel(root: string): string {
 
 // A small PF ToggleGroup builder for the workspace picker: N labeled buttons, one selected at a
 // time, painted from a persisted cell.
+// The caller names the group (a visible label element it owns, via aria-labelledby), so this no
+// longer takes an ariaLabel of its own - one control, one name.
 function toggleGroup<T extends string>(
-  ariaLabel: string,
   items: { value: T; label: string; title?: string }[],
   cell: { get(): T; set(v: T): void; subscribe(fn: (v: T) => void): () => void },
 ): HTMLElement {
   const root = h("div", "pf-v6-c-toggle-group");
   root.setAttribute("role", "group");
-  root.setAttribute("aria-label", ariaLabel);
   const buttons: { btn: HTMLButtonElement; value: T }[] = [];
   for (const item of items) {
     const wrap = h("div", "pf-v6-c-toggle-group__item");
@@ -116,19 +159,30 @@ function bigPictureIcon(): SVGElement {
   return svg;
 }
 
-// enterBigPicture / exitBigPicture drive the actual Fullscreen API. Both are best-effort: a
-// browser can refuse requestFullscreen() (no user gesture, an embedding iframe without the
-// `allowfullscreen` permission, etc.), and the fullscreenchange listener above is what keeps
-// `viewMode` correct either way - these two never set viewMode themselves.
+// enterBigPicture / exitBigPicture set the MODE, and treat fullscreen as decoration on top of it.
+//
+// That order matters and is a deliberate reversal of how this used to work. Fullscreen was the
+// source of truth, so the mode could only ever be reached through requestFullscreen() - which a
+// browser is free to refuse (outside a user gesture, in an iframe without `allowfullscreen`, on a
+// kiosk browser that does not implement it at all). On a refusal the button silently did nothing.
+// Worse, it made the whole mode unreachable from a URL: the Fullscreen API REQUIRES a user gesture,
+// so a TV, an HDMI stick, or a kiosk browser pointed at a link could never enter it. Chrome-less
+// has to be reachable by attribute alone; a real fullscreen is a nicety for someone at a keyboard.
+//
+// So: set the mode first, then ask for fullscreen and ignore the answer. Entering twice is
+// harmless (the fullscreenchange listener sets the same value), and exiting always works whether or
+// not a fullscreen was ever granted.
 function enterBigPicture(): void {
-  const root = document.documentElement;
-  if (!root.requestFullscreen) return; // Fullscreen API unsupported: the button is a no-op
-  root.requestFullscreen().catch(() => {}); // e.g. blocked outside a user gesture
+  setViewMode("bigPicture");
+  document.documentElement.requestFullscreen?.().catch(() => {});
 }
 
 function exitBigPicture(): void {
-  if (!document.exitFullscreen) return;
-  document.exitFullscreen().catch(() => {});
+  pinned = false; // an explicit leave releases a route pin, so the button always works
+  setViewMode("board");
+  // Only when we actually hold one: calling exitFullscreen() otherwise rejects, and on some
+  // browsers logs an unhandled-rejection warning for a no-op.
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
 
 // dashboardHeader is the dashboard's always-visible chrome row - not a Card, sitting above the
@@ -142,12 +196,29 @@ export function dashboardHeader(): Tile {
   wsWrap.hidden = true;
   root.append(wsWrap);
 
+  // A LABELLED, bordered button rather than the bare glyph this used to be.
+  //
+  // The glyph alone was effectively undiscoverable: a muted 1.9rem icon, in the far corner of an
+  // otherwise empty row, that only took on any colour once you were already hovering it. A monitor
+  // outline does not say "present this on a TV" to someone who has not been told, and there was
+  // nothing to prompt them to hover and find the tooltip - so the feature was reachable only by
+  // people who already knew it existed.
+  //
+  // Bordered SECONDARY, not filled primary, and that restraint is deliberate. The attention hero
+  // sits directly below and is what the eye is supposed to land on first; a filled call-to-action
+  // above it would win that contest every time, and the console already spends its filled blue on
+  // running work. Secondary reads unambiguously as a control without competing for the headline.
   const bigPictureBtn = document.createElement("button");
   bigPictureBtn.type = "button";
-  bigPictureBtn.className = "console-dashboard-viewbar__bigpicture";
-  bigPictureBtn.title = "Big Picture mode";
-  bigPictureBtn.setAttribute("aria-label", "Big Picture mode");
-  bigPictureBtn.append(bigPictureIcon());
+  bigPictureBtn.className = "pf-v6-c-button pf-m-secondary console-dashboard-viewbar__bigpicture";
+  bigPictureBtn.title = "Present this dashboard full-screen, with no console chrome";
+  const btnIcon = h("span", "pf-v6-c-button__icon pf-m-start");
+  btnIcon.append(bigPictureIcon());
+  // The label is what makes the control self-describing, so it carries the accessible name and the
+  // aria-label is dropped rather than duplicating it (a label plus an aria-label that says the same
+  // thing is just two names for one control, and screen readers announce the override).
+  const btnText = h("span", "pf-v6-c-button__text", "Big Picture");
+  bigPictureBtn.append(btnIcon, btnText);
   bigPictureBtn.addEventListener("click", () => {
     if (viewMode.get() === "bigPicture") exitBigPicture();
     else enterBigPicture();
@@ -158,6 +229,16 @@ export function dashboardHeader(): Tile {
     const active = mode === "bigPicture";
     bigPictureBtn.setAttribute("aria-pressed", String(active));
     bigPictureBtn.toggleAttribute("data-active", active);
+    // Inside the mode this is the ONLY way out that does not require guessing, because the button
+    // is all that the hover-reveal exit strip contains and Escape does nothing when the mode was
+    // entered by route rather than by fullscreen. So it says what it will do, not what mode you are
+    // in: a control still reading "Big Picture" while Big Picture is on is a toggle whose label
+    // describes its state, which is exactly the ambiguity someone looking for the exit cannot
+    // afford.
+    btnText.textContent = active ? "Exit Big Picture" : "Big Picture";
+    bigPictureBtn.title = active
+      ? "Leave Big Picture and return to the dashboard"
+      : "Present this dashboard full-screen, with no console chrome";
   });
 
   let lastWorkspaces: WorkspaceView[] = [];
@@ -176,13 +257,22 @@ export function dashboardHeader(): Tile {
     const roots = lastWorkspaces.map((w) => w.root).join("\n");
     if (roots === lastRoots) return; // same set: the toggle group already reflects it
     lastRoots = roots;
-    wsWrap.replaceChildren(
-      toggleGroup<string>(
-        "Active workspace",
-        lastWorkspaces.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
-        activeWorkspace,
-      ),
+
+    // A VISIBLE label, not just the group's aria-label. Two bare chips reading "acme" and "magus"
+    // say nothing about what picking one does - they could as easily be a filter, a theme, or a
+    // pair of tabs. The accessible name was already there; the sighted reader was the one being
+    // asked to guess. The label carries the accessible name now (aria-labelledby), so the control
+    // has exactly one name rather than a visible one and a different announced one.
+    const labelId = "dash-ws-picker-label";
+    const label = h("span", "console-dashboard-viewbar__label", "Workspace");
+    label.id = labelId;
+    const group = toggleGroup<string>(
+      lastWorkspaces.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
+      activeWorkspace,
     );
+    group.removeAttribute("aria-label");
+    group.setAttribute("aria-labelledby", labelId);
+    wsWrap.replaceChildren(label, group);
   }
   // Entering/leaving Big Picture must show/hide the workspace picker immediately, not on the
   // next ~1s status tick.
@@ -193,79 +283,6 @@ export function dashboardHeader(): Tile {
     update(s: DashboardState) {
       lastWorkspaces = s.status ? s.status.workspaces : [];
       renderWorkspacePicker();
-    },
-    destroy() {},
-  };
-}
-
-// bigPictureTile is the TV-friendly summary Big Picture mode swaps in: one verdict line, five
-// oversized numbers, and one card per workspace. It reuses attention.ts's verdict rule so the
-// two views never disagree about what "all clear" means, just at very different scales.
-export function bigPictureTile(): Tile {
-  const root = h("section", "console-dashboard-bigpicture");
-  root.setAttribute("aria-label", "Big Picture");
-
-  const verdict = h("h1", "console-dashboard-bigpicture__verdict");
-  const detail = h("p", "console-dashboard-bigpicture__detail");
-  root.append(verdict, detail);
-
-  const metrics = h("div", "console-dashboard-bigpicture__metrics");
-  function metric(label: string): { wrap: HTMLElement; n: HTMLElement } {
-    const wrap = h("div", "console-dashboard-bigpicture__metric");
-    const n = h("span", "console-dashboard-bigpicture__n", "-");
-    wrap.append(n, h("span", "console-dashboard-bigpicture__l", label));
-    metrics.append(wrap);
-    return { wrap, n };
-  }
-  const fail = metric("failing");
-  const running = metric("running");
-  const queued = metric("queued");
-  const hitRate = metric("cache hit rate");
-  const busy = metric("pool busy");
-  root.append(metrics);
-
-  const wsGrid = h("div", "console-dashboard-bigpicture__wsgrid");
-  root.append(wsGrid);
-
-  function renderWorkspaces(workspaces: WorkspaceView[]): void {
-    const cards = workspaces.map((w) => {
-      const card = h("div", "console-dashboard-bigpicture__wscard");
-      card.title = w.root;
-      const stats =
-        w.hits != null
-          ? fmtCount(w.hits) + " hits, " + fmtCount(w.misses ?? 0) + " misses"
-          : "idle";
-      card.append(
-        h("div", "console-dashboard-bigpicture__wsroot", wsLabel(w.root)),
-        h("div", "console-dashboard-bigpicture__wsstats", stats),
-      );
-      return card;
-    });
-    wsGrid.replaceChildren(...cards);
-  }
-
-  function render(status: StatusView): void {
-    const failing = countFailing(status);
-    fail.n.textContent = String(failing);
-    running.n.textContent = String(status.pool.running);
-    queued.n.textContent = String(status.pool.queued);
-    hitRate.n.textContent = fmtPct(status.cache.hitRate);
-    busy.n.textContent =
-      status.pool.capacity > 0 ? fmtPct(status.pool.running / status.pool.capacity) : "-";
-    fail.wrap.dataset.n = failing > 0 ? "some" : "none";
-
-    const v = verdictFor(status, failing);
-    root.dataset.state = v.state;
-    verdict.textContent = v.line;
-    detail.textContent = v.sub;
-
-    renderWorkspaces(status.workspaces);
-  }
-
-  return {
-    el: root,
-    update(s: DashboardState) {
-      if (s.status) render(s.status);
     },
     destroy() {},
   };

@@ -8,6 +8,7 @@
 
 import type { DashboardState } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
+import { attachHelpPopover } from "../../../ui/help-popover";
 import { persisted } from "../../../lib/persist";
 
 export interface Tile {
@@ -44,11 +45,40 @@ export interface CardOptions {
   // Visible heading label if it should differ from the term.
   label?: string;
   note?: string;
+  // WHY this panel is worth reading - what decision it informs, and what a bad number here would
+  // mean. Rendered as the shared "?" affordance beside the heading (ui/help-popover.ts).
+  //
+  // Deliberately distinct from `term`, which links the glossary's definition of WHAT something is.
+  // A dashboard can show an operator a great deal and still leave them unable to act, because
+  // knowing that "cache hit rate is 62%" is not the same as knowing whether 62% is a problem. The
+  // glossary answers the first question and nothing answered the second.
+  //
+  // Write it as a consequence, not a restatement: "a low rate here means most work is rebuilding
+  // from scratch" tells the reader something; "the ratio of hits to total lookups" does not.
+  why?: string;
   // Fold this card on its first ever render (a dense, lower-priority metric family the
   // board keeps out of the way until asked). One-time: a later user expand persists.
   defaultCollapsed?: boolean;
   // Fired when a folded card is revealed (charts/grids need to refit while visible).
   onReveal?: () => void;
+}
+
+// helpGlyph builds the shared "?" affordance and wires its popover.
+//
+// Exported because not every panel is a Card: the utilization tile hand-builds its own PatternFly
+// shell, and the attention hero is deliberately not a card at all. Without this they would each
+// grow their own copy of the button, and the affordance that is supposed to mean one thing
+// everywhere would start looking and behaving differently per panel - which is exactly what the
+// shared popover was introduced to end.
+export function helpGlyph(why: string, label: string): HTMLElement {
+  const help = document.createElement("button");
+  help.type = "button";
+  help.className = "console-render-help-glyph";
+  help.textContent = "?";
+  help.setAttribute("aria-label", "Why " + label + " matters");
+  help.title = why; // attachHelpPopover reads this, then strips it so hover does not double up
+  attachHelpPopover(help);
+  return help;
 }
 
 // Card builds the standard collapsible tile shell as a PatternFly Card and exposes its
@@ -104,6 +134,10 @@ export class Card {
       h.textContent = title;
     }
     titleWrap.append(h);
+    // The "?" affordance, when the tile says why it matters. Reuses the shared glyph and popover
+    // rather than a title= tooltip: a hover tooltip is invisible on touch and unreachable on a
+    // shared screen, and this is the text most likely to be wanted by whoever knows the least.
+    if (opts.why) titleWrap.append(helpGlyph(opts.why, opts.label || title));
     headerMain.append(titleWrap);
 
     const actions = document.createElement("div");

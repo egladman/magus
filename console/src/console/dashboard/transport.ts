@@ -18,6 +18,8 @@ import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
 import { StatusSchema, StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
 import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
+import { ActivityService, Kind } from "../../gen/magus/activity/v1/activity_pb";
+import { InsightService } from "../../gen/magus/insight/v1/insight_pb";
 import {
   authHeaders,
   createDaemonTransport,
@@ -32,16 +34,24 @@ import {
   mapSnapshot,
   mapSample,
   mapInsight,
+  mapAgentActivity,
+  type AgentEventWire,
   type DashboardState,
   type SampleView,
-  type InsightWire,
 } from "./state";
 
 const GRID_MAX = 7 * 52; // ~a GitHub year of columns; the rolling sample window
 const RECONNECT_MS = 3000;
-// Insight is an on-demand JSON read (GET /api/v1/insight), server-side cached ~10s. Not on the
-// status SSE: it is polled on a cadence, refetched on open and on a manual refresh. The interval is
-// the operator's configured refresh rate (getPollMs, default 20s - just above the server cache TTL).
+// The activity poll's cadence, and how many events a page asks for. Independent of the operator's
+// refresh-rate setting: the agent tile reports a five-minute window, so a slower poll only delays
+// when a new call shows up, and a faster one buys nothing. The page has to be deep enough to cover
+// that window on a busy daemon - an agent mid-task easily produces a few hundred tool calls.
+const ACTIVITY_POLL_MS = 4000;
+const ACTIVITY_PAGE = 500;
+// Insight is an on-demand unary read (magus.insight.v1.InsightService.GetInsight), server-side
+// cached ~10s. Not on the status SSE: it is polled on a cadence, refetched on open and on a manual
+// refresh. The interval is the operator's configured refresh rate (getPollMs, default 20s - just
+// above the server cache TTL).
 
 export interface TransportCallbacks {
   onStatusOpen(host: string): void;
@@ -60,6 +70,9 @@ export class DashboardTransport {
   private statusRetry: ReturnType<typeof setTimeout> | null = null;
   private metricsAbort: AbortController | null = null;
   private metricsRetry: ReturnType<typeof setTimeout> | null = null;
+
+  private activityHost: string | null = null;
+  private activityTimer: ReturnType<typeof setInterval> | null = null;
 
   private insightHost: string | null = null;
   private insightAbort: AbortController | null = null;
@@ -82,6 +95,7 @@ export class DashboardTransport {
     this.connectStatus(host);
     this.startMetrics(host);
     this.startInsight(host);
+    this.startActivity(host);
     void this.fetchObservingSince(host);
   }
 
@@ -96,6 +110,7 @@ export class DashboardTransport {
     }
     this.stopMetrics();
     this.stopInsight();
+    this.stopActivity();
   }
 
   // stop is the permanent give-up: it tears down all three feeds (status SSE, metrics
@@ -209,10 +224,60 @@ export class DashboardTransport {
     }, RECONNECT_MS);
   }
 
-  // ---- insight (on-demand JSON poll) ---------------------------------------
-  // An authed GET against the validated loopback host, decoded from PLAIN JSON (not
-  // protobuf) and mapped into the store. Polled on a modest cadence since it is
-  // server-side cached; refetched immediately on connect and on a manual refresh.
+  // ---- insight (on-demand ConnectRPC poll) ---------------------------------
+  // A unary GetInsight against the validated loopback host, bearing the shared token
+  // and mapped into the store. Polled on a modest cadence since it is server-side
+  // cached; refetched immediately on connect and on a manual refresh.
+
+  // ---- activity trail poll -------------------------------------------------
+  //
+  // POLLED, not streamed, and deliberately so for now. ActivityService exposes only ListActivity -
+  // a request/response page - so a live feed would mean designing and shipping a server-stream
+  // first. A page of the most recent events every few seconds is enough for a tile that reports
+  // "agents active in the last five minutes", and it needs no proto change at all. If the tile ever
+  // wants per-event immediacy, that is the moment to add the stream, not before.
+  private startActivity(host: string): void {
+    this.stopActivity();
+    this.activityHost = host;
+    void this.fetchActivity();
+    this.activityTimer = setInterval(() => void this.fetchActivity(), ACTIVITY_POLL_MS);
+  }
+
+  private stopActivity(): void {
+    this.activityHost = null;
+    if (this.activityTimer) {
+      clearInterval(this.activityTimer);
+      this.activityTimer = null;
+    }
+  }
+
+  private async fetchActivity(): Promise<void> {
+    if (this.stopped) return;
+    const host = this.activityHost;
+    if (!host) return;
+    try {
+      const client = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
+      const resp = await client.listActivity({
+        pageSize: ACTIVITY_PAGE,
+        // Only the two kinds the tile reads. Filtering server-side keeps a busy daemon's job and
+        // memory events from crowding the page and pushing agent events off the end of it.
+        filter: { kinds: [Kind.AGENT_COMMAND, Kind.MCP_TOOL_CALL] },
+      });
+      const events: AgentEventWire[] = resp.events.map((e) => ({
+        atMs: e.time ? Number(e.time.seconds) * 1000 + Math.floor(e.time.nanos / 1e6) : 0,
+        isAgentCommand: e.kind === Kind.AGENT_COMMAND,
+        isMcpCall: e.kind === Kind.MCP_TOOL_CALL,
+        host: e.host || "",
+        session: e.session || "",
+        preview: e.preview || "",
+        action: e.action || "",
+      }));
+      this.store.set({ agents: mapAgentActivity(events, Date.now()) });
+    } catch {
+      // A daemon without a trail, an older daemon without the host/session fields, or a blip: keep
+      // whatever is on screen and let the next poll retry. The tile has its own empty state.
+    }
+  }
 
   private startInsight(host: string): void {
     this.stopInsight();
@@ -245,15 +310,12 @@ export class DashboardTransport {
     if (this.insightAbort) this.insightAbort.abort();
     this.insightAbort = new AbortController();
     try {
-      const res = await fetch("http://" + host + "/api/v1/insight", {
-        headers: authHeaders(),
-        signal: this.insightAbort.signal,
-      });
-      if (!res.ok) return; // keep the last insight on screen; the next poll retries
-      const raw = (await res.json()) as InsightWire;
-      this.store.set({ insight: mapInsight(raw) });
+      const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
+      const resp = await client.getInsight({}, { signal: this.insightAbort.signal });
+      if (resp.insight) this.store.set({ insight: mapInsight(resp.insight) });
     } catch {
-      // Network blip or abort: leave the prior insight in place; the poll retries.
+      // An abort, a network blip, or a daemon with no workspace (CodeUnavailable): leave the
+      // prior insight in place; the poll retries.
     }
   }
 
