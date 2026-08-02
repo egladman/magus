@@ -1,5 +1,6 @@
 ---
 title: Targets
+order: 2
 description: A Target is the addressable unit of work in magus, keyed by project Path and operation Name, with charms layered on top for execution modifiers.
 tags: [targets, build, projects, cli, grammar, spells, charms, magusfile]
 ---
@@ -90,11 +91,11 @@ A target name is typically one of the seven canonical operations (see below); cu
 | Name        | Meaning                                          |
 | ----------- | ------------------------------------------------ |
 | `preflight` | pre-run checks (workspace health, missing tools) |
-| `build`     | compile / produce artefacts                      |
+| `build`     | compile / produce artifacts                      |
 | `test`      | run the test suite                               |
 | `lint`      | static analysis, type-check                      |
 | `format`    | format source files                              |
-| `clean`     | remove local build artefacts                     |
+| `clean`     | remove local build artifacts                     |
 | `generate`  | run code generators                              |
 
 There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
@@ -256,12 +257,14 @@ Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` an
 | `magus\needs` target handles                            | `ctx.needs(goBuild)` resolves the target declared `go_build` (the handle's declared name is normalized). |
 | The per-target policy map (`magus\project`'s `targets`) | A policy keyed `"goBuild"` applies to a target declared `go_build`, and vice versa.                        |
 | Charm names                                             | `target:NoCache` and `target:no-cache` are the same charm.                                                 |
-| Spell op keys (since v0.4.0)                            | A spell declaring an op `go_build` registers it as `go-build`.                                              |
+| Spell op keys                                           | A spell declaring an op `go_build` registers it as `go-build`.                                              |
 
 One function does all of it: `types.Normalize`. There is no per-kind normalizer
 and no alias table.
 
-### Spell op keys changed in v0.4.0
+### Spell op keys are normalized too
+
+<!-- magus-changed: v0.4.0 -->
 
 Op keys are now normalized when the spell is decoded, the same as every other
 name. Before, they were stored exactly as authored while every request arriving

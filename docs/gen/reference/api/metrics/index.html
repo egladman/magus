@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="magus">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-x1W/j9lCcq354+JTLr4OrtfNzdkoGxyoN/Ih1J7hzjQ=' 'sha256-gragjfOOG/yHR3z2hzcb5KXYaHQ9as5VBnlPgQwNFXo=' 'sha256-TD1jBCAXE0Jf26yxt4A/cRNh9aUc2olzF4UyKQMJ3L4=' 'sha256-UqRHEYEOgpwOykkwyFnyKiNT0ul+zfuaY3g+vTZXfAg=' 'sha256-LEADDmVxt5HNYHqt5V84Y+Zz7zoFSitvzkzvhZtFPwU='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; form-action 'none'; base-uri 'self'; object-src 'none'; frame-src 'none'">
+  <title>MetricsService - magus</title>
+  <meta name="description" content="MetricsService serves the derived dashboard metrics.">
+  <link rel="canonical" href="https://eli.gladman.cc/magus/reference/api/metrics/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="magus">
+  <meta property="og:title" content="MetricsService - magus">
+  <meta property="og:description" content="MetricsService serves the derived dashboard metrics.">
+  <meta property="og:url" content="https://eli.gladman.cc/magus/reference/api/metrics/">
+  <meta property="og:image" content="https://eli.gladman.cc/magus/assets/gopher.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="alternate" type="application/atom+xml" title="magus releases" href="../../../public/atom/releases.atom.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="../../../assets/apple-touch-icon.png">
+  <link rel="manifest" href="../../../manifest.webmanifest">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f">
+  <link rel="stylesheet" href="../../../assets/pico.min.css">
+  <link rel="stylesheet" href="../../../theme.css">
+  <link rel="stylesheet" href="../../../site.css">
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+       NOT console.css (that is the console-app-only shell). -->
+  <link rel="stylesheet" href="../../../ui-panels.css">
+  <script src="../../../theme.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div id="announcement-bar" data-version="v0.3.0" data-released="2026-07-25">
+    <div class="container">
+      <span>magus <strong>v0.3.0</strong> is out. <a href="https://github.com/egladman/magus/releases/tag/v0.3.0">See what's new</a></span>
+      <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
+    </div>
+  </div>
+  <header class="site-header">
+    <nav class="container">
+      <ul><li><a href="../../../index.html" class="contrast"><picture><source srcset="../../../assets/hat.webp" type="image/webp"><img class="brand-mark" src="../../../assets/hat.png" width="65" height="48" alt=""></picture> <strong>magus</strong></a></li></ul>
+      <div class="nav-right">
+        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
+        <span class="nav-divider" aria-hidden="true"></span>
+        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
+        <ul class="nav-links" id="site-nav-links">
+          <li class="nav-menu-label" aria-hidden="true">Menu</li>
+        <li><a href="../../../index.html">Home</a></li>
+        <li><a href="../../../documentation/" aria-current="page">Documentation</a></li>
+        <li><a href="../../../blog/">Blog</a></li>
+        <li><a href="../../../guides/download/">Download</a></li>
+        <li><a href="../../../tour/">Tour</a></li>
+        <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/contributing/">Contribute</a></li>
+        <li><a href="../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
+          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+        </ul>
+        <button id="settings-btn" class="outline" type="button" aria-controls="settings-panel" aria-expanded="false" aria-haspopup="true" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        <div class="settings-panel" id="settings-panel" hidden aria-label="Settings">
+          <h2 class="settings-title">Settings</h2>
+          <p class="settings-note">Saved locally.</p>
+          <div class="settings-row"><span>Theme</span><button type="button" id="theme-cycle" class="theme-cycle outline" aria-label="Color theme"><span class="theme-cycle-icon" aria-hidden="true"></span><span class="theme-cycle-label">Auto</span></button></div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="main-content" class="container" tabindex="-1">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <ul><li><a href="../../../index.html">Home</a></li><li><a href="../../../documentation/">Documentation</a></li><li><a href="../../../reference/">Reference</a></li><li><a href="../../../reference/api/">Daemon API</a></li><li aria-current="page">MetricsService</li></ul>
+    </nav>
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="../../../documentation/">documentation</a>, or use GitHub's code search on the <a href="https://github.com/egladman/magus">source repo</a>.</p></noscript>
+    <div class="page-tools-secondary"><small class="page-tools-edit"><a href="index.md" data-tooltip="View this page's Markdown source" title="View this page's Markdown source">&#182; View markdown source</a> &middot; <a href="https://github.com/egladman/magus/edit/HEAD/docs/reference/api/metrics.md" data-tooltip="Edit this page on GitHub" title="Edit this page on GitHub">&#x270E; Suggest an edit</a></small></div>
+    <div class="with-toc">
+    <aside class="toc">
+      <nav>
+        <p class="toc-title">In this section</p>
+        <ul class="section-nav">
+          <li><a href="../../../reference/api/" title="Daemon API">Daemon API</a></li>
+          <li><a href="../../../reference/buzz/" title="magus stdlib">magus stdlib</a></li>
+          <li><a href="../../../reference/cli/" title="The CLI in practice">The CLI in practice</a></li>
+          <li><a href="../../../reference/codes/" title="Codes">Codes</a></li>
+          <li><a href="../../../reference/config/" title="magus.yaml configuration">magus.yaml configuration</a></li>
+          <li><a href="../../../reference/console/" title="Console API">Console API</a></li>
+          <li><a href="../../../reference/diagnostics/" title="Diagnostics">Diagnostics</a></li>
+          <li><a href="../../../reference/faq/" title="FAQ">FAQ</a></li>
+          <li><a href="../../../reference/go-sdk/" title="The Go SDK">The Go SDK</a></li>
+          <li><a href="../../../reference/logging/" title="Logging and verbosity">Logging and verbosity</a></li>
+          <li><a href="../../../reference/manpage/" title="Manpage">Manpage</a></li>
+          <li><a href="../../../reference/skills/" title="Agent skills">Agent skills</a></li>
+        </ul>
+        <p class="toc-title">On this page</p>
+        <ul><li><a href="#methods" title="Methods">Methods</a><ul><li><a href="#getmetrics" title="GetMetrics">GetMetrics</a></li><li><a href="#streammetrics" title="StreamMetrics">StreamMetrics</a></li></ul></li><li><a href="#messages" title="Messages">Messages</a><ul><li><a href="#backfill" title="Backfill">Backfill</a></li><li><a href="#buzz" title="Buzz">Buzz</a></li><li><a href="#getmetricsrequest" title="GetMetricsRequest">GetMetricsRequest</a></li><li><a href="#getmetricsresponse" title="GetMetricsResponse">GetMetricsResponse</a></li><li><a href="#latency" title="Latency">Latency</a></li><li><a href="#mcptoolstat" title="MCPToolStat">MCPToolStat</a></li><li><a href="#remote" title="Remote">Remote</a></li><li><a href="#sample" title="Sample">Sample</a></li><li><a href="#sandbox" title="Sandbox">Sandbox</a></li><li><a href="#snapshot" title="Snapshot">Snapshot</a></li><li><a href="#streammetricsrequest" title="StreamMetricsRequest">StreamMetricsRequest</a></li><li><a href="#streammetricsresponse" title="StreamMetricsResponse">StreamMetricsResponse</a></li><li><a href="#targetstat" title="TargetStat">TargetStat</a></li></ul></li></ul>
+        <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
+      </nav>
+    </aside>
+    <div>
+    <small class="reading-time" title="Estimated reading time">6 min read</small>
+    <article>
+<h1 id="metricsservice">MetricsService</h1>
+<p>MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.</p>
+<p>Package <code>magus.metrics.v1</code>, defined in <code>proto/magus/metrics/v1/metrics.proto</code>. Part of the <a href="../">daemon API</a>.</p>
+<h2 id="methods">Methods</h2>
+<h3 id="getmetrics">GetMetrics</h3>
+<p>GetMetrics returns the current derived <a class="glossary-term" href="../../../glossary/#snapshot" data-def="A point-in-time view of live state - the pool's occupancy or a tick of exported metrics - as opposed to accumulated history.">snapshot</a>.</p>
+<p><code>POST /magus.metrics.v1.MetricsService/GetMetrics</code> - unary.</p>
+<p>Takes <code>GetMetricsRequest</code>, returns <code>GetMetricsResponse</code>.</p>
+<h3 id="streammetrics">StreamMetrics</h3>
+<p>StreamMetrics pushes the rolling history first (one <a class="glossary-term" href="../../../glossary/#backfill" data-def="The recent history the daemon replays to a dashboard on connect, so its charts start populated instead of empty. It is served from a bounded ring buffer of the last few hundred samples.">Backfill</a>), then a fresh Snapshot on each tick, so the dashboard's charts and utilization grid start populated and stay live.</p>
+<p><code>POST /magus.metrics.v1.MetricsService/StreamMetrics</code> - <a class="code-xref" href="../../manpage/magus-server/" data-kind="command" data-def="magus server: Start, stop, or check liveness of the persistent magus daemon that keeps workspace discovery, config, and cache warm across invocations.">server</a> streaming.</p>
+<p>Takes <code>StreamMetricsRequest</code>, returns <code>StreamMetricsResponse</code>.</p>
+<h2 id="messages">Messages</h2>
+<h3 id="backfill">Backfill</h3>
+<p>Backfill is the ring-buffer history the <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a> sends once, right after a dashboard connects, so the utilization grid and <a class="glossary-term" href="../../../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>-rate <a class="glossary-term" href="../../../glossary/#trend" data-def="An insight lens: the recent half of the window against the earlier half. A positive delta is a rising hotspot; a negative one is cooling.">trend</a> start populated instead of empty.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>samples</code></td>
+<td>repeated Sample</td>
+<td>1</td>
+<td>oldest-first</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="buzz">Buzz</h3>
+<p><a class="glossary-term" href="../../../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> rolls up the magus.buzz.* families: script exec/compile <a class="glossary-term" href="../../../glossary/#latency" data-def="How long an operation takes. magus records latency as OpenTelemetry histograms per family - target execution, cache op, pool wait, and graph query - and reports each as a count, sum, and percentiles.">latency</a>, the native-boundary host-call family, session-<a class="glossary-term" href="../../../glossary/#pool" data-def="The concurrency pool: the shared set of slots that caps how many targets run in parallel on one machine. Its capacity defaults to MAGUS_CONCURRENCY, then 4 on GitHub-hosted runners, then min(NumCPU, 8); magus status and the dashboard report it live.">pool</a> <a class="glossary-term" href="../../../glossary/#health" data-def="The at-a-glance daemon state derived from the pool: **healthy** when the pool is reporting, **degraded** when it reports an error, **down** when there is no pool. The dashboard color-codes each state.">health</a>, import and <a class="glossary-term" href="../../../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> resolution, and VM-level counters.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>exec_count</code></td>
+<td>int64</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>exec_p50</code></td>
+<td>double</td>
+<td>2</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>exec_p95</code></td>
+<td>double</td>
+<td>3</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>compile_count</code></td>
+<td>int64</td>
+<td>4</td>
+<td></td>
+</tr>
+<tr>
+<td><code>compile_p50</code></td>
+<td>double</td>
+<td>5</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>compile_p95</code></td>
+<td>double</td>
+<td>6</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>host_call_count</code></td>
+<td>int64</td>
+<td>7</td>
+<td></td>
+</tr>
+<tr>
+<td><code>host_call_p50</code></td>
+<td>double</td>
+<td>8</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>host_call_p95</code></td>
+<td>double</td>
+<td>9</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>session_pool_reuse</code></td>
+<td>int64</td>
+<td>10</td>
+<td>acquires served from an idle session</td>
+</tr>
+<tr>
+<td><code>session_pool_idle</code></td>
+<td>int64</td>
+<td>11</td>
+<td>current idle sessions (gauge)</td>
+</tr>
+<tr>
+<td><code>session_pool_evictions</code></td>
+<td>int64</td>
+<td>12</td>
+<td></td>
+</tr>
+<tr>
+<td><code>session_warm_p50</code></td>
+<td>double</td>
+<td>13</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>session_warm_p95</code></td>
+<td>double</td>
+<td>14</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>import_count</code></td>
+<td>int64</td>
+<td>15</td>
+<td></td>
+</tr>
+<tr>
+<td><code>import_p50</code></td>
+<td>double</td>
+<td>16</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>import_p95</code></td>
+<td>double</td>
+<td>17</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>spell_resolve_count</code></td>
+<td>int64</td>
+<td>18</td>
+<td></td>
+</tr>
+<tr>
+<td><code>spell_resolve_p50</code></td>
+<td>double</td>
+<td>19</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>spell_resolve_p95</code></td>
+<td>double</td>
+<td>20</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>jit_runs</code></td>
+<td>int64</td>
+<td>21</td>
+<td></td>
+</tr>
+<tr>
+<td><code>vm_faults</code></td>
+<td>int64</td>
+<td>22</td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="getmetricsrequest">GetMetricsRequest</h3>
+<p>No fields.</p>
+<h3 id="getmetricsresponse">GetMetricsResponse</h3>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>snapshot</code></td>
+<td>Snapshot</td>
+<td>1</td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="latency">Latency</h3>
+<p>Latency is an <a class="glossary-term" href="../../../glossary/#operation" data-def="A single tool-native command a target composes; the middle of the work hierarchy (Spell to Operation to Target).">operation</a>-family rollup: how many happened and how long they took. The percentiles are interpolated from the OTel histogram's buckets server-side, so the dashboard never re-derives them from raw buckets.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>count</code></td>
+<td>int64</td>
+<td>1</td>
+<td>number of observations (the operation count)</td>
+</tr>
+<tr>
+<td><code>p50</code></td>
+<td>double</td>
+<td>2</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>p95</code></td>
+<td>double</td>
+<td>3</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>p99</code></td>
+<td>double</td>
+<td>4</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>max</code></td>
+<td>double</td>
+<td>5</td>
+<td>seconds (upper bound of the largest populated bucket)</td>
+</tr>
+<tr>
+<td><code>sum</code></td>
+<td>double</td>
+<td>6</td>
+<td>total seconds observed (for averages / throughput)</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="mcptoolstat">MCPToolStat</h3>
+<p>MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies, input/output payload sizes, and call duration percentiles.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tool</code></td>
+<td>string</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>calls</code></td>
+<td>int64</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td>int64</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>input_p50</code></td>
+<td>double</td>
+<td>4</td>
+<td>bytes</td>
+</tr>
+<tr>
+<td><code>input_p95</code></td>
+<td>double</td>
+<td>5</td>
+<td>bytes</td>
+</tr>
+<tr>
+<td><code>input_total</code></td>
+<td>int64</td>
+<td>6</td>
+<td>total input bytes observed</td>
+</tr>
+<tr>
+<td><code>output_p50</code></td>
+<td>double</td>
+<td>7</td>
+<td>bytes</td>
+</tr>
+<tr>
+<td><code>output_p95</code></td>
+<td>double</td>
+<td>8</td>
+<td>bytes</td>
+</tr>
+<tr>
+<td><code>output_total</code></td>
+<td>int64</td>
+<td>9</td>
+<td>total output bytes observed</td>
+</tr>
+<tr>
+<td><code>duration_p50</code></td>
+<td>double</td>
+<td>10</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>duration_p95</code></td>
+<td>double</td>
+<td>11</td>
+<td>seconds</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="remote">Remote</h3>
+<p>Remote is the remote-cache instrument family: outcome tallies plus transfer latency and volume.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hits</code></td>
+<td>int64</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>misses</code></td>
+<td>int64</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td>int64</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>duration_p50</code></td>
+<td>double</td>
+<td>4</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>duration_p95</code></td>
+<td>double</td>
+<td>5</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>io_count</code></td>
+<td>int64</td>
+<td>6</td>
+<td>number of get/put operations observed</td>
+</tr>
+<tr>
+<td><code>bytes_total</code></td>
+<td>int64</td>
+<td>7</td>
+<td>total bytes transferred (sum of the io.size histogram)</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="sample">Sample</h3>
+<p>Sample is one point in the rolling utilization/activity history. The daemon appends one per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid square per sample by utilization.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>at</code></td>
+<td>Timestamp</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td>int32</td>
+<td>2</td>
+<td>pool slots running at this tick</td>
+</tr>
+<tr>
+<td><code>capacity</code></td>
+<td>int32</td>
+<td>3</td>
+<td>pool capacity (0 = unlimited)</td>
+</tr>
+<tr>
+<td><code>queued</code></td>
+<td>int32</td>
+<td>4</td>
+<td>tasks <a class="glossary-term" href="../../../glossary/#queued" data-def="A target that wants a slot while the pool is full; it blocks first-in-first-out until a slot frees. The dashboard colors a sample with queued > 0 accordingly.">queued</a> for a <a class="glossary-term" href="../../../glossary/#slot" data-def="One unit of the pool's capacity. A target acquires the slots it needs to run (most take one) and releases them when it finishes; the pool tracks capacity (total slots), running (acquired), and queued (blocked).">slot</a></td>
+</tr>
+<tr>
+<td><code>cache_hits</code></td>
+<td>int64</td>
+<td>5</td>
+<td>cumulative; diff adjacent samples for a hit rate</td>
+</tr>
+<tr>
+<td><code>cache_misses</code></td>
+<td>int64</td>
+<td>6</td>
+<td>cumulative</td>
+</tr>
+<tr>
+<td><code>target_runs</code></td>
+<td>int64</td>
+<td>7</td>
+<td>cumulative <a class="glossary-term" href="../../../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> executions</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="sandbox">Sandbox</h3>
+<p><a class="glossary-term" href="../../../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">Sandbox</a> rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a sandbox was built from, allow/deny check tallies, and dropped environment variables.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>apply_p50</code></td>
+<td>double</td>
+<td>1</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>apply_p95</code></td>
+<td>double</td>
+<td>2</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>rules_read</code></td>
+<td>int64</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rules_write</code></td>
+<td>int64</td>
+<td>4</td>
+<td></td>
+</tr>
+<tr>
+<td><code>rules_exec</code></td>
+<td>int64</td>
+<td>5</td>
+<td></td>
+</tr>
+<tr>
+<td><code>env_rules</code></td>
+<td>int64</td>
+<td>6</td>
+<td>exact + glob env rules</td>
+</tr>
+<tr>
+<td><code>checks_allow</code></td>
+<td>int64</td>
+<td>7</td>
+<td></td>
+</tr>
+<tr>
+<td><code>checks_deny</code></td>
+<td>int64</td>
+<td>8</td>
+<td></td>
+</tr>
+<tr>
+<td><code>env_dropped</code></td>
+<td>int64</td>
+<td>9</td>
+<td></td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="snapshot">Snapshot</h3>
+<p>Snapshot is the derived-metrics view at one instant: each OTel instrument family aggregated for the dashboard.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>captured_at</code></td>
+<td>Timestamp</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td>Latency</td>
+<td>2</td>
+<td>magus.target.duration + magus.target.runs</td>
+</tr>
+<tr>
+<td><code>cache</code></td>
+<td>Latency</td>
+<td>3</td>
+<td>cache is the local Cache.<a class="code-xref" href="../../manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">Run</a> family (magus.cache.duration + magus.cache.{hits,misses,errors}). Named &quot;cache&quot; (not &quot;cache_op&quot;) because &quot;op&quot; collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op.</td>
+</tr>
+<tr>
+<td><code>pool_wait</code></td>
+<td>Latency</td>
+<td>4</td>
+<td>magus.pool.wait.duration</td>
+</tr>
+<tr>
+<td><code><a class="code-xref" href="../../manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>_<a class="code-xref" href="../../../concepts/knowledge/" data-kind="command" data-def="magus query: search the knowledge graph.">query</a></code></td>
+<td>Latency</td>
+<td>5</td>
+<td>magus.graph.query.duration + magus.graph.queries</td>
+</tr>
+<tr>
+<td><code>remote</code></td>
+<td>Remote</td>
+<td>6</td>
+<td>magus.cache.remote.*</td>
+</tr>
+<tr>
+<td><code>target_stats</code></td>
+<td>repeated TargetStat</td>
+<td>7</td>
+<td>per-target rollup of magus.target.{duration,runs}</td>
+</tr>
+<tr>
+<td><code>mcp_tools</code></td>
+<td>repeated MCPToolStat</td>
+<td>8</td>
+<td>per-tool rollup of magus.mcp.tool.*</td>
+</tr>
+<tr>
+<td><code>buzz</code></td>
+<td>Buzz</td>
+<td>9</td>
+<td>magus.buzz.* families</td>
+</tr>
+<tr>
+<td><code>sandbox</code></td>
+<td>Sandbox</td>
+<td>10</td>
+<td>magus.sandbox.* filesystem families</td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="streammetricsrequest">StreamMetricsRequest</h3>
+<p>No fields.</p>
+<h3 id="streammetricsresponse">StreamMetricsResponse</h3>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>backfill</code></td>
+<td>Backfill</td>
+<td>1</td>
+<td><em>one of <code>of</code></em></td>
+</tr>
+<tr>
+<td><code>snapshot</code></td>
+<td>Snapshot</td>
+<td>2</td>
+<td><em>one of <code>of</code></em></td>
+</tr>
+</tbody>
+</table></figure>
+<h3 id="targetstat">TargetStat</h3>
+<p>TargetStat is one per-target rollup: how often a (<a class="glossary-term" href="../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>, target, spell) ran, its latency percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration histogram's per-(project,spell,target,outcome,cache.hit) data points.</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>#</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>project</code></td>
+<td>string</td>
+<td>1</td>
+<td>magus.project attribute</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td>string</td>
+<td>2</td>
+<td>magus.target attribute</td>
+</tr>
+<tr>
+<td><code>spell</code></td>
+<td>string</td>
+<td>3</td>
+<td>magus.spell attribute (&quot;&quot; when the project declares none)</td>
+</tr>
+<tr>
+<td><code>count</code></td>
+<td>int64</td>
+<td>4</td>
+<td>total executions (including cache replays)</td>
+</tr>
+<tr>
+<td><code>p50</code></td>
+<td>double</td>
+<td>5</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>p95</code></td>
+<td>double</td>
+<td>6</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>p99</code></td>
+<td>double</td>
+<td>7</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td><code>cache_hit_rate</code></td>
+<td>double</td>
+<td>8</td>
+<td>[0,1]; fraction of runs served from cache</td>
+</tr>
+<tr>
+<td><code>success</code></td>
+<td>int64</td>
+<td>9</td>
+<td>runs with outcome=success</td>
+</tr>
+<tr>
+<td><code>errors</code></td>
+<td>int64</td>
+<td>10</td>
+<td>runs with outcome=error</td>
+</tr>
+</tbody>
+</table></figure>
+    </article>
+    </div>
+    </div>
+    <nav class="page-nav" aria-label="Pagination">
+      <a class="page-nav-prev" href="../memory/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">MemoryService</span></a>
+      <a class="page-nav-next" href="../status/"><span class="page-nav-dir">Next</span><span class="page-nav-title">StatusService</span></a>
+    </nav>
+  </main>
+  <section class="related container" aria-labelledby="related-heading">
+    <h2 id="related-heading" class="related-heading">Related</h2>
+    <div class="related-grid">
+        <a class="related-card" href="../../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
+        <a class="related-card" href="../../../reference/api/status/"><span class="related-card-title">StatusService</span><span class="related-card-desc">StatusService serves the snapshot, and streams it for a live dashboard.</span></a>
+        <a class="related-card" href="../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+        <a class="related-card" href="../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+    </div>
+  </section>
+  <div class="page-provenance container">
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../tags/api/">api</a><a class="tag" href="../../../tags/proto/">proto</a><a class="tag" href="../../../tags/connect/">connect</a><a class="tag" href="../../../tags/grpc/">grpc</a><a class="tag" href="../../../search/?q=tag%3A%22metricsservice%22">metricsservice</a></div>
+    <small>Last updated <time datetime="2026-08-02T23:12:05Z">August 2, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/425b644c72fbcdfed7e0e27d0143efe8b8914b85" data-tooltip="425b644c72fbcdfed7e0e27d0143efe8b8914b85" title="425b644c72fbcdfed7e0e27d0143efe8b8914b85">425b644c</a>)</small>
+  </div>
+  <details class="ref-section" open>
+    <summary>Glossary</summary>
+    <div class="disclosure-body ref-embed"><h3 id="project">Project</h3>
+<p>A directory magus recognizes as a unit of work (it has a magusfile); the unit of
+caching, scheduling, and dependency tracking. See <a href="../../../concepts/workspace/">workspace</a>.</p>
+<h3 id="target">Target</h3>
+<p>A named operation (<code>build</code>, <code>test</code>, ...) you invoke with <code>magus run &lt;target&gt;</code>; it
+may compose a spell's tool-native operations and depend on other targets. See
+<a href="../../../concepts/targets/">targets</a>.</p>
+<h3 id="operation">Operation</h3>
+<p>A single tool-native command a target composes; the middle of the work hierarchy
+(Spell to Operation to Target). See <a href="../../../concepts/operations/">operations</a>.</p>
+<h3 id="spell">Spell</h3>
+<p>A language/runtime adapter (e.g. <code>go</code>, <code>md</code>) that maps generic targets onto a
+toolchain's real commands. See <a href="../../../concepts/spells/">spells</a>.</p>
+<h3 id="buzz">Buzz</h3>
+<p>The language magusfiles are written in (the <code>.buzz</code> engine). See
+<a href="../../../concepts/engines/">engines</a>.</p>
+<h3 id="cache">Cache</h3>
+<p>The content-addressed store magus consults before running a target, so unchanged
+work is skipped. See <a href="../../../concepts/cache/">cache</a>.</p>
+<h3 id="sandbox">Sandbox</h3>
+<p>The restricted filesystem and environment a target runs in, so builds stay
+reproducible and side-effect-free. See <a href="../../../concepts/sandbox/">sandbox</a>.</p>
+<h3 id="service">Service</h3>
+<p>A long-running or shared process magus manages across runs, distinct from a
+one-shot target. See <a href="../../../concepts/services/">services</a>.</p>
+<h3 id="daemon">Daemon</h3>
+<p>The background magus host that owns shared state such as services and the warm
+knowledge graph. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="ci">CI</h3>
+<p>An ordinary magusfile-defined target you compose yourself with <code>magus\needs</code> -
+magus does not hardcode its stages. <code>Magus.RunCI</code> treats it specially only in
+that it strips the <code>rw</code> charm, it is the anchor <code>magus affected ci</code> keys off,
+and a selected scope with no project declaring it is a load error rather than
+a silent no-op. See <a href="../../../concepts/targets/#the-target-name">targets</a>.</p>
+<h3 id="pool">Pool</h3>
+<p>The concurrency pool: the shared set of slots that caps how many targets run in
+parallel on one machine. Its capacity defaults to <code>MAGUS_CONCURRENCY</code>, then 4 on
+GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</code> and the
+<a href="../../../guides/daemon/">dashboard</a> report it live. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="slot">Slot</h3>
+<p>One unit of the pool's capacity. A target acquires the slots it needs to run
+(most take one) and releases them when it finishes; the pool tracks capacity
+(total slots), running (acquired), and queued (blocked). See
+<a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="queued">Queued</h3>
+<p>A target that wants a slot while the pool is full; it blocks first-in-first-out
+until a slot frees. The dashboard colors a sample with queued &gt; 0 accordingly.
+See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="snapshot">Snapshot</h3>
+<p>A point-in-time view of live state - the pool's occupancy or a tick of exported
+metrics - as opposed to accumulated history. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="backfill">Backfill</h3>
+<p>The recent history the daemon replays to a dashboard on connect, so its charts
+start populated instead of empty. It is served from a bounded ring buffer of the
+last few hundred samples. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="latency">Latency</h3>
+<p>How long an operation takes. magus records latency as OpenTelemetry histograms
+per family - target execution, cache op, pool wait, and graph query - and reports
+each as a count, sum, and percentiles. See <a href="../../../concepts/telemetry/">telemetry</a>.</p>
+<h3 id="percentile">Percentile</h3>
+<p>A latency value at a given rank, interpolated from a histogram's buckets: <strong>p50</strong>
+is the median, <strong>p95</strong> and <strong>p99</strong> are the tail that most latency budgets care
+about. See <a href="../../../concepts/telemetry/">telemetry</a>.</p>
+<h3 id="health">Health</h3>
+<p>The at-a-glance daemon state derived from the pool: <strong>healthy</strong> when the pool is
+reporting, <strong>degraded</strong> when it reports an error, <strong>down</strong> when there is no pool.
+The dashboard color-codes each state. See <a href="../../../guides/daemon/">daemon</a>.</p>
+<h3 id="trend">Trend</h3>
+<p>An insight lens: the recent half of the window against the earlier half. A
+positive delta is a rising hotspot; a negative one is cooling. See
+<a href="../../../guides/insight/">insight</a>.</p>
+</div>
+  </details>
+  <details class="ref-section" open>
+    <summary>Conventions</summary>
+    <div class="disclosure-body ref-embed"><h1 id="documentation-conventions">Documentation conventions</h1>
+<p>A few conventions run through every page on this site. This page is the key.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>Angle brackets mark a value you replace with your own - never type the brackets:</p>
+<pre><code class="language-sh">magus run &lt;target&gt;
+magus completion &lt;shell&gt;    # e.g. bash, zsh, fish
+</code></pre>
+<p><code>&lt;target&gt;</code>, <code>&lt;path&gt;</code>, <code>&lt;shell&gt;</code>, <code>&lt;name&gt;</code> and the like are stand-ins, not literal text.</p>
+<h2 id="command-synopsis-notation">Command synopsis notation</h2>
+<p>Every synopsis on this site and in <code>magus &lt;verb&gt; -h</code> and the manpages uses the
+same five marks. This is the whole vocabulary:</p>
+<figure class="table-scroll"><table>
+<thead>
+<tr>
+<th>notation</th>
+<th>means</th>
+<th>example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;value&gt;</code></td>
+<td>required; replace it</td>
+<td><code>magus run &lt;target&gt;</code></td>
+</tr>
+<tr>
+<td><code>[thing]</code></td>
+<td>optional; omit the brackets if you use it</td>
+<td><code>magus ls [flags]</code></td>
+</tr>
+<tr>
+<td><code>&lt;a|b|c&gt;</code></td>
+<td>required, and one of these exact words</td>
+<td><code>magus completion &lt;bash|zsh|fish|powershell&gt;</code></td>
+</tr>
+<tr>
+<td><code>&lt;value&gt;...</code></td>
+<td>repeatable; one or more, space separated</td>
+<td><code>magus describe file &lt;path&gt; [&lt;path&gt;...]</code></td>
+</tr>
+<tr>
+<td><code>word[s]</code></td>
+<td>the <code>s</code> is optional - both spellings work</td>
+<td><code>magus describe spell[s]</code></td>
+</tr>
+</tbody>
+</table></figure>
+<p>The last one is the only place square brackets do NOT mean &quot;optional argument&quot;:
+<code>spell[s]</code> means <code>magus describe spell</code> and <code>magus describe spells</code> are the same
+command, not that <code>s</code> is a separate thing you can pass.</p>
+<p>Combining them reads left to right, so <code>[&lt;path&gt;...]</code> is &quot;optional, and if you give
+it, one or more paths&quot;:</p>
+<pre><code class="language-sh">magus run &lt;target&gt; [flags] [project...]
+magus describe file &lt;path&gt; [&lt;path&gt;...] [flags]
+</code></pre>
+<p><code>[flags]</code> and <code>[args]</code> are categories rather than placeholders - there is nothing
+called &quot;flags&quot; to substitute. Run the command with <code>-h</code> to see which it accepts.</p>
+<p>A bare <code>--</code> ends magus's own arguments; everything after it is passed through
+untouched to whatever the target runs:</p>
+<pre><code class="language-sh">magus run test libs/foo -- -run TestX
+</code></pre>
+<p>Values are written <code>--flag &lt;value&gt;</code> in synopses, but every magus flag also accepts
+<code>--flag=&lt;value&gt;</code>, <code>-flag &lt;value&gt;</code> and <code>-flag=&lt;value&gt;</code>. Pick whichever reads
+better; they parse identically.</p>
+<p>Some flags take a comma-separated list, which is written as one value. Spaces
+around the commas are trimmed and empty entries are ignored:</p>
+<pre><code class="language-sh">magus status --probe=mcp,liveness
+</code></pre>
+<p>A few take a structured value spelled <code>key=&lt;value&gt;</code> pairs, comma separated. Where
+a pattern is accepted it is always the same three types:</p>
+<pre><code class="language-sh">magus watch --ignore type=glob,pattern='**/node_modules/**'
+magus where --filter type=regex,pattern='^libs/'
+</code></pre>
+<h2 id="shell-commands">Shell commands</h2>
+<p>Command blocks omit the shell prompt - copy the whole block as-is, no leading <code>$</code> or
+<code>&gt;</code> to strip. A <code>#</code> comment on or after a line shows expected output or an aside:</p>
+<pre><code class="language-sh">magus version
+# magus 0.4.2
+</code></pre>
+<p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../reference/buzz/">standard library reference</a>.</p>
+<h2 id="runnable-examples">Runnable examples</h2>
+<p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
+the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no
+install needed. Blocks without the button are illustrative only. (With JavaScript
+off, every block is plain, copyable text.)</p>
+<h2 id="admonitions">Admonitions</h2>
+<p>Call-outs are rendered from GitHub-style alert blockquotes and carry a colored accent
+per type:</p>
+<div class="admonition admonition-note"><p class="admonition-title">Note</p>
+<p>Context worth knowing, but not a warning.</p>
+</div>
+<!-- -->
+<div class="admonition admonition-warning"><p class="admonition-title">Warning</p>
+<p>Something that can bite you if ignored.</p>
+</div>
+<p>The types are <code>NOTE</code>, <code>TIP</code>, <code>IMPORTANT</code>, <code>WARNING</code>, and <code>CAUTION</code>.</p>
+<h2 id="footnotes">Footnotes</h2>
+<p>An aside that would break the flow inline is written as a footnote: a bracketed
+superscript like this<sup id="fnref:1"><a href="#fn:1" class="footnote-ref" role="doc-noteref">1</a></sup> links to a short note at the foot of the page, which
+links back. The generated module reference uses them to flag methods that also exist
+in Buzz's own standard library without cluttering each signature.</p>
+<p>Reach for a footnote when a sentence needs a source, a caveat, or a pointer that
+would derail it inline: a citation or external reference, an edge case that qualifies
+the claim, or a &quot;see also&quot; that is worth keeping but not worth interrupting the
+thought. Prefer a footnote over a parenthetical that runs long, and over dropping the
+detail entirely.</p>
+<h2 id="code-block-titles">Code-block titles</h2>
+<p>A fenced block can carry a filename or label in a small caption bar above it, so you
+know which file a snippet belongs in (for example a <code>magusfile.buzz</code>).</p>
+<h2 id="diffs">Diffs</h2>
+<p>A <code>```diff</code> block shows a change: added lines (leading <code>+</code>) render as a green band,
+removed lines (leading <code>-</code>) as a red one.</p>
+<pre><code class="language-diff"> export fun ci(ctx: magus\Context, args: [str]) &gt; void {
+-    ctx.needs(lint);
++    ctx.needs(lint, test);
+ }
+</code></pre>
+<h2 id="auto-generated-pages">Auto-generated pages</h2>
+<p>Pages built from source - the <a href="../../../reference/buzz/">module reference</a>, the
+<a href="../../../concepts/spells/">spell reference</a>, the <a href="../../../reference/manpage/magus/">man pages</a>, and the
+<a href="../../../reference/config/">configuration reference</a> - carry an <strong>auto-generated</strong> chip. Edit the
+generator, not the page; a hand edit is overwritten on the next build.</p>
+<h2 id="reading-time">Reading time</h2>
+<p>Longer pages show an estimated reading time near the top. It is a word count of the
+source, not a tracker - nothing is measured about you.</p>
+<div class="footnotes" role="doc-endnotes">
+<hr>
+<ol>
+<li id="fn:1">
+<p>Authored as <code>text[^label]</code> in the prose, with a matching <code>[^label]: note</code>
+line anywhere in the file.&#160;<a href="#fnref:1" class="footnote-backref" role="doc-backlink">&#x21a9;&#xfe0e;</a></p>
+</li>
+</ol>
+</div>
+</div>
+  </details>
+  <div class="ref-backdrop" id="ref-backdrop"></div>
+  <aside class="ref-drawer" id="ref-drawer" aria-hidden="true" aria-label="Reference">
+    <div class="ref-drawer-head">
+      <div class="ref-drawer-head-l">
+        <button type="button" class="ref-pin" aria-pressed="false" aria-label="Pin the reference panel open" title="Pin the reference panel open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 5 3 3v2H7v-2l3-3-1-5z"/><line x1="12" y1="14" x2="12" y2="21"/></svg></button>
+        <h2 class="ref-drawer-title">Reference</h2>
+      </div>
+      <button type="button" class="ref-drawer-close" aria-label="Close reference">&times;</button>
+    </div>
+  </aside>
+  <footer class="site-footer container">
+    <small class="footer-group"><a href="../../../search/">Search</a> &middot; <a href="../../../public/">Files</a></small>
+    <small class="footer-group"><a href="../../../console/">Console</a> &middot; <a href="../../../playground/">Playground</a> &middot; <a href="../../../tour/">Tour</a></small>
+    <small class="footer-group"><a href="https://github.com/egladman/magus">Source Code</a> &middot; <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">License</a> &middot; <a href="https://buzz-lang.dev/">Built with Buzz</a></small>
+  </footer>
+  <script type="module" src="../../../main.js"></script>
+</body>
+</html>

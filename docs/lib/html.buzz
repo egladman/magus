@@ -267,6 +267,36 @@ export fun aliasStub(rel: str, csp: str) > str {
 
 // tagCodeTitle wraps the <pre> after a "<!-- magus-code-title: NAME -->" marker in a
 // <figure class="code-block-titled"> with a <figcaption>; drops the marker.
+// tagVersionNote turns "<!-- magus-since: v0.4.0 -->" and "<!-- magus-changed: v0.4.0 -->" into
+// the same chip the frontmatter `since:` badge renders, so one convention covers both.
+//
+// SECTION level, deliberately, where the frontmatter badge is PAGE level. concepts/targets.md
+// long predates the release that changed one behavior inside it, so a page badge reading "New in
+// v0.4.0" would be false; the fact belongs to the section. Before this, those notes were written
+// by hand ("(since v0.4.0)" in a table cell, "changed in v0.4.0" in a heading) and no two looked
+// alike.
+export fun tagVersionNote(html: str) > str {
+    return versionNoteMarker(versionNoteMarker(html, "<!-- magus-since:", "New in"),
+        "<!-- magus-changed:", "Changed in");
+}
+
+fun versionNoteMarker(html: str, open: str, verb: str) > str {
+    var buf = "";
+    var rest = html;
+    var idx = rest.indexOf(open);
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx);
+        rest = rest.sub(idx + open.len());
+        final closeMarker = rest.indexOf("-->");
+        if (closeMarker == null) { return buf + open + rest; }
+        final version = rest.sub(0, closeMarker).trim();
+        rest = rest.sub(closeMarker + 3);
+        buf = buf + el("p", attr("class", "since-badge"), verb + " " + version);
+        idx = rest.indexOf(open);
+    }
+    return buf + rest;
+}
+
 export fun tagCodeTitle(html: str) > str {
     final open = "<!-- magus-code-title:";
     var buf = "";
@@ -362,7 +392,7 @@ export fun stripMdFromLinkText(html: str) > str {
 // (href AND path-named link text), then the ordered content transforms. One choke point
 // so no transform gets applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
-    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir)))))))));
+    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagVersionNote(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir))))))))));
 }
 
 test "stripMdFromLinkText drops a trailing .md from link text only" {

@@ -64,13 +64,16 @@
   opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
 }
 .ref-backdrop.open { opacity: 1; visibility: visible; }
-:root { --ref-w: min(400px, 90vw); }
+/* --ref-pad-x is shared, not repeated: the sticky bars below cancel it with a negative margin
+   so they span the panel edge to edge. Two literals would drift apart, and the bars would go
+   back to sitting inset inside a panel they are supposed to cap. */
+:root { --ref-w: min(400px, 90vw); --ref-pad-x: 1.05rem; }
 .ref-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: var(--ref-w);
   background: var(--pico-card-background-color); border-left: 1px solid var(--pico-muted-border-color);
   box-shadow: -6px 0 18px rgba(0, 0, 0, 0.1);
   transform: translateX(100%); transition: transform 0.24s ease;
-  overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem 1.05rem 2rem;
+  overflow-y: auto; overscroll-behavior: contain; padding: 0.9rem var(--ref-pad-x) 2rem;
 }
 .ref-drawer.open { transform: translateX(0); }
 /* Pinned it is docked furniture, not a floating overlay - drop the shadow so it reads as flat. */
@@ -97,11 +100,15 @@
 .js #ref-drawer.browsing .ref-section { display: none; }
 #ref-drawer.browsing .ref-docview { display: block; }
 .ref-docview-bar {
-  position: sticky; top: 0; z-index: 1; background: var(--pico-card-background-color);
+  position: sticky; top: 0; z-index: 2; background: var(--pico-card-background-color);
+  /* Matches .ref-drawer-head - same bar in browse mode, so it spans and lifts the same way. */
+  box-shadow: 0 2px 4px -2px rgba(0, 0, 0, 0.12);
   /* Same fix as .ref-drawer-head: all the space around the back bar is opaque padding (top and
      bottom), never a transparent margin, so scrolling content never leaks through it. It overlays the
-     drawer head (z-index) in browse mode, so its top padding covers the head's spot too. */
-  margin: 0; padding: 0.9rem 0 0.7rem;
+     drawer head (2 over the head's 1 - stated outright rather than left to DOM order) in browse
+     mode, so its top padding covers the head's spot too. Side margins cancel the drawer padding
+     so it spans edge to edge, same as the head. */
+  margin: 0 calc(-1 * var(--ref-pad-x)); padding: 0.9rem var(--ref-pad-x) 0.7rem;
 }
 /* Bare button: reset Pico's white --pico-color (see .ref-pin) so hover firms up, never vanishes. */
 .ref-doc-back {
@@ -153,12 +160,25 @@ html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backd
 .ref-drawer { padding-top: 0; }
 .ref-drawer-head {
   display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0;
-  /* All spacing around the head is PADDING (inside the opaque background box), never a transparent
-     margin, so scrolling content is fully covered above and below the sticky head. */
-  margin: 0; padding: 0.9rem 0 0.8rem;
+  /* z-index is REQUIRED, not decorative: sticky alone pins the box but leaves it at z-index auto,
+     so the .ref-section summaries scrolling underneath (their native disclosure chevrons most
+     visibly) paint OVER this opaque background instead of behind it. */
+  position: sticky; top: 0; z-index: 1;
+  /* Vertical spacing is PADDING (inside the opaque background box), never a transparent margin,
+     so scrolling content is fully covered above and below the sticky head. Horizontally it does
+     the opposite: a negative margin cancels the drawer's side padding so the bar reaches both
+     panel edges, then padding puts its own content back on the same inset as the body. */
+  margin: 0 calc(-1 * var(--ref-pad-x)); padding: 0.9rem var(--ref-pad-x) 0.8rem;
   background: var(--pico-card-background-color);
+  /* Downward only: the negative spread pulls the blur back in horizontally, so the bar lifts off
+     the content beneath it without smearing shadow down the panel's left and right edges. */
+  box-shadow: 0 2px 4px -2px rgba(0, 0, 0, 0.12);
 }
+/* Breathing room under the bar. It has to be the sibling's margin, not the head's padding or
+   margin-bottom: padding would extend the opaque box (and the shadow sits on its edge), and a
+   margin-bottom would open a transparent gap for scrolling content to show through. Scoped to
+   #ref-drawer to outrank `#ref-drawer .ref-section`, which sets margin: 0 0 0.9rem. */
+#ref-drawer .ref-drawer-head + * { margin-top: 0.9rem; }
 .ref-drawer-head-l { display: flex; align-items: center; gap: 0.5rem; }
 .ref-drawer-title { margin: 0; font-size: 0.95rem; }
 /* Pin/tack toggle: quiet gray by default, our warm ORANGE (--accent-warm, the shared "action"

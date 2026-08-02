@@ -1,5 +1,6 @@
 ---
 title: Workspace and projects
+order: 1
 description: A workspace is the discovered root; a project is a directory whose magusfile registers it, and depends_on wires the two into an ordered, cache-aware graph.
 tags: [workspace, projects, discovery, magusfile, depends-on, monorepo]
 ---

@@ -334,16 +334,22 @@ func pathKey(path ...int32) string {
 }
 
 // clean folds a comment block into one paragraph and escapes what would otherwise break the
-// Markdown table it lands in. Proto comments wrap at the author's column, and this schema
-// already contains pipes in prose ("RUNNING -> PASSED|FAILED|CACHED"), which would split a
-// table row into extra columns.
+// Markdown it lands in. Proto comments are prose written for a .proto file, not for Markdown,
+// so two characters have to be neutralised:
+//
+//	|  this schema already writes pipes in prose ("RUNNING -> PASSED|FAILED|CACHED"), which
+//	   would split a table row into extra columns.
+//	_  an identifier fragment like "the STATE_ prefix" opens an emphasis span that never
+//	   closes, italicising the rest of the page. Escaping every underscore also renders
+//	   snake_case names correctly, so there is no case where leaving one bare is better.
 func clean(c string) string {
 	lines := strings.Split(strings.TrimSpace(c), "\n")
 	out := make([]string, 0, len(lines))
 	for _, l := range lines {
 		out = append(out, strings.TrimSpace(l))
 	}
-	return strings.ReplaceAll(strings.TrimSpace(strings.Join(out, " ")), "|", `\|`)
+	folded := strings.TrimSpace(strings.Join(out, " "))
+	return strings.NewReplacer("|", `\|`, "_", `\_`).Replace(folded)
 }
 
 func leaf(qualified string) string {

@@ -53,6 +53,7 @@
         <li><a href="../../../../guides/download/">Download</a></li>
         <li><a href="../../../../tour/">Tour</a></li>
         <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -107,12 +108,12 @@ line when it runs.</p>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/outputref/"><span class="related-card-title">output-reference diagnostics</span><span class="related-card-desc">Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.</span></a>
         <a class="related-card" href="../../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+        <a class="related-card" href="../../../../reference/api/status/"><span class="related-card-title">StatusService</span><span class="related-card-desc">StatusService serves the snapshot, and streams it for a live dashboard.</span></a>
         <a class="related-card" href="../../../../reference/logging/"><span class="related-card-title">Logging and verbosity</span><span class="related-card-desc">What each verbosity level actually prints, when to reach for one over another, and what ends up in your logs that you may not want to paste into a bug report.</span></a>
-        <a class="related-card" href="../../../../reference/skills/magus-run/"><span class="related-card-title">magus-run</span><span class="related-card-desc">Run builds, tests, lints, and codegen through magus targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS8002%22">MGS8002</a><a class="tag" href="../../../../search/?q=tag%3A%22output+refs%22">output refs</a><a class="tag" href="../../../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../../../search/?q=tag%3A%22prefix%22">prefix</a><a class="tag" href="../../../../search/?q=tag%3A%22ambiguous%22">ambiguous</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS8002%22">MGS8002</a><a class="tag" href="../../../../tags/output-refs/">output refs</a><a class="tag" href="../../../../tags/query/">query</a><a class="tag" href="../../../../search/?q=tag%3A%22prefix%22">prefix</a><a class="tag" href="../../../../search/?q=tag%3A%22ambiguous%22">ambiguous</a></div>
     <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
@@ -211,6 +212,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no

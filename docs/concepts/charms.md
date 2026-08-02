@@ -1,5 +1,6 @@
 ---
 title: Charms
+order: 5
 description: Learn how magus charms replace one-off tool flags with shared, composable intent modifiers that patch a target's argument vector at run time.
 tags: [charms, targets, argv, json-patch, rfc-6902, modifiers, cli]
 ---

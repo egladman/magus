@@ -53,6 +53,7 @@
         <li><a href="../../guides/download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/contributing/">Contribute</a></li>
         <li><a href="../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -77,6 +78,7 @@
       <nav>
         <p class="toc-title">In this section</p>
         <ul class="section-nav">
+          <li><a href="../../reference/api/" title="Daemon API">Daemon API</a></li>
           <li><a href="../../reference/buzz/" title="magus stdlib">magus stdlib</a></li>
           <li><a href="../../reference/cli/" title="The CLI in practice">The CLI in practice</a></li>
           <li><a href="../../reference/codes/" title="Codes">Codes</a></li>
@@ -160,7 +162,7 @@ out3a777178
 <p>The <code>inspect:</code> hint is omitted on <a class="glossary-term" href="../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>. A reference addresses your local cache, so
 a command that cannot work <a class="code-xref" href="../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> the log is read is worse than no hint; the
 reference itself stays, since it still correlates the failure with the run.</p>
-<p>Warnings <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a> here too, because they are things magus wants you to reconsider
+<p>Warnings surface here too, because they are things magus wants you to reconsider
 before they become failures: a <a class="glossary-term" href="../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a> no target declares (usually a typo), a
 filesystem with coarse mtime resolution that can return stale cache hashes, a
 <a class="glossary-term" href="../../glossary/#concurrency" data-def="How many targets run at once. It is bounded by the pool's capacity and set with --concurrency, MAGUS_CONCURRENCY, or the concurrency config key.">concurrency</a> setting above twice your CPU count.</p>
@@ -278,7 +280,7 @@ it. That is intentional: it repaints in place and would otherwise flood the log.
         <a class="related-card" href="../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../reference/api/status/"><span class="related-card-title">StatusService</span><span class="related-card-desc">StatusService serves the snapshot, and streams it for a live dashboard.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
@@ -345,12 +347,6 @@ GitHub-hosted runners, then <code>min(NumCPU, 8)</code>; <code>magus status</cod
 <p>How many targets run at once. It is bounded by the pool's capacity and set with
 <code>--concurrency</code>, <code>MAGUS_CONCURRENCY</code>, or the <code>concurrency</code> config key. See
 <a href="../../guides/daemon/">daemon</a>.</p>
-<h3 id="surface">Surface</h3>
-<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See <a href="../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>
@@ -435,6 +431,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../playground/">playground</a> via WebAssembly - no

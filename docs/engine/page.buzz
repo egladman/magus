@@ -154,10 +154,31 @@ fun renderPagerLink(srcDir: str, name: str, dir: str, cls: str, climbPrefix: str
 }
 
 
+// UNORDERED sorts every page without a frontmatter `order:` after every page with one, so a
+// directory can be curated a few pages at a time instead of all-or-nothing.
+final UNORDERED = 1000000;
+
+// pageOrder reads one sibling's frontmatter `order:`. Orders start at 1; absent reads as 0
+// from .integer(), which is why 0 counts as unordered rather than first.
+fun pageOrder(srcDir: str, name: str) > int {
+    final f = io\File.open(srcDir + "/" + name, io\FileMode.read);
+    final md = f.readAll();
+    f.close();
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
+    // .integer() is null when the key is absent, so the null check comes BEFORE any compare.
+    final n = fm.q("order").integer();
+    if (n == null) { return UNORDERED; }
+    if (n! <= 0) { return UNORDERED; }
+    return n!;
+}
+
 // renderPager builds the prev/next links among a page's siblings - the other rendered
-// docs in the same source directory, ordered by filename (README/index and underscore
-// fixtures excluded). "" when there is no sibling on either side. rel is docs-relative
-// (e.g. "modules/fs.md").
+// docs in the same source directory (README/index and underscore fixtures excluded).
+// "" when there is no sibling on either side. rel is docs-relative (e.g. "modules/fs.md").
+//
+// Ordered by frontmatter `order:`, falling back to filename. Filename order alone was an
+// accident presented as a sequence: on concepts/targets.md it produced "Previous: Spells,
+// Next: Telemetry" purely because s < t < t, implying a reading path that did not exist.
 fun renderPager(rel: str, site: Site) > str {
     final parts = rel.split("/");
     final base = parts[parts.len() - 1];
@@ -176,7 +197,18 @@ fun renderPager(rel: str, site: Site) > str {
         }
     }
     if (sibs.len() < 2) { return ""; }
-    final ordered = sibs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    // Precomputed, not read inside the comparator: a comparator runs O(n log n) times, and
+    // each call would otherwise open and parse a file.
+    var orders: {str: int} = mut {<str: int>};
+    foreach (name in sibs) { orders[name] = pageOrder(srcDir, name); }
+    final ordered = sibs.sort(fun (a: str, b: str) > bool {
+        // Force-unwrap is safe: orders is populated from sibs, and the comparator only ever
+        // sees names from that same list.
+        final oa = orders[a]!;
+        final ob = orders[b]!;
+        if (oa != ob) { return oa < ob; }
+        return strLess(a, b);
+    });
 
     var pos = -1;
     var i = 0;
@@ -258,11 +290,18 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             chips = chips + "<span class=\"tag generated\" data-tooltip=\"Auto-generated from source; edit the generator, not this page\" title=\"Auto-generated from source; edit the generator, not this page\">auto-generated</span>";
         }
         foreach (t in tags) {
-            // Topical tags link into the search page scoped to that exact tag (tag:"<name>"),
-            // so a click lists every page carrying it. Quoted so a multi-word tag stays one
-            // token; urlEncode makes it querystring-safe.
-            final tagQuery = encoding\urlEncode("tag:\"" + t + "\"");
-            chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+            // A tag carried by two or more pages has a real /tags/<slug>/ page, which is a URL a
+            // crawler follows and the orphan gate counts. A one-page tag has none - listing a
+            // single page is a redirect with extra steps - so it keeps the search-query chip:
+            // scoped to that exact tag, quoted so a multi-word tag stays one token, urlEncoded
+            // to stay querystring-safe.
+            final slug = tagSlug(t);
+            if (site.tagPages[slug] != null) {
+                chips = chips + "<a class=\"tag\" href=\"" + root + "tags/" + slug + "/\">" + escapeAttr(t) + "</a>";
+            } else {
+                final tagQuery = encoding\urlEncode("tag:\"" + t + "\"");
+                chips = chips + "<a class=\"tag\" href=\"" + root + "search/?q=" + tagQuery + "\">" + escapeAttr(t) + "</a>";
+            }
         }
         tagsHtml = "    <div class=\"post-tags\" aria-label=\"Tags\">" + chips + "</div>\n";
     }
@@ -276,6 +315,18 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // direct children sectionNav already lists.
     final subtree = site.renderSubtree(canonUrl, root);
     final tocList = renderTocList(content);
+
+    // Record which KINDS of route reach this page, for the post-walk axis report. Computed here
+    // because this is the one place that already knows all three: the section nav, the pager
+    // (passed in), and the page's own tags.
+    var axes = 0;
+    if (sectionNav != "" or subtree != "") { axes = axes + 1; }
+    if (pager != "") { axes = axes + 1; }
+    foreach (t in tags) {
+        if (site.tagPages[tagSlug(t)] != null) { axes = axes + 1; break; }
+    }
+    site.pageAxes[canonUrl] = axes;
+
     var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
     if (sectionNav != "" or subtree != "" or tocList != "") {
         // Muted closing hint at the foot of the aside, shown only when it is the mobile

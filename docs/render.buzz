@@ -66,6 +66,7 @@ import "site/public" as _;
 import "engine/blog" as _;
 import "engine/search" as _;
 import "site/sections" as _;
+import "site/tags" as _;
 import "site/tour" as _;
 import "site/development" as _;
 // The concrete site configuration (base URL, title, nav, generated-tree names) - the only
@@ -226,6 +227,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // the collect* passes above: those read each page's markdown off disk, and a
     // synthesized page has no file behind its srcRel marker.
     collectSectionIndexes(site);
+    // Pre-walk, and after the synthesized overviews join docPages: a tag chip renders during the
+    // walk and has to know whether its /tags/<slug>/ destination will be written.
+    collectTagIndex(site);
 
     renderPlayground(site);
 
@@ -247,6 +251,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // get stubs in the same pass.
     // After the walk: every child's title and description is known by now.
     renderSectionIndexes(site);
+    // After the section indexes: both index the same corpus, and a tag page's cards are drawn
+    // from docPages, which the synthesized overviews have finished contributing to by here.
+    // Which tags get a page was already decided pre-walk by collectTagIndex, so the chips
+    // rendered during the walk and the pages written here cannot disagree.
+    renderTagPages(site);
 
     renderDevelopment(site);
 
@@ -299,6 +308,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Orphan gate: prove each docs page is reachable by clicking from the front door. Runs
     // after assetIntegrityCheck so link targets are already known-good.
     orphanCheck(site);
+    // Reports, never throws - see axisReport. orphanCheck above is the objective floor
+    // (reachable at all); this is the editorial one (reachable three different ways).
+    axisReport(site);
 
     // Parity gate: no previously-shipped URL may silently start 404-ing.
     abandonedLinkCheck(site);

@@ -85,6 +85,27 @@ magus version
 
 Windows examples are shown in PowerShell and labelled as such.
 
+## Reading Buzz: the backslash
+
+Buzz code on this site is full of names like `fs\readFile` and `magus\project`. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.
+
+Buzz uses both separators, and the distinction is what they reach into:
+
+```buzz
+final body = fs\readFile("VERSION");   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+```
+
+Backslash reaches into a **module**; dot reaches into a **value** you already have.
+So `os\exec` is the `exec` function the `os` module provides, while `site.docPages`
+is a field on the `site` object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.
+
+The full module list is the [standard library reference](reference/buzz/index.md).
+
 ## Runnable examples
 
 Some Buzz code blocks are live: a **Run** button appears in the corner and executes

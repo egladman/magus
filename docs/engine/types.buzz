@@ -71,6 +71,10 @@ export object BlogPost {
     date: str = "",
     description: str = "",
     url: str = "",
+    // ||-joined, same shape as DocPage.tags. A post's tag chips link to the same /tags/ pages
+    // the docs use, so the topic axis spans both corpora - without this the chips pointed at
+    // tag pages that were never built, because tag collection only walks docPages.
+    tags: str = "",
 }
 
 // DocPage is one docs page's relatedness metadata. tags is ||-joined (split back out
@@ -177,6 +181,27 @@ export object Site {
     // redirect stub per alias and throws on a collision.
     aliasTarget: {str: str} = mut {},
     pageUrls: {str: bool} = mut {},
+
+    // Tag slugs that earned a /tags/<slug>/ page - carried by two or more pages. Populated
+    // BEFORE the walk (collectTagIndex) because a tag chip renders during the walk and has to
+    // know whether its destination will exist. A one-page tag gets no page: it would be a
+    // redirect with extra steps, and 66% of this corpus's tags are one-page. Those chips keep
+    // pointing at the search query, which is what a single-hit topic actually wants.
+    tagPages: {str: bool} = mut {},
+
+    // url -> how many distinct KINDS of route reach this page: tree (a section index or an
+    // overview ancestor), sequence (the pager), topic (a tag page). Counted per page during the
+    // walk and reported after it.
+    //
+    // Kinds, not links. Counting raw inbound links makes the number meaningless: breadcrumbs, a
+    // pager, and a section card are emitted on every page automatically, so any floor below four
+    // is met without anyone deciding anything. A page missing an AXIS is actionable - "shares no
+    // tag with any other page" says exactly what to do about it.
+    //
+    // Related cards are deliberately excluded: they are computed from similarity rather than
+    // authored, so counting them would let a page clear the floor with no editorial decision
+    // behind it.
+    pageAxes: {str: int} = mut {},
 
     // Every gen-root-relative file this render actually wrote, populated at the choke points
     // that own a write (addRecord, writeAliases, renderAutoindex; a few one-off index.md

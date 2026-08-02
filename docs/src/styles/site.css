@@ -429,6 +429,10 @@ body {
   align-items: center;
   justify-content: center;
   width: auto;
+  /* Opts OUT of .page-tools' align-items:stretch. That stretch is there for the search field, but
+     it also inflated this button's height past its width, leaving the one icon button on the site
+     that was a rectangle while its .nav-right siblings (centered, not stretched) stayed square. */
+  align-self: center;
   margin: 0;
   padding: 0.4rem;
 }
@@ -1947,10 +1951,24 @@ a code {
   padding: 0.6rem 0.75rem;
   background: var(--pico-code-background-color);
   border-top: 1px solid var(--pico-muted-border-color);
-  border-bottom-left-radius: var(--pico-border-radius);
-  border-bottom-right-radius: var(--pico-border-radius);
+  /* All four corners stated in one shorthand, NOT just the bottom two. This is a <pre>, so
+     Pico's base rule rounds every corner; declaring only the bottom pair left the top two
+     rounded, and the panel visibly detached from the block it is supposed to continue. */
+  border-radius: 0 0 var(--pico-border-radius) var(--pico-border-radius);
   font-size: 0.9rem;
   white-space: pre-wrap;
+  /* The panel is inserted on first run, so this fires once, on arrival: it settles down out
+     of the block above rather than appearing fully formed, which is what makes the pair read
+     as input-then-result. Transform and opacity only - both composited, so a long output
+     does not reflow the page mid-animation the way an animated height would. */
+  animation: runnable-output-in 0.16s ease-out;
+}
+@keyframes runnable-output-in {
+  from { opacity: 0; transform: translateY(-0.4rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .runnable-output { animation: none; }
 }
 /* A failed run recolors the separator rule - the only border this panel has. */
 .runnable-output.failed {

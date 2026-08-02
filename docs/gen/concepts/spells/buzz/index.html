@@ -53,6 +53,7 @@
         <li><a href="../../../guides/download/">Download</a></li>
         <li><a href="../../../tour/">Tour</a></li>
         <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -195,7 +196,7 @@ export fun run_buzz(ctx: magus\Context, args: [str]) &gt; void {
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../../search/?q=tag%3A%22spell%22">spell</a><a class="tag" href="../../../search/?q=tag%3A%22gopherbuzz%22">gopherbuzz</a><a class="tag" href="../../../search/?q=tag%3A%22check%22">check</a><a class="tag" href="../../../search/?q=tag%3A%22test%22">test</a><a class="tag" href="../../../search/?q=tag%3A%22tools%22">tools</a></div>
+    <div class="post-tags" aria-label="Tags"><span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span><a class="tag" href="../../../tags/buzz/">buzz</a><a class="tag" href="../../../tags/spell/">spell</a><a class="tag" href="../../../search/?q=tag%3A%22gopherbuzz%22">gopherbuzz</a><a class="tag" href="../../../search/?q=tag%3A%22check%22">check</a><a class="tag" href="../../../tags/test/">test</a><a class="tag" href="../../../tags/tools/">tools</a></div>
     <small>Last updated <time datetime="2026-07-31T03:55:25Z">July 31, 2026, 3:55 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/a59e71c902ce6795766e06865f5bba3beec47ee3" data-tooltip="a59e71c902ce6795766e06865f5bba3beec47ee3" title="a59e71c902ce6795766e06865f5bba3beec47ee3">a59e71c9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (3)</summary><ul><li><a href="https://github.com/egladman/magus/commit/15118091f0721e77ecf83d9ed32777facbca172b"><code>15118091</code></a> <small><time datetime="2026-07-30T18:36:27Z">Jul 30, 2026</time></small> - the execution context work into main</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/spells/buzz.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/spells/buzz.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -316,6 +317,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no

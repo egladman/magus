@@ -53,6 +53,7 @@
         <li><a href="../../../guides/download/" aria-current="page">Download</a></li>
         <li><a href="../../../tour/">Tour</a></li>
         <li><a href="../../../playground/">Playground</a></li>
+        <li><a href="../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -149,13 +150,13 @@ autoload -Uz compinit &amp;&amp; compinit
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../guides/download/"><span class="related-card-title">Download</span><span class="related-card-desc">Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.</span></a>
+        <a class="related-card" href="../../../changelog/"><span class="related-card-title">Changelog</span><span class="related-card-desc">Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.</span></a>
         <a class="related-card" href="../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
         <a class="related-card" href="../../../reference/skills/magus-architecture/"><span class="related-card-title">magus-architecture</span><span class="related-card-desc">Ground refactoring and structure proposals in the magus knowledge graph instead of intuition.</span></a>
-        <a class="related-card" href="../../../guides/integrations/mcp/"><span class="related-card-title">MCP</span><span class="related-card-desc">The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22completion%22">completion</a><a class="tag" href="../../../search/?q=tag%3A%22shell%22">shell</a><a class="tag" href="../../../search/?q=tag%3A%22bash%22">bash</a><a class="tag" href="../../../search/?q=tag%3A%22zsh%22">zsh</a><a class="tag" href="../../../search/?q=tag%3A%22fish%22">fish</a><a class="tag" href="../../../search/?q=tag%3A%22powershell%22">powershell</a><a class="tag" href="../../../search/?q=tag%3A%22mgs%22">mgs</a><a class="tag" href="../../../search/?q=tag%3A%22shorthand%22">shorthand</a><a class="tag" href="../../../search/?q=tag%3A%22setup%22">setup</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../tags/completion/">completion</a><a class="tag" href="../../../tags/shell/">shell</a><a class="tag" href="../../../tags/bash/">bash</a><a class="tag" href="../../../tags/zsh/">zsh</a><a class="tag" href="../../../tags/fish/">fish</a><a class="tag" href="../../../tags/powershell/">powershell</a><a class="tag" href="../../../tags/mgs/">mgs</a><a class="tag" href="../../../tags/shorthand/">shorthand</a><a class="tag" href="../../../tags/setup/">setup</a></div>
     <small>Last updated <time datetime="2026-07-30T19:12:45Z">July 30, 2026, 7:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/5118dbc9e09cb8f49ac98389458d0bd5bf48d139" data-tooltip="5118dbc9e09cb8f49ac98389458d0bd5bf48d139" title="5118dbc9e09cb8f49ac98389458d0bd5bf48d139">5118dbc9</a>)</small>
   </div>
   <details class="ref-section" open>
@@ -295,6 +296,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../playground/">playground</a> via WebAssembly - no

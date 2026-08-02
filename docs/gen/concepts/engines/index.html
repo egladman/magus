@@ -53,6 +53,7 @@
         <li><a href="../../guides/download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/contributing/">Contribute</a></li>
         <li><a href="../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -180,7 +181,7 @@ allowlist, whereas Buzz's <code>os\env</code> is raw. Those overlaps are noted p
 stdlib can't reproduce: magus's <code><a class="code-xref" href="../../reference/buzz/os/#exit" data-kind="method" data-def="">os\exit</a></code> raises a lifecycle error (Buzz's
 hard-exits the process), magus's <code><a class="code-xref" href="../../reference/buzz/os/#sleep" data-kind="method" data-def="">os\sleep</a></code> is cancellable (Buzz's blocks), and
 magus's <code>crypto.*_file</code> hashes a file (Buzz's <code>hash</code> only takes a string). These
-stay on the magus <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>.</p>
+stay on the magus surface.</p>
 <p>A workspace spell lives at <code>spells/&lt;name&gt;/spell.buzz</code><a class="convention-hint" href="../../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> (or flat
 <code>spells/&lt;name&gt;.buzz</code>).</p>
 <h2 id="built-in-spell-vs-language-builtins">&quot;Built-in spell&quot; vs language &quot;builtins&quot;</h2>
@@ -222,7 +223,7 @@ are visible rather than surprising.</p>
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-prev" href="../dependencies/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Dependencies</span></a>
+      <a class="page-nav-prev" href="../ci-providers/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">CI providers</span></a>
       <a class="page-nav-next" href="../knowledge/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Knowledge graph</span></a>
     </nav>
   </main>
@@ -231,12 +232,12 @@ are visible rather than surprising.</p>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/"><span class="related-card-title">Concepts</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
-        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
         <a class="related-card" href="../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
+        <a class="related-card" href="../../migrating/from-nx/"><span class="related-card-title">Coming from Nx</span><span class="related-card-desc">A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22engines%22">engines</a><a class="tag" href="../../search/?q=tag%3A%22buzz%22">buzz</a><a class="tag" href="../../search/?q=tag%3A%22vm%22">vm</a><a class="tag" href="../../search/?q=tag%3A%22interpreter%22">interpreter</a><a class="tag" href="../../search/?q=tag%3A%22runtime%22">runtime</a><a class="tag" href="../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22plugin%22">plugin</a><a class="tag" href="../../search/?q=tag%3A%22session%22">session</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22engines%22">engines</a><a class="tag" href="../../tags/buzz/">buzz</a><a class="tag" href="../../search/?q=tag%3A%22vm%22">vm</a><a class="tag" href="../../tags/interpreter/">interpreter</a><a class="tag" href="../../search/?q=tag%3A%22runtime%22">runtime</a><a class="tag" href="../../tags/magusfile/">magusfile</a><a class="tag" href="../../search/?q=tag%3A%22plugin%22">plugin</a><a class="tag" href="../../search/?q=tag%3A%22session%22">session</a></div>
     <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/53742bce46cc2de8dd57d9cf448b228849924fb4" data-tooltip="53742bce46cc2de8dd57d9cf448b228849924fb4" title="53742bce46cc2de8dd57d9cf448b228849924fb4">53742bce</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (2)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/engines.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/engines.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -287,12 +288,6 @@ a silent no-op. See <a href="../../concepts/targets/#the-target-name">targets</a
 machine replays a build another runner already did instead of rebuilding. Every
 remote artifact must be signed by a trusted key. See
 <a href="../../concepts/remote-cache/">remote-cache</a>.</p>
-<h3 id="surface">Surface</h3>
-<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See <a href="../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>
@@ -377,6 +372,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../playground/">playground</a> via WebAssembly - no
