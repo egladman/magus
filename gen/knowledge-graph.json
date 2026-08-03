@@ -11464,7 +11464,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "doc": "'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root (hookdocs_test.go runs them against real host events).",
+      "doc": "'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root (dogfood_test.go runs them against real host events).",
       "source": "docs/guides/integrations/agents/magusfile.buzz:86",
       "attrs": {
         "exported": "true"
