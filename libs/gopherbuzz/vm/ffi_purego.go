@@ -11,7 +11,18 @@
 // android backend needs cgo), so we exclude it here too — matching purego's own
 // `&& !android` on func.go.
 //
-//go:build (darwin || freebsd || netbsd || (linux && (386 || amd64 || arm || arm64 || loong64 || ppc64le || riscv64 || (cgo && s390x)))) && !android
+// The !noffi clause is an opt-out for builds that must not depend on a dynamic
+// loader. purego reaches dlopen/dlsym through //go:cgo_import_dynamic, which is
+// how it avoids cgo — but that directive still gives the binary a PT_INTERP and
+// DT_NEEDED entries for libc, libdl, and libpthread, even under CGO_ENABLED=0. A
+// scratch or distroless/static image has none of those, so the binary cannot exec
+// at all there, reporting only "no such file or directory". Building with
+// `-tags noffi` drops this provider and zdef() reports FFI unsupported, which is
+// the same graceful degradation an unsupported OS/arch already gets. It costs
+// nothing real in such an image: with no shared libraries present there is
+// nothing for dlopen to open.
+//
+//go:build (darwin || freebsd || netbsd || (linux && (386 || amd64 || arm || arm64 || loong64 || ppc64le || riscv64 || (cgo && s390x)))) && !android && !noffi
 
 package vm
 
