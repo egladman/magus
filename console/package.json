@@ -34,5 +34,10 @@
     "stylelint": "16.24.0",
     "stylelint-config-standard": "39.0.0",
     "typescript": "5.8.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "fast-uri": "4.1.1"
+    }
   }
 }

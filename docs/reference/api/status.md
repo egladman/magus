@@ -202,6 +202,7 @@ Workspace is one workspace the daemon has loaded.
 | `load_time` | Timestamp | 2 |  |
 | `last_access_time` | Timestamp | 3 |  |
 | `cache` | Cache | 4 | this workspace's cache activity |
+| `secret_provider` | string | 5 | secret\_provider is the NAME of the provider spell this workspace's magusfile selected; empty means no declaration and the built-in environment provider applies. It exists so a reader can see that credential resolution is wired up and through what - the same config visibility the cache cap gets.  The name and nothing else. No reference list, no value: magus does not store secrets, it reads them through a provider, and publishing what a build CAN reach would be a map of what to go after. |
 
 ## Enums
 

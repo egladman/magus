@@ -1,4 +1,6 @@
 import "magus";
+// The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
+import "../tools/audit" as audit;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -103,6 +105,7 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
+        "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
@@ -300,6 +303,14 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format, buzz_test);
+}
+
+// security audits what actually ships against the npm advisory database. See
+// console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
+// .npmrc cooling period is the stronger half of this.
+export fun security(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    audit.audit();
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {

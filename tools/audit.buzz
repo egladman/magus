@@ -1,0 +1,138 @@
+// audit.buzz - advisory scanning that fails only on findings you can actually act on.
+//
+// THE PROBLEM THIS EXISTS TO FIX. `pnpm audit` answers one question with an exit code:
+// "does a known advisory match this tree?" That is not the question a build gate needs to
+// ask. The useful question is "is there anything I can do about it right now?", and the
+// two come apart constantly:
+//
+//   - An advisory drops and the maintainer publishes a patch the same day. Every .npmrc
+//     here sets minimum-release-age, so that patch is NOT installable for ten days -
+//     deliberately, because "everyone rush to install the fix" is itself an attack shape.
+//     For those ten days the exit code says FAIL and no action clears it.
+//   - The advisory sits in a transitive dev dependency four levels down with no patched
+//     release at all.
+//
+// A gate that fails on something nobody can fix does not get fixed. It gets muted, and a
+// muted gate is a `|| true` with extra steps. Six stale skip_cache workarounds in this
+// repo started exactly that way.
+//
+// So this splits the findings:
+//   BLOCKING - a patched version exists AND is old enough for our own policy to install
+//              it. Someone can act today, so the build fails.
+//   DEFERRED - the patch is inside the cooling window, or none exists. Printed loudly on
+//              every run, never fatal, and it becomes BLOCKING by itself the day the patch
+//              matures. Nothing to remember, nothing to snooze, no allowlist to rot.
+//
+// This is the part a task orchestrator with a real language can do and a YAML `run:` step
+// cannot. The scanner gives you JSON and an exit code; deciding what that MEANS for this
+// build belongs to the build, written in something that can express it.
+
+import "std";
+import "os";
+import "json";
+import "semver";
+import "time";
+
+// coolingHours mirrors minimum-release-age in each project's .npmrc (14400 minutes).
+// Restated as a duration because .npmrc is not a format Buzz reads. Drift is safe in the
+// direction that matters: a LONGER value here only defers more findings, and can never
+// fail a build over a patch the install would have refused anyway.
+final coolingHours = "-240h";
+
+// isBlockingSeverity reports whether a severity is worth failing over at all. moderate and
+// low are reported and never fatal: the noise floor of a dependency tree lives there, and
+// a gate that cries about it teaches people to stop reading it.
+fun isBlockingSeverity(severity: str) > bool {
+    return severity == "high" or severity == "critical";
+}
+
+// hasInstallablePatch reports whether any published version of pkg satisfies the
+// advisory's patched range AND is old enough to clear the cooling period - that is,
+// whether a fix could actually land today.
+//
+// `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
+// keys "created" and "modified", which are skipped. A version that fails to parse is
+// skipped rather than fatal: an odd tag upstream must not take a build down.
+fun hasInstallablePatch(pkg: str, patched: str) > bool {
+    // "<0.0.0" is the advisory database's way of saying no patch has been published.
+    if (patched == "" or patched == "<0.0.0") {
+        return false;
+    }
+    final res = os\exec("pnpm", args: ["view", pkg, "time", "--json"], dir: ".",
+        opts: {"allow_failure": true});
+    if (res.code != 0) {
+        return false; // registry unreachable: defer rather than fail on a network blip
+    }
+
+    final now = time\parse("2006-01-02T15:04:05Z", value: time\nowIso());
+    final cutoff = time\add(now, duration: coolingHours);
+    final floor = patched.replace(">=", with: "").trim();
+
+    foreach (version, published in json\parse(res.stdout)) {
+        if (version == "created" or version == "modified") {
+            continue;
+        }
+        try {
+            if (!semver\compare(version, op: ">=", b: floor)) {
+                continue;
+            }
+            if (time\parse("2006-01-02T15:04:05.000Z", value: published) <= cutoff) {
+                return true; // a fix exists and our own policy would let it in
+            }
+        } catch (e) {
+            continue; // unparseable version or timestamp: not a fix to rely on
+        }
+    }
+    return false;
+}
+
+// audit scans the current project and fails ONLY on findings that are actionable today.
+// Everything else is printed and carried. Throws to fail the calling target.
+export fun audit() > void {
+    final res = os\exec("pnpm", args: ["audit", "--json"], dir: ".",
+        opts: {"allow_failure": true});
+    if (res.code == 0) {
+        std\print("audit: no advisories match this tree");
+        return;
+    }
+
+    final report = json\parse(res.stdout);
+    if (report["advisories"] == null) {
+        std\print("audit: report carried no advisory detail; treating as clean");
+        return;
+    }
+
+    var blocking = mut [<str>];
+    var deferred = mut [<str>];
+
+    foreach (id, adv in report["advisories"]) {
+        final severity = adv["severity"] ?? "unknown";
+        final pkg = adv["module_name"] ?? "unknown";
+        final patched = adv["patched_versions"] ?? "";
+        final where = pkg + " (" + severity + "): " + (adv["title"] ?? "");
+
+        if (!isBlockingSeverity(severity)) {
+            deferred.append(where + " - below the failing threshold");
+        } else if (hasInstallablePatch(pkg, patched)) {
+            blocking.append(where + " - fix available: upgrade to " + patched);
+        } else {
+            deferred.append(where + " - patched " + patched
+                + " is newer than the cooling period, or unpublished");
+        }
+    }
+
+    foreach (d in deferred) {
+        std\print("audit [deferred] " + d);
+    }
+    if (deferred.len() > 0) {
+        std\print("audit: deferred findings are NOT actionable today. Each one starts"
+            + " failing this gate on its own once a patch clears the cooling period.");
+    }
+
+    if (blocking.len() > 0) {
+        foreach (b in blocking) {
+            std\print("audit [BLOCKING] " + b);
+        }
+        throw "audit: an advisory has a fix this policy would install today; upgrade it";
+    }
+}

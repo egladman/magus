@@ -104,9 +104,18 @@ fun module_version() > str {
 }
 
 fun buzz_ld_flags() > str {
-    final c: Commit = vcs\commit();
-    final short = if (c.short == "") "unknown" else c.short;
-    final date = if (c.date == "") "unknown" else c.date;
+    // try/catch, not field sniffing: vcs.commit RAISES when there is no VCS or the
+    // revision cannot be read, so there is no zero object to inspect. Building outside a
+    // checkout (a release tarball, a container context) is the real case this covers.
+    var short = "unknown";
+    var date = "unknown";
+    try {
+        final c: Commit = vcs\commit();
+        short = c.short;
+        date = c.date;
+    } catch (e) {
+        // leave both as "unknown"
+    }
     return "-w -s"
         + " -X main.version=" + module_version()
         + " -X main.commit=" + short

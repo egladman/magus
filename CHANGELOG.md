@@ -70,6 +70,49 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Changed
 
+- Breaking: `vcs.shortHash`, `vcs.hash`, `vcs.branch`, `vcs.commitDate` and `vcs.commit`
+  now RAISE when no VCS is resolved or its metadata cannot be read. They used to swallow
+  the failure and hand back `""` (or, for `commit`, an object with every field empty), and
+  the module reference told you to test `c.date == ""` to find out.
+
+  That is not how a Buzz function reports a problem - upstream declares the error in the
+  signature and the caller writes try/catch - and the sentinel could not even be trusted:
+  `""` is a value a branch name or a subject line can legitimately hold, so the check could
+  not distinguish "no answer" from "the answer is empty". It also made the check optional,
+  and a magusfile that forgot it interpolated an empty commit into a version string or an
+  image tag with nothing to surface the mistake.
+
+  Migration, where a missing VCS is a real case (building from a release tarball or a
+  container context):
+
+  ```buzz
+  // before
+  final c = vcs\shortHash();
+  if (c == "") { return "unknown"; }
+  return c;
+
+  // after
+  try { return vcs\shortHash(); } catch (e) { return "unknown"; }
+  ```
+
+  `vcs.name()` still returns `""` when nothing is resolved, and remains the way to TEST for
+  a VCS before asking it anything - the same split as `os.env` and `os.lookupEnv`.
+
+- Breaking: container images are signed with cosign v3, so **verifying one needs a v3
+  client**. A v3 client reads both formats; a v2 client cannot read a v3 signature and
+  reports the image as unverified, which is indistinguishable from a bad signature. Run
+  `cosign version` before treating a failure as a compromised image.
+
+  Taken now, deliberately, rather than announced later: no release has been published yet,
+  so nobody is verifying these images with a pinned v2 client. Doing it after a release
+  would have flipped `latest` under readers who never opted in, and the guide tells them a
+  verification failure means "not an official build - do not run it".
+
+  It also unblocks the toolchain. cosign's own 2.x releases do not publish the
+  `cosign_checksums.txt.sigstore.json` that aqua verifies against, so no 2.x version could
+  be installed through the pinned toolchain at all - `mise install` failed outright, in
+  every CI job that runs it rather than only the signing one.
+
 - Breaking: `skip_cache` now requires a REASON string; the bare `true` form no longer
   loads. `"skip_cache": true` was a flag that recorded a decision and threw away why it was
   made, so a target opted out of caching in 2025 looked identical to one opted out by

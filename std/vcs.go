@@ -4,6 +4,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -42,25 +43,25 @@ var Vcs = Module{
 		},
 		{
 			Name:    "short_hash",
-			Doc:     "Short commit hash, or empty on error.",
+			Doc:     "Short commit hash. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsShortHash,
 		},
 		{
 			Name:    "hash",
-			Doc:     "Full commit hash, or empty on error.",
+			Doc:     "Full commit hash. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsHash,
 		},
 		{
 			Name:    "branch",
-			Doc:     "Current branch, or empty on error.",
+			Doc:     "Current branch. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsBranch,
 		},
 		{
 			Name:    "commit_date",
-			Doc:     "Commit date string, or empty on error.",
+			Doc:     "Commit date string. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    VcsCommitDate,
 		},
@@ -91,7 +92,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "commit",
-			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Returns the zero object (every field empty) when no VCS is resolved or the revision can't be looked up - test a field (e.g. c.date == \"\") rather than for null.",
+			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339, when the revision was recorded. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that may not exist.",
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
@@ -211,54 +212,62 @@ func VcsDiff(ctx context.Context, base string) ([]string, error) {
 	return files, nil
 }
 
-// VcsShortHash returns the short commit hash, or "" when unavailable.
-func VcsShortHash(ctx context.Context) (string, error) {
+// vcsMetadata resolves the workspace VCS and reads its metadata, RAISING when either step
+// fails rather than reporting a zero value.
+//
+// These accessors used to swallow both failures and return "". That is not how a Buzz
+// function reports a problem - upstream declares the error in the signature (`!> errors\X`)
+// and the caller writes try/catch - and it is not even unambiguous here, because "" is a
+// value a branch name could in principle take. Worse, it pushed the check onto every call
+// site: a magusfile that forgot `if (h == "")` silently interpolated an empty commit into a
+// version string or an image tag, and nothing surfaced until someone read the artifact.
+//
+// magus.affected already made this call the other way, for the same reason: an empty answer
+// and an unavailable one mean opposite things to whoever is deciding what to build.
+func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return "", nil
+		return types.VCSMeta{}, errors.New("no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
 	}
 	meta, err := v.Metadata(ctx, "")
 	if err != nil {
-		return "", nil //nolint:nilerr // VCS metadata unavailable: callers treat empty as "no VCS info"
+		return types.VCSMeta{}, fmt.Errorf("read %s metadata: %w", v.Name(), err)
+	}
+	return meta, nil
+}
+
+// VcsShortHash returns the short commit hash; raises when no VCS or metadata is available.
+func VcsShortHash(ctx context.Context) (string, error) {
+	meta, err := vcsMetadata(ctx)
+	if err != nil {
+		return "", err
 	}
 	return meta.ShortHash, nil
 }
 
-// VcsHash returns the full commit hash, or "" when unavailable.
+// VcsHash returns the full commit hash; raises when no VCS or metadata is available.
 func VcsHash(ctx context.Context) (string, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return "", nil
-	}
-	meta, err := v.Metadata(ctx, "")
+	meta, err := vcsMetadata(ctx)
 	if err != nil {
-		return "", nil //nolint:nilerr // VCS metadata unavailable: callers treat empty as "no VCS info"
+		return "", err
 	}
 	return meta.Hash, nil
 }
 
-// VcsBranch returns the current branch, or "" when unavailable.
+// VcsBranch returns the current branch; raises when no VCS or metadata is available.
 func VcsBranch(ctx context.Context) (string, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return "", nil
-	}
-	meta, err := v.Metadata(ctx, "")
+	meta, err := vcsMetadata(ctx)
 	if err != nil {
-		return "", nil //nolint:nilerr // VCS metadata unavailable: callers treat empty as "no VCS info"
+		return "", err
 	}
 	return meta.Branch, nil
 }
 
-// VcsCommitDate returns the commit date string, or "" when unavailable.
+// VcsCommitDate returns the commit date string; raises when no VCS or metadata is available.
 func VcsCommitDate(ctx context.Context) (string, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return "", nil
-	}
-	meta, err := v.Metadata(ctx, "")
+	meta, err := vcsMetadata(ctx)
 	if err != nil {
-		return "", nil //nolint:nilerr // VCS metadata unavailable: callers treat empty as "no VCS info"
+		return "", err
 	}
 	return meta.CommitDate, nil
 }
@@ -382,11 +391,15 @@ func VcsMetadata(ctx context.Context) (map[string]any, error) {
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return types.Commit{}, nil
+		return types.Commit{}, errors.New("no VCS resolved for this workspace; use vcs.name() to test before looking up a commit")
 	}
 	c, err := v.FindCommit(ctx, "", rev) // host bindings run in the project cwd
 	if err != nil {
-		return types.Commit{}, nil //nolint:nilerr // unresolved (no commits yet, bad rev): empty object, matching the metadata accessors' graceful empties
+		which := rev
+		if which == "" {
+			which = "the current revision"
+		}
+		return types.Commit{}, fmt.Errorf("look up %s in %s: %w", which, v.Name(), err)
 	}
 	return c, nil
 }

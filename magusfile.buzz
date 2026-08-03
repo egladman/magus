@@ -104,17 +104,28 @@ fun version() > str {
     return v;
 }
 
+// try/catch, not a sentinel check. These accessors RAISE when there is no VCS or its
+// metadata cannot be read, which is what an unavailable value should do - "" is a value a
+// branch could legitimately hold, so testing for it could never distinguish "no answer"
+// from "the answer is empty". A build outside a checkout is a real case (a release tarball,
+// a container build context), so it is caught here and named, once, instead of every caller
+// remembering a check the type system never asked for.
 fun commit() > str {
-    final c = vcs\shortHash();
-    if (c == "") { return "unknown"; }
-    return c;
+    try {
+        return vcs\shortHash();
+    } catch (e) {
+        return "unknown";
+    }
 }
 
-// Commit record date (RFC3339) for reproducible builds; empty => "unknown".
+// Commit record date (RFC3339) for reproducible builds.
 fun build_date() > str {
-    final c: Commit = vcs\commit();
-    if (c.date == "") { return "unknown"; }
-    return c.date;
+    try {
+        final c: Commit = vcs\commit();
+        return c.date;
+    } catch (e) {
+        return "unknown";
+    }
 }
 
 fun ld_flags() > str {

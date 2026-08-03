@@ -574,13 +574,21 @@
           ]
         },
         {
+          "name": "security",
+          "doc": "security audits the dependency tree against the npm advisory database.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
           "name": "ci",
-          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
+          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
           "dependencies": [
             "preflight",
             "lint",
             "test",
-            "build"
+            "build",
+            "security"
           ]
         }
       ],
@@ -908,6 +916,13 @@
           ]
         },
         {
+          "name": "security",
+          "doc": "security audits what actually ships against the npm advisory database.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
           "name": "ci",
           "dependencies": [
             "generate",
@@ -1017,6 +1032,13 @@
         {
           "name": "lint",
           "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "security",
+          "doc": "security audits what actually ships against the npm advisory database.",
           "dependencies": [
             "preflight"
           ]

@@ -158,6 +158,11 @@ cosign verify ghcr.io/egladman/magus:latest \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+**Use cosign v3 or later.** Signatures are written in the Sigstore bundle format that
+v3 made the default. A v3 client verifies both formats, but a v2 client cannot read a
+v3 signature and reports the image as unverified - which looks exactly like a bad
+signature. Check with `cosign version` before concluding anything from a failure.
+
 A missing or mismatched signature means the image is not an official build. Do not
 run it.
 
