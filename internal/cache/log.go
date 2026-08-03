@@ -237,10 +237,16 @@ func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool { return
 func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return h }
 func (h *PrettyHandler) WithGroup(_ string) slog.Handler                { return h }
 
+// Handle renders one record. It deliberately does NOT skip on ctx.Err(): a handler must
+// not treat cancellation as permission to drop output. The check that used to live here
+// was inert for as long as it existed, because every call site reached slog through
+// Logger.Info/Warn/..., which passes context.Background() - Err() was never non-nil. Once
+// the run path started passing its REAL context (so records could reach the secret
+// resolver), it woke up and began eating exactly the lines that matter most: in a
+// concurrent run, the first failure cancels the errgroup, and every [pass]/[fail] that
+// finished afterwards, plus the [summary] footer and the Ctrl-C service-release warning,
+// vanished from the default output while -o json still showed them.
 func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
-	if ctx.Err() != nil {
-		return nil
-	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

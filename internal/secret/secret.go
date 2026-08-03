@@ -351,13 +351,18 @@ func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) 
 // another, masking the shorter first would leave the longer one's remaining bytes in the
 // output.
 //
-// The common ENCODINGS of the value are registered alongside the raw form. Redaction is
-// literal substring matching, so a credential a tool re-encodes before printing passes
-// straight through - and the two that actually happen are not exotic: a token in an
-// `Authorization: Basic` header is base64, and a token in a URL is percent-escaped. This
-// does not make the transform problem solved; a child can encode arbitrarily, and the
-// LIMITS on Redact still stand. It closes the two shapes seen in practice for the cost of
-// a few extra entries per secret.
+// The common ENCODINGS of the value are registered alongside the raw form, because
+// redaction is literal substring matching and a credential a tool re-encodes before
+// printing otherwise passes straight through. It covers a value encoded WHOLE: base64 or
+// hex of the secret by itself, or its percent-escaped form in a URL.
+//
+// What it does NOT cover, and the doc must not imply otherwise: a secret base64'd as part
+// of a LARGER string. base64 works in 3-byte groups, so `base64(user + ":" + secret)`
+// contains `base64(secret)` as a substring only when the prefix length happens to be a
+// multiple of 3 - measured, `us:` matches and `user:` does not. An `Authorization: Basic`
+// header is therefore covered about one time in three, by luck of the username's length.
+// Closing that needs the value to mask itself before it is ever concatenated, which is
+// what a secret.Value type is for.
 func (r *Resolver) record(key memoKey, v string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -365,6 +370,14 @@ func (r *Resolver) record(key memoKey, v string) {
 		r.memo = make(map[memoKey]string)
 	}
 	r.memo[key] = v
+	// Gated on the SOURCE length, not each encoded form. Encoding inflates: base64 of a
+	// 1-character value is "MQ==" and hex of "ab" is "6162", both long enough to clear
+	// minRedactLen on their own. Checking per form therefore registered derivatives of
+	// exactly the values this refuses to protect - shredding ordinary output with a
+	// 4-character match while MGS2011 told the user the value was NOT redacted.
+	if len(v) < minRedactLen {
+		return
+	}
 	for _, form := range encodedForms(v) {
 		r.addRedactable(form)
 	}
@@ -595,14 +608,17 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 	}
 }
 
-// redactAttrs returns as with every key and value redacted. The KEY matters too: an attr
-// built as slog.String(userSuppliedName, v) puts caller-controlled text where only the
-// value is usually suspect, and redacting one half of a pair is the kind of gap this
-// package keeps finding.
+// redactAttrs returns as with every VALUE redacted. Keys are deliberately left alone.
+//
+// An attr key in this codebase is a compile-time constant naming a field, and the default
+// renderer reads several of them back by exact name (internal/cache/log.go pulls
+// "project", "label", "ref", "holder_pid"). Masking a key cannot fail loudly - it silently
+// renders a run with no repro command and no output ref. Since no call site builds a key
+// from a resolved secret, redacting keys would trade a real contract for a hypothetical.
+// If one ever does, the fix is that call site, not this function.
 func redactAttrs(r *Resolver, as []slog.Attr) []slog.Attr {
 	out := make([]slog.Attr, len(as))
 	for i, a := range as {
-		a.Key = r.RedactString(a.Key)
 		a.Value = redactValue(r, a.Value)
 		out[i] = a
 	}
@@ -636,7 +652,6 @@ func (h redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 
 	out := slog.NewRecord(r.Time, r.Level, res.RedactString(r.Message), r.PC)
 	r.Attrs(func(a slog.Attr) bool {
-		a.Key = res.RedactString(a.Key)
 		a.Value = redactValue(res, a.Value)
 		out.AddAttrs(a)
 		return true

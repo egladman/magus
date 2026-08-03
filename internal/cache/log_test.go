@@ -717,3 +717,28 @@ func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 	assert.Contains(t, sink.String(), "$ go build ./...")
 	assert.NotContains(t, sink.String(), "***")
 }
+
+// TestPrettyHandlerPrintsAfterCancellation pins that a cancelled context does NOT silence
+// a record. PrettyHandler is the DEFAULT handler, and it used to early-return on
+// ctx.Err(). That was inert for as long as it existed - every call site logged through
+// slog.Logger.Info, which passes context.Background() - so nothing noticed. When the run
+// path began passing its real context (so records could reach the secret resolver), the
+// check woke up and started eating output: in a concurrent run the first failure cancels
+// the errgroup, so every [pass]/[fail] line that finished afterwards, the [summary]
+// footer, and the Ctrl-C service-release warning all disappeared from the default format
+// while `-o json` still showed them.
+//
+// A log handler must not use record delivery as a cancellation channel.
+func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
+	var sink bytes.Buffer
+	lg := slog.New(NewPrettyHandler(&sink, slog.LevelInfo))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	lg.InfoContext(ctx, "cache.scope", slog.String("label", "before"), slog.String("source", "x"))
+	cancel()
+	lg.InfoContext(ctx, "cache.scope", slog.String("label", "after"), slog.String("source", "x"))
+
+	out := sink.String()
+	assert.Contains(t, out, "before")
+	assert.Contains(t, out, "after", "a cancelled context must not silence a record")
+}

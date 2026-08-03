@@ -58,7 +58,7 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		// falls back to the default. The manager clamps whatever ttl arrives.
 		var req shareRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		sess, err := mgr.Start(r.Context(), consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		if err != nil {
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance

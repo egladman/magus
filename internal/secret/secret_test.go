@@ -109,6 +109,15 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 	// Unregistered, so ordinary output containing those letters survives intact. This is
 	// a documented hole, not an accident - see minRedactLen.
 	assert.Equal(t, "grab a table", string(r.Redact([]byte("grab a table"))))
+
+	// And NO encoded derivative of it is registered either. Encoding inflates, so
+	// base64("ab") is "YWI=" and hex("ab") is "6162" - both clear minRedactLen on their
+	// own. Registering those would contradict the MGS2011 notice this value just fired
+	// AND put a 4-character needle into every future log line.
+	for _, form := range []string{"YWI=", "YWJh", "6162"} {
+		assert.Equal(t, "x"+form+"y", string(r.Redact([]byte("x"+form+"y"))),
+			"no encoded form of a too-short secret may be registered")
+	}
 }
 
 // TestReadWarnsWhenAValueIsTooShortToMask pins MGS2011. Declining to redact is correct;
@@ -333,24 +342,6 @@ func TestRedactCoversCommonEncodings(t *testing.T) {
 	_, err = ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_URL_TOKEN")
 	require.NoError(t, err)
 	assert.Equal(t, mask, r.RedactString(url.QueryEscape(urly)), "percent-escaped form must be masked")
-}
-
-// TestRedactingHandlerRedactsAttrKeys covers the other half of an attr. A key built from
-// caller-supplied text can carry the credential just as a value can, and redacting only
-// one half is the shape of gap this package keeps rediscovering.
-func TestRedactingHandlerRedactsAttrKeys(t *testing.T) {
-	ctx, _ := withResolver(t)
-	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_key_side_leak")
-	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
-	require.NoError(t, err)
-
-	var sink bytes.Buffer
-	h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	// Both an inline attr key and one bound through With, which takes the precomputed path.
-	slog.New(h).With("preset_ghp_key_side_leak", 1).
-		DebugContext(ctx, "keys", "ghp_key_side_leak", "value")
-
-	assert.NotContains(t, sink.String(), "ghp_key_side_leak", "an attr KEY must be redacted too")
 }
 
 // TestRedactingHandlerCoversNestedAndWrappedValues guards the carriers that are not a
