@@ -13,9 +13,9 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ```sh
 VERSION=__MAGUS_VERSION__
 ARCH=amd64            # or arm64 on ARM
-curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}-static.tar.gz"
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf "magus_${VERSION}_linux_${ARCH}-static.tar.gz"
+tar -xzf "magus_${VERSION}_linux_${ARCH}.tar.gz"
 mv magus ~/.local/bin/
 magus version
 ```

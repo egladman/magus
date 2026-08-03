@@ -12,9 +12,9 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 
 ```sh
 VERSION=__MAGUS_VERSION__
-ASSET=magus_${VERSION}_darwin_arm64-static.tar.gz       # Apple Silicon
+ASSET=magus_${VERSION}_darwin_arm64.tar.gz       # Apple Silicon
 # Intel Macs:
-#   ASSET=magus_${VERSION}_darwin_amd64-static.tar.gz
+#   ASSET=magus_${VERSION}_darwin_amd64.tar.gz
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/${ASSET}"
 mkdir -p ~/.local/bin
 tar -xzf "${ASSET}"

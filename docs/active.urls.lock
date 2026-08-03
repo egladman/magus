@@ -163,6 +163,7 @@ guides/agents/
 guides/daemon/
 guides/debugging/
 guides/download/
+guides/download/container-image/
 guides/download/docker/
 guides/download/linux/
 guides/download/macos/

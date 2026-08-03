@@ -478,9 +478,18 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
         env["CGO_ENABLED"] = "0";
     }
 
-    go["go-build"](ctx.withEnv(env), {
-        "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs\join(stage, binary), "./cmd/magus"],
-    });
+    // The -static archives have to drop Buzz FFI, or the name is a lie. Its provider reaches
+    // dlopen through purego's //go:cgo_import_dynamic, which gives the binary a PT_INTERP and
+    // a libc dependency even under CGO_ENABLED=0 - so the archive we ship as "static" needed a
+    // dynamic loader, and would not run on a musl or scratch host. zdef() reports FFI
+    // unsupported in that build; the default (cgo) archives keep it. Same reasoning and the
+    // same tag as Dockerfile.static.
+    var build_args = mut ["-trimpath"];
+    if (!cgo) { build_args.append("-tags"); build_args.append("noffi"); }
+    build_args.append("-ldflags"); build_args.append(ld_flags());
+    build_args.append("-o"); build_args.append(fs\join(stage, binary));
+    build_args.append("./cmd/magus");
+    go["go-build"](ctx.withEnv(env), {"args": build_args});
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
@@ -522,11 +531,18 @@ export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
     ctx.writesFiles("dist/*");
+    // The UNSUFFIXED archive is the static one, and the cgo build carries "-cgo". That is
+    // the same convention as the image tags (`latest` static, `latest-cgo` cgo), and it was
+    // inverted here: the archives spelled static with a suffix and gave the bare name to
+    // cgo, so the identical default was named two opposite ways across one release. The
+    // installer has always defaulted to VARIANT=static and the download guides have always
+    // linked the static asset, so this renames what people already take, rather than
+    // changing which build they get.
     final p = release_target_platform(goos, goarch);
     if (ctx.has_charm("static")) {
-        build_release_variant(ctx, p[0], p[1], false, "-static");
+        build_release_variant(ctx, p[0], p[1], false, "");
     } else {
-        build_release_variant(ctx, p[0], p[1], true, "");
+        build_release_variant(ctx, p[0], p[1], true, "-cgo");
     }
 }
 

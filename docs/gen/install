@@ -271,9 +271,11 @@ download_artifact() {
     release_url="${1:?}"
     version="$(release_version "$release_url")"
 
+    # The static archive is the unsuffixed one, matching the container tags (`latest` is
+    # static, `latest-cgo` is cgo). VARIANT=cgo opts into the glibc build.
     suffix=""
-    if [ "$VARIANT" = "static" ]; then
-        suffix="-static"
+    if [ "$VARIANT" != "static" ]; then
+        suffix="-cgo"
     fi
     artifact="magus_${version}_${OS}_${ARCH}${suffix}.tar.gz"
 

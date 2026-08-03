@@ -1,14 +1,34 @@
 ---
-title: Run magus in Docker
-description: Pull and run the official magus container images from GHCR, mount your workspace into them, and verify the cosign signature. Covers the multi-arch static image and the glibc variant.
-tags: [docker, container, image, ghcr, cosign, install]
+title: Run magus from a container image
+description: Pull and run the official magus OCI images from GHCR with Docker, Podman, or any OCI runtime, mount your workspace, extract the binary without running a container, and verify the cosign signature.
+tags:
+  [
+    container,
+    container image,
+    image,
+    oci,
+    docker,
+    podman,
+    nerdctl,
+    ghcr,
+    registry,
+    cosign,
+    install,
+  ]
+aliases: [guides/download/docker]
 ---
 
-# Run magus in Docker
+# Run magus from a container image
 
 Official images are published to the GitHub Container Registry at
 **`ghcr.io/egladman/magus`**. They are a drop-in alternative to installing the
 binary, which is convenient on CI runners and in throwaway environments.
+
+They are ordinary [OCI](https://opencontainers.org/) images with nothing
+Docker-specific about them. The examples below use `docker` because it is the
+most familiar, and every one of them works unchanged with `podman`, `nerdctl`, or
+any other OCI runtime. Browse the published tags and digests on the
+[package page](https://github.com/egladman/magus/pkgs/container/magus).
 
 Each image runs magus as its entrypoint against `/workspace`, as a non-root user.
 Mount your repository there and pass a magus command:
@@ -49,6 +69,27 @@ image, and both follow from the static image carrying no shared libraries at all
 ```sh
 docker pull ghcr.io/egladman/magus:__MAGUS_VERSION__
 ```
+
+## Install the binary without running a container
+
+The static image is a single static binary on an empty base, so the image doubles as
+a distribution channel: copy the binary out and run it on the host, no container
+runtime involved at run time. This is handy on a machine that already has a runtime
+but no install script, and it is how several projects distribute cross-platform
+tools.
+
+```sh
+id=$(docker create ghcr.io/egladman/magus:__MAGUS_VERSION__)
+docker cp "$id":/magus ./magus
+docker rm "$id"
+./magus version
+```
+
+`podman` works the same way with `podman create` / `podman cp`. Pin a version rather
+than `latest`, so what you extract is reproducible.
+
+This only works with the static image. The binary in the `-cgo` image is linked
+against that image's glibc and will not run on an arbitrary host.
 
 ## Verify the signature
 
