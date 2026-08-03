@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2375,
-  "edge_count": 5292,
+  "node_count": 2377,
+  "edge_count": 5295,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -15414,7 +15414,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:742",
+      "source": "magusfile.buzz:762",
       "attrs": {
         "exported": "true"
       }
@@ -15445,7 +15445,7 @@
       "kind": "function",
       "label": "buzz_check",
       "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:729",
+      "source": "magusfile.buzz:749",
       "attrs": {
         "exported": "true"
       }
@@ -15455,7 +15455,17 @@
       "kind": "function",
       "label": "buzz_run",
       "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:734",
+      "source": "magusfile.buzz:754",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:magusfile.buzz:buzz_test",
+      "kind": "function",
+      "label": "buzz_test",
+      "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
+      "source": "magusfile.buzz:742",
       "attrs": {
         "exported": "true"
       }
@@ -15475,7 +15485,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:774",
+      "source": "magusfile.buzz:794",
       "attrs": {
         "exported": "true"
       }
@@ -15485,7 +15495,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:810",
+      "source": "magusfile.buzz:830",
       "attrs": {
         "exported": "true"
       }
@@ -15501,7 +15511,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:793",
+      "source": "magusfile.buzz:813",
       "attrs": {
         "exported": "true"
       }
@@ -15521,7 +15531,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:771",
+      "source": "magusfile.buzz:791",
       "attrs": {
         "exported": "true"
       }
@@ -15593,7 +15603,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. golangci-lint runs through os.exec to use the tool module rather than the library module. shellcheck covers the shell magus SHIPS - the completion script users source into their shell and the install script served at /magus/install - which was unlinted until it broke in a way only a user would have noticed. The proto contract self-gates: the `proto` project owns its buf-lint/ci, run by `magus affected ci` when it's affected - the root",
-      "source": "magusfile.buzz:757",
+      "source": "magusfile.buzz:777",
       "attrs": {
         "exported": "true"
       }
@@ -15653,7 +15663,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:739",
+      "source": "magusfile.buzz:759",
       "attrs": {
         "exported": "true"
       }
@@ -15663,7 +15673,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:868"
+      "source": "magusfile.buzz:888"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -15706,14 +15716,14 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:882"
+      "source": "magusfile.buzz:902"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two committed gen/ trees with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than in either one. On a sourc",
-      "source": "magusfile.buzz:903",
+      "source": "magusfile.buzz:923",
       "attrs": {
         "exported": "true"
       }
@@ -20579,7 +20589,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "32"
+        "target_count": "33"
       }
     },
     {
@@ -20673,11 +20683,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:793:TODO",
+      "id": "rationale:magusfile.buzz:813:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:793"
+      "source": "magusfile.buzz:813"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -20840,6 +20850,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "buzz_run",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:buzz-test",
+      "kind": "target",
+      "label": "buzz-test",
+      "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "buzz_test",
         "engine": "buzz"
       }
     },
@@ -48831,6 +48852,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:buzz_test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:changelog_generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -59335,6 +59364,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:buzz-test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:changelog-generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -60358,12 +60395,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:793:TODO",
+      "source": "rationale:magusfile.buzz:813:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:793"
+      "provenance": "magusfile.buzz:813"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -61911,6 +61948,14 @@
       "source": "target:.:test",
       "target": "spell:go",
       "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:test",
+      "target": "target:.:buzz-test",
+      "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."

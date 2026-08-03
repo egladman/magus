@@ -364,7 +364,8 @@
           "name": "test",
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
-            "format"
+            "format",
+            "buzz-test"
           ],
           "charms": [
             "rw"
@@ -385,6 +386,11 @@
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
           ]
+        },
+        {
+          "name": "buzz-test",
+          "declared": "buzz_test",
+          "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine."
         },
         {
           "name": "buzz-check",

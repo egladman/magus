@@ -1211,7 +1211,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     // target actually does, which is the disagreement declarations exist to end.
     ctx.writesFiles("assets/coverage.svg");
     final clean_before = vcs\isDirty([fs\join("assets", "coverage.svg")]) == false;
-    ctx.needs(format);
+    ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
     // the Buzz mirrors) are hundreds of functions no test will ever call, so
@@ -1263,6 +1263,26 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 // registry compile that doctor's spell-contract check exercises, and every magusfile by
 // doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
 // pinning `buzz` in mise.toml, which is not the case today.
+
+// Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
+// magus's embedded engine.
+//
+// NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is
+// not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which
+// here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy,
+// none of which run standalone (they import magus host modules the bare toolchain cannot
+// resolve). `magus buzz -t` is always present and is what CONTRIBUTING tells contributors to
+// run, so the gate and the instruction agree.
+//
+// The list is explicit rather than globbed for the same reason: these two are the root
+// modules that are pure library code with tests. badge.buzz's six tests and coverage.buzz's
+// ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
+// covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
+export fun buzz_test(ctx: magus\Context, args: [str]) > void {
+    foreach (mod in ["badge.buzz", "coverage.buzz"]) {
+        magus\cmd(["buzz", "-t", mod]);
+    }
+}
 
 // No gate of its own: doctor USED to run here and fail the build on a finding, which
 // made workspace conventions a blocker for everyone downstream. The advice action now

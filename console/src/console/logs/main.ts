@@ -46,6 +46,7 @@ import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
+import { logsZoomCell } from "../layoutPrefs";
 import { attachHelpPopover } from "../../ui/help-popover";
 
 // Per-activation teardown. The console caches surface modules and re-runs activate() on every
@@ -170,7 +171,7 @@ function demoRunText(run: RunSummary): string {
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 2.2;
 const ZOOM_STEP = 0.1;
-const zoomCell = persisted<number>("logs-zoom", 1);
+const zoomCell = logsZoomCell;
 
 function clampZoom(z: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));

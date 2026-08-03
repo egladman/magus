@@ -21,7 +21,13 @@ interface SgrState {
 
 // STATUS_RE matches a leading magus status token like "[pass]" / "[fail]" - the
 // "brackets" we render as a colored badge instead. statusToken returns the bare word.
-export const STATUS_RE = /^\s*\[(pass|fail|warn|error|info|dry|summary|cached)\]/i;
+//
+// No "cached": magus deliberately keeps the OUTCOME and the CACHE STATE in separate places
+// and prints "[pass] api (cached, 42ms)" (internal/cache/log.go, pinned by its own test).
+// There is no [cached] head token to match, so listing one only taught readers of this file
+// that a log shape exists which does not. sectionAccent still reports "cached" - it reads the
+// "(cached" note, which is the real signal.
+export const STATUS_RE = /^\s*\[(pass|fail|warn|error|info|dry|summary)\]/i;
 
 export function statusToken(raw: string): string {
   const m = STATUS_RE.exec(stripAnsi(raw));

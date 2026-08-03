@@ -10,6 +10,7 @@ import type { DashboardState } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
 import { attachHelpPopover } from "../../../ui/help-popover";
 import { persisted } from "../../../lib/persist";
+import { collapsedCardsCell } from "../../layoutPrefs";
 
 export interface Tile {
   readonly el: HTMLElement;
@@ -19,7 +20,7 @@ export interface Tile {
 
 // Collapsed-card persistence: a set of card ids, stored as a JSON array in a durable
 // cell. Super-basic UI state; a storage-disabled browser degrades to no persistence.
-const collapsedCell = persisted<string[]>("dashboard-collapsed", []);
+const collapsedCell = collapsedCardsCell;
 function loadCollapsed(): Set<string> {
   return new Set(collapsedCell.get());
 }
@@ -126,9 +127,10 @@ export class Card {
     const h = document.createElement("h2");
     h.className = "pf-v6-c-card__title-text";
     if (opts.term) {
-      // The TITLE itself is the reference link: clicking it opens the term inline in the reference
-      // panel (ref-drawer.js intercepts .console-render-glosslink). No separate labeled link beside it - that just
-      // repeated the title ("Workspaces Workspace", "Sandbox File system sandbox").
+      // The TITLE itself is the reference link: clicking it opens the term's glossary entry.
+      // (It navigates - nothing intercepts it; see glossary.ts.) No separate labeled link
+      // beside it - that just repeated the title ("Workspaces Workspace", "Sandbox File
+      // system sandbox").
       h.append(glossaryLink(opts.term, { label: title, slug: opts.slug }));
     } else {
       h.textContent = title;

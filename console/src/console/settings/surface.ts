@@ -27,11 +27,20 @@ import {
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
 import { h } from "../view";
+import {
+  bigPictureSplitCell,
+  collapsedCardsCell,
+  logsZoomCell,
+  splitModeCell,
+  SPLIT_DEFAULT,
+  SPLIT_SCHEMA,
+} from "../layoutPrefs";
 import { LICENSE_TEXT } from "./license";
 import { buildTokensSection } from "./tokens";
 import { buildMemorySection } from "./memory";
 import {
   buildSettingsEnvelope,
+  type LayoutSettings,
   computePendingChanges,
   createDraftCell,
   diffLines,
@@ -87,6 +96,30 @@ function getThemePref(): ThemePref {
   } catch {
     return "auto";
   }
+}
+
+// readLayout / writeLayout move the envelope's `layout` section over the shared cells in
+// layoutPrefs.ts. They are read live and written straight through rather than staged: this
+// surface has no form for them, so there is no draft to hold them in and no Save that would
+// ever commit them. Using the shared cells (not a second persisted() over the same keys) is
+// what keeps the exporter and the owning surfaces agreeing on defaults.
+function readLayout(): LayoutSettings {
+  return {
+    splitMode: splitModeCell.get(),
+    bigPictureSplit: { ...bigPictureSplitCell.get() },
+    logsZoom: logsZoomCell.get(),
+    collapsedCards: collapsedCardsCell.get(),
+  };
+}
+
+function writeLayout(next: LayoutSettings): void {
+  splitModeCell.set(next.splitMode);
+  bigPictureSplitCell.set({
+    v: next.bigPictureSplit.v ?? SPLIT_SCHEMA,
+    cols: next.bigPictureSplit.cols ?? SPLIT_DEFAULT,
+  });
+  logsZoomCell.set(next.logsZoom);
+  collapsedCardsCell.set(next.collapsedCards);
 }
 
 // buildFormGroup wraps a control in a PF horizontal FormGroup. The label is a real <label for> when the
@@ -402,8 +435,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // renderRaw rebuilds the raw view: a line diff of the committed vs draft settings envelope, one span
   // per line tagged with its diff kind (styled red/green/muted in settings.css).
   function renderRaw(): void {
-    const before = JSON.stringify(buildSettingsEnvelope(committed), null, 2);
-    const after = JSON.stringify(buildSettingsEnvelope(draftPrefs()), null, 2);
+    const before = JSON.stringify(buildSettingsEnvelope(committed, readLayout()), null, 2);
+    const after = JSON.stringify(buildSettingsEnvelope(draftPrefs(), readLayout()), null, 2);
     rawPre.replaceChildren();
     for (const line of diffLines(before, after)) {
       const sign = line.kind === "del" ? "-" : line.kind === "add" ? "+" : " ";
@@ -730,7 +763,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   fileLabel.append(fileInput);
   importActions.append(fileLabel);
 
-  const exportJson = (): string => JSON.stringify(buildSettingsEnvelope(draftPrefs()), null, 2);
+  const exportJson = (): string =>
+    JSON.stringify(buildSettingsEnvelope(draftPrefs(), readLayout()), null, 2);
 
   copyBtn.addEventListener("click", () => {
     const text = exportJson();
@@ -778,15 +812,23 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Import stages onto the draft (merged over the current draft), so the operator reviews the pending diff
   // and then Saves or Applies - import never commits on its own.
   const applyImport = (text: string): void => {
-    const res = importSettings(text, draftPrefs());
+    const res = importSettings(text, draftPrefs(), readLayout());
     if (!res.ok) {
       setStatus(res.error, "error"); // aria-live anchor keeps the terse reason
       showToast("Settings", importFailureToast(res.error), "error");
       return;
     }
     loadDraft(res.next);
+    // The layout section is applied immediately rather than staged. It has no form on this
+    // surface, so there is nothing to review it against and nothing that would ever commit it -
+    // staging it would mean silently discarding it. The surfaces that own these cells read them
+    // at mount, so the change shows up on their next open (or a reload), which is the same
+    // nudge an imported theme already gets.
+    if (res.appliedLayout.length > 0) writeLayout(res.nextLayout);
     setStatus(
-      "Staged import: " + res.applied.join(", ") + ". Review, then Save or Save & Apply.",
+      "Staged import: " +
+        [...res.applied, ...res.appliedLayout].join(", ") +
+        ". Review, then Save or Save & Apply.",
       "ok",
     );
     // Partial import: some of the file did not land. One warn toast tells the operator what was dropped so
