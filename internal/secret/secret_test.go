@@ -484,3 +484,49 @@ func TestReadRejectsAnEmptyValueFromAProvider(t *testing.T) {
 	assert.Contains(t, err.Error(), "empty value",
 		"a blank credential must fail here, not at whatever consumes it")
 }
+
+// hidingCreds conceals its credential in String() but still marshals the field. This is the
+// exact shape that defeats an fmt-only comparison, and the reason redactValue checks the
+// JSON encoding too.
+type hidingCreds struct{ Token string }
+
+func (hidingCreds) String() string { return "creds{redacted}" }
+
+// TestRedactingHandlerCoversEveryAnyCarrier pins all four shapes a KindAny attr takes here.
+// The premise worth stating: a handler cannot redact by inspecting ONE rendering, because
+// the rendering it inspects is not necessarily the one the encoder prints. []byte is
+// decimal to fmt and base64 to JSON; a type with a hiding String() shows nothing to fmt and
+// its whole field set to JSON. Each line below was a live leak at some point in this
+// package's history.
+func TestRedactingHandlerCoversEveryAnyCarrier(t *testing.T) {
+	const tok = "ghp_every_carrier_token"
+	for name, val := range map[string]any{
+		"plain_struct":  struct{ Token string }{Token: tok},
+		"hiding_string": hidingCreds{Token: tok},
+		"raw_bytes":     []byte(tok),
+		"string_slice":  []string{"-p", tok},
+		"nested_map":    map[string]any{"auth": map[string]string{"token": tok}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, _ := withResolver(t)
+			t.Setenv("MAGUS_TEST_CARRIER", tok)
+			_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CARRIER")
+			require.NoError(t, err)
+
+			var sink bytes.Buffer
+			h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			slog.New(h).DebugContext(ctx, "carrier", "v", val)
+
+			out := sink.String()
+			assert.NotContains(t, out, tok, "the raw value must not survive")
+			assert.NotContains(t, out, base64.StdEncoding.EncodeToString([]byte(tok)),
+				"nor a base64 form the reader can trivially decode")
+			// The mask is present either literally or, for a []byte attr, base64'd -
+			// those bytes are replaced before encoding/json sees them, so the wire
+			// carries base64 of "***" rather than the characters.
+			maskB64 := base64.StdEncoding.EncodeToString([]byte(mask))
+			assert.True(t, strings.Contains(out, mask) || strings.Contains(out, maskB64),
+				"something must show the value was masked, got %s", out)
+		})
+	}
+}

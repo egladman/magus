@@ -39,6 +39,7 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -598,9 +599,23 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 			}
 			return v
 		}
+		// Two renderings, because a handler does not necessarily print the one fmt
+		// produces. A type whose String() conceals a credential while its exported fields
+		// still marshal - `func (c creds) String() string { return "creds{redacted}" }` -
+		// passes an fmt comparison and then encoding/json emits {"Token":"ghp_..."}.
+		// Checking the JSON form as well closes that without asking every value to
+		// cooperate. Reached only when the resolver holds something, so the marshal is off
+		// the ordinary path entirely.
 		rendered := v.String()
 		if red := r.RedactString(rendered); red != rendered {
 			return slog.StringValue(red)
+		}
+		if enc, err := json.Marshal(v.Any()); err == nil {
+			if red := r.RedactString(string(enc)); red != string(enc) {
+				// The value is unsafe in its own encoding, so hand the handler text it
+				// cannot re-expand: the redacted JSON, as a string.
+				return slog.StringValue(red)
+			}
 		}
 		return v
 	default:
