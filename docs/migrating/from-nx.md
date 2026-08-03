@@ -66,7 +66,7 @@ declared inputs correctly, not because you remembered a flag.
 
 The mirror-image trap matters more. `cache: false` in Nx is an ordinary
 performance or correctness dial people reach for freely, and its nearest-looking
-neighbour here is the `skip_cache` target policy. They are not equivalents.
+neighbor here is the `skip_cache` target policy. They are not equivalents.
 `skip_cache` is a claim that _replaying this target would produce a wrong
 result_ - it signs a fresh artifact, records a screen capture, mutates
 `go.mod`, or never returns. Reaching for it because a target "should feel fresh"

@@ -313,7 +313,7 @@ fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
 never returns at all. It is a claim about the target's nature, which is why it
 lives in the magusfile rather than in the operator's fingers. `--no-cache` says
 something entirely different and far weaker: _I do not trust the cache for this
-one run._ That is a session-level judgement, so it belongs on the command line.
+one run._ That is a session-level judgment, so it belongs on the command line.
 
 The two are not interchangeable, and collapsing them breaks in both directions.
 Move a `skip_cache` target to `--no-cache` and correctness now depends on
