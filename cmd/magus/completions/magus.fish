@@ -5,36 +5,36 @@
 function __magus_subcommands
     printf '%s\t%s\n' \
 # magus-utils:subcommands:begin
-        ls           'list all discovered projects' \
-        describe     'define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)' \
-        run          'run a target for selected projects' \
-        x            'interactive shorthand: pick project + target (TTY only)' \
-        where        'print the absolute path of a project (fuzzy match)' \
-        affected     'run a target for VCS-diff affected projects' \
-        query        'search the knowledge graph and show a node\'s neighborhood' \
-        explain      'show one knowledge-graph node: its edges, provenance, blast radius' \
-        path         'show the shortest path between two knowledge-graph nodes' \
-        refs         'list where an ingested code symbol is defined and referenced' \
-        graph        'the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)' \
-        insight      'VCS-history analytics: hotspots, affinity, ownership, trend, volatility' \
-        watch        'emit changed file paths (pipe into affected --stdin)' \
-        status       'inspect the concurrency pool of a running parent magus' \
-        clean        'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
-        merge-driver 'VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)' \
-        doctor       'validate the workspace' \
-        config       'view or update magus configuration' \
-        memory       'durable cross-session project memory (list, get, put, delete, verify)' \
-        server       'manage the persistent daemon (start / stop / status; MCP starts with it)' \
-        buzz         'run a Buzz script (Buzz stdlib + every magus host module)' \
-        completion   'print a shell completion script (bash, zsh, fish)' \
-        man          'install the man pages embedded in this binary' \
-        init         'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
-        agent        'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
-        hook         'evaluate one shell command or file path against the magus guard rules (deny/advise/pass verdict)' \
-        notify       'normalize an attention event and optionally notify the local desktop' \
-        self         'manage the magus binary (self update / install)' \
-        version      'print version, commit, and build date' \
-        help         'show this message'
+        ls         'list all discovered projects' \
+        describe   'define a magus concept and list all entities (tools|targets|projects|workspaces|mcp-tools)' \
+        run        'run a target for selected projects' \
+        x          'interactive shorthand: pick project + target (TTY only)' \
+        where      'print the absolute path of a project (fuzzy match)' \
+        affected   'run a target for VCS-diff affected projects' \
+        query      'search the knowledge graph and show a node\'s neighborhood' \
+        explain    'show one knowledge-graph node: its edges, provenance, blast radius' \
+        path       'show the shortest path between two knowledge-graph nodes' \
+        refs       'list where an ingested code symbol is defined and referenced' \
+        graph      'the graphs as objects: deps (project DAG), export (knowledge graph), stats (shape)' \
+        insight    'VCS-history analytics: hotspots, affinity, ownership, trend, volatility' \
+        watch      'emit changed file paths (pipe into affected --stdin)' \
+        status     'inspect the concurrency pool of a running parent magus' \
+        clean      'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
+        vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver)' \
+        doctor     'validate the workspace' \
+        config     'view or update magus configuration' \
+        memory     'durable cross-session project memory (list, get, put, delete, verify)' \
+        server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
+        buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
+        completion 'print a shell completion script (bash, zsh, fish)' \
+        man        'install the man pages embedded in this binary' \
+        init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
+        agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
+        hook       'evaluate one shell command or file path against the magus guard rules (deny/advise/pass verdict)' \
+        notify     'normalize an attention event and optionally notify the local desktop' \
+        self       'manage the magus binary (self update / install)' \
+        version    'print version, commit, and build date' \
+        help       'show this message'
 # magus-utils:subcommands:end
 end
 

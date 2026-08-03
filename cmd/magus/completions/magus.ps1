@@ -11,7 +11,7 @@ $__magus_scriptblock = {
     # magus-utils:subcommands:begin
     $subcommands = 'ls', 'describe', 'run', 'x', 'where', 'affected',
                    'query', 'explain', 'path', 'refs', 'graph', 'insight',
-                   'watch', 'status', 'clean', 'merge-driver', 'doctor', 'config',
+                   'watch', 'status', 'clean', 'vcs', 'doctor', 'config',
                    'memory', 'server', 'buzz', 'completion', 'man', 'init',
                    'agent', 'hook', 'notify', 'self', 'version', 'help'
     # magus-utils:subcommands:end
