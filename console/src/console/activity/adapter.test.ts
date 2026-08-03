@@ -63,6 +63,19 @@ test("tsMillis: absent is null, else seconds*1000 + nanos", () => {
   assert.equal(tsMillis({ seconds: 2n, nanos: 500_000_000 } as never), 2500);
 });
 
+// The dashboard's agent tile links a summary row to "../activity/#at=<atMs>", and the trail
+// resolves it by matching that number against tsMillis(ev.time). The two sides therefore have to
+// agree on the SAME epoch-ms for one event: AgentCallView.atMs is built from the trail event, and
+// tsMillis is what the trail surface reads it back with. If these ever diverge the link silently
+// reveals nothing, which looks like a missing event rather than a broken link.
+test("tsMillis round-trips the epoch-ms an agent-call deep link carries", () => {
+  const ev = { seconds: 1_754_000_000n, nanos: 123_000_000 } as never;
+  const atMs = tsMillis(ev);
+  assert.equal(atMs, 1_754_000_000_123);
+  // What the trail does with "#at=1754000000123": Number() it, then compare by identity.
+  assert.equal(Number(String(atMs)), tsMillis(ev));
+});
+
 test("clockTime formats HH:MM:SS and empties a null instant", () => {
   assert.equal(clockTime(null), "");
   assert.match(clockTime(0), /^\d{2}:\d{2}:\d{2}$/);

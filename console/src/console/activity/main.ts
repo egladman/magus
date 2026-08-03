@@ -273,6 +273,24 @@ export function activate(host: HTMLElement): () => void {
       renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
       panel.applyDefault(has);
     }
+    revealDeepLink(events, sectionEls);
+  }
+
+  // revealDeepLink honours "#at=<epoch-ms>", which is how the dashboard's agent tile hands an
+  // operator the full trail entry behind a summary row it just showed them.
+  //
+  // Matching on the timestamp rather than an id because the trail assigns none, and
+  // activityToModel maps events 1:1 onto sections in order - so the event's index IS the section's
+  // index, which is the same correspondence the index tree already relies on. An #at= that matches
+  // nothing (an aged-out event, a trimmed trail) does nothing rather than erroring: arriving at an
+  // unscrolled trail is a fine outcome, throwing during render is not.
+  function revealDeepLink(events: ActivityEvent[], sectionEls: HTMLElement[]): void {
+    const at = parseHash().at;
+    if (!at) return;
+    const want = Number(at);
+    if (!Number.isFinite(want)) return;
+    const index = events.findIndex((ev) => tsMillis(ev.time) === want);
+    if (index >= 0) reveal(index, sectionEls);
   }
 
   function showEmpty(title: string, sub: string, connText: string): void {
