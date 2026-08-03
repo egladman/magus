@@ -186,7 +186,18 @@ type ActivityEvent struct {
 	// The workspace root the action pertained to; empty for a daemon-wide action not bound to one
 	// workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a
 	// job by its workspace rather than fragmenting the record across per-workspace directories.
-	Workspace     string `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	Workspace string `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	// The agent host behind the action and that host's own session id, empty when the producer
+	// could not know them. The name is an opaque label the caller supplies, not a set magus
+	// enumerates: a hook is told its host by the wrapper that ran it, because no local process can
+	// discover which agent host started it. An MCP call has no such wrapper and is attributed from
+	// its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by
+	// host rather than switching on kind first.
+	//
+	// They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
+	// grouped by host must not cost 200 GetPayload calls.
+	Host          string `protobuf:"bytes,14,opt,name=host,proto3" json:"host,omitempty"`
+	Session       string `protobuf:"bytes,15,opt,name=session,proto3" json:"session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,6 +319,20 @@ func (x *ActivityEvent) GetResponseBytes() int64 {
 func (x *ActivityEvent) GetWorkspace() string {
 	if x != nil {
 		return x.Workspace
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetSession() string {
+	if x != nil {
+		return x.Session
 	}
 	return ""
 }
@@ -595,7 +620,7 @@ var File_magus_activity_v1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\n" +
-	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\xe5\x03\n" +
+	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\x93\x04\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12+\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.magus.activity.v1.KindR\x04kind\x12\x14\n" +
@@ -611,7 +636,9 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	" \x01(\tR\apreview\x12#\n" +
 	"\rrequest_bytes\x18\v \x01(\x03R\frequestBytes\x12%\n" +
 	"\x0eresponse_bytes\x18\f \x01(\x03R\rresponseBytes\x12\x1c\n" +
-	"\tworkspace\x18\r \x01(\tR\tworkspace\"\x9f\x01\n" +
+	"\tworkspace\x18\r \x01(\tR\tworkspace\x12\x12\n" +
+	"\x04host\x18\x0e \x01(\tR\x04host\x12\x18\n" +
+	"\asession\x18\x0f \x01(\tR\asession\"\x9f\x01\n" +
 	"\rActivityQuery\x12-\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x17.magus.activity.v1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +

@@ -7,7 +7,8 @@
 //
 // It encodes no magus rule. Every decision comes from `magus hook`, so
 // this stays host-only glue rather than a second rule set that drifts out of
-// step with the other hosts' templates.
+// step with the other hosts' templates. `--host opencode` only labels the
+// observation magus records; it cannot change a verdict.
 //
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules (deny; advise surfaced to the human)
@@ -134,7 +135,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["agent", "hook", "-o", "json", "--", command]));
+        apply(await judge(["agent", "hook", "--host", "opencode", "-o", "json", "--", command]));
         return;
       }
 
@@ -143,7 +144,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(await judge(["agent", "hook", "--path", "-o", "json", "--", path]));
+        apply(await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]));
       }
     },
   };

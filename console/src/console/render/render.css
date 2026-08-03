@@ -1,0 +1,108 @@
+/* render.css - the styles for the shared leaf renderers in render/sections.ts.
+ *
+ * renderLine / renderContent / fillAnsi are already shared TypeScript: the log viewer, the activity
+ * trail, and the dashboard's live-activity preview all build the same .console-render-line,
+ * .console-render-badge and .console-render-ansi* markup through them. Their STYLES, though, lived
+ * in logs.css - a per-surface sheet - which meant a second surface could only get captured output
+ * to look right by loading the whole log viewer's stylesheet. The activity trail does exactly that
+ * today (main.ts registers it with css: "logs/logs.css"), and a third surface wanting one styled
+ * output line would have had to do the same.
+ *
+ * So the leaf renderers' styles live next to the leaf renderers. The boundary is deliberate and
+ * narrow: ONLY what sections.ts's line-level helpers emit. The panel frame, the scroll body, the
+ * foldable section chrome and the empty state stay in logs.css, because those belong to the two
+ * surfaces that build a whole log-viewer-shaped page, not to anyone rendering a line of output.
+ *
+ * Consumed by @import from logs.css and dashboard.css, both bundled at build time, so this is one
+ * source of truth with no extra runtime request.
+ *
+ * --log-pad is supplied by the including sheet: the log viewer wants its own gutter, and a compact
+ * preview inside a dashboard tile wants a much smaller one. The fallback keeps this sheet usable on
+ * its own. */
+
+/* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip. */
+.console-render-badge {
+  display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
+  font-size: 0.66rem; font-weight: 700; line-height: 1.5;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  /* A literal 2px, NOT a radius token, and this is the rare case where that is right.
+   *
+   * Corner radius reads relative to the box it is on, and this box is ~15px tall - so a value that
+   * looks crisp on a card reads as a soft pill here. Every radius token is also platform-tuned:
+   * tokens.css has a :root[data-platform=apple] block that deliberately rounds everything more to
+   * match macOS, taking --tiny from 2px to 4px. That is right for buttons and cards and wrong for a
+   * 15px status chip, which ended up looking like a lozenge on exactly the platform most of these
+   * are read on. Pinning it here keeps the badge square-ish everywhere without flattening the
+   * platform's rounding for every other component that shares the token. */
+  border-radius: 2px; color: #fff; vertical-align: baseline;
+}
+.console-render-badge--pass { background: var(--console-status-ok); }
+.console-render-badge--fail, .console-render-badge--error { background: var(--console-status-danger); }
+.console-render-badge--warn, .console-render-badge--dry { background: var(--console-status-warn); }
+/* The three non-outcome badges, separated by FORM as well as hue.
+ *
+ * CACHED is the quietest thing in a magus log: it means no work happened at all. So it is the one
+ * badge that is not a filled chip - an outline, ink-on-nothing. That makes it the most subdued mark
+ * on the line while still being instantly separable from info and summary, which no third shade of
+ * grey could manage. Filling it, as an earlier revision did, made the most common line in a warm
+ * run the loudest thing on screen, which is backwards. */
+.console-render-badge--cached {
+  background: none;
+  color: var(--console-stone);
+  box-shadow: inset 0 0 0 1px var(--console-stone);
+}
+/* INFO and SUMMARY are both narration, and were both grey, so nothing separated them. They take two
+   distinct hues from the console's earthy palette instead: spruce reads as neutral information,
+   indigo as the heavier line that closes a run. Neither borrows an outcome colour, so neither can
+   be mistaken for a pass or a failure. */
+.console-render-badge--info { background: var(--console-spruce); }
+.console-render-badge--summary { background: var(--console-indigo); }
+
+/* A single output line: a fixed line-number gutter plus the wrapping content. */
+.console-render-line {
+  display: flex; gap: 0.75rem; padding: 0 var(--log-pad, 0.6rem);
+}
+.console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
+/* Line-number gutter: ALWAYS shown and never selectable, so copying the body grabs the text
+   without the numbers. Shared by body lines and section heads for continuous numbering. */
+.console-render-line__gutter {
+  flex: 0 0 auto; min-width: 2.5em; text-align: right;
+  color: var(--pf-t--global--text--color--subtle); user-select: none; -webkit-user-select: none;
+  cursor: pointer; /* line numbers are clickable deep-link anchors (GitHub-style #L10-L20) */
+}
+.console-render-line .console-render-line__content { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
+
+/* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. A translucent accent tint. */
+.console-render-line[data-highlight] { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
+
+/* Zebra striping, OPT-IN via [data-zebra] on the container.
+ *
+ * Opt-in rather than default because the two consumers have different needs. The log viewer numbers
+ * every line, and a line-number gutter already gives the eye a rail to track along; adding stripes
+ * there would be a second, redundant tracking aid and a visual change to a surface that did not ask
+ * for one. A live tail in a dashboard tile has NO gutter (a rolling window has no stable numbering
+ * to anchor to), so it has nothing to track along - and it is the one that gets read at a distance
+ * and while moving, which is exactly when a wrapped line is easy to lose your place in.
+ *
+ * The tint is deliberately very low contrast. It only has to group rows, and anything stronger
+ * fights the ANSI colors and the status badges that are the actual signal on these lines. */
+[data-zebra] .console-render-line:nth-child(even) {
+  background: color-mix(in srgb, var(--pf-t--global--text--color--subtle) 7%, transparent);
+}
+/* Hover still wins over the stripe, so pointing at a row in the log viewer reads the same either
+   way; without this the stripe and the hover tint would trade places row to row. */
+[data-zebra] .console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
+
+/* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colors. The color slots are
+   the console's theme-aware --console-ansi-* tokens (tokens.css), so light/dark need no per-mode
+   overrides here. black/white are left to inherit (no slot). */
+.console-render-ansi--bold { font-weight: 600; }
+.console-render-ansi--dim { opacity: 0.6; }
+.console-render-ansi--italic { font-style: italic; }
+.console-render-ansi--underline { text-decoration: underline; }
+.console-render-ansi__fg--red { color: var(--console-ansi-red); }
+.console-render-ansi__fg--green { color: var(--console-ansi-green); }
+.console-render-ansi__fg--yellow { color: var(--console-ansi-yellow); }
+.console-render-ansi__fg--blue { color: var(--console-ansi-blue); }
+.console-render-ansi__fg--magenta { color: var(--console-ansi-magenta); }
+.console-render-ansi__fg--cyan { color: var(--console-ansi-cyan); }

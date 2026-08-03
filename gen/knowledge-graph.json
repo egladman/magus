@@ -161,14 +161,6 @@
       }
     },
     {
-      "id": "diagnostic:MGS1017",
-      "kind": "diagnostic",
-      "label": "MGS1017",
-      "attrs": {
-        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1017/"
-      }
-    },
-    {
       "id": "diagnostic:MGS2001",
       "kind": "diagnostic",
       "label": "MGS2001",
@@ -2574,7 +2566,9 @@
       "label": "CHANGELOG.md",
       "source": "CHANGELOG.md",
       "attrs": {
-        "role": "changelog"
+        "diagnostic": "MGS7002",
+        "role": "changelog",
+        "unknown_codes": "MGS1017"
       }
     },
     {
@@ -4088,10 +4082,12 @@
       "label": "docs/reference/codes/magusfile/MGS1017.md",
       "source": "docs/reference/codes/magusfile/MGS1017.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS1017,magusfile,spells,migration,breaking-change",
-        "title": "MGS1017: magusfile is not a spell"
+        "title": "MGS1017: magusfile is not a spell",
+        "unknown_codes": "MGS1017"
       }
     },
     {
@@ -20760,6 +20756,14 @@
       "label": "gomod"
     },
     {
+      "id": "spell:magusfile",
+      "kind": "spell",
+      "label": "magusfile",
+      "attrs": {
+        "declared": "true"
+      }
+    },
+    {
       "id": "spell:markdown",
       "kind": "spell",
       "label": "markdown",
@@ -27375,14 +27379,6 @@
     },
     {
       "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1017",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -27464,6 +27460,14 @@
     {
       "source": "doc:CHANGELOG.md",
       "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
+      "target": "spell:magusfile",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
@@ -32407,14 +32411,6 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1017.md",
-      "target": "diagnostic:MGS1017",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/codes/magusfile/MGS1017.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/magusfile/MGS1017.md",
       "target": "doc:docs/concepts/spells.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32440,6 +32436,14 @@
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1017.md",
       "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/codes/magusfile/MGS1017.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1017.md",
+      "target": "spell:magusfile",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,

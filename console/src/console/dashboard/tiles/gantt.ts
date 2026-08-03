@@ -59,7 +59,27 @@ function fmtDurMs(ms: number): string {
 }
 
 export function ganttTile(): Tile {
-  const card = new Card("gantt", "Live execution", { term: "Trace", label: "trace", note: "idle" });
+  const card = new Card("gantt", "Live execution", {
+    term: "Trace",
+    label: "trace",
+    note: "idle",
+    why:
+      "Where a run's wall clock actually went. The dashed leader is queued time and the solid bar is" +
+      " real work. One duration hides that difference, and the two need opposite fixes.",
+  });
+  // How to READ the chart, printed on the tile rather than hidden behind the "?".
+  //
+  // The tile encodes four separate things - horizontal position (when), bar length (how long), the
+  // dashed leader (queued rather than working), and the shaded block (which run) - and the legend
+  // decoded only the fifth, colour. Someone looking at it cold could name the colours and still not
+  // know which way time ran or what the dashes meant. A popover is the wrong home for this: it is
+  // unreachable on a wall display, which is exactly where an unexplained chart is most expensive.
+  const howto = h(
+    "p",
+    "console-dashboard-gantt__howto",
+    "Time runs left to right over the last minute and the right edge is now. Each shaded block is" +
+      " one run, one row per target, and a bar is as long as the target took.",
+  );
   const wrap = h("div", "console-dashboard-gantt__scroll");
   const empty = h("p", "console-dashboard-row__empty", "No active runs.");
   const legend = h("div", "console-dashboard-gantt__legend");
@@ -69,10 +89,13 @@ export function ganttTile(): Tile {
     ["passed", "passed"],
     ["failed", "failed"],
     ["cached", "cached"],
+    // The one legend entry that is not a colour. The dashed leader is the chart's most useful mark
+    // and the least guessable, since nothing else on the board uses dashes to mean elapsed time.
+    ["wait", "waiting to start"],
   ] as const) {
     legend.append(h("span", "console-dashboard-legend console-dashboard-legend--" + cls, text));
   }
-  card.body.append(wrap, empty, legend);
+  card.body.append(howto, wrap, empty, legend);
 
   let runs: RunView[] = [];
   let liveHost: string | null = null;
@@ -122,12 +145,39 @@ export function ganttTile(): Tile {
     rowY: number,
     t0: number,
     now: number,
+    runStart: number | null,
   ): void {
     const span = barSpan(t, now);
     if (!span) return;
     const x1 = timeX(span.s, t0, now);
     const x2 = timeX(span.e, t0, now);
     const w = Math.max(MIN_BAR_W, x2 - x1);
+
+    // WAIT SEGMENT: the stretch between the run being submitted and this target actually starting.
+    //
+    // The bar alone conflates two very different facts. A target that took 40s because it ran for
+    // 40s and one that took 40s because it sat in the queue for 35s and ran for 5 look identical,
+    // and the second is the one worth acting on - it says the pool is the constraint, not the work.
+    // Both times are already in the frame (the run's first start, and this target's), so the
+    // distinction costs a rectangle rather than any new data.
+    //
+    // Drawn hollow and behind the bar so it reads as elapsed-but-not-working.
+    if (runStart != null && t.startMs != null && t.startMs > runStart) {
+      const wx1 = timeX(runStart, t0, now);
+      const ww = x1 - wx1;
+      if (ww > 1) {
+        const wait = svg("rect");
+        wait.setAttribute("x", wx1.toFixed(2));
+        wait.setAttribute("y", String(rowY + (ROW_H - BAR_H / 2) / 2));
+        wait.setAttribute("width", ww.toFixed(2));
+        wait.setAttribute("height", String(BAR_H / 2));
+        wait.setAttribute("class", "console-dashboard-gantt__wait");
+        const wt = svg("title");
+        wt.textContent = t.label + " waited " + fmtDurMs(t.startMs - runStart) + " to start";
+        wait.appendChild(wt);
+        root.appendChild(wait);
+      }
+    }
     // A queued pip sits just left of the now-line so it reads as "waiting to start".
     const x = t.state === "queued" ? Math.max(LABEL_W, timeX(now, t0, now) - MIN_BAR_W) : x1;
     const rect = svg("rect");
@@ -143,6 +193,27 @@ export function ganttTile(): Tile {
     const title = svg("title");
     title.textContent = t.label + " - " + t.state + (dur ? " (" + dur + ")" : "");
     rect.appendChild(title);
+
+    // The duration, printed after the bar.
+    //
+    // A bar's LENGTH is a comparison, not a measurement: it says this took longer than that, within
+    // a 60s window, and nothing about how long either actually was. Reading a number off it means
+    // hovering for the tooltip, which on a board that is watched rather than used is no answer at
+    // all. The value is already computed for that tooltip; printing it costs one <text>.
+    //
+    // Suppressed for a bar that ends flush against the right edge (a still-running target keeps
+    // moving) only when there is no room, so the label never overprints the "now" line.
+    if (dur) {
+      const labelX = x + w + 4;
+      if (labelX < VIEW_W - RIGHT_PAD - 26) {
+        const durText = svg("text");
+        durText.setAttribute("x", labelX.toFixed(2));
+        durText.setAttribute("y", String(rowY + ROW_H / 2 + 3));
+        durText.setAttribute("class", "console-dashboard-gantt__dur");
+        durText.textContent = dur;
+        root.appendChild(durText);
+      }
+    }
 
     // Finished bars with a ref deep-link to the log viewer for that ref, carrying the
     // live host so the viewer can resolve it - same relative path the running-targets
@@ -202,15 +273,83 @@ export function ganttTile(): Tile {
 
     let y = AXIS_H;
     let running = 0;
+    let group = 0;
     for (const run of visibleRuns) {
+      // Group banding, drawn first so it sits behind the labels and bars.
+      //
+      // Zebra at RUN granularity, not row granularity. One tint per invocation blocks its targets
+      // into a single readable unit; striping every row would put twenty alternating lines into a
+      // tile that is already dense, and the stripes would compete with the bars for attention.
+      const groupH = RUN_H + run.targets.length * ROW_H;
+      const band = svg("rect");
+      band.setAttribute("x", "0");
+      band.setAttribute("y", String(y - 2));
+      band.setAttribute("width", String(VIEW_W));
+      band.setAttribute("height", String(groupH));
+      band.setAttribute("class", "console-dashboard-gantt__runband");
+      band.setAttribute("data-zebra", group % 2 === 0 ? "even" : "odd");
+      root.appendChild(band);
+      group++;
+
       const head = svg("text");
-      head.setAttribute("x", "2");
+      // x=8 matches the target labels below, so the header and its rows share one left edge and the
+      // group reads as a block. At x=2 it sat on top of the rule.
+      head.setAttribute("x", "8");
       head.setAttribute("y", String(y + 12));
       head.setAttribute("class", "console-dashboard-gantt__runlabel");
-      const inv = run.inv ? run.inv.slice(0, 12) : "run";
-      head.textContent = (run.trigger || "run") + " " + inv;
+      // Trigger and invocation id are two different kinds of thing on one line, so they are two
+      // tspans rather than one string. The trigger is the word an operator reads; the id is an
+      // opaque handle wanted only when copying it. Weighting the whole line made the id the loudest
+      // text in the tile, and bold on a 12-char hex string is harder to read, not easier.
+      const trigger = svg("tspan");
+      trigger.setAttribute("class", "console-dashboard-gantt__runtrigger");
+      trigger.textContent = run.trigger || "run";
+      head.appendChild(trigger);
+      if (run.inv) {
+        const ref = svg("tspan");
+        ref.setAttribute("class", "console-dashboard-gantt__runref");
+        ref.setAttribute("dx", "6");
+        ref.textContent = run.inv.slice(0, 12);
+        head.appendChild(ref);
+      }
       root.appendChild(head);
+
+      // A per-run summary, right-aligned on the header row: how many targets, how much wall clock
+      // the invocation has burned, and how many of its targets are still going.
+      //
+      // This is the line an operator actually reads off a run - "is this sweep nearly done, and is
+      // it slower than usual" - and it was recoverable only by squinting along the rows and adding
+      // up bars. Wall clock is first-start to last-end (or now, while anything is still running),
+      // which is the elapsed time of the INVOCATION rather than the sum of its targets: with work
+      // running concurrently, the sum is always larger than the time anyone waited.
+      const starts = run.targets.map((t) => t.startMs).filter((v): v is number => v != null);
+      const stillRunning = run.targets.filter((t) => t.state === "running").length;
+      if (starts.length > 0) {
+        const first = Math.min(...starts);
+        const ends = run.targets
+          .map((t) => (t.state === "running" ? now : t.endMs))
+          .filter((v): v is number => v != null);
+        const last = ends.length > 0 ? Math.max(...ends) : now;
+        const bits = [
+          run.targets.length + (run.targets.length === 1 ? " target" : " targets"),
+          fmtDurMs(last - first),
+        ];
+        if (stillRunning > 0) bits.push(stillRunning + " running");
+        const summary = svg("text");
+        summary.setAttribute("x", String(VIEW_W - RIGHT_PAD));
+        summary.setAttribute("y", String(y + 12));
+        summary.setAttribute("text-anchor", "end");
+        summary.setAttribute("class", "console-dashboard-gantt__runsummary");
+        summary.textContent = bits.join(" - ");
+        root.appendChild(summary);
+      }
       y += RUN_H;
+      // When this invocation's first target actually began. Every later target's gap from here is
+      // queue wait rather than work, which is what drawBar shades.
+      const runStart = run.targets.reduce<number | null>(
+        (min, t) => (t.startMs == null ? min : min == null ? t.startMs : Math.min(min, t.startMs)),
+        null,
+      );
       for (const t of run.targets) {
         if (t.state === "running") running++;
         const label = svg("text");
@@ -222,7 +361,7 @@ export function ganttTile(): Tile {
         lt.textContent = t.label;
         label.appendChild(lt);
         root.appendChild(label);
-        drawBar(root, t, y, t0, now);
+        drawBar(root, t, y, t0, now, runStart);
         y += ROW_H;
       }
     }

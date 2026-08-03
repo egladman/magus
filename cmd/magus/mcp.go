@@ -143,6 +143,14 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 			return serviceStatuses(daemonServices)
 		}))
 	}
+	// The activity view is daemon-wide, so it reads every loaded workspace's trail, not just this
+	// bridge's: an agent hook runs as a short-lived client outside the daemon and writes to ITS
+	// workspace's cache dir, so a bridge-only view misses every other workspace's agent activity.
+	// Same registry the WorkspaceLister reports from. Nil for a bridge started without the
+	// multi-workspace daemon, where the bridge workspace is the only one anyway.
+	if daemonRegistry != nil {
+		daemonOpts = append(daemonOpts, daemon.WithActivityWorkspaces(daemonRegistry.activityWorkspaces))
+	}
 	m.SetDaemon(daemon.New(internalmcp.Options{
 		Magus:      m,
 		Logger:     slog.Default(),

@@ -97,6 +97,10 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	event := events[0]
 	require.Equal(t, KindAgentCommand, event.Kind)
 	require.Equal(t, "session:abc123", event.Actor)
+	// Host and session ride the event LINE as well as the request blob, so a reader can group a
+	// page of observations by host without a blob fetch per row.
+	require.Equal(t, "codex", event.Host)
+	require.Equal(t, "abc123", event.Session)
 	require.Equal(t, "/repo/magus", event.Workspace)
 	require.Equal(t, "Bash", event.Action)
 	require.Equal(t, OutcomeOK, event.Outcome)

@@ -18,7 +18,7 @@ Change a file and magus works out which projects it reaches, rebuilds only those
 <!-- Recorded by `magus run tapes` from tapes/core-loop.tape; regenerate and commit to refresh. -->
 
 <p align="center">
-  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them in 802ms reporting '0 cached, 4 ran', and the same command run again reports '4 cached, 0 ran' in 130ms, replaying the captured test output from cache." src="./assets/gen/core-loop.gif">
+  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 4 ran', the same command run again reports '4 cached, 0 ran' and replays the captured test output from cache, and finally one file is edited and magus affected ci reports '4 cached, 1 ran' so only the edited project does work." src="./assets/gen/core-loop.gif" width="820">
 </p>
 
 ## Why magus exists

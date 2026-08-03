@@ -17,10 +17,16 @@
 #
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
+#
+# GUARD_HOST and HOST_SESSION_PATH work exactly as they do in
+# magus-guard-command.sh: attribution recorded on the activity event, never an
+# input to the verdict.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$GUARD_HOST" ] || GUARD_HOST='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -31,4 +37,18 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path -o "template=$HOST_RESPONSE"
+# One drain of stdin, two selections from it: the path to judge, and the session
+# id to attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+
+# Attribution is BEST EFFORT; the verdict is not. --host and --session postdate the current magus
+# release, and an older binary rejects the unknown flag outright - printing usage to stdout and
+# exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
+# attribution, fall back to the call this script made before it existed.
+guard() {
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path "$@" -o "template=$HOST_RESPONSE"
+}
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || verdict=$(guard 2>/dev/null)
+printf '%s' "$verdict"

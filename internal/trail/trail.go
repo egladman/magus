@@ -94,11 +94,17 @@ const (
 // Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
 // body never bloats the line. Field names are snake_case and match the journal's Event where
 // they overlap (Ts, DurMs).
+//
+// Host and Session duplicate what an agent-hook event also records in its request blob, and that
+// duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
+// fetch 200 blobs to do it. They stay short, so the "lines stay small" invariant holds.
 type Event struct {
 	Ts            int64  `json:"ts"`                      // unix milliseconds at the action's start
 	Kind          Kind   `json:"kind"`                    // one of the Kind* constants
 	Actor         string `json:"actor"`                   // who: an agent id, "daemon", a user
 	UserAgent     string `json:"user_agent,omitempty"`    // caller's HTTP User-Agent, when known (MCP over HTTP)
+	Host          string `json:"host,omitempty"`          // the agent host that produced the action, as its own wrapper named itself; "" when the producer could not know
+	Session       string `json:"session,omitempty"`       // the host's own session id, when its event carried one
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
@@ -196,6 +202,8 @@ func AppendAgentCommand(base string, command AgentCommand) {
 		Ts:            time.Now().UnixMilli(),
 		Kind:          KindAgentCommand,
 		Actor:         actor,
+		Host:          command.Host,
+		Session:       command.Session,
 		Workspace:     command.Workspace,
 		Action:        action,
 		Outcome:       OutcomeOK,

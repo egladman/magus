@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]

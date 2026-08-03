@@ -826,6 +826,70 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	assert.Empty(t, events, "a hook with no command/path has no observable invocation to record")
 }
 
+// TestHookCmd_RecordsHostAttribution covers the --host/--session/--event flags: the wrapper is
+// the only party that knows which agent host ran the hook, so what it passes must survive onto
+// the event line, not only into the request blob.
+func TestHookCmd_RecordsHostAttribution(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &out,
+		[]string{"--host", "claude-code", "--session", "abc123", "--event", "PreToolUse", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+
+	// Whole-struct assertion with the content-addressed and clock-dependent fields lifted out
+	// first, so a new field on Event cannot be silently dropped by the hook producer.
+	requestRef, responseRef := got.RequestRef, got.ResponseRef
+	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
+	got.RequestBytes, got.ResponseBytes = 0, 0
+	assert.Equal(t, trail.Event{
+		Kind:      trail.KindAgentCommand,
+		Actor:     "agent",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Workspace: "/repo/magus",
+		Action:    "shell.command",
+		Outcome:   trail.OutcomeOK,
+		Preview:   "guard: pass",
+	}, got)
+
+	body, err := trail.ReadBlob(dir, requestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse","tool":"shell.command","command":"ls"}`, string(body))
+	body, err = trail.ReadBlob(dir, responseRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"decision":"pass"}`, string(body))
+}
+
+// TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
+// metadata, so a wrapper that supplies none still gets a verdict and still records an event.
+func TestHookCmd_AttributionIsOptional(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Empty(t, got.Host)
+	assert.Empty(t, got.Session)
+
+	// Omitted rather than recorded empty: the blob says nothing was known, not that the host is "".
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls"}`, string(body))
+}
+
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")

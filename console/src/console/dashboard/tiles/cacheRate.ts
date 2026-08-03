@@ -18,6 +18,9 @@ export function cacheRateTile(): Tile {
   const card = new Card("cache", "Cache hit-rate", {
     term: "Cache",
     note: "per-interval hits / (hits + misses)",
+    why:
+      "Hit rate over time, not the running total. A rate that drops and stays down means some" +
+      " input now changes on every run. The cumulative number averages that away.",
     onReveal: () => {
       chart.build();
       chart.resize();

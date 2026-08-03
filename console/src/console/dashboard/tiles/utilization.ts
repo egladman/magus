@@ -16,7 +16,7 @@
 import type { DashboardState, SampleView } from "../state";
 import { clock } from "../state";
 import { cssVar, onThemeChange } from "../charts/uplot";
-import { h, type Tile } from "./card";
+import { h, helpGlyph, type Tile } from "./card";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const GRID_ROWS = 7;
@@ -30,7 +30,15 @@ export function utilizationTile(): Tile {
   const headerMain = h("div", "pf-v6-c-card__header-main");
   const titleWrap = h("div", "pf-v6-c-card__title");
   const title = h("h2", "pf-v6-c-card__title-text", "Pool utilization");
-  titleWrap.append(title);
+  titleWrap.append(
+    title,
+    helpGlyph(
+      "Pool occupancy over time, one square per sample, so saturation reads as a pattern rather" +
+        " than as one instant. A band of saturated squares with work queued means the machine was" +
+        " the constraint for that whole stretch.",
+      "pool utilization",
+    ),
+  );
   headerMain.append(titleWrap);
   header.append(headerMain);
 
@@ -55,7 +63,16 @@ export function utilizationTile(): Tile {
     scale,
     h("span", "console-dashboard-legend console-dashboard-legend--queued", "queued"),
   );
-  body.append(grid, legend);
+  // The legend below decodes the SHADING but not the layout, and the layout is the part nobody
+  // guesses: this is not a bar chart, it is one square per sample laid out in reading order. Told
+  // that, the tile becomes obvious; left to work it out, a viewer reads the rows as categories.
+  const howto = h(
+    "p",
+    "console-dashboard-gantt__howto",
+    "One square per sample in reading order, oldest first and newest at the end. A dark run of" +
+      " squares is a stretch where the pool stayed busy.",
+  );
+  body.append(howto, grid, legend);
 
   card.append(header, body, footer);
 

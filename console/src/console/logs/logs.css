@@ -1,3 +1,8 @@
+/* The line-level renderer styles (.console-render-badge / .console-render-line /
+   .console-render-ansi*), shared with every surface that paints captured output through
+   render/sections.ts. Bundled at build time, so this is an inline, not a runtime request. */
+@import "../render/render.css";
+
 /* logs.css - page-scoped styles for the console Log Viewer surface.
  *
  * PatternFly (W3): the CHROME migrated to PatternFly - the file/query bar is a PF Toolbar
@@ -239,49 +244,13 @@
 .console-render-section[data-status="warn"], .console-render-section[data-status="dry"] { box-shadow: inset 3px 0 0 var(--console-status-warn); }
 .console-render-section[data-status="cached"] { box-shadow: inset 3px 0 0 var(--pf-t--global--border--color--default); }
 
-/* Status badge: the "[pass]"/"[fail]" bracket token promoted to a colored chip. */
-.console-render-badge {
-  display: inline-block; margin-right: 0.55em; padding: 0 0.4em;
-  font-size: 0.66rem; font-weight: 700; line-height: 1.5;
-  text-transform: uppercase; letter-spacing: 0.04em;
-  border-radius: var(--pf-t--global--border--radius--small); color: #fff; vertical-align: baseline;
-}
-.console-render-badge--pass { background: var(--console-status-ok); }
-.console-render-badge--fail, .console-render-badge--error { background: var(--console-status-danger); }
-.console-render-badge--warn, .console-render-badge--dry { background: var(--console-status-warn); }
-.console-render-badge--info, .console-render-badge--summary, .console-render-badge--cached { background: var(--pf-t--global--text--color--subtle); }
-
-/* A single output line: a fixed line-number gutter plus the wrapping content. */
-.console-render-line {
-  display: flex; gap: 0.75rem; padding: 0 var(--log-pad);
-}
-.console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
-/* Line-number gutter: ALWAYS shown and never selectable, so copying the body grabs the text
-   without the numbers. Shared by body lines and section heads for continuous numbering. */
-.console-render-line__gutter {
-  flex: 0 0 auto; min-width: 2.5em; text-align: right;
-  color: var(--pf-t--global--text--color--subtle); user-select: none; -webkit-user-select: none;
-  cursor: pointer; /* line numbers are clickable deep-link anchors (GitHub-style #L10-L20) */
-}
-.console-render-line .console-render-line__content { flex: 1 1 auto; white-space: pre-wrap; word-break: break-word; }
-
-/* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. A translucent accent tint. */
-.console-render-line[data-highlight] { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
+/* The badge / line / ANSI rules that used to sit here now live in render/render.css, next to the
+   sections.ts helpers that emit them, and are pulled in by the @import at the top of this file.
+   They moved because the dashboard's live-activity preview needs the same styled output lines, and
+   the only way to get them was to load this entire sheet - which is what the activity trail still
+   does for the panel frame below. Section-head highlighting stays here: the foldable section is log
+   viewer and activity chrome, not something a line-level renderer produces. */
 .console-render-section__head[data-highlight] { background: color-mix(in srgb, var(--console-accent) 22%, var(--pf-t--global--background--color--secondary--default)); }
-
-/* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colors. The color slots are
-   the console's theme-aware --console-ansi-* tokens (tokens.css), so light/dark need no per-mode
-   overrides here. black/white are left to inherit (no slot). */
-.console-render-ansi--bold { font-weight: 600; }
-.console-render-ansi--dim { opacity: 0.6; }
-.console-render-ansi--italic { font-style: italic; }
-.console-render-ansi--underline { text-decoration: underline; }
-.console-render-ansi__fg--red { color: var(--console-ansi-red); }
-.console-render-ansi__fg--green { color: var(--console-ansi-green); }
-.console-render-ansi__fg--yellow { color: var(--console-ansi-yellow); }
-.console-render-ansi__fg--blue { color: var(--console-ansi-blue); }
-.console-render-ansi__fg--magenta { color: var(--console-ansi-magenta); }
-.console-render-ansi__fg--cyan { color: var(--console-ansi-cyan); }
 
 /* --- Trace waterfall (Timeline) -------------------------------------------------------------
    The invocation's spans (targets, and their step child-spans) on a shared time axis, drawn as

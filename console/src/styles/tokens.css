@@ -28,6 +28,28 @@
   --pf-t--global--border--radius--300: 3px;
   --pf-t--global--border--radius--400: 3px;
   --pf-t--global--border--radius--500: 4px; /* was 999px (pill) - crisp rounded rect, not a cylinder */
+  /* Motion. One duration scale and one easing, so every state change in the console moves at a
+     related pace instead of each surface inventing its own.
+   *
+   * The house rule these encode: use a TRANSITION, never a keyframe animation, to bring something
+   * into view. The two fail in opposite directions. An element whose animation has not completed
+   * sits at its `from` keyframe - which for a fade-in or a slide-in means invisible or off-screen -
+   * and browsers do not advance animations in a tab they consider non-visible, which a wall display
+   * very often is. An element whose transition is not running is simply AT its final computed
+   * style. So a transition that never gets to interpolate degrades to "it just appeared", while an
+   * animation that never gets to run degrades to "it is not there at all".
+   *
+   * This is not hypothetical: the Big Picture alert rail shipped briefly with a slide-up keyframe
+   * and measured at y=900 on a 900px viewport, parked below the fold on its `from` frame - an alert
+   * channel that would have been reliably invisible on exactly the screens it was built for.
+   *
+   * --console-motion-fast for a hover or a press, --console-motion for an element arriving or
+   * leaving. Anything slower reads as lag rather than as grace. */
+  --console-motion-fast: 120ms;
+  --console-motion: 190ms;
+  /* No easing token is defined here: --console-ease already exists further down this file. Defining
+     a second one in an earlier block silently lost to it, which is the failure mode of a duplicated
+     custom property - no error, just the other value. */
   --pf-t--global--border--radius--tiny: 2px;
   --pf-t--global--border--radius--small: 3px;
   --pf-t--global--border--radius--medium: 3px;

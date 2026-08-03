@@ -4,6 +4,7 @@
 import type { DashboardState, WorkspaceView } from "../state";
 import { relTime } from "../state";
 import { Card, h, type Tile } from "./card";
+import { fitRows } from "./density";
 import type { Persisted } from "../../../lib/persist";
 
 // activeWorkspace, when given, is the dashboard header's active-workspace picker pick
@@ -11,7 +12,13 @@ import type { Persisted } from "../../../lib/persist";
 // visible effect here - the one place per-workspace data (this daemon's cache tallies) actually
 // exists to scope to. Optional: the standalone case (no picker wired) renders unhighlighted.
 export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
-  const card = new Card("workspaces", "Workspaces", { term: "Workspace", label: "workspaces" });
+  const card = new Card("workspaces", "Workspaces", {
+    term: "Workspace",
+    label: "workspaces",
+    why:
+      "Which checkouts this daemon holds warm, and how well the cache serves each. One with a far" +
+      " worse hit rate is usually a worktree whose absolute paths differ, so it reuses nothing.",
+  });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");
   countLabel.append(count);
@@ -52,12 +59,20 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
     if (lastStatus) render(lastStatus.workspaces);
   });
 
+  // On the board this list simply grows its card and the page scrolls. In Big Picture the card is a
+  // fixed grid slot with no scrollbar, so a longer list would lose its tail behind overflow: hidden
+  // and read as though the daemon had fewer workspaces than it has. fitRows trims to fit and says
+  // what it dropped; it is a no-op whenever everything already fits, which is the board's case.
+  const unfit = fitRows(card.body, list, (hidden) => "+" + String(hidden) + " more");
+
   return {
     el: card.el,
     update(s: DashboardState) {
       lastStatus = s.status;
       if (s.status) render(s.status.workspaces);
     },
-    destroy() {},
+    destroy() {
+      unfit();
+    },
   };
 }

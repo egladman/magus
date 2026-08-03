@@ -19,6 +19,7 @@ import {
 import { createStore } from "../../lib/store";
 import { persisted } from "../../lib/persist";
 import { notify } from "../../lib/notifications";
+import { showCountdownToast, showRefreshToast } from "../../lib/refresh-toast";
 import { bind } from "../view";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
@@ -36,13 +37,22 @@ import { buzzTile } from "./tiles/buzz";
 import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
+import { agentsTile } from "./tiles/agents";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
 import { servicesTile } from "./tiles/services";
 import { configTile } from "./tiles/config";
 import { ganttTile } from "./tiles/gantt";
 import { insightSection } from "./tiles/insight";
-import { viewMode, dashboardHeader, bigPictureTile, activeWorkspace } from "./tiles/bigPicture";
+import { mountAlertRail } from "./tiles/alerts";
+import { mountSplitHandle } from "./tiles/split";
+import { mountRotator, type Rotator } from "./tiles/rotator";
+import {
+  viewMode,
+  dashboardHeader,
+  activeWorkspace,
+  enterBigPictureRoute,
+} from "./tiles/bigPicture";
 // The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
@@ -210,6 +220,7 @@ function wireNotifications(): void {
 
 // ---- tiles -----------------------------------------------------------------
 let tiles: Tile[] = [];
+let rotator: Rotator | null = null;
 
 function mountTiles(): void {
   const host = el("dash-panels");
@@ -242,6 +253,7 @@ function mountTiles(): void {
 
   const attention = attentionTile();
   const activity = activityTile();
+  const agents = agentsTile();
   const gantt = ganttTile(); // the live execution timeline (fed by Status.runs)
   const utilization = utilizationTile();
   const cacheRate = cacheRateTile();
@@ -260,6 +272,7 @@ function mountTiles(): void {
   const ordered: Tile[] = [
     attention,
     activity,
+    agents,
     pool,
     cacheStats,
     remote,
@@ -284,34 +297,90 @@ function mountTiles(): void {
   host.append(insight.el);
   for (const t of insight.tiles) host.append(t.el);
 
-  // Big Picture: the TV-friendly summary the fullscreen button swaps in. Mounted alongside the
-  // board (not built only when entered) so it keeps updating in the background and flipping to
-  // it is instant.
-  const bigPicture = bigPictureTile();
-  host.append(bigPicture.el);
+  // The Big Picture alert rail. Mounted here rather than inside a tile because it is not one: it
+  // has no slot in the grid, it renders only in Big Picture, and it is driven by NOTIFY_EVENT
+  // rather than by the store. It exists because hiding the console chrome also hides the
+  // notification bell, so without it the failures wireNotifications() raises below would fire into
+  // a surface nobody can see - the mode would go quiet exactly when something went wrong.
+  const alerts = mountAlertRail();
+  host.append(alerts.el);
 
-  tiles = [header, ...ordered, ...insight.tiles, bigPicture];
+  // The one adjustable dimension of the canvas: where the left stack ends and the live-activity
+  // column begins. Like the rail this is not a tile - it has no slot, renders only in the wide Big
+  // Picture layout, and is driven by a stored preference rather than by the store. It tracks the
+  // activity panel's measured left edge, so it stays correct without re-deriving the grid's own
+  // column arithmetic.
+  const split = mountSplitHandle(host);
+  host.append(split.el);
+
+  tiles = [header, ...ordered, ...insight.tiles];
 
   // Chrome first, then tiles: the panels are revealed before a chart tile builds.
   store.subscribe(renderStatusBar);
   for (const t of tiles) store.subscribe((s) => t.update(s));
 
-  // Board vs Big Picture: exactly one shows at a time; the header row itself always stays
-  // visible. A data attribute, not .hidden: several tiles (config/services/remote/buzz/sandbox)
-  // already manage their OWN .hidden as a "waiting for data" latch inside update(), which runs
-  // on every store tick AFTER this - fighting over .hidden would flicker the board back on.
-  // [data-view-hide] is touched only here, so the two never collide (dashboard.css draws the
-  // actual display:none). Bound once here, un-disposed on a later remount - the same lifetime
-  // the store.subscribe calls above already have (mountTiles rebuilds the whole panel host on
-  // re-mount).
+  // Board vs Big Picture. Big Picture is NOT a separate view: it is THIS SAME SET of tiles with
+  // most of them hidden, re-laid-out by dashboard.css off [data-bigpicture]. So the only decision
+  // made here is membership - which tiles survive the switch - and the tiles themselves neither
+  // know nor care which mode they are being painted in.
+  //
+  // That is what keeps one renderer per concept. The alternative (and what this replaced) was a
+  // bigPictureTile that re-drew the verdict, the counts, and the workspaces itself at TV scale,
+  // which meant every metric had to be written twice and the two copies drifted. Placing the real
+  // attention/pool/cache/workspaces tiles means a fix to any of them lands in both modes at once.
+  //
+  // Membership rule: what answers "is anything wrong, and what is the machine doing" from across a
+  // room. Trends, per-target tables, the heavy metric families, and the on-demand VCS lenses are
+  // lean-in artifacts that cannot be read at that distance, so they sit the mode out.
+  // The panels that share the ROTATING slot. Everything here is material you would look at second:
+  // history and aggregates, worth a turn on a wall display but not worth a permanent slot when the
+  // alternative is losing the run timeline or the verdict. See tiles/rotator.ts for the discipline.
+  const rotating: HTMLElement[] = [
+    utilization.el, // pool occupancy over time
+    cacheRate.el, // hit rate over time
+    targets.el, // which targets cost the most, and which flap
+    remote.el, // the shared cache, when one is configured
+    services.el, // hosted services the daemon is keeping warm
+  ];
+
+  const bigPictureEls = new Set<HTMLElement>([
+    attention.el, // the verdict and the failing/running/queued counts
+    activity.el, // what is running right now
+    gantt.el, // the live execution timeline
+    pool.el, // occupancy, as the airplane-seating grid
+    cacheStats.el, // hit rate and the cache tallies
+    workspaces.el, // which workspaces this daemon is serving
+    locks.el, // a held lock with waiters behind it is exactly a from-across-the-room fact
+    agents.el, // who is driving magus right now, and whether the guard is denying anything
+    ...rotating, // present in the mode; the rotator shows exactly one at a time
+  ]);
+
+  // Rotation freezes whenever the verdict is not "all clear". The hero stamps its own state, so the
+  // rotator reads the SAME judgement the headline shows rather than re-deriving one that could
+  // disagree with it. A board that keeps shuffling while something is failing is working against
+  // the person who just looked up at it.
+  // Torn down and rebuilt with the panel host: mountTiles() runs again when a console tab is closed
+  // and reopened, and a second rotator driving the same elements would fight the first over which
+  // one is showing.
+  rotator?.destroy();
+  rotator = mountRotator(rotating, {
+    paused: () => attention.el.dataset.state !== "clear",
+  });
+
+  // A data attribute, not .hidden: several tiles (config/services/remote/buzz/sandbox) already
+  // manage their OWN .hidden as a "waiting for data" latch inside update(), which runs on every
+  // store tick AFTER this - fighting over .hidden would flicker the board back on. [data-view-hide]
+  // is touched only here, so the two never collide (dashboard.css draws the actual display:none).
+  // Bound once here, un-disposed on a later remount - the same lifetime the store.subscribe calls
+  // above already have (mountTiles rebuilds the whole panel host on re-mount).
   const boardEls: HTMLElement[] = [
     ...ordered.map((t) => t.el),
     insight.el,
     ...insight.tiles.map((t) => t.el),
   ];
   bind(viewMode, (mode) => {
-    for (const e of boardEls) e.toggleAttribute("data-view-hide", mode !== "board");
-    bigPicture.el.toggleAttribute("data-view-hide", mode !== "bigPicture");
+    const big = mode === "bigPicture";
+    for (const e of boardEls) e.toggleAttribute("data-view-hide", big && !bigPictureEls.has(e));
   });
 }
 
@@ -429,7 +498,66 @@ function registerServiceWorker(): void {
   const secure = location.protocol === "https:" || location.hostname === "localhost";
   if (!secure) return;
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(new URL("../sw.js", import.meta.url)).catch(() => {});
+    navigator.serviceWorker
+      .register(new URL("../sw.js", import.meta.url))
+      .then(watchForNewVersion)
+      .catch(() => {});
+  });
+}
+
+// How long the board announces a pending refresh before taking it. Long enough that someone walking
+// past can read it and hit Cancel, short enough that a wall display is not left on a stale build.
+const AUTO_REFRESH_SECONDS = 10;
+
+// watchForNewVersion turns a service-worker update into a refresh.
+//
+// Nothing did this before: sw.js calls skipWaiting()/clients.claim(), so a new worker takes over at
+// once, but the PAGE keeps executing the bundle it loaded until something reloads it. On a desk that
+// is a stale tab until you happen to hit refresh. On a wall display it is indefinite - the whole
+// point of the screen is that nobody touches it, so nobody ever reloads it, and it can sit on a
+// build from days ago while looking perfectly live.
+//
+// The response splits on whether a person is there:
+//   Big Picture - announce and DO IT. A "click to refresh" prompt on an unattended screen is a
+//     prompt that is never clicked. It still counts down visibly and offers Cancel, so someone who
+//     IS standing there is not ambushed.
+//   Board - ASK, via the existing prompt. Someone is working: reloading out from under them could
+//     lose a scroll position, a filter, a half-read log.
+function watchForNewVersion(reg: ServiceWorkerRegistration): void {
+  reg.addEventListener("updatefound", () => {
+    const next = reg.installing;
+    if (!next) return;
+    next.addEventListener("statechange", () => {
+      // `installed` WITH an existing controller is an update. Without one it is the very first
+      // install on this origin, which is not a new version and must not trigger a reload loop.
+      if (next.state !== "installed" || !navigator.serviceWorker.controller) return;
+      onNewVersion();
+    });
+  });
+}
+
+let refreshPending = false;
+function onNewVersion(): void {
+  if (refreshPending) return; // one announcement per page lifetime
+  refreshPending = true;
+
+  if (viewMode.get() !== "bigPicture") {
+    showRefreshToast("Dashboard", "A new version of the console is available.");
+    return;
+  }
+  const cancel = showCountdownToast(
+    "Dashboard",
+    (s) => "New version available. Refreshing in " + s + "s.",
+    AUTO_REFRESH_SECONDS,
+    () => location.reload(),
+  );
+  // Leaving Big Picture mid-countdown means a person just took control, so the automatic reload is
+  // no longer the right call - fall back to the prompt they can act on.
+  const unbind = viewMode.subscribe((mode) => {
+    if (mode === "bigPicture") return;
+    cancel();
+    unbind();
+    showRefreshToast("Dashboard", "A new version of the console is available.");
   });
 }
 
@@ -462,6 +590,13 @@ export function activate(): void {
 
   const params = parseHash();
   consumeLiveToken(params);
+
+  // A `#big-picture` fragment enters the presentation mode with NO user gesture, which is the whole
+  // reason it exists: the Fullscreen API requires one, so a TV, an HDMI stick, or a kiosk browser
+  // pointed at a link could never reach the mode through the button. Applied here, before any
+  // connection path is chosen, so it composes with all of them - `#port=7391&big-picture` for a live
+  // daemon and `#demo&big-picture` for an offline showcase both land in the mode.
+  if (params["big-picture"] !== undefined) enterBigPictureRoute();
 
   // A #demo fragment enters the daemon-free showcase and wins over any saved daemon.
   if (wantsDemo(params)) {

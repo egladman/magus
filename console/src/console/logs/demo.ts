@@ -1,9 +1,11 @@
 import { must } from "../../lib/guards";
 // demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
 // magus.viewer.v1 Journals and REVEAL the primary one incrementally so the page feels like a live run
-// streaming in. The primary (streamed) invocation is the failing svc/api:test run an agent kicked off
-// ~92m ago; the completed sibling shown alongside it is the earlier `magus affected ci` sweep, mostly
-// cache hits. So the viewer shows both a FAIL and cached/passed targets, and - crucially - the SAME
+// streaming in. The primary (streamed) invocation is the failing services/identity:test run an agent
+// kicked off ~92m ago - the beat where a libs/authkit contract change takes down a downstream token
+// verifier; the completed sibling shown alongside it is the earlier `magus affected ci` sweep, mostly
+// cache hits. So the viewer shows a FAIL, cached targets (one replaying stored output, one silent
+// because a green `go build` prints nothing) and passed targets on one axis - and, crucially, the SAME
 // runs (out92e1d4, outci7a*) the recent-runs tree, the activity trail, and the dashboard point at.
 //
 // It reuses the live-stream buffer (state.liveEvents / liveInvocation) and scheduleLiveRender end to
@@ -94,32 +96,32 @@ function buildJournal(
     }
     const end = at0 + run.durationMs;
     maxEnd = Math.max(maxEnd, end - base);
-    if (run.stdout) {
+    // Captured output is STAGGERED across the target's window rather than stamped at one instant.
+    // A real tool dribbles its lines out while it works, and the reveal below only reads as live if
+    // the timestamps say so - stamped together, a dozen lines land in one frame and the waterfall
+    // gains a dozen coincident markers. stdout first, then stderr: a tool prints its failure block
+    // last, and that is the part a reader scrolls to.
+    const lines = [
+      ...(run.stdout
+        ? run.stdout.split("\n").map((text) => ({ stream: Stream.STDOUT, text }))
+        : []),
+      ...(run.stderr
+        ? run.stderr.split("\n").map((text) => ({ stream: Stream.STDERR, text }))
+        : []),
+    ];
+    lines.forEach((line, n) => {
       events.push(
         create(EventSchema, {
           kind: Kind.OUTPUT,
-          time: demoTs(end - 10),
+          // Spread strictly INSIDE (at0, end) so no output line can sort after its own RESULT.
+          time: demoTs(at0 + Math.round((run.durationMs * (n + 1)) / (lines.length + 1))),
           project: run.project,
           target: run.target,
-          stream: Stream.STDOUT,
-          text: run.stdout,
+          stream: line.stream,
+          text: line.text,
         }),
       );
-    }
-    if (run.stderr) {
-      for (const line of run.stderr.split("\n")) {
-        events.push(
-          create(EventSchema, {
-            kind: Kind.OUTPUT,
-            time: demoTs(end - 8),
-            project: run.project,
-            target: run.target,
-            stream: Stream.STDERR,
-            text: line,
-          }),
-        );
-      }
-    }
+    });
     if (run.state === "failed") anyFail = true;
     events.push(
       create(EventSchema, {
@@ -152,15 +154,21 @@ function buildJournal(
   return create(JournalSchema, { invocation, events });
 }
 
-// brokenTestJournal is the primary streamed invocation: the agent-driven svc/api:test run that FAILs.
+// brokenTestJournal is the primary streamed invocation: the agent-driven services/identity:test run
+// that FAILs.
 function brokenTestJournal(): Journal {
   const runs = scenarioRuns(Date.now());
   const test = must(runs.find((r) => r.inv === INV_TEST_BREAK));
   return buildJournal(
     [{ run: test, start: 0 }],
     INV_TEST_BREAK,
-    { verb: "run", args: ["test", "svc/api"], cwd: "/Users/eli/Repos/acme", trigger: Trigger.RUN },
-    "projects: svc/api",
+    {
+      verb: "run",
+      args: ["test", "services/identity"],
+      cwd: "/Users/eli/Repos/acme",
+      trigger: Trigger.RUN,
+    },
+    "projects: services/identity (cwd)",
   );
 }
 
@@ -175,7 +183,7 @@ function ciSweepJournal(): Journal {
     placed,
     INV_CI,
     { verb: "affected", args: ["ci"], cwd: "/Users/eli/Repos/acme", trigger: Trigger.CI },
-    "projects: svc/api, web/app, lib/core, .",
+    "projects: services/identity, apps/dashboard, libs/authkit, . (affected)",
   );
 }
 

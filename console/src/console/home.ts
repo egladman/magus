@@ -31,16 +31,48 @@ const TAGLINES: Tagline[] = [
   { text: "See what magus is up to.", at: ANY_HOURS },
   { text: "Cache warm, spells ready.", at: ANY_HOURS },
   { text: "The graph is warm.", at: ANY_HOURS },
+  { text: "Everything is where you left it.", at: ANY_HOURS },
+  { text: "Nothing is on fire.", at: ANY_HOURS },
+  { text: "The workspace is yours.", at: ANY_HOURS },
+  { text: "Ready when you are.", at: ANY_HOURS },
   { text: "The forge is warming up.", at: [5, 11] },
   { text: "Fresh build, fresh coffee.", at: [5, 11] },
   { text: "Morning. What are we building?", at: [5, 11] },
+  { text: "First build of the day.", at: [5, 11] },
+  { text: "The cache slept well.", at: [5, 11] },
   { text: "Deep in the afternoon build.", at: [11, 17] },
   { text: "Plenty of daylight left to ship.", at: [11, 17] },
+  { text: "Hitting a good rhythm.", at: [11, 17] },
+  { text: "Halfway through, still warm.", at: [11, 17] },
   { text: "Evening. One more target?", at: [17, 22] },
   { text: "Winding down the day's builds.", at: [17, 22] },
+  { text: "Good time to leave it green.", at: [17, 22] },
+  { text: "Last build before you log off?", at: [17, 22] },
   { text: "Burning the midnight build.", at: [22, 5] },
   { text: "The daemon never sleeps.", at: [22, 5] },
+  { text: "Quiet hours. The cache is listening.", at: [22, 5] },
+  { text: "Late one. Keep it cached.", at: [22, 5] },
 ];
+
+// The launcher HEADING also rotates, for the same reason the lede does: this is the first thing the
+// console says on every fresh load, and one fixed sentence forever is the difference between a tool
+// that feels alive and one that feels like a form. Kept as plain questions, ASCII, no exclamation
+// marks - the warmth comes from variety, not from enthusiasm.
+const TITLES: string[] = [
+  "What do you want to open?",
+  "Where are we starting?",
+  "What are we looking at?",
+  "Pick a place to begin.",
+  "What needs your attention?",
+  "Where to?",
+];
+
+// launcherTitle picks one of the headings at random. `pick` is injected only so the choice is
+// testable, exactly as in launcherTagline; unlike the taglines these are not time-gated, because a
+// heading that changed character through the day would read as a different app each time.
+export function launcherTitle(pick: () => number = Math.random): string {
+  return TITLES[Math.floor(pick() * TITLES.length)];
+}
 
 // inWindow reports whether `hour` sits in a [start, end) window, handling a window that wraps past
 // midnight (start > end, e.g. 22..5).
@@ -110,7 +142,7 @@ export function buildLauncher(
   root.dataset.surface = "home";
 
   const title = document.createElement("h1");
-  title.textContent = "What do you want to open?";
+  title.textContent = launcherTitle();
   const sub = document.createElement("p");
   sub.textContent = launcherTagline();
 
