@@ -188,10 +188,10 @@ a depth bound will cut through.
 
 ## Two filters that look better and are not
 
-**`--filter=tree:0`** (treeless) is smaller still, and it is a trap here. It omits the
+**`--filter=tree:0`** (treeless) is smaller still, and it costs more than it saves here. It omits the
 trees `git diff --name-only` compares, so git refetches them one commit at a time. On
 this repository a single 40-commit-back name-only diff triggered **10** lazy fetches to
-save 3 MB over blobless. Over the network that trade is badly wrong.
+save 3 MB over blobless. Each of those fetches is a network round trip.
 
 **`sparse-checkout`** limits which files land in the working tree. affected reads the
 diff, not the working tree, so a sparse checkout does not shrink the fetch that
