@@ -117,6 +117,10 @@ export interface KeybindingsDeps {
 // in the modal overlay and in the Settings surface's Keybindings section.
 export interface KeybindingsEditor {
   readonly el: HTMLElement;
+  // Abandons any in-progress recording and repaints. Distinct from destroy(): the editor
+  // survives, so a host that hides and re-shows it (the overlay) can drop the capture
+  // without losing the keymap subscription that keeps the table live.
+  cancelCapture(): void;
   destroy(): void;
 }
 
@@ -321,6 +325,11 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 
   return {
     el: root,
+    cancelCapture(): void {
+      if (capturing === null) return;
+      stopCapture();
+      render();
+    },
     destroy(): void {
       stopCapture();
       if (unsub) {
@@ -372,6 +381,12 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   function close(): void {
     if (overlay.hidden) return;
     overlay.hidden = true;
+    // Hiding the overlay does NOT stop a recording: beginCapture puts a capture-phase
+    // keydown listener on `document` that preventDefault()s every key, and it outlives
+    // the modal it was started from. Dismissed mid-Record without this, the console eats
+    // every keystroke app-wide - and then silently rebinds the command 900ms later, since
+    // the commit timer is still pending. Reload was the only way out.
+    editor.cancelCapture();
   }
 
   // Escape closes; stopPropagation keeps keys typed while the editor owns the screen from reaching the

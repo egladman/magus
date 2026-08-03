@@ -4046,7 +4046,11 @@ function bootWireEvents() {
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
-  let queryTimer = 0;
+  // ReturnType<typeof setTimeout>, not number: the browser's setTimeout returns a
+  // number but Node's returns a Timeout object, and the test type-check program pulls
+  // in @types/node - so a bare `number` only compiles as long as nothing checks this
+  // file against Node's lib.
+  let queryTimer: ReturnType<typeof setTimeout> | undefined;
   searchEl.addEventListener("input", () => {
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => {
@@ -4282,7 +4286,7 @@ function bootWireEvents() {
   }
 
   // Re-read the console tokens and repaint on a theme toggle.
-  let t = 0;
+  let t: ReturnType<typeof setTimeout> | undefined;
   const rerender = () => {
     clearTimeout(t);
     t = setTimeout(() => {
