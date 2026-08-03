@@ -506,7 +506,6 @@ func TestGitEnvironStripsRedirectsAndKeepsTransport(t *testing.T) {
 		assert.Equal(t, value, got[name], "%s governs how git works, not where, and must survive", name)
 	}
 }
-
 // mergeRepo builds a repo whose branch `other` and HEAD both changed the same file, so a
 // merge of `other` conflicts. Returns the repo dir.
 func mergeRepo(t *testing.T) string {

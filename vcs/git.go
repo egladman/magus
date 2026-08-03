@@ -1281,12 +1281,14 @@ var gitRedirectVars = []string{
 // gitEnviron is the process environment with gitRedirectVars removed, so -C and cmd.Dir
 // decide which repository a subprocess acts on.
 //
-// Deliberately NOT "drop everything matching GIT_*": that prefix is two categories and
-// only one is a problem. The variables above answer WHICH repository; the rest answer HOW
-// to work on it - GIT_SSH_COMMAND and GIT_ASKPASS authenticate a fetch (recoverMergeBase
-// really does fetch), GIT_TERMINAL_PROMPT=0 stops CI hanging on a credential prompt,
-// GIT_TRACE is someone actively debugging. Stripping those turns a working fetch into an
-// auth failure.
+// Deliberately NOT "drop everything matching GIT_*". That prefix is not one category, it is
+// two, and only one of them is a problem. The variables above answer WHICH repository; the
+// rest answer HOW to work on it - GIT_SSH_COMMAND, GIT_ASKPASS and GIT_PROXY_COMMAND are
+// how a fetch authenticates (recoverMergeBase really does fetch), GIT_TERMINAL_PROMPT=0 is
+// what stops CI hanging on a credential prompt, GIT_EXEC_PATH is how a nonstandard install
+// finds its own subcommands, and GIT_TRACE is someone actively debugging. Stripping those
+// turns a working fetch into an auth failure, or silently discards the flag the user set to
+// find out why. The blanket rule is simpler to write and strictly worse to run.
 //
 // The maintenance rule, so this does not become guesswork: add a variable here only if it
 // changes which repository, work tree, index, object store, or ref namespace git acts on.
