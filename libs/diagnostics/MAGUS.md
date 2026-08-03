@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2377 nodes** and **5295 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2381 nodes** and **5302 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -56,8 +56,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 273 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 167 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 224 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1157 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 123 | `magus query kind:import` | `std`, `magus`, `fs` |
+| function | 1159 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 125 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
@@ -127,7 +127,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
-| `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests). |
+| `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run. |
 | `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 | `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps. |

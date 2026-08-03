@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2377,
-  "edge_count": 5295,
+  "node_count": 2381,
+  "edge_count": 5302,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7474,7 +7474,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:70",
+      "source": "console/magusfile.buzz:109",
       "attrs": {
         "exported": "true"
       }
@@ -7484,7 +7484,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
-      "source": "console/magusfile.buzz:98",
+      "source": "console/magusfile.buzz:137",
       "attrs": {
         "exported": "true"
       }
@@ -7494,14 +7494,14 @@
       "kind": "function",
       "label": "install",
       "doc": "install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.",
-      "source": "console/magusfile.buzz:53"
+      "source": "console/magusfile.buzz:58"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:85",
+      "source": "console/magusfile.buzz:124",
       "attrs": {
         "exported": "true"
       }
@@ -7510,7 +7510,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:48",
+      "source": "console/magusfile.buzz:53",
       "attrs": {
         "exported": "true"
       }
@@ -7519,8 +7519,8 @@
       "id": "function:console/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
-      "source": "console/magusfile.buzz:60",
+      "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.  The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and reverted.  Which is why the figure needs cov.lcovMergePercent rather than",
+      "source": "console/magusfile.buzz:88",
       "attrs": {
         "exported": "true"
       }
@@ -7536,11 +7536,27 @@
       }
     },
     {
+      "id": "function:coverage.buzz:keepsSource",
+      "kind": "function",
+      "label": "keepsSource",
+      "doc": "keepsSource decides whether one lcov SF: path counts toward the figure.  Anchored at a path boundary, both forms: node:test writes paths relative to the cwd (\"src/foo.ts\") while other producers write absolute ones (\"/w/src/foo.ts\"). A bare substring test would also match \"vendor/notsrc/...\".  node_modules is excluded FIRST and separately, because the boundary anchor alone does not exclude it: a dependency that ships its own src/ directory gives \"/node_modules/x/src/y.js\", which contains \"/src/\" and so passe",
+      "source": "coverage.buzz:121"
+    },
+    {
+      "id": "function:coverage.buzz:lcovMergePercent",
+      "kind": "function",
+      "label": "lcovMergePercent",
+      "doc": "lcovMergePercent is lcovPercent over SEVERAL lcov reports of the same sources.  It exists because a project whose tests run in more than one process gets one report per process, and those reports OVERLAP: every process that imports a shared module reports that module's whole line table, so summing their LF/LH counts that file once per process. The figure comes out looking like a weighted average of how many processes happened to touch each file, which is not a fact about anything.  So the merge is at LINE l",
+      "source": "coverage.buzz:162",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:coverage.buzz:lcovPercent",
       "kind": "function",
       "label": "lcovPercent",
-      "doc": "lcovPercent totals LINE coverage across every lcov record whose source file path contains keep, as a one-decimal percentage string (\"85.7\") - the shape badge.coverage renders.  lcov rather than Node's printed table: the table is a display format that has changed shape across Node releases, while LF/LH are counts. Summing counts and dividing once is also the only correct way to combine files - averaging their per-file percentages would weight a three-line module the same as a three-hundred-line one.  keep ex",
-      "source": "coverage.buzz:109",
+      "source": "coverage.buzz:126",
       "attrs": {
         "exported": "true"
       }
@@ -17609,6 +17625,22 @@
       }
     },
     {
+      "id": "import:../badge",
+      "kind": "import",
+      "label": "../badge",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:../coverage",
+      "kind": "import",
+      "label": "../coverage",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:archive",
       "kind": "import",
       "label": "archive",
@@ -21267,7 +21299,7 @@
       "id": "target:console:test",
       "kind": "target",
       "label": "test",
-      "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+      "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
       "source": "console",
       "attrs": {
         "engine": "buzz"
@@ -21973,6 +22005,14 @@
     {
       "source": "charm:rw",
       "target": "target:console:build",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:console:test",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37124,6 +37164,22 @@
     },
     {
       "source": "file:console/magusfile.buzz",
+      "target": "import:../badge",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
+      "target": "import:../coverage",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
@@ -37181,6 +37237,22 @@
     {
       "source": "file:coverage.buzz",
       "target": "function:coverage.buzz:isGeneratedSource",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "coverage.buzz"
+    },
+    {
+      "source": "file:coverage.buzz",
+      "target": "function:coverage.buzz:keepsSource",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "coverage.buzz"
+    },
+    {
+      "source": "file:coverage.buzz",
+      "target": "function:coverage.buzz:lcovMergePercent",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52729,6 +52801,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "function:coverage.buzz:lcovMergePercent",
+      "target": "function:coverage.buzz:keepsSource",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "coverage.buzz"
+    },
+    {
+      "source": "function:coverage.buzz:lcovPercent",
+      "target": "function:coverage.buzz:keepsSource",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "coverage.buzz"
     },
     {
       "source": "function:coverage.buzz:stripGenerated",

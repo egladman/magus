@@ -574,9 +574,17 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).",
+          "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.",
           "dependencies": [
             "preflight"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "writes_files": [
+            {
+              "glob": "coverage.svg"
+            }
           ]
         },
         {

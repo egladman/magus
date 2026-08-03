@@ -11,7 +11,7 @@
     "copy-static": "mkdir -p gen/assets gen/logs gen/graph gen/dashboard gen/activity && cp index.html manifest.webmanifest sw.js gen/ && cp src/assets/* gen/assets/ && cp src/console/logs/scaffold.html gen/logs/ && cp src/console/graph/scaffold.html gen/graph/ && cp src/console/dashboard/scaffold.html gen/dashboard/ && cp ../gen/knowledge-graph.json gen/graph/knowledge-graph.json && cp ../gen/target-graph.json gen/graph/target-graph.json && node scripts/surface-stubs.mjs && node scripts/stamp-build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "stylelint": "stylelint \"src/**/*.css\"",
-    "test": "rm -rf .testcache && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --outdir=.testcache && node --test $(find .testcache -name '*.test.js' -not -name '*-dom.test.js') && node --import ./test-setup.mjs --test $(find .testcache -name '*-dom.test.js') && node --test scripts/*.test.mjs"
+    "test": "rm -rf .testcache coverage.plain.lcov coverage.dom.lcov && esbuild $(find src -name '*.test.ts') --bundle --platform=node --format=esm --sourcemap --outdir=.testcache && node --enable-source-maps --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.plain.lcov --test $(find .testcache -name '*.test.js' -not -name '*-dom.test.js') && node --enable-source-maps --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage.dom.lcov --import ./test-setup.mjs --test $(find .testcache -name '*-dom.test.js') && node --test scripts/*.test.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.9.0",
