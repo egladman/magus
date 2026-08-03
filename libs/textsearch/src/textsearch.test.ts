@@ -93,6 +93,16 @@ test("field:wildcard on a tag anchors the whole tag", () => {
   assert.deepEqual(titles("tag:diag*"), ["MGS1002 duplicate spell"]);
 });
 
+// A star-dense query is pathological for a backtracking engine: every unanchored `.*` is a
+// choice point and they compound, so this pattern would run effectively forever against a
+// non-matching haystack - once per record, per keystroke. Capping the stars keeps the search
+// box responsive; what matters is that it RETURNS, not what it returns.
+test("a star-dense wildcard returns instead of hanging", () => {
+  const started = Date.now();
+  assert.doesNotThrow(() => runSearch(INDEX, "*a*a*a*a*a*a*a*a*a*a*a*a*z"));
+  assert.ok(Date.now() - started < 1000, "a pathological wildcard must not lock the thread");
+});
+
 test("title matches outrank body-only matches", () => {
   // "graph" is a title hit for the explorer and a body hit for nothing else here.
   const ranked = runSearch(INDEX, "graph");

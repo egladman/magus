@@ -1474,11 +1474,16 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      // Release any nodes that were parked off-screen by the projection.
+      // Release any nodes that were parked off-screen by the projection. x/y must be reset
+      // too, not just fx/fy: a released node keeps the -1e6 parking coordinate until the sim
+      // moves it, and a fitView over a set containing one fits bounds a million units wide -
+      // zoom collapses and the canvas reads as blank. switchLayout gets this right.
       for (const nd of graph.nodes) {
         if (nd.fx === -1e6) {
           nd.fx = null;
           nd.fy = null;
+          nd.x = 0;
+          nd.y = 0;
         }
       }
       const projectNeighborhood = new Set([id]);
@@ -1959,7 +1964,7 @@ function renderList() {
         escapeHtml(n.id) +
         '"' +
         ' title="' +
-        escapeHtml(n.kind + " · " + n.label) +
+        escapeHtml(n.kind + " - " + n.label) +
         '"' +
         (n.id === selected ? ' aria-current="true"' : "") +
         ">" +
@@ -2378,12 +2383,16 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  // Release all parked nodes so the force sim (or layered layout) can place them.
+  // Release all parked nodes so the force sim (or layered layout) can place them. x/y are
+  // reset alongside fx/fy for the same reason switchLayout does it: left at -1e6, a released
+  // node poisons the next fitView's bounds and the canvas comes back blank.
   if (graph) {
     for (const n of graph.nodes) {
       if (n.fx === -1e6) {
         n.fx = null;
         n.fy = null;
+        n.x = 0;
+        n.y = 0;
       }
     }
   }

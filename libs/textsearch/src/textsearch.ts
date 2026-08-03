@@ -119,10 +119,22 @@ function lc(e: TextSearchEntry): LcFields {
   return fields;
 }
 
+// How many wildcards one term may carry. Each unanchored `.*` is a backtracking point, and
+// they compound: `*a*a*a*a*a*a*a*a*z` against a non-matching string is exponential, and this
+// regex is .test()ed per record per keystroke over a multi-hundred-KB index, so the tab locks
+// up while someone is still typing. Past this the extra stars are matched literally - a query
+// that silly cannot mean anything useful, and degrading beats hanging.
+const MAX_WILDCARDS = 4;
+
 // A wildcard value ("build*", "*cache*") compiles to a regex: escape regex specials, turn *
 // into .*, anchor whole-tag matches (^...$) but leave field/free-text loose.
 function buildWild(value: string, field: string | null): RegExp {
-  const body = value.replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === "*" ? ".*" : "\\" + ch));
+  let stars = 0;
+  const body = value.replace(/[.*+?^${}()|[\]\\]/g, (ch) => {
+    if (ch !== "*") return "\\" + ch;
+    stars += 1;
+    return stars <= MAX_WILDCARDS ? ".*" : "\\*";
+  });
   const anchored = field === "tag" || field === "tags";
   return new RegExp(anchored ? "^" + body + "$" : body, "i");
 }

@@ -497,7 +497,7 @@ function registerServiceWorker(): void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   const secure = location.protocol === "https:" || location.hostname === "localhost";
   if (!secure) return;
-  window.addEventListener("load", () => {
+  const go = (): void => {
     navigator.serviceWorker
       .register(new URL("../sw.js", import.meta.url))
       .then((reg) => {
@@ -505,7 +505,14 @@ function registerServiceWorker(): void {
         pollForNewVersion(reg);
       })
       .catch(() => {});
-  });
+  };
+  // Waiting on `load` unconditionally never fires when the console shell reaches this
+  // module through a dynamic import: by then the page has long finished loading, and the
+  // listener is registered for an event that has already been and gone - so the dashboard
+  // silently ran with no service worker at all inside the shell, while the standalone page
+  // (a deferred module script, which does run before `load`) worked fine.
+  if (document.readyState === "complete") go();
+  else window.addEventListener("load", go, { once: true });
 }
 
 // How often a tab re-checks the server for a new worker. Registration alone does not: the browser

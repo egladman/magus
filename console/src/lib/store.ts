@@ -21,7 +21,19 @@ export function createStore<T extends object>(initial: T): Store<T> {
     get: () => state,
     set(patch: Partial<T>): void {
       state = { ...state, ...patch };
-      for (const fn of listeners) fn(state);
+      // Snapshot, and isolate each listener. Iterating the live Set lets a subscriber that
+      // unsubscribes mid-notify change the set being walked, and one THROWING subscriber
+      // would abandon the loop - so every tile registered after the bad one silently stops
+      // receiving updates, with nothing on screen to say why. The dashboard fans one tick
+      // out to every tile, so a single broken tile must not take the board down with it.
+      // persist.ts already snapshots this way.
+      for (const fn of [...listeners]) {
+        try {
+          fn(state);
+        } catch (err) {
+          console.error("store: a subscriber threw; the remaining subscribers still ran", err);
+        }
+      }
     },
     subscribe(fn: Listener<T>): () => void {
       listeners.add(fn);
