@@ -90,9 +90,9 @@ func (t *lineTap) Write(p []byte) (int, error) {
 	defer t.mu.Unlock()
 
 	// Redact any value read through magus\secret.read before ANYTHING sees it: dest is
-	// the terminal and the raw log file, and t.buf becomes the emitted events. The
-	// subprocess writers in run.Exec are wrapped too (secret.NewWriter); this covers the
-	// taps themselves, which a target's own output also reaches.
+	// the terminal and the raw log file, and t.buf becomes the emitted events. run.Exec
+	// redacts its own buffered result separately; this covers the taps, which a target's
+	// own output also reaches.
 	//
 	// The write is reported as len(p) rather than the redacted length: the caller is
 	// os/exec copying a pipe, and a short write makes it stop. Redaction changes how

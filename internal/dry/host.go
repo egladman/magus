@@ -499,7 +499,22 @@ func (r *Tracer) traceProject(path string, opts vm.Value) error {
 				// Per-target policy mirrors the real binding (project_ns.go):
 				// skip_cache opts the target out of the cache; exclusive runs it
 				// alone against the batch.
-				if sv, ok := pv.MapGet("skip_cache"); ok && sv.Bool() {
+				//
+				// skip_cache is a REASON, not a flag, and this path must reject the
+				// bare `true` for the same reason the real binding does. A Buzz string
+				// is truthy, so the old `sv.Bool()` accepted both forms - which meant
+				// the Playground and the editor's diagnostics stayed green on a
+				// magusfile that `magus run` refuses to load.
+				if sv, ok := pv.MapGet("skip_cache"); ok {
+					var reason string
+					if sv.IsStr() {
+						reason = strings.TrimSpace(sv.AsString())
+					}
+					if reason == "" {
+						return fmt.Errorf(
+							"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\". "+
+								"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", rawName)
+					}
 					p.NoCache = append(p.NoCache, name)
 				}
 				if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {

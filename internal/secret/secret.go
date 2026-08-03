@@ -365,7 +365,9 @@ func (r *Resolver) record(key memoKey, v string) {
 //   - It is literal substring replacement. A child that base64-encodes, URL-escapes or
 //     splits the value defeats it.
 //   - A secret straddling two writes is masked only if both halves land in one call.
-//     Captured output is redacted whole, so this limit applies to the live stream only.
+//     This applies to the live stream, the raw log, AND the output store: the capture tap
+//     redacts per Write, and all three read those same chunks. Only run.Exec's buffered
+//     ExecResult is redacted whole.
 func (r *Resolver) Redact(p []byte) []byte {
 	if r == nil || len(p) == 0 {
 		return p
