@@ -1114,7 +1114,9 @@ export const MagusGuard: Plugin = async () =&gt; {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, [&quot;filePath&quot;, &quot;file_path&quot;, &quot;path&quot;]);
         if (path === &quot;&quot;) return;
-        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--path&quot;, &quot;--host&quot;, &quot;opencode&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, path]));
+        apply(
+          await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--path&quot;, &quot;--host&quot;, &quot;opencode&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, path]),
+        );
       }
     },
   };

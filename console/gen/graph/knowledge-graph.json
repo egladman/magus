@@ -8996,7 +8996,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:225",
+      "source": "docs/magusfile.buzz:233",
       "attrs": {
         "exported": "true"
       }
@@ -9006,7 +9006,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Run after bumping the version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:282",
+      "source": "docs/magusfile.buzz:290",
       "attrs": {
         "exported": "true"
       }
@@ -9016,7 +9016,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Run after bumping the mermaid version in package.json; commit the regenerated artifact.",
-      "source": "docs/magusfile.buzz:269",
+      "source": "docs/magusfile.buzz:277",
       "attrs": {
         "exported": "true"
       }
@@ -9026,7 +9026,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm itself) and survive regeneration untouched, so CI - which has no TinyGo - never rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo tha",
-      "source": "docs/magusfile.buzz:249",
+      "source": "docs/magusfile.buzz:257",
       "attrs": {
         "exported": "true"
       }
@@ -9036,7 +9036,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:230",
+      "source": "docs/magusfile.buzz:238",
       "attrs": {
         "exported": "true"
       }
@@ -9045,7 +9045,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:238",
+      "source": "docs/magusfile.buzz:246",
       "attrs": {
         "exported": "true"
       }
@@ -9055,7 +9055,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:151",
+      "source": "docs/magusfile.buzz:159",
       "attrs": {
         "exported": "true"
       }
@@ -9064,7 +9064,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:208",
+      "source": "docs/magusfile.buzz:216",
       "attrs": {
         "exported": "true"
       }
@@ -9074,7 +9074,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the one public docs publication target. Its small drift gate always runs; its content, catalog, changelog, and site stages replay independently when unchanged.",
-      "source": "docs/magusfile.buzz:190",
+      "source": "docs/magusfile.buzz:198",
       "attrs": {
         "exported": "true"
       }
@@ -9084,7 +9084,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:213",
+      "source": "docs/magusfile.buzz:221",
       "attrs": {
         "exported": "true"
       }
@@ -9094,7 +9094,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:133",
+      "source": "docs/magusfile.buzz:141",
       "attrs": {
         "exported": "true"
       }
@@ -9103,7 +9103,7 @@
       "id": "function:docs/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/magusfile.buzz:128",
+      "source": "docs/magusfile.buzz:136",
       "attrs": {
         "exported": "true"
       }
@@ -9113,7 +9113,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:292",
+      "source": "docs/magusfile.buzz:300",
       "attrs": {
         "exported": "true"
       }
@@ -9123,7 +9123,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.",
-      "source": "docs/magusfile.buzz:176",
+      "source": "docs/magusfile.buzz:184",
       "attrs": {
         "exported": "true"
       }
@@ -9132,7 +9132,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:234",
+      "source": "docs/magusfile.buzz:242",
       "attrs": {
         "exported": "true"
       }

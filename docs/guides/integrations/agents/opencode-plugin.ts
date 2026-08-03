@@ -144,7 +144,9 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]));
+        apply(
+          await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]),
+        );
       }
     },
   };
