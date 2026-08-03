@@ -42,11 +42,38 @@ ci:rw`, and `generate` writes its output locally. CI strips the default
 
 ## Which magus binary
 
-`magus run build .` is the one-shot-per-session build. It works, and it writes
-`./magus` at the repo root; run `./magus <cmd>` after it to exercise your change.
-If a `./magus` is already present and newer than the tree (`magus doctor` reports
-this as the "guard binary" check), it is fine to keep using. Do not expect a
-release binary on PATH.
+DEFAULT: use the released `magus` already on PATH. Do NOT build one.
+
+Building is the exception, and it needs a reason. Rebuild only when you are
+changing what the magus RUNTIME does and need to exercise that change:
+
+- a `magus.project` option, target policy, or other magusfile schema change (the
+  released binary rejects a key it does not know, and then no magus command can
+  even load the workspace)
+- engine, daemon, spell-runtime, or CLI behaviour you are about to run
+- a doctor check whose output you want to see against this tree
+
+Editing docs, workflows, or Go you are only unit-testing (`go test ./...` needs
+no magus binary) requires NO rebuild. The instinct to build first is expensive in
+a way that is invisible locally: the build stamps
+`-X main.version/commit/buildDate` from `git describe` and the commit hash, so the
+LINK step is unshareable across worktrees and across commits within a worktree.
+Roughly 34 worktrees each rebuilding grew `~/Library/Caches/go-build` to 62 GB.
+Reclaim with `go clean -cache`.
+
+When you do need one: `magus run go_build .` writes `./magus`, and unlike
+`magus run build .` it skips the `format` -> `generate` -> `deploy-generate`
+chain that fails in a fresh worktree on a missing `docs/gen/index.html`. Then run
+`./magus <cmd>`. An existing `./magus` newer than the tree (`magus doctor`'s
+"guard binary" check) is fine to keep using; do not rebuild it per command.
+
+Bootstrap deadlock: after a magusfile schema change, EVERY magus command fails at
+workspace load, including the one that would build the binary that understands it.
+Escape by shelving just that hunk - `git stash push -- <file>`, `magus run
+go_build .`, `git stash pop`.
+
+Note `magus affected ci --no-default-charms` DELETES `./magus`: it is a declared
+output of the root project and the read-only run prunes it. Rebuild after gating.
 
 BOTH raw Go entry points are DENIED by the agent guard:
 
@@ -58,9 +85,9 @@ BOTH raw Go entry points are DENIED by the agent guard:
 
 Producing a binary is a write, and writes go through magus - the toolchain verb
 is what has to change, not the destination. `magus run go::go-build .` is the
-one-op form when the whole `build` target is too broad, but note it does NOT
-write `./magus` (only the `build` target's ldflags step does), so rebuild with
-`magus run build .` when you intend to run the result.
+one-op form when you only want the compile checked, but note it does NOT write
+`./magus` and reports `[pass]` while leaving a stale one in place, which reads as
+a successful rebuild. Use `magus run go_build .` when you intend to run the result.
 
 `magus run test .` passes. It previously failed to link with `fingerprint
 mismatch: github.com/egladman/magus ...`, which was mise setting

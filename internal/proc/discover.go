@@ -6,12 +6,44 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/proc/endpoint"
 )
 
 // stableSocketName is the well-known socket filename used by `magus server start`.
 const stableSocketName = "magus-daemon.sock"
+
+// reapGracePeriod is how long a dead socket must have sat untouched before a sweep
+// unlinks it. The window closes a narrow race: a server that has created its socket
+// file but not yet called listen would fail our liveness dial, and removing it there
+// would delete a path a live process is about to bind. Nothing legitimate leaves a
+// socket dead for minutes, so the guard costs nothing and removes the hazard.
+const reapGracePeriod = 5 * time.Minute
+
+// reapDeadSocket unlinks a socket that failed the liveness probe.
+//
+// A unix socket is a filesystem entry and does not disappear when its process dies, so
+// something has to remove it. Server.Close unlinks on clean shutdown and Server.Start
+// reclaims a stale path on EADDRINUSE - both correct, and between them they should be
+// enough. They are not, because sockets are named magus-<pid>-<rand>.sock: every server
+// picks a globally unique path, so the EADDRINUSE reclaim can never fire, and the only
+// remaining mechanism is the shutdown unlink, which SIGKILL, a panic, a closed terminal,
+// and a sleeping machine all skip. Unique naming is what opted this system out of
+// bind-time reclaim, so it owes the filesystem a sweep instead. One development machine
+// had accumulated 39 dead sockets with zero magus processes running.
+//
+// Discovery is the right place: it already dials every candidate to test liveness, so it
+// knows which are dead and pays nothing extra to say so. Failure is ignored on purpose -
+// a socket another process removed first, or one we cannot unlink, is not worth failing
+// a discovery call over.
+func reapDeadSocket(path string, e os.DirEntry) {
+	info, err := e.Info()
+	if err != nil || time.Since(info.ModTime()) < reapGracePeriod {
+		return
+	}
+	_ = os.Remove(path)
+}
 
 // StableSocketName returns the file basename of the stable multi-workspace daemon socket.
 func StableSocketName() string { return stableSocketName }
@@ -67,7 +99,9 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 		p := filepath.Join(dir, name)
 		if isSocketLive(ctx, p) {
 			candidates = append(candidates, p)
+			continue
 		}
+		reapDeadSocket(p, e)
 	}
 
 	switch len(candidates) {

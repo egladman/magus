@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,4 +71,32 @@ func TestDecodeWireError(t *testing.T) {
 	assert.NotErrorIs(t, plain, ErrProtocolMismatch)
 	assert.Equal(t, "something else entirely", plain.Error())
 	assert.False(t, errors.Is(plain, ErrNotAdoptable))
+}
+
+// TestDiscoverSocketReapsDeadSockets covers the sweep. Sockets are named
+// magus-<pid>-<rand>.sock, so no new server ever collides with an old path and the
+// EADDRINUSE reclaim in Server.Start can never fire; without this, a machine accumulates
+// dead sockets until someone notices (39 on the one that prompted it).
+func TestDiscoverSocketReapsDeadSockets(t *testing.T) {
+	dir := isolateSockDir(t)
+
+	write := func(name string, age time.Duration) string {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, nil, 0o600))
+		when := time.Now().Add(-age)
+		require.NoError(t, os.Chtimes(p, when, when))
+		return p
+	}
+
+	old := write("magus-111-deadbeef.sock", time.Hour)
+	fresh := write("magus-222-cafebabe.sock", time.Second)
+	unrelated := write("notes.txt", time.Hour)
+
+	_, err := DiscoverSocket(context.Background())
+	require.Error(t, err, "no live socket, so discovery still reports none found")
+
+	assert.NoFileExists(t, old, "a long-dead socket is swept")
+	assert.FileExists(t, fresh,
+		"inside the grace period: a server may have created the file and not yet called listen")
+	assert.FileExists(t, unrelated, "only magus-*.sock is ever touched")
 }
