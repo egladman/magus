@@ -163,6 +163,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("secret", secretNS)
 
+	// magus.workspace.<...>: wires a workspace-provider spell in the real module.
+	// Stubbed no-op for the same reason as the two above; the playground has no
+	// workspace to fold provided projects into, and no VM to run the provider.
+	ws := vm.NewMap()
+	ws.MapSet("provider", fn("magus.workspace.provider", retNull))
+	m.MapSet("workspace", ws)
+
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).

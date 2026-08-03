@@ -47,8 +47,9 @@ func TestSingleGoProject(t *testing.T) {
 	projects := ws.All()
 	require.Len(t, projects, 1)
 	want := types.Project{
-		Path: ".",
-		Dir:  ws.Root, // symlink-resolved by Inspect
+		Path:   ".",
+		Dir:    ws.Root, // symlink-resolved by Inspect
+		Origin: types.OriginMagusfile,
 	}
 	assert.Equal(t, want, *projects[0])
 }

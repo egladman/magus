@@ -25,6 +25,10 @@ var boundaryTypes = []boundaryType{
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "Tool", Type: reflect.TypeFor[spells.Tool]()},
+	// A spell WRITES this one, so it takes the bare Buzz name; the Go side carries
+	// the adjective because types.Project and types.ProjectEntry already exist. The
+	// registry keys on the Buzz name, which is what makes that split expressible.
+	{Name: "Project", Type: reflect.TypeFor[spells.ProvidedProject]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},

@@ -332,7 +332,12 @@ func baseGraphFromRev(ctx context.Context, root, rev string) (types.KnowledgeGra
 	// disable it so the base is not asymmetrically missing @vcs attrs the current side has.
 	cfg.Knowledge.VCS.Enabled = false
 
-	ws, err := magus.Inspect(ctx, tmp, magus.WithLoadedConfig(cfg))
+	// No workspace providers on the base side: the export is a bare tree (no
+	// node_modules, no toolchain, no VCS metadata), so a provider shelling out to nx
+	// or gradle there would fail and take the whole diff with it. A project only a
+	// provider knows about therefore reads as added rather than unchanged, which is
+	// the honest answer for a base magus cannot resolve.
+	ws, err := magus.Inspect(ctx, tmp, magus.WithLoadedConfig(cfg), magus.WithoutWorkspaceProviders())
 	if err != nil {
 		return types.KnowledgeGraphOutput{}, fmt.Errorf("graph diff: inspect revision %q tree: %w", rev, err)
 	}

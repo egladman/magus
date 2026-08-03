@@ -140,6 +140,7 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	magus.MapSet("cache", cacheNS)
 	magus.MapSet("ci", ciNS)
 	magus.MapSet("secret", buildSecretNS(ctx, obs))
+	magus.MapSet("workspace", buildWorkspaceNS(ctx, obs))
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,

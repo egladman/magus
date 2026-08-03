@@ -112,7 +112,10 @@ func restoreFromCache(root string, c *wsCache) *types.Workspace {
 
 	ws := &types.Workspace{Root: root, Projects: make(map[string]*types.Project, len(c.Projects))}
 	for key, cp := range c.Projects {
-		p := &types.Project{Path: cp.Path, Dir: cp.Dir}
+		// Only magusfile-discovered projects are cached: the walk is what this cache
+		// replays, and a provider's projects are folded in after every open (they are
+		// not part of the tree walk and have their own cache).
+		p := &types.Project{Path: cp.Path, Dir: cp.Dir, Origin: types.OriginMagusfile}
 		for _, name := range cp.Spells {
 			if s, ok := spellByName[name]; ok {
 				p.AttachSpell(s)
