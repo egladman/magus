@@ -101,7 +101,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">2 min read</small>
+    <small class="reading-time" title="Estimated reading time">3 min read</small>
     <article>
 <h1 id="mgs1010-affected-set-could-not-be-computed">MGS1010: affected set could not be computed</h1>
 <p>magus could not ask the VCS which files changed, so it selected <strong>every</strong> <a class="glossary-term" href="../../../../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a>
@@ -122,9 +122,19 @@ decision is deliberate and it is not going to change.</p>
 believing you have an incremental one, and on <a class="glossary-term" href="../../../../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a> that difference can be the whole
 budget. Worse, it is stable: a misconfigured base ref does not fail loudly once,
 it silently degrades every run forever.</p>
-<p>The commonest cause by far is a <strong>shallow clone</strong>. A CI checkout with
-<code>fetch-depth: 1</code> contains no history, so there is no merge base to diff against.
-Others:</p>
+<p>A <strong>shallow clone</strong> used to be the commonest cause on its own. It no longer is:
+when the merge base is missing and the repository is shallow, magus fetches
+progressively more history until the common ancestor appears, and only reports
+<a class="code-xref" href="./" data-kind="code" data-def="Fires when magus cannot derive a changed-file set from the VCS and selects every project as a safety net, turning an incremental run into a full build.">MGS1010</a> if that recovery cannot run. So a shallow checkout reaching this
+diagnostic means the deepening itself failed:</p>
+<ul>
+<li>The runner has no network, or the remote is unreachable.</li>
+<li>The base ref names a branch the remote does not have (<code>origin/master</code> against a
+repository whose default branch is <code>main</code>).</li>
+<li>The base is not a remote-tracking name at all, so there is nothing to deepen
+from - a bare SHA the clone does not contain, or a local-only branch.</li>
+</ul>
+<p>Independently of depth:</p>
 <ul>
 <li>The configured base ref does not exist in this clone (a branch that was never
 fetched, or a typo in <code><a class="code-xref" href="../../../config/#vcs" data-kind="config" data-def="string, flag --vcs-base-ref, env MAGUS_VCS_BASE_REF">vcs.base_ref</a></code> / <code>MAGUS_VCS_BASE_REF</code>).</li>
@@ -133,11 +143,18 @@ build that copied files in without <code>.git</code>.</li>
 <li>The VCS binary is missing from the image.</li>
 </ul>
 <h2 id="fix">Fix</h2>
-<p><strong>In CI, fetch enough history.</strong> For GitHub Actions:</p>
-<pre><code class="language-yaml">- uses: actions/checkout@v4
+<p><strong>Give CI a base branch it can reach.</strong> For GitHub Actions:</p>
+<pre><code class="language-yaml">- uses: actions/checkout@v5
   with:
-    fetch-depth: 0 # or enough depth to contain the base ref
+    fetch-depth: 0
+    filter: blob:none # commit graph only; history's file contents stay on the server
 </code></pre>
+<p><code>filter: blob:none</code> is the important half. <a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> reads tree identities, never a
+historical file's contents, so the blobs a full clone downloads are pure cost - 96%
+of the payload in magus's own repository, and a share that grows with age. A bounded
+<code>fetch-depth</code> works too, since magus deepens past it when a branch outruns it. See
+<a href="../../../../guides/integrations/ci/">CI checkout</a> for the per-provider recipes and the
+measurements behind this.</p>
 <p><strong>Verify the base ref resolves.</strong> <code><a class="code-xref" href="../../../manpage/magus-doctor/" data-kind="command" data-def="Run diagnostic checks on the workspace covering project discovery, magusfile syntax, graph cycles, symlinks, env vars, and VCS reachability.">magus doctor</a></code> probes it directly and reports a
 <code>vcs base ref</code> failure when it does not. <code>magus <a class="code-xref" href="../../../manpage/magus-affected/" data-kind="command" data-def="magus affected: Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">affected</a> --<a class="code-xref" href="../../../../concepts/knowledge/" data-kind="command" data-def="magus explain: explain one knowledge-graph node.">explain</a> &lt;project&gt;</code> shows
 what magus believed changed and why a project was selected.</p>
@@ -152,7 +169,7 @@ git merge-base: exit status 128)
 <p>The diagnostic exists for the callers that have no scope line - notably the MCP
 <code>run_affected</code> tool, <a class="code-xref" href="../../../manpage/magus-where/" data-kind="command" data-def="magus where: Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd &quot;$(magus where api)".">where</a> an agent would otherwise be told only that the run
 passed, with no way to know it had just built the entire workspace instead of the
-<a class="glossary-term" href="../../../../glossary/#affected" data-def="The set of projects touched by a change; magus affected &lt;target> runs a target only over them.">affected</a> set.</p>
+affected set.</p>
 <h2 id="not-a-bug-when">Not a bug when</h2>
 <p>You are running <code>affected</code> in a workspace with no VCS on purpose. There is nothing
 to diff, so the fallback is the only correct behavior. If that is your steady

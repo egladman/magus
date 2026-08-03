@@ -4,9 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -60,19 +63,33 @@ func TestExtractTarRejectsEscape(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "escaping entry must not be written")
 }
 
+// gitEnv is the environment every git subprocess in this file runs under. Beyond fixed
+// identities for reproducible commits, it neuters the developer's own git config: a global
+// core.hooksPath (husky and pre-commit both install one) would otherwise run their hooks
+// inside these fixtures, and a hardened protocol.file.allow would break the file:// clones
+// outright. GIT_TERMINAL_PROMPT=0 keeps a misconfigured fixture from hanging on a prompt.
+func gitEnv() []string {
+	return append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
+		"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_SYSTEM="+os.DevNull, "GIT_TERMINAL_PROMPT=0")
+}
+
+// gitRun runs one git command in dir and fails the test if it does not succeed.
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = gitEnv()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+}
+
 // gitInitRepo makes a throwaway repo at dir with files committed. Skips if git is absent.
 func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	run := func(args ...string) {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-	}
+	run := func(args ...string) { gitRun(t, dir, args...) }
 	run("init", "-q")
 	for name, content := range files {
 		p := filepath.Join(dir, filepath.FromSlash(name))
@@ -192,4 +209,155 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 	assert.Equal(t, "abc123", got[0].ID)
 	assert.True(t, got[0].Date.IsZero(), "unparseable date is zero, not an error")
 	assert.Empty(t, got[0].Files)
+}
+
+// gitDivergedOrigin builds an origin repository with `trunk` commits of shared history, a
+// branch "feat" cut from its tip carrying one commit of its own, and three further commits
+// on "main" past the branch point. It returns the repository path.
+//
+// The trunk is what makes a bounded clone measurable. With a short shared history, any
+// fetch deep enough to reach the branch point also reaches the root, so the repository
+// stops being shallow and a test cannot tell a bounded recovery from `git fetch
+// --unshallow`. Keep `trunk` well above the ladder's first rung.
+func gitDivergedOrigin(t *testing.T, trunk int) string {
+	t.Helper()
+	origin := t.TempDir()
+	gitInitRepo(t, origin, map[string]string{"magus.yaml": "version: 1\n"})
+	gitRun(t, origin, "branch", "-M", "main")
+	commit := func(name string) {
+		require.NoError(t, os.WriteFile(filepath.Join(origin, name), []byte(name), 0o644))
+		gitRun(t, origin, "add", "-A")
+		gitRun(t, origin, "commit", "-q", "-m", name)
+	}
+	for i := range trunk {
+		commit(fmt.Sprintf("trunk-%d.txt", i))
+	}
+
+	gitRun(t, origin, "checkout", "-q", "-b", "feat")
+	commit("app.txt")
+
+	// main moves on past the branch point, so the merge base is neither branch's tip and
+	// the diff has post-branch-point commits it must exclude.
+	gitRun(t, origin, "checkout", "-q", "main")
+	for i := range 3 {
+		commit(fmt.Sprintf("main-%d.txt", i))
+	}
+	return origin
+}
+
+// gitCloneShallow clones branch "feat" from origin at depth, single-branch: the shape a CI
+// checkout with a bounded fetch-depth produces. The result holds neither origin/main nor
+// the commit the two branches share, so `git merge-base origin/main HEAD` fails outright.
+// depth 0 clones the full history instead, still single-branch.
+func gitCloneShallow(t *testing.T, origin string, depth int) string {
+	t.Helper()
+	clone := filepath.Join(t.TempDir(), "checkout")
+	args := []string{"clone", "--quiet", "--single-branch", "--branch", "feat"}
+	if depth > 0 {
+		args = append(args, fmt.Sprintf("--depth=%d", depth))
+	}
+	cmd := exec.Command("git", append(args, "file://"+origin, clone)...)
+	cmd.Env = gitEnv()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "clone: %s", out)
+
+	wantShallow := strconv.FormatBool(depth > 0)
+	require.Equal(t, wantShallow, gitOutput(t, clone, "rev-parse", "--is-shallow-repository"),
+		"the clone must start in the state the test is about, or it proves nothing")
+	return clone
+}
+
+// gitOutput returns the trimmed stdout of one git command in dir.
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = gitEnv()
+	out, err := cmd.Output()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), exit.Stderr)
+	}
+	require.NoError(t, err, "git %s", strings.Join(args, " "))
+	return strings.TrimSpace(string(out))
+}
+
+// gitCommitCount is how much history the checkout actually holds, the quantity every
+// depth assertion below is about.
+func gitCommitCount(t *testing.T, dir string) int {
+	t.Helper()
+	n, err := strconv.Atoi(gitOutput(t, dir, "rev-list", "--count", "HEAD"))
+	require.NoError(t, err)
+	return n
+}
+
+// TestDiffRecoversMergeBaseInShallowClone is the regression for the silent full build:
+// before Diff recovered, a shallow CI checkout made `git merge-base` fail, which affected
+// reports as MGS1010 and answers by selecting every project. The changed files must come
+// back from a clone that never had the merge base to begin with - and the recovery must
+// stay bounded rather than quietly turning into `git fetch --unshallow`.
+func TestDiffRecoversMergeBaseInShallowClone(t *testing.T) {
+	origin := gitDivergedOrigin(t, 40)
+	clone := gitCloneShallow(t, origin, 1)
+	full := gitCommitCount(t, origin)
+
+	// An uncommitted edit too, so the recovered merge base is exercised against the work
+	// tree the same way a real `magus affected` run sees it.
+	require.NoError(t, os.WriteFile(filepath.Join(clone, "dirty.txt"), []byte("uncommitted\n"), 0o644))
+
+	files, err := gitVCS{}.Diff(t.Context(), clone, "origin/main")
+	require.NoError(t, err)
+	assert.Contains(t, files, "app.txt", "the branch's committed change")
+	assert.Contains(t, files, "dirty.txt", "an untracked working-tree file")
+	assert.NotContains(t, files, "main-0.txt", "commits that landed on main after the branch point stay out")
+
+	// Bounded, not unshallowed: the ladder stops as soon as the ancestor is reachable. If
+	// this ever holds the whole history, the recovery has degenerated into `git fetch
+	// --unshallow` and is charging exactly the cost it exists to avoid.
+	assert.Equal(t, "true", gitOutput(t, clone, "rev-parse", "--is-shallow-repository"),
+		"recovery must leave the clone shallow")
+	assert.Less(t, gitCommitCount(t, clone), full,
+		"recovery must fetch less than the full history")
+}
+
+// TestRecoverMergeBaseNeverShortens is the regression for a data-destructive bug: `git
+// fetch --depth=N` is absolute in BOTH directions, so a ladder built on --depth truncated
+// any checkout deeper than its first rung, and a later rung failing left the repository
+// holding less history than it was cloned with.
+func TestRecoverMergeBaseNeverShortens(t *testing.T) {
+	origin := gitDivergedOrigin(t, 40)
+	const depth = 36 // deeper than the ladder's first rung (32), shallower than the divergence
+	clone := gitCloneShallow(t, origin, depth)
+	before := gitCommitCount(t, clone)
+	require.Greater(t, before, 32, "the clone must start deeper than the first rung")
+
+	gitVCS{}.recoverMergeBase(t.Context(), clone, "origin/main")
+
+	assert.GreaterOrEqual(t, gitCommitCount(t, clone), before,
+		"recovery must only ever add history, never truncate what the checkout arrived with")
+}
+
+// TestRecoverMergeBaseSkipsFullClone locks in the guard. The clone here has a working
+// origin remote and a reachable base branch, so the fetch WOULD succeed and WOULD return a
+// merge base: the empty result is the guard refusing, and deleting the guard fails this
+// test. A full clone that cannot find a merge base has a bad ref, not missing history, and
+// no read-only query should fetch into it.
+func TestRecoverMergeBaseSkipsFullClone(t *testing.T) {
+	origin := gitDivergedOrigin(t, 3)
+	clone := gitCloneShallow(t, origin, 0)
+	require.Empty(t, gitOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+		"single-branch clone must lack the base ref, so merge-base fails for a reason recovery could fix")
+
+	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "origin/main"))
+	assert.Empty(t, gitOutput(t, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+		"the guard must return before any ref is fetched")
+}
+
+// TestRecoverMergeBaseUnusableBase covers the two bases with nothing to fetch from: one
+// with no remote segment at all, and one naming a remote this repository does not have.
+// Neither may be guessed at, because the segment reaches `git fetch` as a repository
+// argument - a URL sink.
+func TestRecoverMergeBaseUnusableBase(t *testing.T) {
+	clone := gitCloneShallow(t, gitDivergedOrigin(t, 3), 1)
+	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "deadbeef"))
+	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "refs/remotes/origin/main"))
 }

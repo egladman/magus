@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2374,
-  "edge_count": 5290,
+  "node_count": 2375,
+  "edge_count": 5300,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1141,7 +1141,7 @@
       "source": "docs/guides",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "19",
+        "dir_files": "20",
         "dir_languages": "markdown"
       }
     },
@@ -1163,7 +1163,7 @@
       "source": "docs/guides/integrations",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "4",
+        "dir_files": "5",
         "dir_languages": "markdown"
       }
     },
@@ -3354,6 +3354,18 @@
         "section": "guides",
         "tags": "agents,skills,agent install,MCP,MAGUS.md,AGENTS.md,hooks,guard,knowledge graph,memory,claude,codex,opencode,drift",
         "title": "Agents"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/ci.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/ci.md",
+      "source": "docs/guides/integrations/ci.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "ci,checkout,clone,partial clone,blobless,fetch-depth,shallow,affected,merge base,MGS1010,github actions,gitlab,circleci,buildkite,jenkins,azure pipelines",
+        "title": "CI checkout"
       }
     },
     {
@@ -9130,14 +9142,14 @@
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml; a warm tree skips installation, while a cold checkout restores the locked set before esbuild runs the declared build scripts.",
-      "source": "docs/render.buzz:325"
+      "source": "docs/render.buzz:336"
     },
     {
       "id": "function:docs/render.buzz:site_publish",
       "kind": "function",
       "label": "site_publish",
       "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger.",
-      "source": "docs/render.buzz:315",
+      "source": "docs/render.buzz:326",
       "attrs": {
         "exported": "true"
       }
@@ -23435,6 +23447,14 @@
     },
     {
       "source": "dir:docs/guides/integrations",
+      "target": "doc:docs/guides/integrations/ci.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "dir:docs/guides/integrations",
       "target": "doc:docs/guides/integrations/daemon.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -29667,6 +29687,14 @@
     },
     {
       "source": "doc:docs/concepts/workspace/affected.md",
+      "target": "doc:docs/guides/integrations/ci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/affected.md",
       "target": "doc:docs/guides/tips.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30680,6 +30708,62 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "diagnostic:MGS1010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/concepts/targets/ci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/concepts/workspace/affected.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/ci.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/ci.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/ci.md"
     },
     {
       "source": "doc:docs/guides/integrations/daemon.md",
@@ -32157,6 +32241,14 @@
       "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
       "target": "diagnostic:MGS1010",
       "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1010.md",
+      "target": "doc:docs/guides/integrations/ci.md",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1010.md"

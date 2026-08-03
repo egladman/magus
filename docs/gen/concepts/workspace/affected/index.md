@@ -69,6 +69,12 @@ and `RunCI` strips the `rw` charm, an affected CI run is always read-only no mat
 how the workspace is configured. Fan out at scale with `--plan` feeding a shard
 matrix.
 
+How the pipeline clones the repository decides whether any of this works. affected
+needs a reachable merge base, and a checkout that cannot supply one degrades to a full
+build without failing. [CI checkout](../../guides/integrations/ci.md) covers the
+provider recipes, why a blobless partial clone is the right default, and how magus
+deepens a shallow clone rather than silently rebuilding everything.
+
 ## Watch integration
 
 `--stdin` reads changed paths from a pipe instead of running a diff, so a file
@@ -83,6 +89,7 @@ newlines. See [tips](../../guides/tips.md) for the continuous-build loop.
 
 ## See also
 
+- [ci.md](../../guides/integrations/ci.md) - checking out a repository so the diff is computable and cheap.
 - [dependencies.md](../dependencies.md) - `magus\needs` versus `depends_on`, the edges the closure walks.
 - [targets.md](../targets.md) - the target grammar these edges resolve against.
 - [operations.md](../operations.md) - what a target dispatches to per project.

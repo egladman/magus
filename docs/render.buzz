@@ -180,6 +180,17 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/assets && find " + site.outDir + "/assets -mindepth 1 -maxdepth 1 ! -name mermaid.js ! -name hljs.js -exec rm -rf \{\} +"]);
     os\execute(["sh", "-c", "[ -d " + site.root + "/assets ] && cp -r " + site.root + "/assets/. " + site.outDir + "/assets/ || true"]);
 
+    // The README also badges each libs/* project's own coverage.svg, which that project
+    // writes beside itself (ctx.writesFiles("coverage.svg")) rather than into assets/. The
+    // README renders in two places - GitHub and gen/index.html - so the badge path has to
+    // resolve in both; mirroring the repo-relative path into gen/ satisfies both, whereas
+    // rewriting the README to point at assets/ would fix the site by breaking GitHub.
+    // Globbed, not a hardcoded list: a second project adding a badge must not be a silent
+    // 404 that only assetIntegrityCheck notices. Wiped first, like assets/ above, so a
+    // removed project leaves no stale badge behind.
+    os\execute(["sh", "-c", "rm -rf " + site.outDir + "/libs"]);
+    os\execute(["sh", "-c", "for f in " + site.root + "/libs/*/coverage.svg; do [ -f \"$f\" ] || continue; d=" + site.outDir + "/libs/$(basename \"$(dirname \"$f\")\"); mkdir -p \"$d\" && cp \"$f\" \"$d/\"; done"]);
+
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
     // of every feature module). mermaid is a lazy dynamic import() of the same-origin
