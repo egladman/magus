@@ -110,7 +110,7 @@ The `targets` sub-map keys a target name to a policy table:
 
 | Policy       | Effect                                                                       |
 | ------------ | ---------------------------------------------------------------------------- |
-| `skip_cache` | opts the target out of the cache; magus always runs it and never replays it  |
+| `skip_cache` | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting)) |
 | `exclusive`  | runs the target alone - no peer target runs concurrently while it does       |
 | `slots`      | the target holds N concurrency slots while it runs, throttling parallel work |
 
@@ -122,7 +122,7 @@ magus\project({
     "watch_ignore": { "glob": ["**/*.snap"] },
     "targets": {
         "test": { "slots": 4 },
-        "build": { "skip_cache": true },
+        "build": { "skip_cache": "signs a fresh artifact per invocation" },
     },
 });
 ```

@@ -17,7 +17,7 @@ magus\project({
     "outputs": ["bin/**", "gen/**"],
     "targets": {
         // Always re-run: the value is the check on every run, not a stored output.
-        "generate": {"skip_cache": true},
+        "generate": {"skip_cache": "is the drift check itself; the value is the check on every run, not a stored output"},
     },
 });
 

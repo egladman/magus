@@ -308,6 +308,7 @@ reference/codes/magusfile/MGS1016/
 reference/codes/magusfile/MGS1017/
 reference/codes/magusfile/MGS1018/
 reference/codes/magusfile/MGS1019/
+reference/codes/magusfile/MGS1020/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -450,6 +451,7 @@ tags/filesystem/
 tags/fingerprint/
 tags/fish/
 tags/flags/
+tags/formatter/
 tags/fs/
 tags/generated/
 tags/getting-started/

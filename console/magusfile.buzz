@@ -40,7 +40,7 @@ magus\project({
     "targets": {
         // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
         // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
-        "build": {"skip_cache": true, "exclusive": true},
+        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the git-status check", "exclusive": true},
     },
 });
 

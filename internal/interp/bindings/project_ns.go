@@ -267,8 +267,21 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			// name is normalized by workspace.WithTarget, so a policy declared
 			// under any spelling matches a target invoked under any other.
-			if sv, ok := pv.MapGet("skip_cache"); ok && sv.Bool() {
-				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache()))
+			// A reason, not a flag. Opting out claims that REPLAYING this target
+			// would be wrong; wanting a fresh run is `--no-cache`. A bare `true`
+			// could not tell those apart, and six of these turned out to be
+			// workarounds for a snapshot error the engine no longer raises.
+			if sv, ok := pv.MapGet("skip_cache"); ok {
+				var reason string
+				if sv.IsStr() {
+					reason = strings.TrimSpace(sv.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\". "+
+							"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache(reason)))
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))

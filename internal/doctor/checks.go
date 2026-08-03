@@ -808,6 +808,56 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 	}
 }
 
+// checkOutputOwnedByTwoTargets is MGS1020: one output glob declared by two targets in the
+// SAME project. MGS4002 already covers the cross-project shape (two projects, one target);
+// this is its sibling, and the gap it fills is the common one - a generator and a formatter
+// that both rewrite a gen/ tree.
+//
+// Two owners of one file is not an ordering problem, which is why it earns a diagnostic
+// rather than a scheduling fix. Run the generator first and the formatter's edit is what
+// lands, so the generator's next drift gate fails; run the formatter first and its work is
+// immediately overwritten. Whichever goes last wins and the other's gate fails on the next
+// run, forever, at every ordering. The fix is always ownership: one target owns the bytes,
+// and if generated output needs formatting the GENERATOR formats it as its final step.
+//
+// Only DECLARED writes are visible here. A formatter that reformats a tree without
+// declaring ctx.writesFiles is undetectable statically, which is why every formatter in
+// this workspace excludes generated trees by configuration as well.
+func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) Check {
+	const name = "output ownership"
+	var details []string
+	for _, p := range projects {
+		owners := map[string][]string{}
+		for target, refs := range p.TargetOutputs {
+			for _, ref := range refs {
+				if !slices.Contains(owners[ref.Glob], target) {
+					owners[ref.Glob] = append(owners[ref.Glob], target)
+				}
+			}
+		}
+		for glob, targets := range owners {
+			if len(targets) < 2 {
+				continue
+			}
+			slices.Sort(targets)
+			details = append(details, fmt.Sprintf("%s: output glob %q is declared by %s",
+				types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob, strings.Join(targets, " and ")))
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "every declared output has one owning target"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d output glob(s) declared by more than one target; whichever runs last wins and the other's drift gate fails (see %s)",
+			len(details), types.CodeURL(types.OutputOwnedByTwoTargets)),
+		Details: details,
+	}
+}
+
 // provesBuilt reports whether a glob's matches are evidence that the project was actually
 // built, which is true only when nothing the glob matched is committed. Matching a committed
 // file proves the clone happened, not the build.

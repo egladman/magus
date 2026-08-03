@@ -78,13 +78,13 @@ func TestWithTarget_NormalizesName(t *testing.T) {
 	p := &types.Project{Path: "."}
 	// Declared camelCase; a policy lookup under kebab-case (post-A1 CLI/ParseTarget
 	// normalization) must find it, and vice versa.
-	opt := WithTarget("goBuild", SkipCache())
+	opt := WithTarget("goBuild", SkipCache("test policy"))
 	require.NoError(t, opt(p))
 	assert.True(t, p.TargetPolicies["go-build"].SkipCache)
 	assert.NotContains(t, p.TargetPolicies, "goBuild")
 
 	p2 := &types.Project{Path: "."}
-	opt2 := WithTarget("go-build", SkipCache())
+	opt2 := WithTarget("go-build", SkipCache("test policy"))
 	require.NoError(t, opt2(p2))
 	assert.True(t, p2.TargetPolicies["go-build"].SkipCache)
 }

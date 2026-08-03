@@ -107,3 +107,49 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 		[]string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
 		got.Details)
 }
+
+// TestOutputOwnedByTwoTargets is MGS1020. The failing shape is a generator and a formatter
+// both declaring a gen/ tree: no ordering resolves it, so it has to be reported rather than
+// scheduled around.
+func TestOutputOwnedByTwoTargets(t *testing.T) {
+	var r *runner
+
+	t.Run("two targets on one glob is reported", func(t *testing.T) {
+		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
+			Path: "docs", Name: "docs",
+			TargetOutputs: map[string][]types.OutputRef{
+				"generate": {{Glob: "gen/**"}},
+				"format":   {{Glob: "gen/**"}},
+			},
+		}})
+		assert.Equal(t, StatusFail, got.Status)
+		assert.Equal(t,
+			[]string{`docs: output glob "gen/**" is declared by format and generate`},
+			got.Details, "owners are sorted so the message is stable")
+	})
+
+	t.Run("one owner per glob is fine", func(t *testing.T) {
+		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
+			Path: "docs", Name: "docs",
+			TargetOutputs: map[string][]types.OutputRef{
+				"generate":      {{Glob: "gen/**"}},
+				"build-mermaid": {{Glob: "gen/assets/mermaid.js"}},
+			},
+		}})
+		assert.Equal(t, Check{
+			Name:    "output ownership",
+			Status:  StatusOK,
+			Message: "every declared output has one owning target",
+		}, got, "distinct globs are not an overlap, even nested ones")
+	})
+
+	t.Run("one target repeating a glob is not two owners", func(t *testing.T) {
+		got := r.checkOutputOwnedByTwoTargets([]*types.Project{{
+			Path: "docs", Name: "docs",
+			TargetOutputs: map[string][]types.OutputRef{
+				"generate": {{Glob: "gen/**"}, {Glob: "gen/**"}},
+			},
+		}})
+		assert.Equal(t, StatusOK, got.Status)
+	})
+}

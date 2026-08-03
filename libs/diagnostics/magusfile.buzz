@@ -24,7 +24,7 @@ magus\project({
     "outputs": ["MAGUS.md"],
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
-        "generate": {"skip_cache": true, "exclusive": true},
+        "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
     },
 });
 

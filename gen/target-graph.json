@@ -271,7 +271,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
@@ -354,7 +354,7 @@
           "charms": [
             "cd"
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }

@@ -169,6 +169,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkUnreachedFootprintDecls(projects),
 		r.checkRedundantFootprintGlobs(projects),
 		r.checkDeadOutputGlobs(projects),
+		r.checkOutputOwnedByTwoTargets(projects),
 		r.checkSelfStalingOutputs(projects),
 		r.checkCharmTargetCollision(projects),
 		r.checkHasCharmTypos(projects),

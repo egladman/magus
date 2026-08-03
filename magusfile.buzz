@@ -56,37 +56,37 @@ magus\project({
     "name": "magus",
     "spells": [go, buzz, markdown, bash],
     "targets": {
-        "watch": {"skip_cache": true},
+        "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         // serve blocks (a long-running dev-loop server), so it must never cache.
-        "serve": {"skip_cache": true},
+        "serve": {"skip_cache": "blocks as a long-running dev server and never returns"},
         // deploy-generate writes a gitignored tree and nothing else.
         // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
         // writes into .gitattributes, and an ignored path can never conflict.
-        "deploy-generate": {"skip_cache": true},
-        "generate": {"skip_cache": true, "exclusive": true},
-        "ci-shard": {"skip_cache": true},
-        "image-build": {"skip_cache": true},
+        "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
+        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
+        "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
+        "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
-        "release-build": {"skip_cache": true},
-        "release-sign": {"skip_cache": true},
+        "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
+        "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
         // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
-        "release": {"skip_cache": true, "exclusive": true},
+        "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
-        "test": {"skip_cache": true},
+        "test": {"skip_cache": "rewrites assets/coverage.svg; a hit would skip the write"},
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
-		"changelog-generate": {"skip_cache": true},
+		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
         // Screen-records the CLI, so the bytes it writes are never the same twice
         // (real target durations land in the frames). Caching would replay a GIF
         // recorded against different code, which is the one thing a demo must not
         // do. Deliberately NOT named *-generate: `generate` globs that suffix and
         // drift-gates it, and a non-reproducible artifact under a drift gate fails
         // every CI run by construction. See the tapes target below.
-        "tapes": {"skip_cache": true},
+        "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
     },
 });
 
@@ -364,7 +364,12 @@ fun workspace_go_mods(ctx: magus\Context) > [any] {
 // The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or
 // writes go.mod. Without rw, Go's -print mode must equal the checked-in file.
 export fun mod_sync(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("go.mod");
+    // modifiesExistingFiles, not writesFiles: go.mod is hand-authored and committed, and
+    // this target amends its replace directives rather than producing the file. Declaring
+    // it an OUTPUT made mod-sync snapshot it, so a later cache hit could replay a
+    // pre-release go.mod straight over the version bump `release` had just written - the
+    // two-owners hazard MGS1020 reports. As a modification it still hashes into the key.
+    ctx.modifiesExistingFiles("go.mod");
     final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});
@@ -687,7 +692,9 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 
     // 1. Nested modules first: the root's go.mod must require a version that
     // already exists as a tag by the time the root itself is tagged.
-    ctx.writesFiles("go.mod");
+    // See mod-sync: release amends require versions in a committed go.mod, it does not
+    // produce the file, and two targets declaring one output is MGS1020.
+    ctx.modifiesExistingFiles("go.mod");
     var gomod = fs\readFile("go.mod");
     var rewrote = false;
     foreach (m in modules) {

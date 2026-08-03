@@ -101,18 +101,18 @@ magus\project({
     "targets": {
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
-        "generate": {"skip_cache": true, "exclusive": true},
+        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
         // render is the FAST re-render path (site_render only, no MAGUS.md/changelog/
         // JS-bundle rebuild, no drift gate) the workspace-root `serve` dev loop calls on
         // a docs change. skip_cache so every invocation actually re-renders gen/.
-        "render": {"skip_cache": true},
+        "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
 		// site-generate incorporates VCS tags and history. Those are deliberately
 		// outside file hashing, so replay is unsafe until the cache has a VCS input
 		// primitive. It still has a narrow target footprint and no output snapshot.
-		"site-generate": {"skip_cache": true},
+		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
-        "build-playground": {"skip_cache": true},
+        "build-playground": {"skip_cache": "TinyGo emits a non-deterministic wasm binary; a hit would replay a stale one"},
         // build-mermaid / build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
