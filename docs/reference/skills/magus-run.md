@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `cbc13a3be57a` |
+| `skill-content` | `7a0d05f4f47b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.

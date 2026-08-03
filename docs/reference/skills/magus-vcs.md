@@ -2,8 +2,8 @@
 title: magus-vcs
 description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs]
-skill_full_bytes: 5371
-skill_simple_bytes: 3447
+skill_full_bytes: 6164
+skill_simple_bytes: 4056
 ---
 
 # magus-vcs
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `cbc13a3be57a` |
+| `skill-content` | `7a0d05f4f47b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -85,18 +85,34 @@ CORRECT: note that `docs/gen/**` is a declared output of
 - Commit regenerated outputs together with the source change that produced
   them. CI typically runs the generate target as a drift gate: a source change
   whose outputs were not committed fails there.
-- On merge conflicts in a generated file, do not merge hunks by hand: take
-  either side, then regenerate. Workspaces wired with `magus config init` have
-  a VCS merge driver that does this automatically.
+- On merge conflicts, run `magus vcs resolve`. It settles every conflicted
+  generated file at once, regenerates ONCE, and records the result, leaving only
+  the conflicts magus cannot settle for you. Never merge generated hunks by
+  hand. Do not reach for the merge driver instead: a VCS invokes a driver once per
+  conflicted path and never invokes one at all for a file one side deleted, so the
+  driver alone cannot finish the job.
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
 ## Preparing a commit
 
-There is deliberately no `magus vcs` command. Classify with Magus, then use
-your VCS directly and stage only the paths you intend. For a rare VCS fact that
-needs Magus's portable VCS module rather than porcelain, use one inline Buzz
-evaluation:
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add <path>...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in, which is the one thing
+`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
+For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
+use one inline Buzz evaluation:
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'
@@ -183,17 +199,30 @@ project and a role:
   version, timestamp). Report the tool; never revert the tree to chase it.
 - Commit regenerated outputs together with the source change that produced
   them.
-- On merge conflicts in a generated file, do not merge hunks by hand: take
-  either side, then regenerate.
+- On merge conflicts, run `magus vcs resolve`. It settles every conflicted
+  generated file at once, regenerates ONCE, and records the result, leaving only
+  the conflicts magus cannot settle for you.
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
 ## Preparing a commit
 
-There is deliberately no `magus vcs` command. Classify with Magus, then use
-your VCS directly and stage only the paths you intend. For a rare VCS fact that
-needs Magus's portable VCS module rather than porcelain, use one inline Buzz
-evaluation:
+`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
+replacement for `git add -A`:
+
+```sh
+magus vcs add --dry-run   # classify the dirty tree, stage nothing
+magus vcs add             # stage declared sources AND the outputs they produced
+magus vcs add <path>...   # narrow it
+```
+
+It stages sources and generated outputs together (they belong in one commit) and
+REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
+genuinely a new source file. Staging specific paths by hand stays fine; the long
+form below is what it automates, and what to fall back to.
+
+For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
+use one inline Buzz evaluation:
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main() > void { std\print(vcs\metadata()); } main();'

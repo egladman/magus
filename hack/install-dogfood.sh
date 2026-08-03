@@ -42,8 +42,11 @@ magus run dogfood .
 
 test -x "$root/magus-dev" || { echo "install-dogfood: magus run dogfood produced no $root/magus-dev" >&2; exit 1; }
 
-# The %O %A %B %L %P placeholders are git's, passed through verbatim.
-git config --worktree merge.magus.driver "$root/magus-dev merge-driver %O %A %B %L %P"
+# The %O %A %B %L %P placeholders are git's, passed through verbatim. The subcommand is
+# `vcs merge-driver`, matching gitDriverArgs in vcs/git.go - keep the two in step. A stale
+# spelling does not fail loudly: git runs it, the dispatch rejects the arguments, and every
+# generated file comes back as a hand-merge conflict instead.
+git config --worktree merge.magus.driver "$root/magus-dev vcs merge-driver %O %A %B %L %P"
 
 echo "install-dogfood: this worktree now merges generated files with $root/magus-dev"
 echo "  $("$root/magus-dev" version)"
