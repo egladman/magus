@@ -9,7 +9,7 @@ import (
 
 // gitFilter checks whether a path is tracked by git. Tracked files are
 // the only ones eligible for race findings — tool-generated files,
-// caches, and build artefacts are excluded by definition.
+// caches, and build artifacts are excluded by definition.
 type gitFilter struct {
 	root    string
 	once    sync.Once

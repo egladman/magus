@@ -1,0 +1,137 @@
+// site/tags.buzz - one real page per tag, plus a /tags/ hub.
+//
+// Tag chips used to point at the search page carrying a `tag:"x"` query. That serves a reader
+// who already has a page open and produces NOTHING for discovery: a client-side query is not a
+// URL a crawler follows, not a link the orphan gate can count, and not somewhere another page
+// can point. Giving a tag its own page turns every chip into a real inbound link and gives the
+// corpus a topic axis that cuts ACROSS the directory tree - the one thing section indexes,
+// breadcrumbs, and the pager all cannot do, because each of those only ever walks the tree.
+//
+// Runs after the walk: every page's frontmatter has to be collected before a tag knows its
+// members. The pages are NOT registered in docPages - they are an index over the corpus, not
+// part of it, and listing them as content would put them in Related cards and the section
+// subtree, where they would crowd out the pages they exist to point at.
+namespace tags;
+
+import "fs";
+import "template";
+import "lib/text" as _;
+import "lib/url" as _;
+import "engine/types" as _;
+import "engine/page" as _;
+import "engine/path" as _;
+
+// writeTagPage renders one synthesized page and records it everywhere the site tracks output.
+// srcRel carries the "/_index.md" synthesized-page marker so renderPage knows there is no
+// source to view or edit, and so rootPrefix climbs the right number of levels.
+fun writeTagPage(url: str, srcRel: str, title: str, desc: str, body: str, searchText: str, site: Site) > void {
+    final doc = renderPage(title, desc, body, srcRel, "", url, "", mut [], site);
+    final dir = site.outDir + "/" + url.sub(0, url.len() - 1);
+    fs\makeDirectory(dir);
+    fs\writeFile(dir + "/index.html", doc);
+    site.addRecord(url, title, desc, searchText);
+    site.pageUrls[url] = true;
+    site.writtenPaths[url + "index.html"] = true;
+}
+
+// collectTagIndex records which tag slugs will get a page, so a chip rendered during the walk
+// knows whether its destination exists. Runs pre-walk, over docPages only - blog posts are not
+// collected until the walk, so a blog-only tag simply keeps its search chip.
+export fun collectTagIndex(site: Site) > void {
+    var count: {str: int} = mut {<str: int>};
+    foreach (p in site.docPages) {
+        foreach (t in p.tags.split("||")) {
+            if (t == "") { continue; }
+            final slug = tagSlug(t);
+            if (slug == "") { continue; }
+            final prev = count[slug];
+            if (prev == null) { count[slug] = 1; } else { count[slug] = prev! + 1; }
+        }
+    }
+    foreach (slug in count.keys()) {
+        if (count[slug]! > 1) { site.tagPages[slug] = true; }
+    }
+}
+
+export fun renderTagPages(site: Site) > void {
+    // slug -> the display spelling. Last writer wins, which is fine: two tags that kebab to the
+    // same slug ARE the same topic, and either spelling names it. Restricted to the slugs
+    // collectTagIndex already promised a page for, so chips and pages cannot disagree.
+    var label: {str: str} = mut {<str: str>};
+    foreach (p in site.docPages) {
+        foreach (t in p.tags.split("||")) {
+            if (t == "") { continue; }
+            final slug = tagSlug(t);
+            if (slug != "" and site.tagPages[slug] != null) { label[slug] = t; }
+        }
+    }
+    if (label.size() == 0) { return; }
+
+    var slugs: [str] = mut [<str>];
+    foreach (s in label.keys()) { slugs.append(s); }
+    final orderedSlugs = slugs.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+
+    var hubRows: [{str: any}] = mut [<{str: any}>];
+
+    foreach (slug in orderedSlugs) {
+        final name = label[slug]!;
+        // Second pass over docPages per tag rather than a slug->pages map built up front: the
+        // corpus is a couple of hundred pages, and this keeps the grouping in one obvious place.
+        var cards: [{str: any}] = mut [<{str: any}>];
+        foreach (p in site.docPages) {
+            var carries = false;
+            foreach (t in p.tags.split("||")) {
+                if (t != "" and tagSlug(t) == slug) { carries = true; }
+            }
+            if (carries == false) { continue; }
+            cards.append(mut {"url": p.url, "title": p.title, "desc": p.desc, "hasDesc": p.desc != ""});
+        }
+        foreach (b in site.blogPosts) {
+            var carries = false;
+            foreach (t in b.tags.split("||")) {
+                if (t != "" and tagSlug(t) == slug) { carries = true; }
+            }
+            if (carries == false) { continue; }
+            cards.append(mut {"url": b.url, "title": b.title, "desc": b.description, "hasDesc": b.description != ""});
+        }
+        if (cards.len() == 0) { continue; }
+
+        final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
+            return strLess("" + a["title"], "" + b["title"]);
+        });
+
+        final url = "tags/" + slug + "/";
+        final srcRel = "tags/" + slug + "/_index.md";
+        final title = "Tagged: " + name;
+        final desc = "Every page tagged \"" + name + "\".";
+        final root = rootPrefix(srcRel, site);
+        final body = template\render(`  <p>Every page tagged <strong>{{name}}</strong>. Tags cut across the directory tree, so these pages come from different sections.</p>
+  <div class="related-grid section-index-grid">
+{{#cards}}
+    <a class="related-card" href="{{root}}{{url}}"><span class="related-card-title">{{title}}</span>{{#hasDesc}}<span class="related-card-desc">{{desc}}</span>{{/hasDesc}}</a>
+{{/cards}}
+  </div>
+  <p><a href="{{root}}tags/">All tags</a></p>
+`, {"name": name, "root": root, "cards": ordered});
+
+        writeTagPage(url, srcRel, title, desc, body, title + " " + desc, site);
+        hubRows.append(mut {"slug": slug, "name": name, "count": ordered.len()});
+    }
+
+    if (hubRows.len() == 0) { return; }
+
+    final hubSrcRel = "tags/_index.md";
+    final hubRoot = rootPrefix(hubSrcRel, site);
+    final hubBody = template\render(`  <p>Every topic in the documentation, with the number of pages carrying it. A tag is the one
+  route through these docs that ignores the directory tree.</p>
+  <div class="post-tags" aria-label="All tags">
+{{#rows}}
+    <a class="tag" href="{{root}}tags/{{slug}}/">{{name}} ({{count}})</a>
+{{/rows}}
+  </div>
+`, {"root": hubRoot, "rows": hubRows});
+
+    writeTagPage("tags/", hubSrcRel, "Tags",
+        "Every documentation topic, with the pages carrying it. Tags cut across the section tree.",
+        hubBody, "Tags topics index", site);
+}

@@ -5,18 +5,25 @@
 # typo->fix map, so domain terms (gopherbuzz, magusfile, TinyGo, ...) never trip
 # it and there is essentially nothing to babysit here. Keep this file lean.
 
+[default]
+# Without a locale, `typos` accepts every English variant, so "artefacts" sat in the
+# canonical target table indefinitely - correct British, not a typo. Pinning en-us makes
+# one spelling the workspace's spelling, which is the only way a prose gate stays useful.
+locale = "en-us"
+
 [files]
 # Skip generated / vendored trees and lockfiles - nothing to fix inside them, and
 # they carry byte-identical text `typos` would otherwise re-scan every run.
 extend-exclude = [
-  "website/gen/**",
-  "website/playground/**",
-  "docs/manpage/gen/**",
-  "gopherbuzz/testdata/**",
+  # One glob, not a path list: generated output lives in a `gen/` dir by convention, and
+  # naming each one is how this list went stale (it still pointed at website/gen after the
+  # docs reorg). Generated trees are also the worst false-positive source - the protobuf
+  # TS descriptors are base64 blobs that read as hundreds of misspelled words.
+  "**/gen/**",
+  "libs/gopherbuzz/testdata/**",
   "**/*.min.*",
   "**/*.wasm",
   "go.sum",
-  "go.tool.sum",
   "pnpm-lock.yaml",
   "package-lock.json",
 ]

@@ -3,6 +3,14 @@
 namespace url;
 
 import "assert";
+import "strings";
+
+// tagSlug turns an author-written tag into one URL segment: "remote cache" -> "remote-cache",
+// "magus.yaml" -> "magus-yaml". Tags are prose, so two that differ only in punctuation or case
+// are the same topic and must land on the same page - kebabCase is what collapses them.
+export fun tagSlug(tag: str) > str {
+    return strings\kebabCase(tag);
+}
 
 // allDigits reports whether every byte of s is an ASCII digit (and s is non-empty).
 export fun allDigits(s: str) > bool {

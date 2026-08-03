@@ -319,6 +319,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	if len(p.TargetOutputs[target]) > 0 {
 		step.Outputs = nil
 		step.RequiredOutputs = nil
+		// The target named its own artifacts, so producing none of them is a real error and
+		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
+		// which a check-only target never produces - see OutputsDeclared.
+		step.OutputsDeclared = true
 	}
 	for _, s := range p.ResolvedSpells {
 		step.Sources = append(step.Sources, s.TargetSources()[target]...)

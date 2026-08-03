@@ -19,12 +19,14 @@ pnpm = "10.33.0"
 # lint clean, and unlike the `go tool` plugins it is bound to no module graph, so
 # nothing else would have caught the drift.
 "aqua:hadolint/hadolint" = "2.14.0"
-# Go linter driven by the go spell's golangci-lint op. Pinned here rather than via
-# go.mod's tool block: a linter generates no code, so it has none of the
-# generator/runtime lockstep that keeps protoc-gen-go on `go tool`, and it was never
-# actually in that block - `go tool golangci-lint` reported "no such tool", so the
-# op could not run at all.
+# Go linter and vuln scanner driven by the root lint target. Pinned here rather than via
+# go.mod's tool block: neither generates code, so they have none of the generator/runtime
+# lockstep that keeps protoc-gen-go on `go tool`. They used to run via
+# `go tool -modfile=go.tool.mod`, which COMPILES them with whichever go leads PATH - that is
+# how CI ended up building the linter with a different toolchain than it analyzed with, and
+# panicking. A pinned prebuilt binary has no toolchain to drift against.
 "aqua:golangci/golangci-lint" = "2.12.2"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
 tinygo = "0.41.1"
 "aqua:WebAssembly/binaryen" = "129"
 "aqua:bufbuild/buf" = "1.58.0"

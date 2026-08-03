@@ -53,6 +53,7 @@
         <li><a href="../../../../guides/download/">Download</a></li>
         <li><a href="../../../../tour/">Tour</a></li>
         <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -185,13 +186,13 @@ last run (schema 2: includes <code>summary</code> counts and per-finding
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/race/"><span class="related-card-title">race diagnostics</span><span class="related-card-desc">Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.</span></a>
-        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
         <a class="related-card" href="../../../../documentation/"><span class="related-card-title">magus Documentation</span><span class="related-card-desc">The magus documentation hub covering install, targets, spells, charms, operations, engines, remote caching, MCP, telemetry, and the interactive playground.</span></a>
         <a class="related-card" href="../../../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
+        <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS4001%22">MGS4001</a><a class="tag" href="../../../../search/?q=tag%3A%22race%22">race</a><a class="tag" href="../../../../search/?q=tag%3A%22filesystem%22">filesystem</a><a class="tag" href="../../../../search/?q=tag%3A%22concurrency%22">concurrency</a><a class="tag" href="../../../../search/?q=tag%3A%22parallel%22">parallel</a><a class="tag" href="../../../../search/?q=tag%3A%22watch%22">watch</a><a class="tag" href="../../../../search/?q=tag%3A%22suppression%22">suppression</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS4001%22">MGS4001</a><a class="tag" href="../../../../tags/race/">race</a><a class="tag" href="../../../../tags/filesystem/">filesystem</a><a class="tag" href="../../../../tags/concurrency/">concurrency</a><a class="tag" href="../../../../search/?q=tag%3A%22parallel%22">parallel</a><a class="tag" href="../../../../tags/watch/">watch</a><a class="tag" href="../../../../search/?q=tag%3A%22suppression%22">suppression</a></div>
     <small>Last updated <time datetime="2026-07-22T22:51:56Z">July 22, 2026, 10:51 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1" data-tooltip="b022d75e1f7485c455f355392bcc39463273d8f1" title="b022d75e1f7485c455f355392bcc39463273d8f1">b022d75e</a>)</small>
   </div>
   <details class="ref-section" open>
@@ -239,12 +240,6 @@ a silent no-op. See <a href="../../../../concepts/targets/#the-target-name">targ
 regression that started failing and stays failing. magus keeps per-target
 pass/fail history and a Wilson-score volatility rate to tell them apart and
 auto-retry the noise. See <a href="../../../../concepts/volatility/">volatility</a>.</p>
-<h3 id="surface">Surface</h3>
-<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See <a href="../../../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>
@@ -329,6 +324,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no

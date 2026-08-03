@@ -16,6 +16,9 @@ export fun magusConfig() > Config {
     nav.append(NavLink{ suffix = "guides/download/", label = "Download", key = "download" });
     nav.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
     nav.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
+    // Contributing was two clicks deep under /development/, which is the right depth for a
+    // project nobody contributes to and the wrong one for a project that wants contributors.
+    nav.append(NavLink{ suffix = "development/contributing/", label = "Contribute", key = "contributing" });
     nav.append(NavLink{ suffix = "console/", label = "Console", key = "console", blank = true });
     return Config{
         baseURL = "https://eli.gladman.cc/magus/",

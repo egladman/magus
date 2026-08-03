@@ -39,3 +39,27 @@ coverage.hand.out
 *.orig
 *.swp
 *.swo
+
+# Agent surface: GENERATED, not source.
+#
+# `magus agent install` writes these from the binary and stamps each with the schema and
+# content hashes it was built from - so they are a rendering of cmd/magus/skills/, tracked in
+# three provider trees at once. Committed, one `magus run build` triplicated 33 files into
+# version control and every merge conflicted on output nobody edits. Regenerate them instead:
+#   magus agent install .claude/skills --force
+#
+# magus-skill-authoring is the exception and stays tracked: it is hand-authored, never embedded
+# in the binary, and nothing regenerates it. Hand-authored stays, generated goes.
+.agents/skills/
+.opencode/skills/
+.claude/skills/*
+!.claude/skills/magus-skill-authoring/
+
+# Harness wiring, not repo configuration. settings.json hard-wires the PreToolUse guard to a
+# `magus hook` binary that a fresh clone may not have built - when it resolves something stale,
+# every Bash/Edit/Write fails closed for that contributor, which is how this file cost a whole
+# session once. launch.json pins one machine's dev-server command and port. Both are per
+# developer; the guard SCRIPTS they point at (docs/guides/integrations/agents/) are the
+# artifact worth versioning.
+.claude/settings.json
+.claude/launch.json

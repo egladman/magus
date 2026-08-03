@@ -28,8 +28,10 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	if len(matches) == 0 && len(s.Outputs) > 0 {
-		return nil, fmt.Errorf("snapshot: no files matched declared outputs (project %q)", s.ProjectPath)
+	// Only a target's OWN declaration makes an empty result an error - see Step.OutputsDeclared.
+	if len(matches) == 0 && len(s.Outputs) > 0 && s.OutputsDeclared {
+		return nil, fmt.Errorf("snapshot: target %q in project %q declared outputs but produced none: %v",
+			s.Target, s.ProjectPath, s.Outputs)
 	}
 	// Each required glob is checked on its own, not folded into the all-or-nothing test
 	// above: a target declaring its own outputs alongside a cross-project one passes that

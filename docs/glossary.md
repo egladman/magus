@@ -270,13 +270,18 @@ static app, not something the daemon serves - the daemon exposes a loopback API
 it calls: read-only views plus one bearer-gated job-control service for
 maintenance jobs. See [reference/console.md](reference/console.md).
 
-### Surface
+### Console app
 
-One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). "Surface" rather than "page" because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See [reference/console.md](reference/console.md).
+One of the console's applications (Log Viewer, Graph Explorer, Dashboard,
+Activity Trail, Settings). "App" rather than "page" because one is never a
+document you navigate to: it is mounted into a tab, or into a pane beside
+another one. Each is single-instance - opening one you already have focuses it
+instead of duplicating it.
+
+The glossary term is two words on purpose. As a bare "App" the auto-linker
+matched every unrelated "app" in the corpus - a ChatGPT desktop app, a Postgres
+app - and pointed each at this definition. See
+[reference/console.md](reference/console.md).
 
 ### Pane
 
@@ -300,13 +305,13 @@ chords dispatch the same commands it does. See [reference/console.md](reference/
 
 ### Live link
 
-The URL that points a surface at a running daemon. The daemon serves the console
-from its own loopback origin, so the link is that origin plus the surface path and
+The URL that points an app at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the app path and
 a bearer token in the fragment (`http://127.0.0.1:7391/console/graph/#token=...`).
 The daemon prints it; the console consumes the token, stores it, and strips it from
 the URL, so the secret never lingers in history or a copied link. The origin must be
 literal loopback - `localhost` and hostnames are rejected before any request.
-Without one, a surface
+Without one, an app
 reads only what rides in the link itself. See [reference/console.md](reference/console.md).
 
 ## See also

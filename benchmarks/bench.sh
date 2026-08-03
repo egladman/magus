@@ -272,7 +272,7 @@ get_cmd() {
 }
 
 # Returns the cache-clear prepare command for S4.
-# For TypeScript fixtures we also remove tsc incremental artefacts (*.tsbuildinfo
+# For TypeScript fixtures we also remove tsc incremental artifacts (*.tsbuildinfo
 # and dist/ directories outside node_modules) so hyperfine --prepare starts from a
 # true cold-compiler state.  Without this, `tsc -b` sees the tsbuildinfo and no-ops
 # even when the tool's own cache (e.g. .magus) was deleted.

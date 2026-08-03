@@ -269,6 +269,14 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	buzzArgs := []vm.Value{vm.ListValue(items)}
 	ctx, exitCode := types.WithExitCapture(ctx)
 	ctx = WithSource(ctx, src)
+	// Seed the dispatch ancestor stack with the entry target. It is called here
+	// directly rather than dispatched, so the pool never saw it: a dependency that
+	// needed the entry target back was not a cycle to anyone, and it re-ran the
+	// entry target's body inside its own dependency. With two dependencies in
+	// flight that second execution then parked on one dependency's memo entry
+	// while that dependency parked on the entry target - a hang instead of the
+	// cycle diagnostic the pool produces one level deeper.
+	ctx = buzz.WithAncestors(ctx, []string{key})
 	val, err := fn(ctx, buzzArgs)
 	if code, ok := exitCode(); ok {
 		return nil, types.ExitError{Code: code}

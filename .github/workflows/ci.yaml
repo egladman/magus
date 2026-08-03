@@ -64,6 +64,13 @@ jobs:
           installation-strategy: source
           git-ref: ${{ github.sha }}
 
+      # setup-magus builds its bootstrap binary with actions/setup-go, which reads go.mod's
+      # `go` directive and PREPENDS that toolchain to PATH. It outranks mise's pinned Go for
+      # every later step, so without this the workspace is built, tested, and linted on a
+      # different Go than mise.toml pins. GITHUB_PATH prepends, so re-adding mise's wins.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
       - name: Doctor
         run: magus doctor
 
@@ -113,6 +120,10 @@ jobs:
         with:
           installation-strategy: source
           git-ref: ${{ github.sha }}
+
+      # See the preflight job: setup-magus's bootstrap toolchain outranks mise's on PATH.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: crazy-max/ghaction-github-runtime@b3a9207c0e1ef41f4cf215303c976869d0c2c1c4 # v3.0.0
 

@@ -1,10 +1,11 @@
 # magus merge-driver is the VCS merge driver git/hg invoke for declared output
-# files: on a merge conflict in a path matching a declared Output glob, it
-# regenerates the file instead of leaving conflict markers. Users never type this
-# command themselves - `magus init` wires it into .git/config (or .hgrc) once per
-# clone - so what is worth pinning here is the usage/argument contract, not a full
-# regeneration (that needs a real declared-output target mid conflict, which does
-# not belong in a hermetic fixture).
+# files: on a merge conflict in a path matching a declared Output glob, it keeps the
+# version the VCS already staged instead of leaving conflict markers, and an explicit
+# `magus run <target>` settles the result afterwards. Users never type this command
+# themselves - `magus init` wires it into .git/config (or .hgrc) once per clone - so
+# what is worth pinning here is the usage/argument contract. The resolution itself is
+# unit-tested in merge_driver_test.go, which needs a workspace whose target declares
+# the conflicted path as its own output.
 
 # Bare `magus merge-driver` is a usage error (exit 2). It used to exit 0, which for a
 # MERGE DRIVER is the wrong signal to hand back: 0 is how the driver tells git the
@@ -21,10 +22,11 @@ stderr 'Wire it once per clone with .magus init.'
 ! exec magus merge-driver onlyonearg
 stderr '\[error\] magus merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
 
-# Five arguments naming a path no project declares as an Output: cannot
-# regenerate, so this also fails rather than silently doing nothing.
+# Five arguments naming a path no project declares as an Output. magus has no
+# regeneration that would settle it later, so it fails and lets the VCS write ordinary
+# conflict markers rather than silently picking a side of a hand-merged file.
 ! exec magus merge-driver base.txt local.txt other.txt 0 local.txt
-stderr '\[error\] merge-driver: no project declares "local.txt" as an output; cannot regenerate'
+stderr '\[error\] merge-driver: no project declares "local.txt" as an output; cannot resolve'
 
 -- magus.yaml --
 concurrency: 2

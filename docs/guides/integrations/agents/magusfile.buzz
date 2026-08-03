@@ -9,7 +9,7 @@
 // Registered as its own project for one reason: the OpenCode plugin is real TypeScript that
 // ships to users, so it must be held to the same gates as the rest of the workspace instead
 // of being prose in a markdown file nobody type-checks. The shell templates are POSIX sh and
-// are exercised by the Go tests at the repo root (hookdocs_test.go), which assert that this
+// are exercised by the Go tests at the repo root (dogfood_test.go), which assert that this
 // repository's own agent config invokes these files and that the guide embeds them verbatim.
 //
 // There is deliberately NO build target: nothing here is compiled. The shell templates are
@@ -82,7 +82,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 // 'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to
 // build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root
-// (hookdocs_test.go runs them against real host events).
+// (dogfood_test.go runs them against real host events).
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(lint);
 }

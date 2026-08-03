@@ -313,7 +313,18 @@ func (p *Pool) execute(ctx context.Context, name string, ancestors []string) err
 	}
 	defer p.releaseWorker(ctx, w)
 
-	ctx = withBuzzAncestors(ctx, append(ancestors, name))
+	// Clip first, so this append ALWAYS allocates a fresh backing array. dispatchInner submits
+	// every name of one ctx.needs(a, b, ...) concurrently and hands each child the same
+	// ancestors slice header; when that slice has spare capacity, a plain append writes into
+	// the array the caller still owns. Every sibling then writes its own name to the same
+	// index and reads back whichever sibling won - a write/write race whose visible symptom is
+	// a CYCLE REPORTED FOR AN ACYCLIC GRAPH.
+	//
+	// Depth-gated by Go's append growth (0->1->2->4->8), so only a fan-out at depth 3, 5, 6, or
+	// 7 is exposed. Everything a human runs locally fans out shallower and is provably safe;
+	// the root `ci` target was the one entry point deep enough to hit it, which made the gate
+	// itself the only thing that failed, intermittently, and read as flake for a long time.
+	ctx = WithAncestors(ctx, append(slices.Clip(ancestors), name))
 
 	fn, ok := w.targets[name]
 	if !ok {
@@ -439,7 +450,13 @@ func buzzSlotHeld(ctx context.Context) bool {
 	return v
 }
 
-func withBuzzAncestors(ctx context.Context, stack []string) context.Context {
+// WithAncestors installs stack as the dispatch ancestor stack. The pool maintains it
+// itself while dispatching; it is exported for the two boundaries the pool cannot
+// see: the entry target (invoked directly rather than dispatched, so it must seed the
+// stack with its own name or a dependency can cycle back into it undetected) and a
+// cross-project dispatch (which enters a project where these names mean nothing, and
+// passes nil to clear them).
+func WithAncestors(ctx context.Context, stack []string) context.Context {
 	return context.WithValue(ctx, buzzAncestorKey{}, stack)
 }
 

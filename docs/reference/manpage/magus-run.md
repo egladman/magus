@@ -59,7 +59,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : Format source files in selected projects
 
 **clean**
-: Remove build artefacts from selected projects
+: Remove build artifacts from selected projects
 
 **generate**
 : Run code generation for selected projects

@@ -319,7 +319,7 @@ command: file watchers invalidate the warm graph and push an SSE event to the
 console, a throttled SCIP indexer keeps symbols current, and a branch switch
 fires the git hook, which submits one coalesced graph-build job over the socket.
 
-Teal is the browser console, four static surfaces on the daemon, covered in
+Teal is the browser console, four static apps on the daemon, covered in
 [The browser console](#the-browser-console) below.
 
 The graph itself is assembled from declared sources as shards (the magusfile
@@ -337,14 +337,14 @@ reports each one on its own line.
 
 ## The browser console
 
-magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser surfaces.
+magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser apps.
 
-> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all four surfaces in demo mode. Everything below runs against your own daemon instead.
+> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all four apps in demo mode. Everything below runs against your own daemon instead.
 
-### The four surfaces
+### The four apps
 
-The four surfaces ship as one console app; each link below opens it on the
-matching surface.
+The four apps ship as one console; each link below opens it on the
+matching app.
 
 - [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
 - [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph open`).[^app-graph]

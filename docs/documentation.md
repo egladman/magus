@@ -106,7 +106,10 @@ The magusfile API and diagnostics:
 
 - [Configuration](reference/config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
 - [Standard library modules](reference/buzz/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
+- [Daemon API](reference/api/index.md) - the Connect, gRPC, and gRPC-Web contract the daemon serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or front end against it.
 - [Spells reference](concepts/spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
 - Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](concepts/wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](reference/codes/services/MGS5002.md)). Browse by family: [magusfile](reference/codes/magusfile/README.md), [race](reference/codes/race/README.md), [sandbox](reference/codes/sandbox/README.md), [services](reference/codes/services/README.md), and [knowledge graph](reference/codes/knowledge/README.md).
 - [Documentation conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.
 - [Glossary](glossary.md) - the core magus vocabulary (workspace, project, magusfile, target, spell, operation, charm, ward, module, engine) defined in one place.
+- [Changelog](changelog.md) - every released change, newest first. Pages that call out a behavior change name the release it landed in; this is where that release is written up.
+- [Tags](tags/) - every topic, with the pages carrying it. The one route through these docs that ignores the section tree, so it finds pages a directory walk would not put next to each other.

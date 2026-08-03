@@ -1,5 +1,6 @@
 ---
 title: Cache model
+order: 7
 description: How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
 tags:
   [

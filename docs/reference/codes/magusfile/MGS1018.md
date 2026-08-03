@@ -1,0 +1,77 @@
+---
+title: "MGS1018: dead output glob"
+description: A project declares an output glob that matches nothing while its other outputs match files. A target that inherits the glob fails its snapshot on a cold cache, long after the mistake was made.
+tags: [MGS1018, magusfile, outputs, cache, snapshot, doctor, spells]
+---
+
+# MGS1018: dead output glob
+
+A project declares an output glob that matches **no** files, while other globs the
+same project declares **do** match. The glob is almost always inherited from a bound
+spell that this project never satisfies.
+
+## Why this matters, and why it hides
+
+Declared outputs are per project, and a bound spell contributes its `provides` globs to
+every target on that project. A target that declares nothing of its own
+(`ctx.writesFiles`) inherits the whole set. So a check-only target - a test, a lint -
+inherits an output glob it was never going to write.
+
+That is harmless until the target has to **snapshot**, which only happens on a cache
+**miss**. As long as the target keeps replaying, the code path never runs. The first
+thing to see the failure is a cold cache: a fresh clone, a new CI runner, or
+`magus clean --cache`. By then the declaration that caused it may be months old, and the
+error arrives somewhere that looks unrelated to it.
+
+This diagnostic moves that discovery forward, to the moment the glob stops matching.
+
+## Example
+
+A project binds the `typescript` spell, which provides `dist/**`, but emits its bundles
+to `gen/`:
+
+```buzz
+magus\project({
+    "spells": [typescript],   // contributes dist/** to every target
+    "outputs": ["gen/**"],    // what this project actually writes
+});
+
+// No ctx.writesFiles, so this inherits dist/** - a glob it never produces.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    magus\cmd(["buzz", "-t", "render.buzz"]);
+}
+```
+
+## Resolve it
+
+Pick whichever is true of your project:
+
+- **The target does produce files.** Declare them, so its snapshot records the real
+  artifact instead of an inherited glob:
+
+  ```buzz
+  ctx.writesFiles("gen/assets/mermaid.js");
+  ```
+
+- **The target produces nothing** (a test, a check). Nothing to declare - the inherited
+  glob simply should not have applied. magus only treats an empty result as an error when
+  the target declared the outputs itself, so this case is already safe; the diagnostic is
+  pointing at the project-level glob, not at your target.
+
+- **The project never writes that glob at all.** The spell binding is contributing an
+  output shape this project does not use. Either the binding is wrong, or the spell's
+  `mgs_listProvidedGlobs` does not describe how this project builds.
+
+## Why the check stays quiet on an unbuilt tree
+
+If **nothing** a project declares has been produced yet, the project simply has not been
+built, and every glob matching zero is expected. Reporting then would fire on every fresh
+clone and teach people to ignore the check. It only speaks when some outputs exist and one
+glob still matches nothing - which is the case that indicates a real mistake rather than
+an empty tree.
+
+## See also
+
+- [Cache model](../../../concepts/cache.md) - what `provides` means and how a snapshot works
+- [Spells](../../../concepts/spells.md) - what a bound spell contributes to a project
+- [MGS1005](MGS1005.md) - a per-target output glob that duplicates a project-wide one

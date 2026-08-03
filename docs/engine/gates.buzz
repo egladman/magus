@@ -37,6 +37,33 @@ export fun loadMeta(site: Site) > void {
     site.metaLoaded = true;
 }
 
+// axisReport lists pages reachable by fewer than three KINDS of route - tree, sequence, topic.
+// See Site.pageAxes for why kinds rather than link count.
+//
+// It REPORTS rather than throws, deliberately. orphanCheck can throw because its bar is
+// objective: a page is reachable or it is not. "Three axes" is an editorial target, and a gate
+// that fails the build the moment someone adds a page - before they have tagged it - trains
+// people to reach for an escape hatch. Print the shortfall, let it be burned down, and promote
+// it to a throw once the number is at zero and staying there.
+export fun axisReport(site: Site) > void {
+    var thin: [str] = mut [<str>];
+    foreach (p in site.docPages) {
+        final n = site.pageAxes[p.url];
+        if (n == null) { continue; }
+        if (n! < 3) { thin.append(p.url + " (" + "{n!}" + ")"); }
+    }
+    if (thin.len() == 0) { return; }
+    final ordered = thin.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    std\print("  link axes: {ordered.len()} page(s) reachable by fewer than 3 kinds of route (tree, sequence, topic)");
+    var shown = 0;
+    foreach (u in ordered) {
+        if (shown >= 10) { break; }
+        std\print("    " + u);
+        shown = shown + 1;
+    }
+    if (ordered.len() > 10) { std\print("    ... and {ordered.len() - 10} more"); }
+}
+
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
 // renamed bundle or forgotten alias fails the build instead of shipping a 404.
 export fun assetIntegrityCheck(site: Site) > void {

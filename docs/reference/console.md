@@ -9,7 +9,11 @@ aliases: [console, browser-bridge]
 
 The console is three frozen, read-only GET routes that the magus daemon
 exposes over loopback so the hosted [console](https://eli.gladman.cc/magus/console/)
-(its Graph Explorer surface) can display your current workspace.
+(its Graph Explorer app) can display your current workspace.
+
+The console holds no privileged access: it is one client of the same contract
+anyone can code against. The full schema - every service, method, message, and
+enum, generated from the `.proto` files - is the [daemon API reference](api/index.md).
 
 **These read routes cannot change your workspace.** The console's GET API has no
 write surface, no POST routes, and no way to trigger a build, run a target, or

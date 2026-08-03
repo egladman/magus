@@ -41,7 +41,11 @@ import "magus/spell/go";
 
 magus\project({
     "spells": [typescript],
-    "depends_on": [".."],
+    // ../proto because content-generate reads proto/gen/descriptor.binpb, which the proto
+    // project writes. Without the edge the two generate targets are unordered, so a schema
+    // change could regenerate the API reference from the PREVIOUS descriptor - and reading
+    // another project's declared output with no dependency on it is what MGS4004 flags.
+    "depends_on": ["..", "../proto"],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,
     // co-located with the markdown it renders, so the content and the generator share one
@@ -156,8 +160,13 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
         workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
         workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
         workspace.file("cmd/magus-skilldocs/**/*.go"), workspace.file("internal/agent/**/*.go"),
-        workspace.file("cmd/magus/skills/**/*.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md");
+        workspace.file("cmd/magus/skills/**/*.md"), workspace.file("cmd/magus-protodocs/**/*.go"),
+        // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
+        // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
+        // directly would drag a network-bound buf step into this project's cache boundary,
+        // which is the exact coupling buf.gen.yaml was restructured to remove.
+        workspace.file("proto/gen/descriptor.binpb"), workspace.file("CHANGELOG.md"));
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/*.md", "changelog.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -169,6 +178,25 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-docs", "./concepts/knowledge.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills", "-src", "../cmd/magus"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
+
+    // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,
+    // from releases/*.yaml) and sits outside this project's walk, so a reader upgrading has
+    // nowhere on the site to see what changed. Copying it in with frontmatter hands it to the
+    // ordinary page pipeline - search index, breadcrumbs, related cards, the orphan gate - with
+    // no renderer change at all, the same way the generated manpages arrive. Copy, not a
+    // symlink: the walk reads real files, and a link would leave the page's provenance chip
+    // pointing outside the project.
+    // Links inside CHANGELOG.md are written for GitHub, where they resolve from the repo
+    // ROOT ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix has to
+    // come off or every one of them 404s - which the asset-integrity gate catches, and did.
+    // Rewriting here rather than in CHANGELOG.md keeps the file correct in both places.
+    final changelogMd = fs\readFile("../CHANGELOG.md").split("](docs/").join("](");
+    fs\writeFile("changelog.md",
+        "---\ntitle: Changelog\n"
+        + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"
+        + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
+        + changelogMd);
 }
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
@@ -191,12 +219,16 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	magus\hint("docs generate refreshes derived content and bundles; unchanged stages replay from cache; for a docs/blog preview use `magus run render docs`");
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
-        "concepts/knowledge.md", "reference/manpage", "reference/skills"];
+        "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
     final GENERATED = [OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT;
     final clean_before = vcs\isDirty(GENERATED) == false;
+    // changelog-generate runs FIRST, alone: content-generate now copies CHANGELOG.md in as a
+    // docs page, so the two no longer own disjoint outputs and cannot share a stage - fanned
+    // out together, the page could be written from the previous release's changelog.
+    ctx.needs(workspace.changelog_generate);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
-    ctx.needs(content_generate, md_generate, workspace.changelog_generate);
+    ctx.needs(content_generate, md_generate);
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
@@ -268,6 +300,9 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
 // bumping the mermaid version in package.json; commit the regenerated artifact.
 export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    // Declared so the snapshot records THIS artifact. Without it the target inherits the
+    // project baseline (the typescript spell's `dist/**`, which this project never writes).
+    ctx.writesFiles("gen/assets/mermaid.js");
     if (!fs\isDir("node_modules")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
@@ -281,6 +316,8 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
 // package.json; commit the regenerated artifact.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
+    ctx.writesFiles("gen/assets/hljs.js");
     if (!fs\isDir("node_modules")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }

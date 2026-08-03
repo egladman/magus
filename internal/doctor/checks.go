@@ -656,6 +656,58 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 	}
 }
 
+// checkDeadOutputGlobs is MGS1018: a declared output glob that matches nothing while its
+// SIBLING globs in the same project match files.
+//
+// This is the shape that bit us: the typescript spell contributes `dist/**` to every project
+// that binds it, and a project emitting to gen/ never writes a dist/ - so a target with no
+// ctx.writesFiles of its own inherits a glob it can never satisfy. Snapshot then rejects it,
+// but only on a cache MISS, so the failure hides for as long as the target keeps replaying.
+// A cold cache - a new clone, a CI runner, `magus clean --cache` - is the first thing to see
+// it, which is the worst possible time to find out.
+//
+// The sibling test is what keeps this quiet on an unbuilt tree. If NOTHING a project declares
+// has been produced yet, the project simply has not been built and every glob matching zero is
+// expected; reporting then would fire on every fresh clone and train people to ignore it. Only
+// when some outputs exist and one glob still matches nothing is that glob suspect.
+func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
+	const name = "dead output globs"
+	var details []string
+	for _, p := range projects {
+		var dead []string
+		matchedAny := false
+		for _, glob := range p.Outputs {
+			hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
+			if err != nil {
+				continue
+			}
+			if len(hits) > 0 {
+				matchedAny = true
+				continue
+			}
+			dead = append(dead, glob)
+		}
+		if !matchedAny {
+			continue
+		}
+		for _, glob := range dead {
+			details = append(details, fmt.Sprintf("%s: output glob %q matched no files while the project's other outputs did", types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob))
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no dead output globs"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d declared output glob(s) never match; a target inheriting one fails its snapshot on a cold cache (see %s)",
+			len(details), types.CodeURL(types.DeadOutputGlob)),
+		Details: details,
+	}
+}
+
 // magusfileSourcesInDir returns every Buzz magusfile source for a project
 // directory: the top-level magusfile.buzz plus magusfiles/*.buzz.
 func magusfileSourcesInDir(dir string) []string {

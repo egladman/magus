@@ -247,10 +247,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		VersionCmd: []string{"go", "version"},
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.
-		VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
-		Language:    "go",
-		IgnoreDirs:  []string{"vendor"},
-		Manifests:   []string{"go.mod"},
+		VersionCmds: map[string][]string{
+			"golangci-lint": {"golangci-lint", "--version"},
+			"govulncheck":   {"govulncheck", "-version"},
+		},
+		Language:   "go",
+		IgnoreDirs: []string{"vendor"},
+		Manifests:  []string{"go.mod"},
 		Ops: map[string]spells.Op{
 			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -283,7 +286,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
-			"govulncheck": {Command: spells.Command{Bin: "go", Args: []string{"tool", "govulncheck", "./..."}}},
+			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
 			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
@@ -344,10 +347,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"typescript": {
-		Name:       "typescript",
-		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
-		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
-		Provides:   []string{"dist/**"},
+		Name:   "typescript",
+		Needs:  []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
+		Claims: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
+		// No Provides: tsc's output location is the project's tsconfig outDir, which the spell
+		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1018).
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",

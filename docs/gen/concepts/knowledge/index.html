@@ -53,6 +53,7 @@
         <li><a href="../../guides/download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/contributing/">Contribute</a></li>
         <li><a href="../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -203,12 +204,11 @@ its argv was always identical to the op's, so the op carries the model.)</p>
 <pre><code class="language-console">$ magus explain tool:go
 tool:go   tool
 tool: go
-14 nodes reach this
+13 nodes reach this
 
-used by (11)  op:go:go-build, op:go:go-clean, op:go:go-generate,
+used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
               op:go:go-mod-edit, op:go:go-mod-json, op:go:go-mod-tidy,
-              op:go:go-run, op:go:go-test, op:go:go-vet, op:go:govulncheck,
-              spell:go
+              op:go:go-run, op:go:go-test, op:go:go-vet, spell:go
 
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&amp;node=tool%3Ago&amp;token=q2lYk8MY_plBI1553QrP9_LU07Z8kem-6N-iYYUmQME
 (start the magus daemon if the graph does not load)
@@ -536,7 +536,7 @@ and a managed always-on <code>AGENTS.md</code> section. Claude Code uses
 <code>magus agent install .claude/skills</code>. The skills teach HOW to use magus (the
 repo's <code>MAGUS.md</code> says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.
-They ship with the binary and teach only the tool <a class="glossary-term" href="../../glossary/#surface" data-def="One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity Trail, Settings). &quot;Surface" rather than "page" because one is never a document you navigate to: it is mounted into a tab, or into a pane beside another one. Each is single-instance - opening one you already have focuses it instead of duplicating it.">surface</a>, so they stay current
+They ship with the binary and teach only the tool surface, so they stay current
 with the <a class="code-xref" href="../../reference/manpage/magus-version/" data-kind="command" data-def="Print the magus version string, git commit hash, and build date for the currently installed binary.">magus version</a> rather than the workspace. Each installed file carries a
 version footer, and <code>magus graph verify --strict</code> reports actionable drift after
 an upgrade. See <a href="../../guides/agents/">Agents</a> for the full host setup.</p>
@@ -572,21 +572,21 @@ visible instead of quietly skipping them.</p>
     </div>
     <nav class="page-nav" aria-label="Pagination">
       <a class="page-nav-prev" href="../engines/"><span class="page-nav-dir">Previous</span><span class="page-nav-title">Engines</span></a>
-      <a class="page-nav-next" href="../operations/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Operations</span></a>
+      <a class="page-nav-next" href="../sandbox/"><span class="page-nav-dir">Next</span><span class="page-nav-title">Sandbox model</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../concepts/"><span class="related-card-title">Concepts</span><span class="related-card-desc">Pages in this section.</span></a>
+        <a class="related-card" href="../../changelog/"><span class="related-card-title">Changelog</span><span class="related-card-desc">Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.</span></a>
+        <a class="related-card" href="../../reference/cli/"><span class="related-card-title">The CLI in practice</span><span class="related-card-desc">The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.</span></a>
         <a class="related-card" href="../../guides/integrations/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
-        <a class="related-card" href="../../reference/skills/magus-query/"><span class="related-card-title">magus-query</span><span class="related-card-desc">Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs).</span></a>
-        <a class="related-card" href="../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../search/?q=tag%3A%22query%22">query</a><a class="tag" href="../../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../../search/?q=tag%3A%22path%22">path</a><a class="tag" href="../../search/?q=tag%3A%22graph%22">graph</a><a class="tag" href="../../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../../search/?q=tag%3A%22graphml%22">graphml</a><a class="tag" href="../../search/?q=tag%3A%22mcp%22">mcp</a></div>
-    <small>Last updated <time datetime="2026-08-01T01:53:12Z">August 1, 2026, 1:53 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/53742bce46cc2de8dd57d9cf448b228849924fb4" data-tooltip="53742bce46cc2de8dd57d9cf448b228849924fb4" title="53742bce46cc2de8dd57d9cf448b228849924fb4">53742bce</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/289ecda9c8fa27cb9f89dbb125475ea68e871a13"><code>289ecda9</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout playground surface</li><li><a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292"><code>3e1b75ad</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - the agent harness generator layout</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../tags/knowledge-graph/">knowledge graph</a><a class="tag" href="../../tags/query/">query</a><a class="tag" href="../../search/?q=tag%3A%22explain%22">explain</a><a class="tag" href="../../tags/path/">path</a><a class="tag" href="../../tags/graph/">graph</a><a class="tag" href="../../search/?q=tag%3A%22schema%22">schema</a><a class="tag" href="../../search/?q=tag%3A%22node-link%22">node-link</a><a class="tag" href="../../tags/graphml/">graphml</a><a class="tag" href="../../tags/mcp/">mcp</a></div>
+    <small>Last updated <time datetime="2026-08-02T23:19:58Z">August 2, 2026, 11:19 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ff75bc5e1a0d9b808007d380734bfe1d6dae3deb" data-tooltip="ff75bc5e1a0d9b808007d380734bfe1d6dae3deb" title="ff75bc5e1a0d9b808007d380734bfe1d6dae3deb">ff75bc5e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (5)</summary><ul><li><a href="https://github.com/egladman/magus/commit/53742bce46cc2de8dd57d9cf448b228849924fb4"><code>53742bce</code></a> <small><time datetime="2026-08-01T01:53:12Z">Aug 1, 2026</time></small> - integrate session 019fb9b2 release work</li><li><a href="https://github.com/egladman/magus/commit/289ecda9c8fa27cb9f89dbb125475ea68e871a13"><code>289ecda9</code></a> <small><time datetime="2026-07-30T19:19:13Z">Jul 30, 2026</time></small> - settle the merge fallout playground surface</li><li><a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292"><code>3e1b75ad</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - the agent harness generator layout</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/knowledge.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/knowledge.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -673,12 +673,6 @@ architectural smell. See <a href="../../guides/insight/">insight</a>.</p>
 <p>An insight lens: author concentration - the primary author and their share, the
 distinct-author count (the bus factor), and abandonment. See
 <a href="../../guides/insight/">insight</a>.</p>
-<h3 id="surface">Surface</h3>
-<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See <a href="../../reference/console/">reference/console</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>
@@ -763,6 +757,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../playground/">playground</a> via WebAssembly - no

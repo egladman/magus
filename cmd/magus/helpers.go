@@ -49,6 +49,24 @@ func traceFromContext(ctx context.Context) *startupTracer {
 	return newStartupTracer(false) // no-op
 }
 
+// skipMergeDriverRefreshKey marks a workspace load that must not re-wire the merge driver.
+type skipMergeDriverRefreshKey struct{}
+
+// withoutMergeDriverRefresh suppresses the merge-driver registration refresh for loads made
+// from inside the merge driver itself. EnsureMergeDriver writes the TRACKED .gitattributes,
+// and the driver runs inside the VCS's own index manipulation, once per conflicted file -
+// so refreshing there leaves the working tree dirty against what the VCS staged and stops
+// `git rebase --continue` dead, which is the exact failure the driver was rewritten to stop
+// causing. Any other caller still keeps the registration honest.
+func withoutMergeDriverRefresh(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipMergeDriverRefreshKey{}, true)
+}
+
+func skipMergeDriverRefresh(ctx context.Context) bool {
+	skip, _ := ctx.Value(skipMergeDriverRefreshKey{}).(bool)
+	return skip
+}
+
 type magusCtxKey struct{}
 
 // withMagus injects a per-workspace Magus for daemon-adopted handlers.
@@ -113,7 +131,7 @@ func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) 
 		opts = append(opts, extra...)
 		magusValue, magusErr = magus.Open(ctx, root, opts...)
 		stop()
-		if magusErr == nil {
+		if magusErr == nil && !skipMergeDriverRefresh(ctx) {
 			// Declared outputs are known only once the workspace is open, and they are
 			// what the merge driver registers, so this is the first point that can keep
 			// the registration honest. It is a no-op unless the globs actually moved.

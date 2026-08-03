@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -137,9 +138,12 @@ func TestLimiterFairQueueing(t *testing.T) {
 	}
 
 	ready := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
 
 	// Goroutine 1: requests 3 slots — queued first, needs 3 to free.
 	go func() {
+		defer wg.Done()
 		<-ready
 		_ = l.AcquireN(context.Background(), 3)
 		record(1)
@@ -148,6 +152,7 @@ func TestLimiterFairQueueing(t *testing.T) {
 
 	// Goroutine 2: requests 1 slot — queued second; should NOT sneak past g1.
 	go func() {
+		defer wg.Done()
 		<-ready
 		_ = l.AcquireN(context.Background(), 1)
 		record(2)
@@ -162,17 +167,16 @@ func TestLimiterFairQueueing(t *testing.T) {
 	// and correct release accounting, not strict ordering.
 	l.ReleaseN(4)
 
-	// Drain: both goroutines must eventually finish.
-	for i := 0; i < 20; i++ {
-		mu.Lock()
-		n := len(order)
-		mu.Unlock()
-		if n == 2 {
-			break
-		}
-		// spin briefly
-		_ = i
-	}
+	// Drain: both goroutines must finish before the limiter can be called clean. This was a
+	// 20-iteration busy loop whose body was `_ = i` - it yielded nothing and almost never
+	// outlasted the goroutines, so the Running assertion below sampled a limiter still
+	// holding slots and failed intermittently under -race.
+	wg.Wait()
+
+	mu.Lock()
+	recorded := len(order)
+	mu.Unlock()
+	assert.Equal(t, 2, recorded, "both queued acquirers must have run")
 	// Verify both completed and limiter is clean.
 	assert.Equal(t, 0, l.Snapshot().Running, "post-fairness-test running")
 }
@@ -256,7 +260,14 @@ func TestLimiterWaitingHook(t *testing.T) {
 	for l.Snapshot().Queued == 0 {
 		runtime.Gosched()
 	}
-	// While the goroutine is provably blocked, onWait's net must equal the live waiting count.
+	// Queued and the onWait hook are separate atomics that AcquireN updates a couple of
+	// instructions apart - it increments queued, THEN calls onWait - so waiting on Queued
+	// alone exits inside that window and samples net == 0 against Queued == 1. Waiting for
+	// both makes the assertion below about the two agreeing rather than a race with the
+	// update itself. The slot is held for the duration, so the waiter cannot proceed and
+	// the pair cannot move again before it is read.
+	require.Eventually(t, func() bool { return l.Snapshot().Queued > 0 && net.Load() > 0 },
+		time.Second, time.Millisecond, "the blocked caller must register as waiting")
 	assert.Equal(t, int64(l.Snapshot().Queued), net.Load(), "onWait net must mirror Queued")
 
 	l.Release() // unblock the waiter

@@ -53,6 +53,7 @@
         <li><a href="../../../../guides/download/">Download</a></li>
         <li><a href="../../../../tour/">Tour</a></li>
         <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -159,12 +160,12 @@ ascend&quot; rule the audit enforces at runtime.</li>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/sandbox/"><span class="related-card-title">sandbox diagnostics</span><span class="related-card-desc">Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.</span></a>
         <a class="related-card" href="../../../../concepts/spells/"><span class="related-card-title">Spells</span><span class="related-card-desc">A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.</span></a>
+        <a class="related-card" href="../../../../changelog/"><span class="related-card-title">Changelog</span><span class="related-card-desc">Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.</span></a>
         <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
-        <a class="related-card" href="../../../../guides/integrations/agents/"><span class="related-card-title">Agents</span><span class="related-card-desc">How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS3001%22">MGS3001</a><a class="tag" href="../../../../search/?q=tag%3A%22audit%22">audit</a><a class="tag" href="../../../../search/?q=tag%3A%22project+boundary%22">project boundary</a><a class="tag" href="../../../../search/?q=tag%3A%22descendants%22">descendants</a><a class="tag" href="../../../../search/?q=tag%3A%22workspace+scope%22">workspace scope</a><a class="tag" href="../../../../search/?q=tag%3A%22formatter%22">formatter</a><a class="tag" href="../../../../search/?q=tag%3A%22globs%22">globs</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS3001%22">MGS3001</a><a class="tag" href="../../../../search/?q=tag%3A%22audit%22">audit</a><a class="tag" href="../../../../search/?q=tag%3A%22project+boundary%22">project boundary</a><a class="tag" href="../../../../search/?q=tag%3A%22descendants%22">descendants</a><a class="tag" href="../../../../search/?q=tag%3A%22workspace+scope%22">workspace scope</a><a class="tag" href="../../../../search/?q=tag%3A%22formatter%22">formatter</a><a class="tag" href="../../../../tags/globs/">globs</a></div>
     <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b022d75e1f7485c455f355392bcc39463273d8f1"><code>b022d75e</code></a> <small><time datetime="2026-07-22T22:51:56Z">Jul 22, 2026</time></small> - reorganize the docs into a concepts/guides/reference/migrating hierarchy: move ~160 pages and recompute every cross-link; keep documentation/glossary/conventions top-level (the refDocHtml embed assumes depth-1) and file operations under concepts; retarget the doc generators (magus-docs/spelldocs/manpage/examples/configdocs) plus their emitted links, the tour/development/nav/route SSG references, and diagnostic.go&#39;s codes URLs; retire the 137 moved URLs in retired.urls.lock; regenerate the site and MAGUS.md</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/sandbox/MGS3001.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/sandbox/MGS3001.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -272,6 +273,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no

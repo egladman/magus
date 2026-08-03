@@ -15,16 +15,19 @@ export fun mgs_listRequiredGlobs() > [Path] {
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
 
-// golangci-lint is a SECOND binary this spell drives, and now that it runs from
-// PATH rather than `go tool` it is pinned outside the module graph - so `go
-// version` no longer implies it. A linter upgrade changes which code passes while
-// every cache entry replays the old verdict, and this probe is what moves the key.
+// golangci-lint and govulncheck are the OTHER binaries this spell drives, and now that they
+// run from PATH rather than `go tool` they are pinned outside the module graph - so `go
+// version` no longer implies either. An upgrade to either changes which code passes while
+// every cache entry replays the old verdict, and these probes are what move the key.
 //
-// Absent, it records UNPROBED and the lint op fails with a clear "not found"
-// rather than the probe failing the whole run - a workspace that binds the go
-// spell only to build and test is not forced to install a linter.
+// Absent, one records UNPROBED and its op fails with a clear "not found" rather than the
+// probe failing the whole run - a workspace that binds the go spell only to build and test
+// is not forced to install a linter or a vuln scanner.
 export fun mgs_getVersionCommands() > {str: [str]} {
-    return {"golangci-lint": ["golangci-lint", "--version"]};
+    return {
+        "golangci-lint": ["golangci-lint", "--version"],
+        "govulncheck": ["govulncheck", "-version"],
+    };
 }
 
 export fun mgs_getLanguage() > str { return "go"; }
@@ -86,7 +89,11 @@ fun goModJSON(target: Target) > Command {
     return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
 }
 fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "./..."]}; }
-fun goVulncheck(target: Target) > Command { return Command{bin = "go", args = ["tool", "govulncheck", "./..."]}; }
+// Invoked directly rather than through `go tool`, for the same reason as golangCILint above:
+// `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
+// had not put it there got "no such tool" - so the op could not run at all. On PATH it is
+// pinned by whatever the workspace uses, and mgs_getVersionCommands records which.
+fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."]}; }
 fun scipGo(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};
 }

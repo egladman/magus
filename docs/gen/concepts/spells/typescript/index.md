@@ -12,8 +12,6 @@ The `typescript` spell wires a TypeScript project's tooling into a magusfile, fo
 
 **Version probe:** `node --version`
 
-**Provides:** `dist/**`
-
 **Opaque:** yes (its outputs are not enumerable, so magus treats the whole workspace as the cache input).
 
 ## Passing arguments to ops

@@ -240,7 +240,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   toolchain inventory - a target reaches its tool via its existing `target --uses--> op`
   edge. Plus test `coverage` with a `test_refs` count folded onto file and symbol nodes
   from the coverage profile magus already produces, and `magus refs` now returns the
-  definition's `file:line`. Query recipes: [docs/knowledge.md](docs/knowledge.md).
+  definition's `file:line`. Query recipes: [the knowledge graph](docs/concepts/knowledge.md).
 - `daemon.enabled` (flag `--daemon-enabled`, env `MAGUS_DAEMON_ENABLED`, default true):
   set false to run each invocation self-contained in its own per-process pool instead
   of discovering and adopting the shared `magus server start` daemon - handy for a
@@ -257,7 +257,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
   completion to an editor over stdio.
 - `buf-breaking` op in the buf spell: gates a proto schema against a baseline
-  branch, composable into a `lint` target. See [Breaking changes](docs/breaking-changes.md).
+  branch, composable into a `lint` target. See [Breaking changes](docs/migrating/breaking-changes.md).
 - `describe target --explain` prints the charm trace behind a target's resolved
   command, so a stacked argv patch is inspectable before a run.
 - Silent-failure diagnostics: an invalid charm patch (MGS6001), a `has_charm` typo,
