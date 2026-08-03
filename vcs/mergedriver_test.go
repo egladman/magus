@@ -1,10 +1,13 @@
 package vcs
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -93,4 +96,117 @@ func TestReplaceManagedSectionIdempotent(t *testing.T) {
 	}
 	assert.Equal(t, "*.png binary\n\n"+want, text)
 	assert.Equal(t, 1, strings.Count(text, testBegin), "exactly one managed section")
+}
+
+// The two EnsureMergeDriver tests below live here rather than in git_test.go beside the
+// method they call, and reach across to git_test.go's gitInitRepo helper to do it. Their
+// subject is the managed-section contract this file owns - written once, replaced not
+// appended - which the pure replaceManagedSection tests above can only prove in memory.
+// Splitting them from those would put the two halves of one invariant in two files.
+//
+// TestEnsureMergeDriverIdempotent drives EnsureMergeDriver end to end against a real repo,
+// which is where the accumulation actually bit: every magus invocation runs it, so a section
+// appended rather than replaced grew .gitattributes by a block per command.
+//
+// EnsureMergeDriver builds its own git commands and does NOT route them through gitEnv, so
+// this pins the ambient git environment itself. GIT_DIR is the one that matters: git exports
+// it inside every hook and every `rebase --exec`, so running the suite from a pre-commit hook
+// sent `git config merge.magus.driver` into whatever repo was being committed to - the test
+// passing all the while, because it never looked. Pointing the variables at the fixture makes
+// the target explicit rather than merely unset, and the config assertion below is what proves
+// the write landed here.
+func TestEnsureMergeDriverIdempotent(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
+	t.Setenv("GIT_WORK_TREE", repo)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	outputGlobs := []string{"gen/**", "docs/gen/**"}
+	attrsPath := filepath.Join(repo, ".gitattributes")
+
+	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.True(t, changed, "first call installs the section")
+
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, outputGlobs)
+	require.NoError(t, err)
+	assert.False(t, changed, "second call has nothing to do")
+
+	// Assert the CONTENT, not just that two reads agree: with changed==false a write is
+	// impossible, so comparing the two reads can only ever restate the line above. An
+	// EnsureMergeDriver that wrote an empty section would satisfy that and fail a user.
+	attrs, err := os.ReadFile(attrsPath)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(string(attrs), gitAttrsBegin), "exactly one managed section")
+	// Whole lines, not substrings: "docs/gen/**" ends with "gen/**", so a substring count
+	// finds the narrower glob inside the wider one and reports two.
+	lines := strings.Split(string(attrs), "\n")
+	for _, glob := range outputGlobs {
+		want := glob + " merge=magus linguist-generated"
+		n := 0
+		for _, line := range lines {
+			if line == want {
+				n++
+			}
+		}
+		assert.Equal(t, 1, n, "section names %s exactly once", glob)
+	}
+
+	// The registration is half of what EnsureMergeDriver promises, and reading it back from
+	// the fixture is also what would catch the config escaping into another repository.
+	assert.Contains(t, gitConfigValue(t, repo, "merge.magus.driver"), gitDriverArgs,
+		"driver registered in the fixture repo")
+
+	// Re-wiring is the other reason EnsureMergeDriver exists: a project that declares an
+	// output later must be added, not left frozen at the shape the workspace had on the day
+	// init ran. The steady state above cannot show that.
+	changed, err = gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**", "dist/**"})
+	require.NoError(t, err)
+	assert.True(t, changed, "a changed glob set re-wires")
+	attrs, err = os.ReadFile(attrsPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(attrs), "dist/** merge=magus linguist-generated", "new glob added")
+	assert.NotContains(t, string(attrs), "docs/gen/**", "dropped glob removed, not accumulated")
+	assert.Equal(t, 1, strings.Count(string(attrs), gitAttrsBegin), "still exactly one section")
+}
+
+// TestEnsureMergeDriverIgnoresAmbientGitDir pins the escape gitEnviron exists to stop.
+//
+// GIT_DIR overrides both -C and cmd.Dir, and git exports it into every hook and
+// `rebase --exec`. EnsureMergeDriver runs on workspace load, so before the scrub, a magus
+// command invoked from a pre-commit hook registered the merge driver in whatever repository
+// was being committed to - succeeding quietly, because nothing ever read the value back.
+func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	bystander := t.TempDir()
+	gitInitRepo(t, bystander, map[string]string{"magus.yaml": "version: 1\n"})
+
+	// Point the ambient environment at the bystander, exactly as a git hook would.
+	t.Setenv("GIT_DIR", filepath.Join(bystander, ".git"))
+	t.Setenv("GIT_WORK_TREE", bystander)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+
+	_, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, []string{"gen/**"})
+	require.NoError(t, err)
+
+	assert.Contains(t, gitConfigValue(t, repo, "merge.magus.driver"), gitDriverArgs,
+		"the named repo is the one configured")
+	assert.Empty(t, gitConfigValue(t, bystander, "merge.magus.driver"),
+		"the repo named only by ambient GIT_DIR must be left alone")
+}
+
+// gitConfigValue reads one local config key, returning "" when it is unset. It reads with a
+// scrubbed environment for the same reason the production path writes with one: an ambient
+// GIT_DIR would otherwise answer about a different repository than the caller named.
+func gitConfigValue(t *testing.T, repo, key string) string {
+	t.Helper()
+	cmd := gitExec(t.Context(), "-C", repo, "config", "--get", key)
+	out, err := cmd.Output()
+	if err != nil {
+		return "" // git exits 1 for an unset key; any real failure surfaces as an empty value
+	}
+	return strings.TrimSpace(string(out))
 }

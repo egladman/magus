@@ -398,3 +398,42 @@ func TestTrackedFiles(t *testing.T) {
 		assert.Equal(t, []string{"tracked.html"}, got, "a path in the last batch is still found")
 	})
 }
+
+// TestGitEnvironStripsRedirectsAndKeepsTransport pins the split gitEnviron is built on: the
+// GIT_* prefix covers two unrelated categories, and only the repository-selecting one is
+// removed. The "keeps" half is the load-bearing one - a blanket prefix strip would pass a
+// test that only checked the "strips" half, then break fetch authentication in the field.
+func TestGitEnvironStripsRedirectsAndKeepsTransport(t *testing.T) {
+	strip := map[string]string{
+		"GIT_DIR":        "/elsewhere/.git",
+		"GIT_WORK_TREE":  "/elsewhere",
+		"GIT_INDEX_FILE": "/elsewhere/.git/index",
+		"GIT_NAMESPACE":  "refs/namespaces/x",
+	}
+	keep := map[string]string{
+		"GIT_SSH_COMMAND":     "ssh -i /key",
+		"GIT_ASKPASS":         "/usr/bin/askpass",
+		"GIT_TERMINAL_PROMPT": "0",
+		"GIT_AUTHOR_NAME":     "t",
+		"GIT_TRACE":           "1",
+	}
+	for name, value := range strip {
+		t.Setenv(name, value)
+	}
+	for name, value := range keep {
+		t.Setenv(name, value)
+	}
+
+	got := map[string]string{}
+	for _, kv := range gitEnviron() {
+		name, value, _ := strings.Cut(kv, "=")
+		got[name] = value
+	}
+
+	for name := range strip {
+		assert.NotContains(t, got, name, "%s selects a repository and must be removed", name)
+	}
+	for name, value := range keep {
+		assert.Equal(t, value, got[name], "%s governs how git works, not where, and must survive", name)
+	}
+}
