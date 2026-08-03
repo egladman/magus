@@ -49,6 +49,7 @@ import {
   setRemembered,
   wantsDemo,
   createDaemonTransport,
+  parseHash,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../../gen/magus/status/v1/status_pb";
@@ -383,22 +384,12 @@ async function decodeFragment(b64url: string): Promise<GraphPayload> {
   return JSON.parse(text);
 }
 
-function hashParams(): Record<string, string> {
-  const h = location.hash.replace(/^#/, "");
-  const out: Record<string, string> = {};
-  for (const part of h.split("&")) {
-    if (!part) continue;
-    const eq = part.indexOf("=");
-    // Keep a bare token (no "=") with an empty value, matching lib/daemon's parseHash,
-    // so the shared `#demo` fragment (which has no "=") is detected by wantsDemo.
-    if (eq < 0) {
-      out[part] = "";
-      continue;
-    }
-    out[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
-  }
-  return out;
-}
+// hashParams is lib/daemon's parseHash. It used to be a second implementation here, and the
+// two had drifted on the case that matters: parseHash guards decodeURIComponent, this copy
+// called it bare, so a truncated shared link (a malformed percent-escape) threw a URIError out
+// of the graph explorer's boot path instead of degrading to the raw text. Aliased rather than
+// renamed at ~5 call sites, which keeps this change to the behaviour.
+const hashParams = parseHash;
 
 async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   const params = hashParams();
@@ -1677,12 +1668,6 @@ function clearFocusOrQuery() {
   } else {
     draw();
   }
-}
-
-// applyLens is the legacy entry point for [data-lens] clicks; now delegates to
-// activateView so the view system handles state/hash/CLI idiom uniformly.
-function applyLens(name: string) {
-  activateView(name === "hubs" ? "hubs" : "orphans");
 }
 
 // syncConditionalViews shows or hides the "What's slow?" (critical) view button
@@ -4153,14 +4138,13 @@ function bootWireEvents() {
     });
   }
 
-  // Lenses (magus graph stats parity): hubs / orphans set the match set. The lens
-  // buttons are marked by their data-lens hook (no presentational class of their own).
-  document.querySelectorAll<HTMLElement>("[data-lens]").forEach((b) =>
-    b.addEventListener("click", () => {
-      const lens = b.dataset.lens;
-      if (lens) applyLens(lens);
-    }),
-  );
+  // No separate lens wiring. The hubs/orphans buttons are ordinary view chips - they carry
+  // .console-graph-views__chip and data-view like every other question - so the chip handler
+  // above already dispatches them. A second [data-lens] listener ran on the SAME click and
+  // called activateView unconditionally, which undid the chip handler's clearView the instant
+  // it fired: clicking an active hubs/orphans chip cleared the view and re-applied it, so the
+  // toggle could never be turned off. The data-lens attribute is gone from the scaffold too;
+  // it was only ever a hook for the listener this comment replaces.
 
   // Phase 5: color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
