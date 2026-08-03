@@ -37,18 +37,6 @@ magus\project({
     "sources": ["magusfile.buzz", "*.ts", "*.sh", "codex-hooks.json",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json"],
     "targets": {
-        // No declared outputs, so nothing to snapshot: the ts spell contributes a
-        // dist/** provided-glob this source-only project never fills, and a cacheable
-        // target with no matching output fails at snapshot time. libs/textsearch solves
-        // that by generating a MAGUS.md to act as the output; that fix is unavailable
-        // here, because a *.md file in a docs/ subtree becomes a rendered PAGE - the SSG
-        // walks every markdown file it finds. Skipping the cache is the honest answer for
-        // two fast gates over five files.
-        "lint": {"skip_cache": true},
-        // ci only composes the source-only lint gate, so it cannot produce a
-        // cache snapshot either. Marking just lint was insufficient: the ci
-        // wrapper still tried to snapshot this output-free project.
-        "ci": {"skip_cache": true},
     },
 });
 

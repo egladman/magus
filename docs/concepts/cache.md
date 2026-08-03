@@ -308,8 +308,32 @@ Four controls, at four different scopes:
 | `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
 | `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run      | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.                                                                                                                                         |
 
-`skip_cache` and `--no-cache` both force a genuine re-execution; the difference
-is entirely about what happens to the cache entry afterward (never snapshot vs.
+`skip_cache` states that **replaying this target would be wrong**: it signs a
+fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
+never returns at all. It is a claim about the target's nature, which is why it
+lives in the magusfile rather than in the operator's fingers. `--no-cache` says
+something entirely different and far weaker: _I do not trust the cache for this
+one run._ That is a session-level judgement, so it belongs on the command line.
+
+The two are not interchangeable, and collapsing them breaks in both directions.
+Move a `skip_cache` target to `--no-cache` and correctness now depends on
+everyone remembering a flag, so a forgotten one replays a cached signature into
+a release. Reach for `skip_cache` when you merely wanted a fresh run and the
+target stops caching forever, for everyone.
+
+`skip_cache` is **not** how you handle a target that produces no files. A pure
+orchestration target - a `ci` that only composes `lint`, `build`, and `test` -
+caches correctly with no policy at all: it snapshots an empty manifest and
+replays as a hit, while its stages keep their own entries. Output globs
+_inherited_ from the project or a bound spell are allowed to match nothing, and
+only a glob the target declared itself via `ctx.writesFiles` must produce a file.
+If a no-output target ever fails at snapshot time, that is a bug to report, not a
+reason to opt out of the cache. Opting out instead costs the replay AND is
+indistinguishable from a real never-replays defect, which is what
+[MGS1009](../reference/codes/magusfile/MGS1009.md) exists to catch.
+
+Both `skip_cache` and `--no-cache` force a genuine re-execution; the mechanical
+difference is what happens to the cache entry afterward (never snapshot vs.
 snapshot-and-refresh). `bust_cache` and `clean --cache` both delete entries, at
 different granularities and from different sides of a run. `cache.immutable` is
 the odd one out: it does not force anything to re-run, it just stops the cache

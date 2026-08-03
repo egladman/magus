@@ -18,9 +18,6 @@ magus\project({
     "targets": {
         // These targets deliberately produce no result artifact. The live smoke
         // and grid targets retain the project output snapshot.
-        "preflight": {"skip_cache": true},
-        "lint": {"skip_cache": true},
-        "ci": {"skip_cache": true},
     },
 });
 

@@ -99,14 +99,6 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
-        // ci only composes generate/lint/build/test and writes nothing of its own, so the
-        // cache wrapper had nothing to snapshot and failed the whole project with
-        // "no files matched declared outputs". That is the cost of the per-target output
-        // ownership above: every write belongs to the stage that makes it, and a pure
-        // orchestration target legitimately owns none. Its stages carry their own cache
-        // entries, so nothing is lost by skipping this one. Same fix, same reason, as
-        // evals and docs/guides/integrations/agents.
-        "ci": {"skip_cache": true},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
         "generate": {"skip_cache": true, "exclusive": true},
