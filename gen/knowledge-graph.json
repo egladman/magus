@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2431,
-  "edge_count": 5509,
+  "edge_count": 5512,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -28760,6 +28760,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS1020",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS3001",
       "relation": "documents",
       "confidence": "inferred",
@@ -28784,6 +28792,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "doc:docs/migrating/breaking-changes.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28793,6 +28809,14 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "doc:docs/reference/codes/magusfile/MGS1017.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1020.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
