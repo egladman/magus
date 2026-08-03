@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -39,7 +37,8 @@ func mergeDriverUsage() error {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files. git and hg invoke this")
 	fmt.Fprintln(os.Stderr, "automatically during a merge when a conflicted file matches a declared")
-	fmt.Fprintln(os.Stderr, "output glob; it regenerates the file instead of writing conflict markers.")
+	fmt.Fprintln(os.Stderr, "output glob; it keeps the current version instead of writing conflict")
+	fmt.Fprintln(os.Stderr, "markers. Run `magus run generate` afterwards to settle the result.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `magus init`.")
 	fmt.Fprintln(os.Stderr, "git calls it as:  magus merge-driver %O %A %B %L %P")
@@ -161,27 +160,27 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 	}
 }
 
-// mergeDriverRun runs the owning project's generate (or build) target and writes the result.
-// Args: ancestor result other markerSize path (git/hg protocol); exit non-zero falls back to conflict markers.
+// mergeDriverRun resolves a conflicted declared-output file by keeping the version the VCS
+// already staged in %A, which marks the conflict resolved without merging generated hunks by
+// hand. Args: ancestor result other markerSize path (git/hg protocol); exit non-zero falls
+// back to conflict markers.
+//
+// It deliberately does NOT regenerate. git runs a merge driver inside its own index
+// manipulation, once per conflicted file, and the owning project's generate target writes
+// every output that project declares - not just the one file git asked about. Mid-rebase that
+// left the working tree dirty against what git had staged, so `git rebase --continue` refused
+// to proceed; staging the result only invited the driver to fire again on the next commit. A
+// loop by construction, at one full build per conflicted file. Taking a side here and settling
+// it afterwards with an explicit `magus run generate` is what the merge guidance already tells
+// a human to do, and the generate drift gate catches a forgotten re-run.
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
 		return usagef("magus merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
 	}
-	pathArg := args[4] // git: repo-relative; hg: absolute workspace path (== result arg)
 
-	var relPath string
-	if filepath.IsAbs(pathArg) {
-		wsRoot, err := magus.FindRoot(root)
-		if err != nil {
-			return fmt.Errorf("merge-driver: find workspace root: %w", err)
-		}
-		rel, err := filepath.Rel(wsRoot, pathArg)
-		if err != nil {
-			return fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
-		}
-		relPath = filepath.ToSlash(rel)
-	} else {
-		relPath = filepath.ToSlash(pathArg)
+	relPath, err := mergeDriverRelPath(root, args[4])
+	if err != nil {
+		return err
 	}
 
 	m, err := loadMagus(ctx, root)
@@ -189,32 +188,38 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("merge-driver: load workspace: %w", err)
 	}
 
-	wsRoot := m.Root()
-	absPath := filepath.Join(wsRoot, filepath.FromSlash(relPath))
-
+	absPath := filepath.Join(m.Root(), filepath.FromSlash(relPath))
 	p := m.FindOutputProducer(absPath)
 	if p == nil {
-		return fmt.Errorf("merge-driver: no project declares %q as an output; cannot regenerate", relPath)
+		// Not a declared output, so magus has no regeneration that would settle it later.
+		// Failing here lets the VCS write ordinary conflict markers rather than silently
+		// picking a side of a file a human is expected to merge.
+		return fmt.Errorf("merge-driver: no project declares %q as an output; cannot resolve", relPath)
 	}
 
-	if conflicted, err := sourcesConflicted(ctx, wsRoot, p); err == nil && conflicted {
-		return fmt.Errorf("merge-driver: %s has conflicted source files; resolve source conflicts first, then re-merge", types.ProjectLabel(p.Path, p.Dir))
-	}
-
-	regenTarget := pickRegenTarget(p)
-	targets := []types.Target{{Path: p.Path, Name: regenTarget}}
-	if err := m.Run(ctx, targets, magus.WithWrite()); err != nil {
-		return fmt.Errorf("merge-driver: %s %s: %w", types.ProjectLabel(p.Path, p.Dir), regenTarget, err)
-	}
-
-	resultPath := args[1] // copy to result if it differs from absPath (git temp-file protocol)
-	if !sameFile(resultPath, absPath) {
-		if err := copyFile(absPath, resultPath); err != nil {
-			return fmt.Errorf("merge-driver: copy result to %q: %w", resultPath, err)
-		}
-	}
-
+	// %A already holds the current version and is the file the VCS reads back, so leaving it
+	// untouched IS the resolution - there is nothing to write.
+	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
+		slog.String("path", relPath),
+		slog.String("regenerate", "magus run "+pickRegenTarget(p)+" "+types.ProjectLabel(p.Path, p.Dir)))
 	return nil
+}
+
+// mergeDriverRelPath normalizes the driver's path argument to a workspace-relative slash
+// path. git passes it repo-relative; hg passes an absolute workspace path.
+func mergeDriverRelPath(root, pathArg string) (string, error) {
+	if !filepath.IsAbs(pathArg) {
+		return filepath.ToSlash(pathArg), nil
+	}
+	wsRoot, err := magus.FindRoot(root)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: find workspace root: %w", err)
+	}
+	rel, err := filepath.Rel(wsRoot, pathArg)
+	if err != nil {
+		return "", fmt.Errorf("merge-driver: resolve path %q: %w", pathArg, err)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // workspaceOutputGlobs returns deduplicated workspace-relative output globs for all projects.
@@ -251,28 +256,6 @@ func pickRegenTarget(p *types.Project) string {
 	return "build"
 }
 
-// sourcesConflicted reports whether any of the project's source files are unmerged
-// (via `git diff --name-only --diff-filter=U`, not content scanning).
-func sourcesConflicted(ctx context.Context, wsRoot string, p *types.Project) (bool, error) {
-	out, err := runInDir(ctx, wsRoot, "git", "diff", "--name-only", "--diff-filter=U")
-	if err != nil {
-		return false, err // git unavailable or not a git repo; skip guardrail
-	}
-	conflicted := strings.Fields(out)
-	for _, cf := range conflicted {
-		// cf is workspace-relative. Check if it sits inside p.Dir.
-		absConflicted := filepath.Join(wsRoot, filepath.FromSlash(cf))
-		rel, err := filepath.Rel(p.Dir, absConflicted)
-		if err != nil {
-			continue
-		}
-		if !strings.HasPrefix(rel, "..") {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // resolveVCS returns the active VCS resolution for the workspace.
 func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSResolution, error) {
 	wsRoot := m.Root()
@@ -280,39 +263,4 @@ func resolveVCS(ctx context.Context, root string, m *magus.Magus) (types.VCSReso
 		wsRoot = root
 	}
 	return vcs.Resolve(ctx, wsRoot, "", m.VCSOptions())
-}
-
-// sameFile reports whether a and b resolve to the same path (by clean absolute comparison).
-func sameFile(a, b string) bool {
-	return filepath.Clean(a) == filepath.Clean(b)
-}
-
-// copyFile copies src to dst, creating or truncating dst.
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
-}
-
-// runInDir runs a command rooted at dir and returns trimmed stdout.
-func runInDir(ctx context.Context, dir, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
