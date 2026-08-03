@@ -11,26 +11,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mergeDriverWorkspace builds a workspace whose single project declares gen/** as an output
-// and whose targets, if either ever ran, would leave gen/regenerated.txt behind. Both
-// generate and build write it because pickRegenTarget falls back to build when no bound
-// spell contributes a generate target, as this fixture's does not - with only generate
-// declared the sentinel was unreachable and silently proved nothing.
+// mergeDriverWorkspace builds a workspace whose generate target declares gen/** as its own
+// output via ctx.writesFiles - the shape settleTarget requires - and which would leave
+// gen/regenerated.txt behind if that target ever ran.
 func mergeDriverWorkspace(t *testing.T) (context.Context, string) {
 	t.Helper()
 	root := t.TempDir()
 	magusfile := `import "magus";
 import "fs";
 
-magus.project({
-    "outputs": ["gen/**"],
-})
+magus.project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
-    fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
-}
-
-export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
     fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
 }
 `
@@ -82,11 +75,13 @@ func TestMergeDriverDoesNotRegenerate(t *testing.T) {
 
 	assert.NoFileExists(t, filepath.Join(root, "gen", "regenerated.txt"),
 		"the driver must not run the project's regeneration target")
-	// The whole-tree comparison is the load-bearing assertion: running any target also
-	// leaves cache manifests and output records behind, and it is that broader dirtying -
-	// not just the sentinel - that blocks `git rebase --continue`.
+	// The whole-tree comparison is a broader "ran nothing" oracle than the sentinel alone,
+	// catching cache manifests and output records too. Note those live under .magus/, which
+	// is gitignored, and ignored files do NOT block `git rebase --continue` - it is the
+	// TRACKED declared outputs that do. Both matter here: this asserts the driver ran no
+	// target at all.
 	assert.Equal(t, before, snapshotTree(t, root),
-		"the driver must leave the working tree untouched; a dirty tree is what blocks `git rebase --continue`")
+		"the driver must run no target; rewriting tracked outputs is what blocks `git rebase --continue`")
 }
 
 // TestMergeDriverRejectsUndeclaredPath keeps magus out of files it has no regeneration story
@@ -99,6 +94,34 @@ func TestMergeDriverRejectsUndeclaredPath(t *testing.T) {
 	err := mergeDriverRun(ctx, root, []string{"ancestor", result, "other", "7", "README.md"})
 	require.Error(t, err, "a path no project declares as an output must not be auto-resolved")
 	assert.ErrorContains(t, err, "no project declares")
+}
+
+// TestMergeDriverRefusesUnrebuildableOutput covers the case that makes auto-resolution safe
+// in the first place. A project-wide output glob with no target that writes it names no
+// command a human could run afterwards, so keeping one side would drop the other's change
+// with no conflict marker - and the VCS only invokes a driver when BOTH sides changed the
+// file. go.mod and the lockfiles in this repo are wired to the driver in exactly this shape.
+func TestMergeDriverRefusesUnrebuildableOutput(t *testing.T) {
+	root := t.TempDir()
+	// gen/** is declared project-wide, and no target claims it via ctx.writesFiles.
+	magusfile := `import "magus";
+
+magus.project({
+    "outputs": ["gen/**"],
+})
+
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err)
+	ctx := withMagus(context.Background(), m)
+
+	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
+	err = mergeDriverRun(ctx, root, []string{"ancestor", result, "other", "7", "gen/catalog.md"})
+
+	require.Error(t, err, "a declared output no target rebuilds must not be auto-resolved")
+	assert.ErrorContains(t, err, "rebuilds")
 }
 
 // TestMergeDriverArgCount covers the protocol contract: git always passes five placeholders,

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
@@ -183,7 +186,11 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	m, err := loadMagus(ctx, root)
+	// Loading the workspace must not re-wire the merge driver: EnsureMergeDriver writes the
+	// TRACKED .gitattributes, and doing that here - inside the VCS's index manipulation, once
+	// per conflicted file - is the same dirty-tree failure this driver was changed to stop
+	// causing.
+	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
 	if err != nil {
 		return fmt.Errorf("merge-driver: load workspace: %w", err)
 	}
@@ -197,11 +204,21 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("merge-driver: no project declares %q as an output; cannot resolve", relPath)
 	}
 
+	target, ok := settleTarget(p, absPath)
+	if !ok {
+		// Auto-resolving is only safe because an explicit run rebuilds the file afterwards.
+		// With no target that writes this exact path there is no such run, so keeping one
+		// side would silently drop the other's change - and the VCS only invokes a driver
+		// when BOTH sides changed the file, so that change is never empty.
+		return fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
+			types.ProjectLabel(p.Path, p.Dir), relPath)
+	}
+
 	// %A already holds the current version and is the file the VCS reads back, so leaving it
 	// untouched IS the resolution - there is nothing to write.
 	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
 		slog.String("path", relPath),
-		slog.String("regenerate", "magus run "+pickRegenTarget(p)+" "+types.ProjectLabel(p.Path, p.Dir)))
+		slog.String("regenerate", "magus run "+target+" "+types.ProjectLabel(p.Path, p.Dir)))
 	return nil
 }
 
@@ -243,17 +260,40 @@ func workspaceOutputGlobs(m *magus.Magus) []string {
 	return globs
 }
 
-// pickRegenTarget returns "generate" if the project declares that target via one
-// of its spells, otherwise falls back to "build".
-func pickRegenTarget(p *types.Project) string {
-	for _, s := range p.ResolvedSpells {
-		for _, v := range s.Targets() {
-			if v == "generate" {
-				return "generate"
+// settleTarget returns the project's target that declares absPath among its OWN outputs -
+// the one command that rebuilds this exact file - and whether such a target exists.
+//
+// It reads TargetOutputs rather than guessing a conventional name. The previous guess
+// ("generate" if a bound spell offers it, else "build") consulted only ResolvedSpells,
+// which cannot see a target the magusfile itself exports: the magusfile spell is one
+// global instance, so its Targets() is always empty and every magusfile-declared generate
+// fell through to "build". In this very workspace that printed `magus run build .` for a
+// conflict in MAGUS.md, naming the wrong command as the entire remedy.
+//
+// Reporting false is load-bearing, not a fallback. A project-wide output glob with no
+// producing target names nothing a human could run, and auto-resolving a file that no
+// later run rebuilds is how one side's change disappears without a conflict marker.
+func settleTarget(p *types.Project, absPath string) (string, bool) {
+	rel, err := filepath.Rel(p.Dir, absPath)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	// Sorted so a path claimed by more than one target names the same command every run
+	// rather than following map iteration order.
+	for _, name := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
+		for _, ref := range p.TargetOutputs[name] {
+			// A cross-project ref's glob is relative to the tree it writes INTO, so it
+			// would resolve against the wrong root here; it is counted on the owner.
+			if ref.Project != "" && ref.Project != p.Path {
+				continue
+			}
+			if ok, err := doublestar.Match(ref.Glob, rel); err == nil && ok {
+				return name, true
 			}
 		}
 	}
-	return "build"
+	return "", false
 }
 
 // resolveVCS returns the active VCS resolution for the workspace.
