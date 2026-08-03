@@ -8,6 +8,7 @@ package symbols
 
 import (
 	"cmp"
+	"log/slog"
 	"path"
 	"slices"
 	"strconv"
@@ -61,10 +62,18 @@ func ParseIndex(data []byte, projectPath string) ([]types.KnowledgeSymbol, error
 		refs map[string]*types.KnowledgeSymbolRef // ref file -> tally
 	}
 	byKey := map[string]*acc{}
+	skipped := 0
 
 	for _, doc := range idx.Documents {
 		// Rebase the indexer-relative document path onto the workspace once per document.
-		docPath := workspacePath(projectPath, doc.RelativePath)
+		// A document outside the workspace (a dependency the indexer resolved into the
+		// module or build cache) is skipped entirely: none of its occurrences describe
+		// code this workspace owns.
+		docPath, ok := workspacePath(projectPath, doc.RelativePath)
+		if !ok {
+			skipped++
+			continue
+		}
 		for _, occ := range doc.Occurrences {
 			moniker := occ.Symbol
 			if moniker == "" || scip.IsLocalSymbol(moniker) {
@@ -122,18 +131,61 @@ func ParseIndex(data []byte, projectPath string) ([]types.KnowledgeSymbol, error
 	}
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbol) int { return cmp.Compare(x.Key, y.Key) })
+	if skipped > 0 {
+		// Dropping a dependency document is normal scip-go output, not a fault - but an
+		// index filtered to nothing looks exactly like a scip target that never ran, and
+		// the caller logs nothing for an empty result. The count is what tells those
+		// apart when an indexer's root does not match what magus assumed.
+		slog.Debug("symbols: skipped documents outside the workspace",
+			slog.String("project", projectPath),
+			slog.Int("skipped", skipped),
+			slog.Int("kept", len(idx.Documents)-skipped))
+	}
 	return out, nil
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining
-// it under the project's workspace-relative path. A root project ("" or ".") leaves the
-// path unchanged. path.Join also cleans a leading "./" or stray separators the indexer
-// may emit, so the result matches the file IDs the rest of the graph uses.
-func workspacePath(projectPath, rel string) string {
-	if projectPath == "" || projectPath == "." {
-		return path.Clean(rel)
+// it under the project's workspace-relative path, and reports whether the document lives
+// in the workspace at all.
+//
+// This is the ONE place an externally-supplied path enters the knowledge graph: every
+// other path-bearing node comes from magus walking its own tree. So the check belongs
+// here and nowhere downstream.
+//
+// ok is false for a document outside the workspace, and the caller drops it. An indexer
+// routinely emits those: scip-go records occurrences in the packages it resolved, so a
+// document path can point into the module or build cache. Rebasing one produced paths
+// like "../../../../../Library/Caches/go-build/01/abc", which became real graph nodes -
+// a committed graph carried 93 of them, describing a layout that existed on one laptop.
+// The graph is committed, published, and shared through the remote cache, so dropping is
+// the whole answer rather than clamping: a file outside the workspace is not the
+// workspace's to describe.
+//
+// rel is validated BEFORE it is joined, which is load-bearing. path.Join cleans, so
+// joining first cancels ".." against the project path instead of rejecting it:
+// path.Join("libs/gopherbuzz", "../../internal/x.go") is "internal/x.go", which has no
+// ".." left to find. That silently re-attributes a document to an unrelated project
+// rather than dropping it, and it only shows up when the ".." count is within the
+// project's own depth.
+func workspacePath(projectPath, rel string) (string, bool) {
+	cleaned := path.Clean(rel)
+	if !workspaceRelative(cleaned) {
+		return "", false
 	}
-	return path.Join(projectPath, rel)
+	if projectPath == "" || projectPath == "." {
+		return cleaned, true
+	}
+	return path.Join(projectPath, cleaned), true
+}
+
+// workspaceRelative reports whether p is a relative path that stays inside the tree it is
+// relative to. It takes an already-cleaned path, so a ".." can only appear as a leading
+// segment that Clean could not resolve.
+func workspaceRelative(p string) bool {
+	if p == "" || p == "." || path.IsAbs(p) {
+		return false
+	}
+	return !slices.Contains(strings.Split(p, "/"), "..")
 }
 
 // parseMoniker turns a SCIP moniker into a stable, version-free node key and a

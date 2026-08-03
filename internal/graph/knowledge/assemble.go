@@ -201,6 +201,13 @@ func AssembleShards(in Inputs) []Shard {
 // before. Paths are workspace-relative and slash-separated, so path (not filepath) is
 // the right splitter regardless of host OS.
 func containsChain(projectPath, leafPath, leafID string) ([]types.KnowledgeNode, []types.KnowledgeEdge) {
+	// A loop precondition, not a second line of defense: every caller already gates on
+	// ownership, which refuses an escaping path. It stays because the loop below is
+	// unbounded upward and mints a node per iteration, so the one thing it must never be
+	// handed is a path that climbs.
+	if !workspaceContainsPath(leafPath) {
+		return nil, nil
+	}
 	var dirs []string // deepest-first: the directories strictly between the project and the leaf
 	for d := path.Dir(leafPath); d != "." && d != "/" && d != "" && d != projectPath; d = path.Dir(d) {
 		dirs = append(dirs, d)
@@ -238,10 +245,35 @@ func owningProjectPath(file string, projects []types.TargetGraphProject) (string
 }
 
 // projectContainsFile reports whether the project at projectPath owns file. The root
-// project (".") owns everything; any other project owns a file equal to its path or
-// beneath it. The trailing "/" guard stops "foo" from claiming "foobar/x".
+// project (".") owns everything INSIDE the workspace; any other project owns a file equal
+// to its path or beneath it. The trailing "/" guard stops "foo" from claiming "foobar/x".
 func projectContainsFile(projectPath, file string) bool {
+	if !workspaceContainsPath(file) {
+		return false
+	}
 	return projectPath == "." || file == projectPath || strings.HasPrefix(file, projectPath+"/")
+}
+
+// workspaceContainsPath reports whether a path names something inside the workspace. It
+// mirrors projectContainsFile one level up: the workspace owns a relative path that stays
+// inside it, and nothing else.
+//
+// Every path in the graph is workspace-relative and slash-separated, so anything absolute
+// or holding a ".." segment names a location the workspace does not own. The graph is
+// committed, published, and shared through the remote cache, so a node reaching outside
+// leaks a local machine's layout into all three.
+//
+// The root project used to own everything unconditionally, which made this reachable
+// rather than theoretical: a leaf climbing upward was adopted by ".", and the directory
+// walk minted a node for every level on the way out.
+func workspaceContainsPath(p string) bool {
+	// Slash-only, deliberately: the graph's paths are documented slash-separated, so
+	// reaching for filepath here would make an explicitly deterministic, remote-shared
+	// artifact differ by host OS.
+	if p == "" || p == "." || path.IsAbs(p) {
+		return false
+	}
+	return !slices.Contains(strings.Split(p, "/"), "..")
 }
 
 // knownTargetIDs collects every target node ID the project shards will define, so

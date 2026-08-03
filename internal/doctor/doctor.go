@@ -161,6 +161,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkGraphCycles(),
 		r.checkGuardBinary(),
 		r.checkSymlinks(),
+		r.checkGraphBounds(),
 		r.checkStaleWorktrees(),
 		r.checkEnvVars(),
 		r.checkTargetNameConventions(projects),

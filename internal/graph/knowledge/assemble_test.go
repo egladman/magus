@@ -430,3 +430,56 @@ func TestOwningProjectPathNoRootUnowned(t *testing.T) {
 	_, ok := owningProjectPath("top.buzz", []types.TargetGraphProject{{Path: "docs"}})
 	assert.False(t, ok)
 }
+
+// TestWorkspaceContainsPath pins the containment rule every path-bearing node is held to.
+func TestWorkspaceContainsPath(t *testing.T) {
+	inside := []string{"a.go", "cmd/magus/vcs.go", "docs/gen/index.html", "a..b/c.go", "..hidden/x"}
+	for _, p := range inside {
+		assert.True(t, workspaceContainsPath(p), "%q is inside the workspace", p)
+	}
+
+	outside := []string{
+		"",
+		"..",
+		"../sibling",
+		"../../../../../Library/Caches/go-build/01",
+		"cmd/../../escape.go",
+		"/etc/passwd",
+		"/Users/someone/Library/Caches/go-build",
+	}
+	for _, p := range outside {
+		assert.False(t, workspaceContainsPath(p), "%q is outside the workspace", p)
+	}
+}
+
+// TestProjectContainsFileRefusesEscape covers the hole that put a developer's
+// ~/Library/Caches/go-build shards into a committed graph: the root project claimed every
+// path unconditionally, so a leaf climbing out was adopted by "." and the directory walk
+// minted a node for each ".." on the way.
+func TestProjectContainsFileRefusesEscape(t *testing.T) {
+	assert.True(t, projectContainsFile(".", "cmd/magus/vcs.go"))
+	assert.True(t, projectContainsFile("libs/gopherbuzz", "libs/gopherbuzz/pool.go"))
+
+	assert.False(t, projectContainsFile(".", "../../../../../Library/Caches/go-build/01"),
+		"the root project owns the workspace, not the machine")
+	assert.False(t, projectContainsFile(".", "/etc/passwd"))
+	assert.False(t, projectContainsFile("libs/gopherbuzz", "libs/gopherbuzz/../../escape.go"))
+
+	_, ok := owningProjectPath("../outside.go", []types.TargetGraphProject{{Path: "."}})
+	assert.False(t, ok, "no project claims a path outside the workspace")
+}
+
+// TestContainsChainRefusesEscape checks the walk itself, not just its caller. The walk
+// climbs until it reaches ".", so an escaping leaf is what produces the chain.
+func TestContainsChainRefusesEscape(t *testing.T) {
+	nodes, edges := containsChain(".", "../../../../../Library/Caches/go-build/01/x", "file:x")
+	assert.Empty(t, nodes)
+	assert.Empty(t, edges)
+
+	nodes, edges = containsChain(".", "cmd/magus/vcs.go", "file:cmd/magus/vcs.go")
+	require.NotEmpty(t, nodes, "an ordinary path still builds its chain")
+	for _, n := range nodes {
+		assert.True(t, workspaceContainsPath(n.Source), "minted dir %q stays inside the workspace", n.Source)
+	}
+	assert.NotEmpty(t, edges)
+}
