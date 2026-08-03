@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2688 nodes** and **5533 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2690 nodes** and **5535 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -46,13 +46,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 10 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 96 | `magus query kind:target` | `content-generate`, `site-generate`, `skills-generate` |
-| spell | 13 | `magus query kind:spell` | `go`, `rust`, `markdown` |
+| spell | 12 | `magus query kind:spell` | `go`, `rust`, `markdown` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
-| tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS1002` |
+| diagnostic | 49 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS1002` |
 | doc | 283 | `magus query kind:doc` | `docs/reference/manpage/magus-run.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md` |
 | dir | 461 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 225 | `magus query kind:file` | `libs/gopherbuzz/examples/bubblegum/config.buzz`, `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
