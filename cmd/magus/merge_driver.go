@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// mergeDriverCmd dispatches `magus merge-driver %O %A %B %L %P`.
+// mergeDriverCmd dispatches `magus vcs merge-driver %O %A %B %L %P`.
 // Per-clone wiring is installed by `magus init`, not here.
 func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
@@ -26,7 +26,7 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 		// git only ever calls this with all five placeholders, so a bare invocation is
 		// a human typing it. Exiting 0 said "merge resolved" for a run that did nothing,
 		// and disagreed with the 1-argument case, which already errored.
-		return usagef("magus merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
+		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got 0")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		return mergeDriverUsage()
@@ -36,16 +36,20 @@ func mergeDriverCmd(ctx context.Context, root string, args []string) error {
 
 // mergeDriverUsage prints usage for the merge-driver subcommand.
 func mergeDriverUsage() error {
-	fmt.Fprintln(os.Stderr, "Usage: magus merge-driver %O %A %B %L %P")
+	fmt.Fprintln(os.Stderr, "Usage: magus vcs merge-driver %O %A %B %L %P")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The VCS merge driver for declared output files. git and hg invoke this")
 	fmt.Fprintln(os.Stderr, "automatically during a merge when a conflicted file matches a declared")
 	fmt.Fprintln(os.Stderr, "output glob; it keeps the current version instead of writing conflict")
-	fmt.Fprintln(os.Stderr, "markers. Run `magus run generate` afterwards to settle the result.")
+	fmt.Fprintln(os.Stderr, "markers.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "You do not run this by hand. Wire it once per clone with `magus init`.")
-	fmt.Fprintln(os.Stderr, "git calls it as:  magus merge-driver %O %A %B %L %P")
-	fmt.Fprintln(os.Stderr, "hg calls it as:   magus merge-driver $base $local $other 0 $local")
+	fmt.Fprintln(os.Stderr, "git calls it as:  magus vcs merge-driver %O %A %B %L %P")
+	fmt.Fprintln(os.Stderr, "hg calls it as:   magus vcs merge-driver $base $local $other 0 $local")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "To settle a conflicted merge yourself, run `magus vcs resolve`: it decides")
+	fmt.Fprintln(os.Stderr, "every conflicted path at once, regenerates once, and stages the result -")
+	fmt.Fprintln(os.Stderr, "including the files one side deleted, which no VCS calls a driver for.")
 	return nil
 }
 
@@ -178,7 +182,7 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 // a human to do, and the generate drift gate catches a forgotten re-run.
 func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if len(args) < 5 {
-		return usagef("magus merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
+		return usagef("magus vcs merge-driver: expected 5 arguments (ancestor result other markerSize path), got %d", len(args))
 	}
 
 	relPath, err := mergeDriverRelPath(root, args[4])
@@ -239,7 +243,13 @@ func mergeDriverRelPath(root, pathArg string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-// workspaceOutputGlobs returns deduplicated workspace-relative output globs for all projects.
+// workspaceOutputGlobs returns deduplicated workspace-relative output globs for all
+// projects, sorted.
+//
+// Sorted because the result goes into the TRACKED .gitattributes. In project iteration
+// order the same workspace can render that file two ways, so a branch that changed no
+// outputs still shows a diff, and two branches that each add a glob conflict over line
+// order rather than content.
 func workspaceOutputGlobs(m *magus.Magus) []string {
 	seen := make(map[string]struct{})
 	var globs []string
@@ -257,6 +267,7 @@ func workspaceOutputGlobs(m *magus.Magus) []string {
 			}
 		}
 	}
+	slices.Sort(globs)
 	return globs
 }
 

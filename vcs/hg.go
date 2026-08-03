@@ -306,26 +306,30 @@ func (v hgVCS) culprit(ctx context.Context, dir string) (string, error) {
 	return sha, nil
 }
 
+// Managed-section markers; see the git.go block for why each pair is a locator MARK
+// plus the full line written.
 const (
-	hgRCBegin = "# BEGIN magus-generated — do not edit this section manually"
-	hgRCEnd   = "# END magus-generated"
+	hgRCBegin     = "# BEGIN magus-generated"
+	hgRCBeginLine = hgRCBegin + " - do not edit this section manually"
+	hgRCEnd       = "# END magus-generated"
 
-	hgHookBegin = "# BEGIN magus-refresh — do not edit this section manually"
-	hgHookEnd   = "# END magus-refresh"
+	hgHookBegin     = "# BEGIN magus-refresh"
+	hgHookBeginLine = hgHookBegin + " - do not edit this section manually"
+	hgHookEnd       = "# END magus-refresh"
 )
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
 func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []string) error {
 	hgrcPath := filepath.Join(root, ".hg", "hgrc")
 	var section strings.Builder
-	section.WriteString(hgRCBegin + "\n")
+	section.WriteString(hgRCBeginLine + "\n")
 	section.WriteString("[merge-patterns]\n")
 	for _, glob := range outputGlobs {
 		fmt.Fprintf(&section, "glob:%s = magus\n", glob)
 	}
 	section.WriteString("\n[merge-tools]\n")
 	section.WriteString("magus.executable = magus\n")
-	section.WriteString("magus.args = merge-driver $base $local $other 0 $local\n")
+	section.WriteString("magus.args = vcs merge-driver $base $local $other 0 $local\n")
 	section.WriteString("magus.premerge = False\n")
 	section.WriteString("magus.gui = False\n")
 	section.WriteString(hgRCEnd + "\n")
@@ -362,7 +366,7 @@ func (v hgVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs [
 func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]string, error) {
 	hgrcPath := filepath.Join(root, ".hg", "hgrc")
 	var section strings.Builder
-	section.WriteString(hgHookBegin + "\n")
+	section.WriteString(hgHookBeginLine + "\n")
 	section.WriteString("[hooks]\n")
 	fmt.Fprintf(&section, "update.magus-refresh = %s >/dev/null 2>&1 || true\n", command)
 	section.WriteString(hgHookEnd + "\n")

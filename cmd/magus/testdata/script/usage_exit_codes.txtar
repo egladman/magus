@@ -9,7 +9,7 @@
 # `path` node, an ambiguous `where`, `tail` with no terminal).
 #
 # It had drifted badly. The SAME mistake - forgetting the subcommand - exited 0 from
-# `config`, `self` and `merge-driver`, 1 from `man` and `completion`, while `self
+# `config`, `self` and `vcs merge-driver`, 1 from `man` and `completion`, while `self
 # <unknown>` exited 2. Nothing scripting magus could branch on. The cause was uniform:
 # every dispatcher wrote `if len(args) == 0 || args[0] == "-h"`, collapsing "you gave
 # me nothing" into "you asked for help".
@@ -23,7 +23,7 @@ exec magus config -h
 exec magus server -h
 exec magus man --help
 exec magus self --help
-exec magus merge-driver -h
+exec magus vcs -h
 exec magus completion --help
 exec magus agent -h
 
@@ -50,7 +50,7 @@ stderr 'shell name required'
 
 # merge-driver is the sharp one: 0 is how a merge driver tells git the conflict was
 # resolved, so returning it for a run that did nothing was actively the wrong signal.
-! exec magus merge-driver
+! exec magus vcs merge-driver
 stderr 'expected 5 arguments'
 
 # -- an unknown subcommand is the same class of error: exit 2 ------------------
@@ -77,7 +77,7 @@ stderr 'unknown subcommand "bogus"'
 # -- a wrong argument count is a usage error, not a work failure ---------------
 ! exec magus config set concurrency 4
 stderr 'requires one argument in key=<key>,value=<value> form'
-! exec magus merge-driver onlyonearg
+! exec magus vcs merge-driver onlyonearg
 stderr 'expected 5 arguments'
 
 -- magus.yaml --
