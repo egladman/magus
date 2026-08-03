@@ -121,12 +121,12 @@ magus\project({
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
         "build-playground": {"skip_cache": true},
-        // build-mermaid / build-hljs / build-editor bundle a
+        // build-mermaid / build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
-        // committed gen/ artifact. esbuild + pinned npm deps are deterministic, so these
+        // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
         // stay cacheable (no skip_cache): a cache hit replays identical bytes, and a
         // version bump invalidates it via package.json/pnpm-lock.yaml in sources.
-        // Run by hand when a version is bumped; commit the new artifact.
+        // generate runs them, so a version bump reaches the published site on its own.
     },
 });
 
@@ -235,7 +235,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
-    final GENERATED = [OUT, "MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT;
+    // OUT is deliberately absent. gen/ is ignored now that pages.yaml renders at deploy
+    // time, and an ignored path is never "dirty", so listing it would assert a check that
+    // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
+    // the root CHANGELOG.md, src/gen, and the derived Markdown in CONTENT.
+    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT;
     final clean_before = vcs\isDirty(GENERATED) == false;
     // changelog-generate runs FIRST, alone: content-generate now copies CHANGELOG.md in as a
     // docs page, so the two no longer own disjoint outputs and cannot share a stage - fanned
@@ -244,11 +248,16 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
     ctx.needs(content_generate, md_generate);
+    // The esbuild bundles are a stage of their own, BEFORE site-generate rather than beside
+    // it: site-generate hashes gen/ into the service-worker precache and site-manifest, so a
+    // bundle written after it would ship with a manifest that does not describe it. They used
+    // to be run by hand and committed; with gen/ untracked, generate is what produces them.
+    ctx.needs(build_mermaid, build_hljs, build_playground_editor);
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.has_charm("rw")) { return; }
     if (clean_before and vcs\isDirty(GENERATED)) {
-        throw "generate: " + OUT + " or MAGUS.md or CHANGELOG.md or generated docs Markdown drifted; re-run `magus run generate:rw docs` and commit";
+        throw "generate: MAGUS.md or CHANGELOG.md or generated docs Markdown drifted; re-run `magus run generate:rw docs` and commit";
     }
 }
 
@@ -287,12 +296,16 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo
-// compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the
-// matching wasm_exec.js glue is copied beside it. Both are committed (like the wasm
-// itself) and survive regeneration untouched, so CI - which has no TinyGo - never
-// rebuilds them. Run after changing the interpreter (../gopherbuzz) or the playground
-// host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from
-// the same TinyGo that built the wasm.
+// compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching
+// wasm_exec.js glue is copied beside it. Run after changing the interpreter
+// (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo
+// >= 0.40; the glue must come from the same TinyGo that built the wasm.
+//
+// vendor/, not gen/. These two are the only published bytes CI cannot reproduce - it has
+// no TinyGo, deliberately - so they are COMMITTED INPUTS to the render rather than render
+// output. Keeping them in gen/ made that tree a mix of "rebuild at will" and "irreplaceable
+// if deleted", which is exactly the distinction gen/ is supposed to make obvious, and it is
+// what stopped gen/ from being untracked. site_render copies them into gen/playground/.
 export fun build_playground(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(gopherbuzz\build);
@@ -301,18 +314,19 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
     // -scheduler=asyncify pins the wasm default so the status banner matches the build.
     os\exec("tinygo",
         ["build", "-target=wasm", "-no-debug", "-stack-size=1MB", "-scheduler=asyncify",
-         "-o", "docs/gen/playground/buzz.wasm", "./cmd/buzz-playground"],
+         "-o", "docs/vendor/playground/buzz.wasm", "./cmd/buzz-playground"],
         "..", {});
     os\exec("sh",
-        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" docs/gen/playground/wasm_exec.js"],
+        ["-c", "cp \"$(tinygo env TINYGOROOT)/targets/wasm_exec.js\" docs/vendor/playground/wasm_exec.js"],
         "..", {});
-    magus\info("rebuilt docs/gen/playground/buzz.wasm + wasm_exec.js - commit the result");
+    magus\info("rebuilt docs/vendor/playground/buzz.wasm + wasm_exec.js - commit the result");
 }
 
 // build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)
-// into the committed gen/assets/mermaid.js. mermaid.js (the runtime init script) imports
-// it same-origin so diagrams and page styling work offline without any CDN. Run after
-// bumping the mermaid version in package.json; commit the regenerated artifact.
+// into gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so
+// diagrams and page styling work offline without any CDN. Bump the mermaid version in
+// package.json and the next generate picks it up; gen/ is not committed, so there is no
+// artifact to commit and generate runs this as one of its stages.
 export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // Declared so the snapshot records THIS artifact. Without it the target inherits the
@@ -322,13 +336,13 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
     os\exec("pnpm", ["run", "build-mermaid"], ".", {});
-    magus\info("rebuilt gen/assets/mermaid.js - commit the result");
+    magus\info("rebuilt gen/assets/mermaid.js");
 }
 
 // build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
-// into the committed gen/assets/hljs.js. syntax-highlight.js imports it same-origin so
-// syntax highlighting works offline without any CDN. Run after bumping the version in
-// package.json; commit the regenerated artifact.
+// into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting
+// works offline without any CDN. Bump the version in package.json and the next generate picks
+// it up; gen/ is not committed, so generate runs this as one of its stages.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
@@ -337,7 +351,22 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
     os\exec("pnpm", ["run", "build-hljs"], ".", {});
-    magus\info("rebuilt gen/assets/hljs.js - commit the result");
+    magus\info("rebuilt gen/assets/hljs.js");
+}
+
+// build-playground-editor bundles the CodeMirror editor the playground loads into
+// gen/playground/editor.js. It existed only as a pnpm script before, because the artifact
+// was committed and a human ran it after a version bump. gen/ is no longer committed, so
+// every published byte needs a target CI can run - a script nothing invokes would have
+// shipped a playground with no editor.
+export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
+    ctx.writesFiles("gen/playground/editor.js");
+    if (!fs\isDir("node_modules")) {
+        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+    }
+    os\exec("pnpm", ["run", "build-editor"], ".", {});
 }
 
 // render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.

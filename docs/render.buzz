@@ -213,10 +213,13 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     os\execute(["sh", "-c", "esbuild src/theme.ts --minify --outfile=" + site.outDir + "/theme.js"]);
     os\execute(["sh", "-c", "esbuild src/site/main.ts --bundle --minify --format=esm --outfile=" + site.outDir + "/main.js"]);
 
-    // buzz.wasm, wasm_exec.js, and editor.js are committed in gen/playground/ - rebuilt in
-    // place by build-playground / build-playground-editor, never by this render - so
-    // renderPlayground (below) only adds index.html alongside them. pruneStaleOutputs()
-    // leaves these three paths alone (its alwaysKeep set).
+    // The playground's wasm and its TinyGo glue are the only published bytes nothing here
+    // can produce: TinyGo builds them and CI has none. They are committed under vendor/ as
+    // render INPUTS and copied in here, which is what lets gen/ be untracked output all the
+    // way down - the copy is reproducible, the wasm is not. editor.js is esbuild output
+    // (build-playground-editor) and lands in gen/playground/ on its own, so it is not here.
+    // renderPlayground (below) adds index.html alongside both.
+    os\execute(["sh", "-c", "mkdir -p " + site.outDir + "/playground && cp -r " + site.root + "/" + site.docs + "/vendor/playground/. " + site.outDir + "/playground/"]);
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
     // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
     // frontmatter, so it is free of the render state below.

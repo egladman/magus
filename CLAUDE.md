@@ -118,7 +118,8 @@ deliberately instead:
 - `gopherbuzz/` - the embedded Buzz language implementation
 - `spells/` - built-in spell sources (`.buzz`), compiled into the binary
 - `docs/` - markdown sources; `docs/render.buzz` renders them into the
-  committed static site at `docs/gen/`
+  static site at `docs/gen/` (generated, NOT committed - .github/workflows/pages.yaml
+  renders it at deploy time)
 - `console/` - the native console PWA (standalone pnpm project); read
   `console/PATTERNFLY.md` before touching it (CSS naming, PF conventions)
 

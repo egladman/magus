@@ -1,3 +1,35 @@
+# The rendered docs site and the built console app. Published by .github/workflows/
+# pages.yaml, which now RENDERS them at deploy time instead of copying committed bytes.
+#
+# They were tracked for years, and the cost was not the disk: every page embeds the commit
+# that last touched its source, so committing a source change immediately staled its own
+# rendered output. The fix was a second "refresh generated metadata" commit after every
+# real one, forever, because amending would change the hash the footer had just recorded.
+# Rendering in CI knows the final commit already, so the cycle disappears.
+#
+# They are also 27% of this repository's blob history (17.6 MB docs/gen + 4.6 MB
+# console/gen of 83.2 MB), which is the exact cost a CI checkout pays. Untracking stops
+# the growth; it does not shrink what is already there - the blobless clone in
+# docs/guides/integrations/ci.md is what keeps CI from downloading the old versions.
+#
+# docs/active.urls.lock stays TRACKED on purpose: it lives outside gen/ and is the ledger
+# abandonedLinkCheck reads to prove a previously published URL never starts 404-ing. That
+# gate only works if the ledger survives across builds.
+# docs/vendor/playground/ stays tracked too: TinyGo builds the wasm and CI has none.
+#
+# `docs/gen/*` rather than `docs/gen/`, because git cannot re-include a file whose parent
+# DIRECTORY is excluded - the trailing-slash form would make the negation below silently
+# do nothing. Excluding the entries instead leaves docs/gen itself includable.
+/docs/gen/*
+# docs/gen/install is hand-authored, not rendered: it is the POSIX sh installer served at
+# /magus/install, linted by the root shellcheck target, and nothing under docs/ writes it
+# (engine/gates.buzz only lists it in pruneStaleOutputs' alwaysKeep so the render leaves it
+# alone). It is a source file misfiled inside the output tree, and it stays tracked where it
+# is because .github/actions/setup-magus sparse-checks-out this exact path from the default
+# branch - moving it would break that action for every caller pinned to an older tag.
+!/docs/gen/install
+console/gen/
+
 # Go coverage profile — throwaway intermediate from `magus run coverage`. The
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out

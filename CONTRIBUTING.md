@@ -59,16 +59,34 @@ fallback; never gate behavior on a fast path.
 
 ## Docs site
 
-The docs site under `docs/` is generated into the committed `docs/gen/`
-tree; regenerate and commit it after any doc change:
+The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
+`.github/workflows/pages.yaml` renders it on every push to `main` and publishes
+that. Render locally to check your change:
 
 ```sh
-magus run generate:rw docs   # re-render, keep the output
-# review `git status docs/gen`, then commit gen/ alongside your source edit
+magus run generate:rw docs   # re-render into docs/gen/, then open it
 ```
 
-A plain `magus run generate docs` gates on drift and fails if `gen/` was not
-re-rendered, so CI catches a forgotten regen.
+It was committed for years. The reason it no longer is: every page embeds the
+commit that last touched its source, so committing a source change immediately
+staled the rendered output committed beside it. That bought a second "refresh
+generated metadata" commit after every real one, and amending could not escape
+it, because the new hash restales the footer it just recorded. Rendering at
+deploy time knows the final commit already.
+
+What still gates on drift is the generated Markdown that *is* tracked:
+`MAGUS.md`, the root `CHANGELOG.md`, `docs/src/gen`, and the derived pages under
+`docs/reference/`. A plain `magus run generate docs` fails if any of those was
+left un-regenerated, so CI still catches a forgotten regen for everything a
+reader can find in the repository.
+
+Two things under `docs/` stay tracked on purpose:
+
+- `docs/vendor/playground/` holds the playground wasm and its TinyGo glue. They
+  are the only published bytes CI cannot reproduce, because it has no TinyGo.
+  The render copies them into `gen/`. Rebuild with `magus run build-playground docs`.
+- `docs/active.urls.lock` is the ledger proving a previously published URL never
+  starts 404-ing. That gate only works if the ledger outlives a single build.
 
 Pages use extensionless URLs (`/magus/documentation/`, served from
 `documentation/index.html`). If you rename or move a page, keep the old URL alive

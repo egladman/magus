@@ -916,7 +916,7 @@ fun rerender_docs() > void {
 }
 
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
-// two committed gen/ trees with the GitHub Pages pathing - "/" serves docs/gen and
+// two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - "/" serves docs/gen and
 // "/console/" serves console/gen, where the console SPA SHADOWS the docs render's
 // /console/ redirect stub (longest-prefix routing in http.server's mounts mode),
 // exactly like the deploy that assembles docs/gen at the root and console/gen under
