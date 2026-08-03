@@ -2222,6 +2222,33 @@ fun missing_input(path: str, project: str) > str {
         + "that boundary without depending on it, so no run order builds it for you.";
 }
 
+// missing_input phrases a deploy-generate precondition that ANOTHER project owns.
+//
+// Naming one single-project command teaches the wrong habit: the reader runs it, gets the
+// next precondition, runs another, and learns the set by failing once per producer. So name
+// every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run
+// build docs console` is one dispatch over both - which is the idiom this message teaches.
+//
+// Deliberately NOT "magus affected build" or "magus run build /". Both would include this
+// project, and neither can order it after the producers: the root declares no dependency on
+// docs or console, so there is no edge to schedule on. It cannot declare one either - docs
+// already depends on the root, so the reverse edge closes a cycle. That missing edge is
+// exactly why this runtime check exists instead of ctx.needs, and why the remedy has to name
+// the producers rather than a whole-workspace verb that would just fail here first.
+//
+// The command leads the sentence: a long cause line is elided with an ellipsis in run
+// output, so anything after the first clause may never reach the reader.
+//
+// Defined ABOVE deploy-generate's doc comment, not between it and the target: the extractor
+// binds the immediately preceding comment run to the next declaration, so sitting in that
+// gap silently stole the target's doc string out of the graph.
+fun missing_input(path: str, project: str) > str {
+    return "deploy-generate: " + path
+        + " is missing - run `magus run build docs console` first (one dispatch, both "
+        + "producers). The " + project + " project owns it, and this target reads across "
+        + "that boundary without depending on it, so no run order builds it for you.";
+}
+
 // deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at
 // the root of it and the console app under /console/.
 //
