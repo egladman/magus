@@ -18,7 +18,7 @@
 // the target graph - affected tracking is glob-based (sources), not import-graph-based.
 
 import "magus";
-// fs guards the node_modules install and writes MAGUS.md; os shells out to pnpm
+// fs writes MAGUS.md and reads the sources it indexes; os shells out to pnpm
 // (typecheck/biome/test); vcs gates the generated MAGUS.md on drift.
 import "fs";
 import "os";

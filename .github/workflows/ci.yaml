@@ -304,14 +304,20 @@ jobs:
       - name: Install pinned toolchain
         run: mise install # cosign, for the signing step inside image-build
 
+      # Built from source, NOT the pinned release: the image-* targets below call
+      # magus\secret.read, which no published release has yet. On a release binary that
+      # namespace is missing, resolvable()'s try/catch swallows the failure, and the job
+      # reports "no usable credentials" while the tokens are sitting right there in env.
+      # Move this back to git-ref once a release carries the secret provider.
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      # Same magusfile-driven login as cd.yaml, under the dev charm instead - which
+      # Same magusfile-driven login as cd.yaml, under the snapshot charm instead - which
       # lists GHCR alone, so no Docker Hub secret is needed or read here.
       - name: Verify registry credentials
         env:

@@ -102,10 +102,12 @@ after `--` forwards it to the test binary, which rejects it.
 
 CI runs `setup-magus` two different ways, on purpose:
 
-- `source-path: .` (preflight, the ci shards, skill-evals) builds the magus THIS
-  commit defines and runs it against this commit's magusfile. So a change that
-  `magusfile.buzz` needs is exercised by the very run that introduces it - there
-  is no "release first" chicken-and-egg.
+- `source-path: .` (preflight, the ci shards, skill-evals, image-snapshot) builds
+  the magus THIS commit defines and runs it against this commit's magusfile. So a
+  change that `magusfile.buzz` needs is exercised by the very run that introduces
+  it - there is no "release first" chicken-and-egg. image-snapshot is here because
+  its targets call `magus\secret.read`, which no release carries yet; move it back
+  to `git-ref` once one does.
 - `git-ref: <latest release tag>` (completions, deploy-build, merge-history,
   postflight) runs the pinned, checksum-verified release instead. That is the
   compatibility contract: if one of those jobs breaks because the magusfile

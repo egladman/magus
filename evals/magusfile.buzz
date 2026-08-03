@@ -41,7 +41,6 @@ fun install() > void {
 // constraint predicate exists. No network, no API key.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    install();
     os\exec("pnpm", ["run", "lint"], ".", {});
 }
 
@@ -53,7 +52,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // // smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
 // export fun smoke(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     install();
 //     os\exec("pnpm", ["run", "smoke"], ".", {});
 // }
 //
@@ -61,7 +59,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // // Minutes-to-hours and real money. Never on the PR path.
 // export fun grid(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     install();
 //     os\exec("pnpm", ["run", "grid"], ".", {});
 // }
 

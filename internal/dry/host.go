@@ -383,6 +383,7 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 var (
 	dryKnownProjectOptionKeys = []string{
 		"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+		"no_language",
 	}
 	dryKnownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots"}
 )

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2429,
-  "edge_count": 5504,
+  "edge_count": 5503,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -9429,7 +9429,7 @@
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
+      "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, which it reaches through format -\u003e generate -\u003e preflight; os.exec raises on a non-zero exit, so either gate fails lint.",
       "source": "docs/magusfile.buzz:278",
       "attrs": {
         "exported": "true"
@@ -10451,7 +10451,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.",
-      "source": "evals/magusfile.buzz:70",
+      "source": "evals/magusfile.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -15922,7 +15922,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:1356",
+      "source": "magusfile.buzz:1358",
       "attrs": {
         "exported": "true"
       }
@@ -16085,7 +16085,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run \u003ctarget\u003e [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:1317"
+      "source": "magusfile.buzz:1319"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -16151,8 +16151,8 @@
       "id": "function:magusfile.buzz:rebuild_console",
       "kind": "function",
       "label": "rebuild_console",
-      "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:1277"
+      "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
+      "source": "magusfile.buzz:1281"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -16195,7 +16195,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:1291"
+      "source": "magusfile.buzz:1293"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -16215,7 +16215,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1405",
+      "source": "magusfile.buzz:1407",
       "attrs": {
         "exported": "true"
       }
@@ -55569,14 +55569,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/18-typed-boundaries.buzz"
-    },
-    {
-      "source": "function:evals/magusfile.buzz:lint",
-      "target": "function:evals/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals/magusfile.buzz"
     },
     {
       "source": "function:evals/magusfile.buzz:preflight",

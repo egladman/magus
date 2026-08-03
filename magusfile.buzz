@@ -436,7 +436,7 @@ export fun image_registries(ctx: magus\Context, args: [str]) > void {
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        magus\info("image-registries: this build pushes nowhere; add the cd or dev charm to see a release or dev target");
+        magus\info("image-registries: this build pushes nowhere; add the cd or snapshot charm to see a release or snapshot target");
         return;
     }
     // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
@@ -531,7 +531,7 @@ export fun image_login(ctx: magus\Context, args: [str]) > void {
     if (args.len() > 0) { host = args[0]; }
     final registries = select_registries(publish_registries(ctx), host);
     if (registries.len() == 0) {
-        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd or dev charm (`magus run image-login:cd`)";
+        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd or snapshot charm (`magus run image-login:cd` or `:snapshot`)";
     }
     foreach (reg in registries) {
         final user = magus\secret.read(reg.user_ref);
@@ -1274,10 +1274,12 @@ export fun ci_shard(ctx: magus\Context, args: [str]) > void {
 // rebuild_console rebuilds console/gen with the console project's own esbuild build
 // (pnpm run build), installing its deps first on a cold tree. Run from the console/
 // dir so pnpm resolves that project's package.json.
+// Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted
+// install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this
+// replaced read that as ready and handed the missing packages to esbuild. On a warm tree
+// --frozen-lockfile is about a second and changes nothing.
 fun rebuild_console() > void {
-    if (!fs\isDir(fs\join("console", "node_modules"))) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
-    }
+    os\exec("pnpm", ["install", "--frozen-lockfile"], "console", {});
     os\exec("pnpm", ["run", "build"], "console", {});
 }
 

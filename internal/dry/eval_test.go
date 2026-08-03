@@ -69,6 +69,25 @@ func TestLoadMagusfile_graph(t *testing.T) {
 	assert.True(t, hasEdge(g.Edges, "build", "format"), "edges = %+v", g.Edges)
 }
 
+// TestLoadMagusfile_noLanguage pins dryKnownProjectOptionKeys against a key the real
+// binding accepts. The two lists are hand-mirrored, and when no_language was added to
+// internal/interp/bindings only, this path rejected the workspace's OWN evals/magusfile.buzz
+// - so the Playground, magus-docs, and editor diagnostics all failed on a valid file while
+// `magus run` was happy. A mismatch is invisible until someone uses the key.
+func TestLoadMagusfile_noLanguage(t *testing.T) {
+	g := LoadMagusfile(context.Background(), `
+import "magus";
+magus\project({
+    "name": "harness",
+    "no_language": "polyglot harness; no single language pack describes it",
+    "targets": {},
+});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	require.True(t, g.OK, "dry path rejected no_language: %+v", g.Diag)
+	require.Len(t, g.Projects, 1)
+}
+
 func TestRun_orderAndTrace(t *testing.T) {
 	r := Run(context.Background(), sampleMagusfile, "ci", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)

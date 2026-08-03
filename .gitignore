@@ -55,6 +55,14 @@ coverage.hand.out
 # published to the GitHub release, never committed
 /dist/
 
+# buildx --metadata-file output from image-build, one per variant. Untracked and never
+# committed: image-build is skip_cache, so nothing snapshots them, and left un-ignored
+# they make the whole-tree vcs\isDirty check in generate read as already-dirty, which
+# silently downgrades the drift gate to a no-op on the next run.
+/static-meta.json
+/cgo-meta.json
+/snapshot-meta.json
+
 # macOS directory metadata
 .DS_Store
 
