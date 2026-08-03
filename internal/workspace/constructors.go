@@ -62,6 +62,11 @@ func WithExclusive() ProjectOption {
 	return func(p *types.Project) error { p.Exclusive = true; return nil }
 }
 
+// WithNoLanguage records why a project binds no toolchain spell deliberately.
+func WithNoLanguage(reason string) ProjectOption {
+	return func(p *types.Project) error { p.NoLanguage = reason; return nil }
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {
@@ -174,9 +179,13 @@ func RetryOnVolatile() TargetOption {
 }
 
 // SkipCache returns a TargetOption that opts the target out of the cache, so magus
-// always runs it and never replays or snapshots it.
-func SkipCache() TargetOption {
-	return func(t *types.Target) { t.SkipCache = true }
+// always runs it and never replays or snapshots it. reason states why REPLAYING the
+// target would be wrong (a fresh signature, a screen capture, a go.mod mutation); it
+// is recorded rather than merely documented so a reader can tell a real opt-out from
+// a workaround, and so `--no-cache`, which only distrusts the cache for one run, is
+// not reached for by mistake.
+func SkipCache(reason string) TargetOption {
+	return func(t *types.Target) { t.SkipCache = true; t.SkipCacheReason = reason }
 }
 
 // Exclusive returns a TargetOption that runs the target alone — no other target

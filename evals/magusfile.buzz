@@ -14,12 +14,10 @@ magus\project({
                 "fixtures/**", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
                 "pnpm-workspace.yaml"],
     "outputs": ["results/**"],
+    "no_language": "polyglot harness: promptfoo yaml tasks, .mjs libs, .py analysis tools; no single language pack describes it, and the work runs through promptfoo rather than a toolchain",
     "targets": {
         // These targets deliberately produce no result artifact. The live smoke
         // and grid targets retain the project output snapshot.
-        "preflight": {"skip_cache": true},
-        "lint": {"skip_cache": true},
-        "ci": {"skip_cache": true},
     },
 });
 
@@ -47,20 +45,25 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     os\exec("pnpm", ["run", "lint"], ".", {});
 }
 
-// smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
-export fun smoke(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
-    install();
-    os\exec("pnpm", ["run", "smoke"], ".", {});
-}
-
-// grid is the full run: every skill, both permutations, every model, 5 trials.
-// Minutes-to-hours and real money. Never on the PR path.
-export fun grid(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
-    install();
-    os\exec("pnpm", ["run", "grid"], ".", {});
-}
+// MUTED 2026-08-03. smoke and grid are the only targets that call promptfoo and
+// spend money on live model runs; they are commented out rather than deleted so the
+// tasks, constraints, and lint gate keep working and this comes back by uncommenting.
+// The weekly cron in .github/workflows/skill-evals.yaml is disabled to match.
+//
+// // smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
+// export fun smoke(ctx: magus\Context, args: [str]) > void {
+//     ctx.needs(preflight);
+//     install();
+//     os\exec("pnpm", ["run", "smoke"], ".", {});
+// }
+//
+// // grid is the full run: every skill, both permutations, every model, 5 trials.
+// // Minutes-to-hours and real money. Never on the PR path.
+// export fun grid(ctx: magus\Context, args: [str]) > void {
+//     ctx.needs(preflight);
+//     install();
+//     os\exec("pnpm", ["run", "grid"], ".", {});
+// }
 
 // ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have,
 // and a keyless environment must not fail this gate.

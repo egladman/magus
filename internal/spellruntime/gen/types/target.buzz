@@ -13,6 +13,7 @@ export object Target {
     declared: str = "",
     declaredCharms: [str] = [],
     skip_cache: bool = false,
+    skip_cache_reason: str = "",
     exclusive: bool = false,
     slots: int = 0,
 }

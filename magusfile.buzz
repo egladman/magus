@@ -56,41 +56,41 @@ magus\project({
     "name": "magus",
     "spells": [go, buzz, markdown, bash],
     "targets": {
-        "watch": {"skip_cache": true},
+        "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         // serve blocks (a long-running dev-loop server), so it must never cache.
-        "serve": {"skip_cache": true},
+        "serve": {"skip_cache": "blocks as a long-running dev server and never returns"},
         // deploy-generate writes a gitignored tree and nothing else.
         // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
         // writes into .gitattributes, and an ignored path can never conflict.
-        "deploy-generate": {"skip_cache": true},
-        "generate": {"skip_cache": true, "exclusive": true},
-        "ci-shard": {"skip_cache": true},
-        "image-build": {"skip_cache": true},
+        "deploy-generate": {"skip_cache": "assembles a gitignored deploy tree that is never snapshotted"},
+        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
+        "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
+        "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         // Both read the environment and report or act on it per invocation; a replay
         // would report the charms and credentials of whatever ran last.
-        "image-registries": {"skip_cache": true},
-        "image-login": {"skip_cache": true},
+        "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
+        "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
-        "release-build": {"skip_cache": true},
-        "release-sign": {"skip_cache": true},
+        "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
+        "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
         // Mutates go.mod and creates VCS tags (with the cd charm) - a real,
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
-        "release": {"skip_cache": true, "exclusive": true},
+        "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
         // test rewrites assets/coverage.svg; a cache hit would skip the write.
-        "test": {"skip_cache": true},
+        "test": {"skip_cache": "rewrites assets/coverage.svg; a hit would skip the write"},
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
-		"changelog-generate": {"skip_cache": true},
+		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
         // Screen-records the CLI, so the bytes it writes are never the same twice
         // (real target durations land in the frames). Caching would replay a GIF
         // recorded against different code, which is the one thing a demo must not
         // do. Deliberately NOT named *-generate: `generate` globs that suffix and
         // drift-gates it, and a non-reproducible artifact under a drift gate fails
         // every CI run by construction. See the tapes target below.
-        "tapes": {"skip_cache": true},
+        "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
     },
 });
 
@@ -707,7 +707,12 @@ fun workspace_go_mods(ctx: magus\Context) > [any] {
 // The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or
 // writes go.mod. Without rw, Go's -print mode must equal the checked-in file.
 export fun mod_sync(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("go.mod");
+    // modifiesExistingFiles, not writesFiles: go.mod is hand-authored and committed, and
+    // this target amends its replace directives rather than producing the file. Declaring
+    // it an OUTPUT made mod-sync snapshot it, so a later cache hit could replay a
+    // pre-release go.mod straight over the version bump `release` had just written - the
+    // two-owners hazard MGS1020 reports. As a modification it still hashes into the key.
+    ctx.modifiesExistingFiles("go.mod");
     final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});
@@ -1030,7 +1035,9 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 
     // 1. Nested modules first: the root's go.mod must require a version that
     // already exists as a tag by the time the root itself is tagged.
-    ctx.writesFiles("go.mod");
+    // See mod-sync: release amends require versions in a committed go.mod, it does not
+    // produce the file, and two targets declaring one output is MGS1020.
+    ctx.modifiesExistingFiles("go.mod");
     var gomod = fs\readFile("go.mod");
     var rewrote = false;
     foreach (m in modules) {
@@ -1116,15 +1123,20 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
-export fun buzz_check(ctx: magus\Context, args: [str]) > void {
-    buzz["buzz-check"](ctx.withCwd("cmd/magus/starter/spells"));
-}
-
-// Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).
-export fun buzz_run(ctx: magus\Context, args: [str]) > void {
-    buzz["magus-buzz"](ctx.withCwd("cmd/magus/starter/spells"));
-}
+// buzz-check and buzz-run lived here and are gone: they ran the upstream `buzz`
+// toolchain and magus's embedded engine over cmd/magus/starter/spells, whose only two
+// files (a .bzz and a .tl) were deleted with the lua/teal interpreter in b60e99be. They
+// have been checking an absent directory and passing ever since, which this repo treats
+// as worse than no gate.
+//
+// They are deleted rather than repointed because there is no standalone Buzz left to
+// aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
+// constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
+// drift. What they were meant to protect is already covered: spells/examples/**
+// by TestExamplesParseAndRecord (ParseEmbedded), every spells/<dir>/spell.buzz by the
+// registry compile that doctor's spell-contract check exercises, and every magusfile by
+// doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
+// pinning `buzz` in mise.toml, which is not the case today.
 
 // Gates the build on workspace health by running `magus doctor`.
 export fun preflight(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
@@ -1282,6 +1294,33 @@ fun rerender_docs() > void {
     os\exec("" + bin, ["run", "render", "docs"], ".", {});
 }
 
+// missing_input phrases a deploy-generate precondition that ANOTHER project owns.
+//
+// Naming one single-project command teaches the wrong habit: the reader runs it, gets the
+// next precondition, runs another, and learns the set by failing once per producer. So name
+// every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run
+// build docs console` is one dispatch over both - which is the idiom this message teaches.
+//
+// Deliberately NOT "magus affected build" or "magus run build /". Both would include this
+// project, and neither can order it after the producers: the root declares no dependency on
+// docs or console, so there is no edge to schedule on. It cannot declare one either - docs
+// already depends on the root, so the reverse edge closes a cycle. That missing edge is
+// exactly why this runtime check exists instead of ctx.needs, and why the remedy has to name
+// the producers rather than a whole-workspace verb that would just fail here first.
+//
+// The command leads the sentence: a long cause line is elided with an ellipsis in run
+// output, so anything after the first clause may never reach the reader.
+//
+// Defined ABOVE deploy-generate's doc comment, not between it and the target: the extractor
+// binds the immediately preceding comment run to the next declaration, so sitting in that
+// gap silently stole the target's doc string out of the graph.
+fun missing_input(path: str, project: str) > str {
+    return "deploy-generate: " + path
+        + " is missing - run `magus run build docs console` first (one dispatch, both "
+        + "producers). The " + project + " project owns it, and this target reads across "
+        + "that boundary without depending on it, so no run order builds it for you.";
+}
+
 // deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at
 // the root of it and the console app under /console/.
 //
@@ -1328,10 +1367,10 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
     // deleted a file - it means a build did not run, or silently produced nothing. Publishing
     // that would replace a working site with an empty one, so say which command is missing.
     if (!fs\exists(DOCS_GEN + "/index.html")) {
-        throw "deploy-generate: " + DOCS_GEN + "/index.html is missing - run `magus run generate docs` first";
+        throw missing_input(DOCS_GEN + "/index.html", "docs");
     }
     if (!fs\exists(CONSOLE_GEN + "/index.html")) {
-        throw "deploy-generate: " + CONSOLE_GEN + "/index.html is missing - run `magus run build console` first";
+        throw missing_input(CONSOLE_GEN + "/index.html", "console");
     }
 
     // Rebuilt from empty every time: a stale page left behind by a previous assembly would

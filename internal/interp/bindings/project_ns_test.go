@@ -64,6 +64,66 @@ func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 	assert.Equal(t, []string{"docs/**", "../proto/**/*.proto"}, p.Sources)
 }
 
+// no_language exempts a project from doctor's language-coverage check, so it has to cost a
+// sentence. A bool would let the exemption in anonymously, which is the failure mode: the
+// next reader finds a silenced check instead of a reason.
+func TestParseBuzzProjectOpts_NoLanguage(t *testing.T) {
+	t.Run("a reason is recorded", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("no_language", vm.StrValue("polyglot harness; no single pack describes it"))
+		p := applyOpts(t, opts)
+		assert.Equal(t, "polyglot harness; no single pack describes it", p.NoLanguage)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"a bare true is not a reason", vm.BoolValue(true)},
+		{"empty is not a reason", vm.StrValue("")},
+		{"whitespace is not a reason", vm.StrValue("   ")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := vm.NewMap()
+			opts.MapSet("no_language", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), opts)
+			assert.ErrorContains(t, err, `"no_language" needs a reason string`)
+		})
+	}
+}
+
+// skip_cache claims that REPLAYING a target would be wrong, which is a different and much
+// stronger statement than --no-cache's "not this run". A bare true could not tell the two
+// apart, and six uses in this repo turned out to be workarounds for a snapshot error the
+// engine no longer raises, so the reason is what keeps the opt-out honest.
+func TestParseBuzzProjectOpts_SkipCacheReason(t *testing.T) {
+	t.Run("a reason is recorded", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("skip_cache", vm.StrValue("signs a fresh artifact per invocation"))
+		p := applyOpts(t, targetsOpts("release-sign", pol))
+		got := p.TargetPolicies["release-sign"]
+		assert.True(t, got.SkipCache)
+		assert.Equal(t, "signs a fresh artifact per invocation", got.SkipCacheReason)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"a bare true is not a reason", vm.BoolValue(true)},
+		{"empty is not a reason", vm.StrValue("")},
+		{"whitespace is not a reason", vm.StrValue("  ")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("skip_cache", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("lint", pol))
+			assert.ErrorContains(t, err, "needs a reason string")
+			assert.ErrorContains(t, err, "--no-cache", "the error must point at the weaker control")
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))

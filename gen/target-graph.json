@@ -293,7 +293,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
@@ -376,7 +376,7 @@
           "charms": [
             "cd"
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
@@ -427,38 +427,6 @@
           ],
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
-          ]
-        },
-        {
-          "name": "buzz-check",
-          "declared": "buzz_check",
-          "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-          "spells": [
-            {
-              "spell": "buzz",
-              "ops": [
-                "buzz-check"
-              ]
-            }
-          ],
-          "exec_overrides": [
-            "cwd:cmd/magus/starter/spells"
-          ]
-        },
-        {
-          "name": "buzz-run",
-          "declared": "buzz_run",
-          "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-          "spells": [
-            {
-              "spell": "buzz",
-              "ops": [
-                "magus-buzz"
-              ]
-            }
-          ],
-          "exec_overrides": [
-            "cwd:cmd/magus/starter/spells"
           ]
         },
         {
@@ -559,55 +527,6 @@
       ],
       "depends_on": [
         "libs/gopherbuzz"
-      ]
-    },
-    {
-      "path": "cmd/magus/starter",
-      "name": "cmd/magus/starter",
-      "engine": "buzz",
-      "nodes": [
-        {
-          "name": "preflight"
-        },
-        {
-          "name": "generate",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
-          "name": "format",
-          "dependencies": [
-            "generate"
-          ]
-        },
-        {
-          "name": "lint",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "build",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "test",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "ci",
-          "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
-          "dependencies": [
-            "lint",
-            "build",
-            "test"
-          ]
-        }
       ]
     },
     {
@@ -949,8 +868,7 @@
           "name": "lint",
           "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
-            "format",
-            "deps"
+            "format"
           ],
           "spells": [
             {
@@ -1013,17 +931,11 @@
           ]
         },
         {
-          "name": "deps",
+          "name": "build-mermaid",
+          "declared": "build_mermaid",
           "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
-          ]
-        },
-        {
-          "name": "build-mermaid",
-          "declared": "build_mermaid",
-          "dependencies": [
-            "deps"
           ],
           "writes_files": [
             {
@@ -1036,7 +948,7 @@
           "declared": "build_hljs",
           "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
-            "deps"
+            "preflight"
           ],
           "writes_files": [
             {
@@ -1049,7 +961,7 @@
           "declared": "build_playground_editor",
           "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
           "dependencies": [
-            "deps"
+            "preflight"
           ],
           "writes_files": [
             {
@@ -1110,20 +1022,6 @@
           ]
         },
         {
-          "name": "smoke",
-          "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
-          "name": "grid",
-          "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
           "name": "ci",
           "doc": "ci is LINT ONLY, deliberately.",
           "dependencies": [
@@ -1172,7 +1070,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
@@ -1287,7 +1185,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }

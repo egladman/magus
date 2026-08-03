@@ -28,9 +28,9 @@ magus\project({
     "outputs": ["MAGUS.md"],
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
-        "generate": {"skip_cache": true, "exclusive": true},
+        "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
         // Fetches over the network and re-checks upstream out every run.
-        "conformance": {"skip_cache": true},
+        "conformance": {"skip_cache": "fetches over the network and re-checks upstream on every run"},
     },
 });
 
@@ -73,7 +73,12 @@ fun workspace_go_mods(ctx: magus\Context) > [any] {
 }
 
 export fun mod_sync(ctx: magus\Context, args: [str]) > void {
-    ctx.writesFiles("go.mod");
+    // modifiesExistingFiles, not writesFiles: go.mod is hand-authored and committed, and
+    // this amends its replace directives rather than producing the file. As an output it
+    // was snapshotted, replayable, deletable by `magus clean`, and marked
+    // linguist-generated in .gitattributes - none of which is true of a go.mod. Matches
+    // the root magusfile's mod-sync; see MGS1020 for the two-owner form of this mistake.
+    ctx.modifiesExistingFiles("go.mod");
     final flags = gomod\replaceArgs(go["go-mod-json"](ctx).stdout, modules: workspace_go_mods(ctx));
     if (flags.len() == 0) { return; }
     final edited = go["go-mod-edit"](ctx, {"args": flags});

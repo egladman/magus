@@ -86,6 +86,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `sources`      | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
+| `no_language`  | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                            |
 | `targets`      | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
@@ -93,11 +94,23 @@ other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
 silently dropped option - the error names the offending key and suggests the
 nearest known one.
 
+`no_language` takes prose, never `true`. A project with no toolchain spell is
+legal and common, so doctor cannot tell an intentional one (a polyglot harness no
+single pack describes) from a forgotten `import "magus/spell/go"` without being
+told which it is. Requiring a reason keeps the exemption a decision the next
+reader can evaluate rather than a switch someone flipped to get a green check:
+
+```buzz
+magus\project({
+    "no_language": "promptfoo harness: yaml tasks, .mjs libs, .py tools; no single pack describes it",
+});
+```
+
 The `targets` sub-map keys a target name to a policy table:
 
 | Policy       | Effect                                                                       |
 | ------------ | ---------------------------------------------------------------------------- |
-| `skip_cache` | opts the target out of the cache; magus always runs it and never replays it  |
+| `skip_cache` | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting)) |
 | `exclusive`  | runs the target alone - no peer target runs concurrently while it does       |
 | `slots`      | the target holds N concurrency slots while it runs, throttling parallel work |
 
@@ -109,7 +122,7 @@ magus\project({
     "watch_ignore": { "glob": ["**/*.snap"] },
     "targets": {
         "test": { "slots": 4 },
-        "build": { "skip_cache": true },
+        "build": { "skip_cache": "signs a fresh artifact per invocation" },
     },
 });
 ```

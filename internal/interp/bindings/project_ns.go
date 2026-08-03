@@ -48,6 +48,7 @@ func magusfileNotASpellErr(what string) error {
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
 	"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+	"no_language",
 }
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
@@ -163,6 +164,19 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithExclusive())
 		}
 	}
+	// A reason, not a flag. `"no_language": true` would silence doctor's language-coverage
+	// check anonymously; requiring prose means the next reader learns why this project has
+	// no toolchain spell instead of finding a switch someone flipped.
+	if nv, ok := v.MapGet("no_language"); ok {
+		var reason string
+		if nv.IsStr() {
+			reason = strings.TrimSpace(nv.AsString())
+		}
+		if reason == "" {
+			return nil, fmt.Errorf(`magus.project: "no_language" needs a reason string explaining why this project binds no toolchain spell, e.g. "polyglot harness; no single language pack describes it"`)
+		}
+		opts = append(opts, workspace.WithNoLanguage(reason))
+	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value
 		// here, at bind time, from the resolved spec its handle carries; built-ins
@@ -253,8 +267,21 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			// name is normalized by workspace.WithTarget, so a policy declared
 			// under any spelling matches a target invoked under any other.
-			if sv, ok := pv.MapGet("skip_cache"); ok && sv.Bool() {
-				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache()))
+			// A reason, not a flag. Opting out claims that REPLAYING this target
+			// would be wrong; wanting a fresh run is `--no-cache`. A bare `true`
+			// could not tell those apart, and six of these turned out to be
+			// workarounds for a snapshot error the engine no longer raises.
+			if sv, ok := pv.MapGet("skip_cache"); ok {
+				var reason string
+				if sv.IsStr() {
+					reason = strings.TrimSpace(sv.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\". "+
+							"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache(reason)))
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))

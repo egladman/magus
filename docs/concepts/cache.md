@@ -308,8 +308,32 @@ Four controls, at four different scopes:
 | `magus clean --cache`                       | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
 | `cache.immutable` (`MAGUS_CACHE_IMMUTABLE`) | whole cache, whole run      | Read-only mode: replays hits, but a miss runs the target and does **not** write a new manifest.                                                                                                                                         |
 
-`skip_cache` and `--no-cache` both force a genuine re-execution; the difference
-is entirely about what happens to the cache entry afterward (never snapshot vs.
+`skip_cache` states that **replaying this target would be wrong**: it signs a
+fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
+never returns at all. It is a claim about the target's nature, which is why it
+lives in the magusfile rather than in the operator's fingers. `--no-cache` says
+something entirely different and far weaker: _I do not trust the cache for this
+one run._ That is a session-level judgement, so it belongs on the command line.
+
+The two are not interchangeable, and collapsing them breaks in both directions.
+Move a `skip_cache` target to `--no-cache` and correctness now depends on
+everyone remembering a flag, so a forgotten one replays a cached signature into
+a release. Reach for `skip_cache` when you merely wanted a fresh run and the
+target stops caching forever, for everyone.
+
+`skip_cache` is **not** how you handle a target that produces no files. A pure
+orchestration target - a `ci` that only composes `lint`, `build`, and `test` -
+caches correctly with no policy at all: it snapshots an empty manifest and
+replays as a hit, while its stages keep their own entries. Output globs
+_inherited_ from the project or a bound spell are allowed to match nothing, and
+only a glob the target declared itself via `ctx.writesFiles` must produce a file.
+If a no-output target ever fails at snapshot time, that is a bug to report, not a
+reason to opt out of the cache. Opting out instead costs the replay AND is
+indistinguishable from a real never-replays defect, which is what
+[MGS1009](../reference/codes/magusfile/MGS1009.md) exists to catch.
+
+Both `skip_cache` and `--no-cache` force a genuine re-execution; the mechanical
+difference is what happens to the cache entry afterward (never snapshot vs.
 snapshot-and-refresh). `bust_cache` and `clean --cache` both delete entries, at
 different granularities and from different sides of a run. `cache.immutable` is
 the odd one out: it does not force anything to re-run, it just stops the cache
@@ -369,6 +393,50 @@ the run hierarchy.
 A run that "wins the race" against a cancellation is neither snapshotted nor
 published: its outputs may be incomplete, so magus surfaces the cancellation
 instead of recording a poisoned entry.
+
+## One owner per generated file
+
+A generated file has exactly one owning target: the one that declares it. Two
+targets writing the same bytes is the most common way to get a build that never
+settles, and it is worth being blunt about why, because the instinct it provokes
+is wrong.
+
+Say `generate` writes `gen/**` and a formatter rewrites the same tree. The
+instinct is to call this a race and fix it with a dependency edge. It is not a
+race, and ordering cannot fix it:
+
+- Generate, then format: the formatter's bytes land. The next `generate`
+  regenerates unformatted output, sees it differ from what is committed, and
+  fails its drift gate.
+- Format, then generate: the formatting is immediately undone, and the
+  formatter's own check fails instead.
+
+Whichever runs last wins, and the loser's gate fails on the next run, at every
+possible ordering. A dependency edge resolves a producer and a consumer. Two
+producers of one file is an ownership violation, and there is no order that
+makes both correct.
+
+**If generated output needs formatting, the generator formats it**, as the last
+thing it does. It still owns the final bytes, so its drift gate compares
+formatted output against formatted output and settles. Generated Go needs no
+special handling here for exactly this reason: `mockery` and `protoc` emit
+gofmt-clean output already.
+
+Excluding generated trees from a formatter is the weaker fallback, and it is
+correct when nothing else needs to read that output. Every formatter in this
+workspace does it, and `.markdownlintignore` states the reasoning: a lint rule
+"fixed" in generated output is a fix in the wrong place, because the generator
+overwrites the edit on its next run. The fix belongs in the generator.
+
+Declaring the same output glob from two targets is
+[MGS1020](../reference/codes/magusfile/MGS1020.md); the cross-project shape,
+where two projects claim one glob under the same target, is
+[MGS4002](../reference/codes/race/MGS4002.md). Neither can see an undeclared
+write, which is why formatters are excluded by configuration as well as caught
+by a diagnostic. When a target genuinely needs to amend part of a file it does
+not own, that is
+[`ctx.modifiesExistingFiles`](#files-a-target-edits-rather-than-produces), not a
+second output declaration.
 
 ## The two roles of an output (maintainer note)
 

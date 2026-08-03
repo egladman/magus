@@ -50,19 +50,20 @@ magus\project({
     "outputs": ["MAGUS.md"],
     "targets": {
         // Drift-gates MAGUS.md via git status: run alone, every time.
-        "generate": {"skip_cache": true, "exclusive": true},
+        "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
     },
 });
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 
-// install restores the dev-only gate deps (typescript + biome) with pnpm, honoring
-// .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
-// local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. An interrupted install leaves a node_modules
+// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
+// handing the missing packages straight to tsc/esbuild. Reached once per invocation
+// through preflight, which every target below already needs, so the unconditional
+// --frozen-lockfile costs about a second on a warm tree and never races itself.
 fun install() > void {
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift =
@@ -91,7 +92,6 @@ export fun md_generate(ctx: magus\Context, args: [str]) > void {
 // os.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    install();
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["run", "biome"], ".", {});
 }
@@ -109,7 +109,6 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.writesFiles("coverage.svg");
     final clean_before = vcs\isDirty(["coverage.svg"]) == false;
-    install();
 
     final tests = fs\glob("src/**/*.test.ts");
     var bundle = mut ["exec", "esbuild"];

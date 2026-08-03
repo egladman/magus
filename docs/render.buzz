@@ -346,11 +346,11 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: T
 }
 
 // generateJsBundles builds the committed browser bundles that import npm packages. pnpm
-// is pinned by package.json and pnpm-lock.yaml; a warm tree skips installation, while a
-// cold checkout restores the locked set before esbuild runs the declared build scripts.
+// is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time
+// rather than behind an isDir check: an interrupted install leaves a node_modules that
+// exists but is incomplete, and the guard read that as ready and fed esbuild a half
+// tree. See the install() note in magusfile.buzz.
 fun generateJsBundles() > void {
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     os\exec("pnpm", ["run", "build"], ".", {});
 }
