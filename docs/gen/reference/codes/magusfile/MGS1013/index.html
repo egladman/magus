@@ -53,6 +53,7 @@
         <li><a href="../../../../guides/download/">Download</a></li>
         <li><a href="../../../../tour/">Tour</a></li>
         <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -94,6 +95,7 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1016/" title="MGS1016: workspace-local Go replace directives drifted">MGS1016: workspace-local Go replace directives drifted</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1017/" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1018/" title="MGS1018: dead output glob">MGS1018: dead output glob</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#resolution" title="Resolution">Resolution</a></li><li><a href="#see-also" title="See also">See also</a></li></ul>
@@ -159,13 +161,13 @@ against that one. If nothing owns it, it is not a tracked output - see
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../../../reference/codes/magusfile/"><span class="related-card-title">magusfile diagnostics</span><span class="related-card-desc">Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace&#39;s magusfile, such as missing targets or unresolved declarations.</span></a>
+        <a class="related-card" href="../../../../changelog/"><span class="related-card-title">Changelog</span><span class="related-card-desc">Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.</span></a>
         <a class="related-card" href="../../../../concepts/cache/"><span class="related-card-title">Cache model</span><span class="related-card-desc">How magus computes a content-addressed cache key from a target&#39;s declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.</span></a>
         <a class="related-card" href="../../../../concepts/knowledge/"><span class="related-card-title">Knowledge graph</span><span class="related-card-desc">The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.</span></a>
-        <a class="related-card" href="../../../../reference/codes/magusfile/MGS1011/"><span class="related-card-title">MGS1011: cross-project output names an unusable owner</span><span class="related-card-desc">Fires at load when a target declares ctx.writesFiles into another project that magus cannot resolve or did not discover, so nothing would own, clean, or regenerate the file.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1013%22">MGS1013</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22outputs%22">outputs</a><a class="tag" href="../../../../search/?q=tag%3A%22cross-project%22">cross-project</a><a class="tag" href="../../../../search/?q=tag%3A%22globs%22">globs</a><a class="tag" href="../../../../search/?q=tag%3A%22containment%22">containment</a></div>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1013%22">MGS1013</a><a class="tag" href="../../../../tags/magusfile/">magusfile</a><a class="tag" href="../../../../tags/outputs/">outputs</a><a class="tag" href="../../../../tags/cross-project/">cross-project</a><a class="tag" href="../../../../tags/globs/">globs</a><a class="tag" href="../../../../search/?q=tag%3A%22containment%22">containment</a></div>
     <small>Last updated <time datetime="2026-08-02T01:05:00Z">August 2, 2026, 1:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/3da15dc98bfbc41b8c59289da5ee04e809d12fa9" data-tooltip="3da15dc98bfbc41b8c59289da5ee04e809d12fa9" title="3da15dc98bfbc41b8c59289da5ee04e809d12fa9">3da15dc9</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1013.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1013.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
@@ -280,6 +282,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no

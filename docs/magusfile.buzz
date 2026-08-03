@@ -199,7 +199,14 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
     // ROOT ("docs/concepts/knowledge.md"). This page sits INSIDE docs/, so the prefix has to
     // come off or every one of them 404s - which the asset-integrity gate catches, and did.
     // Rewriting here rather than in CHANGELOG.md keeps the file correct in both places.
-    final changelogMd = fs\readFile("../CHANGELOG.md").split("](docs/").join("](");
+    // CONTRIBUTING.md is the other root-relative target, and it needs a different rewrite
+    // than the docs/ prefix: it is not a docs page at all. site/development.buzz renders the
+    // repo-root file as a synthesized page under development/, so the GitHub-correct
+    // "CONTRIBUTING.md" has to become that URL rather than just losing a prefix. Trailing
+    // slash and no anchor here so an existing "#naming" suffix survives the join.
+    final changelogMd = fs\readFile("../CHANGELOG.md")
+        .split("](docs/").join("](")
+        .split("](CONTRIBUTING.md").join("](development/contributing/");
     fs\writeFile("changelog.md",
         "---\ntitle: Changelog\n"
         + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"

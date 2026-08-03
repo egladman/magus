@@ -77,12 +77,12 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#unreleased" title="[Unreleased]">[Unreleased]</a><ul><li><a href="#removed" title="Removed">Removed</a></li><li><a href="#changed" title="Changed">Changed</a></li><li><a href="#added" title="Added">Added</a></li><li><a href="#fixed" title="Fixed">Fixed</a></li><li><a href="#changed-1" title="Changed">Changed</a></li></ul></li><li><a href="#v021---2026-07-19" title="[v0.2.1] - 2026-07-19">[v0.2.1] - 2026-07-19</a></li><li><a href="#v020---2026-07-18" title="[v0.2.0] - 2026-07-18">[v0.2.0] - 2026-07-18</a></li><li><a href="#v010---2026-07-05" title="[v0.1.0] - 2026-07-05">[v0.1.0] - 2026-07-05</a><ul><li><a href="#added-1" title="Added">Added</a></li><li><a href="#changed-2" title="Changed">Changed</a></li><li><a href="#fixed-1" title="Fixed">Fixed</a></li></ul></li></ul>
+        <ul><li><a href="#unreleased" title="[Unreleased]">[Unreleased]</a><ul><li><a href="#fixed" title="Fixed">Fixed</a></li><li><a href="#removed" title="Removed">Removed</a></li><li><a href="#changed" title="Changed">Changed</a></li><li><a href="#added" title="Added">Added</a></li><li><a href="#fixed-1" title="Fixed">Fixed</a></li><li><a href="#changed-1" title="Changed">Changed</a></li></ul></li><li><a href="#v021---2026-07-19" title="[v0.2.1] - 2026-07-19">[v0.2.1] - 2026-07-19</a></li><li><a href="#v020---2026-07-18" title="[v0.2.0] - 2026-07-18">[v0.2.0] - 2026-07-18</a></li><li><a href="#v010---2026-07-05" title="[v0.1.0] - 2026-07-05">[v0.1.0] - 2026-07-05</a><ul><li><a href="#added-1" title="Added">Added</a></li><li><a href="#changed-2" title="Changed">Changed</a></li><li><a href="#fixed-2" title="Fixed">Fixed</a></li></ul></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">16 min read</small>
+    <small class="reading-time" title="Estimated reading time">18 min read</small>
     <article>
 <h1 id="changelog">Changelog</h1>
 <p>All notable changes to this <a class="glossary-term" href="../glossary/#project" data-def="A directory magus recognizes as a unit of work (it has a magusfile); the unit of caching, scheduling, and dependency tracking.">project</a> will be documented in this file.
@@ -91,12 +91,52 @@ and this project adheres to <a href="https://semver.org/" rel="noopener noreferr
 <h2 id="unreleased">[Unreleased]</h2>
 <p>See the unreleased changes at
 <a href="https://github.com/egladman/magus/compare/v0.2.1...main" rel="noopener noreferrer" target="_blank" data-external>https://github.com/egladman/magus/compare/v0.2.1...main</a></p>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>The <a class="glossary-term" href="../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> no longer denies a write into a directory the <a class="code-xref" href="../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> has yet to create.
+A non-existent write <a class="glossary-term" href="../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a> is normalized by resolving its parent, but when that
+parent was missing too the whole <a class="code-xref" href="../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> stayed lexical, so a symlink anywhere above
+it went unresolved and could never match a rule path (which IS resolved). Any
+<a class="glossary-term" href="../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> under a symlinked prefix - on macOS that is every path under <code>/var</code> or
+<code>/tmp</code> - had nested creates denied. It now walks up to the nearest ancestor that
+exists and re-attaches the missing tail.</li>
+<li>magus no longer panics mid-run on a target that fans out. <code>captureRun</code> puts one
+pair of output taps on the context for a whole target body, and <code>ctx.needs(lint, test)</code> - the shape of every <code>ci</code> target - runs its children concurrently, so
+several goroutines reached the same tap. Its line buffer was unguarded, so two
+writers tore the slice header and the process died with <code>slice bounds out of range</code> inside <code>lineTap.Write</code>. The panic killed the writer goroutine, after which
+the child process reported its broken output pipe as <code>exit -1</code> - surfacing as an
+unrelated-looking tool failure rather than as a crash. The shared log sink beside
+it already had the equivalent guard.</li>
+</ul>
 <h3 id="removed">Removed</h3>
 <ul>
+<li>Breaking: <code>magusfile</code> is no longer a <a class="glossary-term" href="../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a>. <code>import &quot;magus/spell/magusfile&quot;</code> and a
+<code>magusfile</code> entry in a project's <code>&quot;spells&quot;</code> list now fail with
+<a href="../reference/codes/magusfile/MGS1017/">MGS1017</a> and the one-line fix: delete
+both. Neither did anything already - magus binds that driver to every project it
+discovers, because it is what makes a <a class="glossary-term" href="../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a>'s own targets runnable rather than
+a toolchain an author opts into. Leaving the declarations accepted kept teaching
+readers that <code>magusfile</code> was a spell like <code>go</code> or <code>buf</code>, which the spell reference
+has never listed it as. Consequences: <code><a class="code-xref" href="../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> spells</code> no longer lists it,
+and <code><a class="code-xref" href="../reference/manpage/magus-ls/" data-kind="command" data-def="List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">magus ls</a></code> reports the toolchain a project actually binds (or none) instead of
+answering <code>magusfile</code> for almost every project - a fact true by construction, since
+having a magusfile is how a project is discovered at all.</li>
+<li>Breaking: <code>magus memory list</code> and <code><a class="code-xref" href="../reference/manpage/magus-config/" data-kind="command" data-def="Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, init, and cache prune.">magus config</a> mcp connector list</code> are now
+<code>... <a class="code-xref" href="../reference/manpage/magus-ls/" data-kind="command" data-def="magus ls: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.">ls</a></code>, matching <code>magus ls</code> and <code><a class="code-xref" href="../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> ls</code>. The old spelling errors with a
+message naming the new one.</li>
+<li>Breaking: the three vendor spells register canonical, vendor-qualified names -
+<code>actions</code> is now <code>github-actions</code>, <code>s3-cache</code> is now <code>aws-s3</code>, and the GitLab <a class="glossary-term" href="../glossary/#ci" data-def="An ordinary magusfile-defined target you compose yourself with magus\needs - magus does not hardcode its stages. Magus.RunCI treats it specially only in that it strips the rw charm, it is the anchor magus affected ci keys off, and a selected scope with no project declaring it is a load error rather than a silent no-op.">CI</a>
+provider's <code>ci</code> is now <code>gitlab-ci</code>. A registered name is what identifies a spell
+in every listing and diagnostic, with no directory around it to supply context,
+so it has to stand alone: <code>actions</code> named no product, and <code>ci</code> collided outright
+with the <code>ci</code> TARGET that <code><a class="code-xref" href="../reference/manpage/magus-affected/" data-kind="command" data-def="Run a target for every project affected by a VCS diff, with forensic modes for explain, graph, CI shard plan, and regression bisect.">magus affected</a> ci</code> anchors on. Source paths are
+unchanged (<code>spells/github/actions</code>, <code>spells/aws/s3-cache</code>, <code>spells/gitlab/ci</code>),
+so the path imports in magusfiles keep working; only the registered name moved.
+The reasoning is written down in <a href="../development/contributing#naming">CONTRIBUTING</a>.</li>
 <li>Breaking: <code>magus tail</code> is gone. It streamed the most recent cached log for the
 project in the current directory - a view <code><a class="code-xref" href="../concepts/knowledge/" data-kind="command" data-def="Search the knowledge graph.">magus query</a> output &lt;ref&gt;</code><a class="convention-hint" href="../conventions/#placeholders" data-kind="convention" data-def="Angle brackets mark a value you replace with your own - never type the brackets" aria-label="What is this? Placeholders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></a> already gives
-from the reference every <a class="code-xref" href="../reference/manpage/magus-run/" data-kind="command" data-def="magus run: Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">run</a> prints. A whole subcommand, flag surface, and <a class="code-xref" href="../reference/manpage/magus-man/" data-kind="command" data-def="magus man: Write magus section 1 man pages from the running binary to a user-selected manpath.">man</a> page
-for a narrower <a class="code-xref" href="../concepts/knowledge/" data-kind="command" data-def="magus path: show the shortest path between knowledge-graph nodes.">path</a> to the same bytes. Its retired URL is listed in
+from the reference every run prints. A whole subcommand, flag surface, and <a class="code-xref" href="../reference/manpage/magus-man/" data-kind="command" data-def="magus man: Write magus section 1 man pages from the running binary to a user-selected manpath.">man</a> page
+for a narrower path to the same bytes. Its retired URL is listed in
 <code>docs/retired.urls.lock</code>; no successor page, because the capability did not move.</li>
 <li>Breaking (library callers): <code>magus.WithTargetNameNormalizer</code> and the
 <code>types.TargetNameNormalizer</code> interface are gone, along with
@@ -104,7 +144,7 @@ for a narrower <a class="code-xref" href="../concepts/knowledge/" data-kind="com
 exactly one implementation and the option had zero callers anywhere in the tree,
 including tests, so <code>run.Normalizer</code> was always nil and the seam only ever installed
 the same kebab-casing sixteen other call sites reached for directly. Use
-<code>types.Normalize</code> for every entity name - <a class="glossary-term" href="../glossary/#target" data-def="A named operation (build, test, ...) you invoke with magus run &lt;target>; it may compose a spell's tool-native operations and depend on other targets.">target</a>, <a class="glossary-term" href="../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, or <a class="glossary-term" href="../glossary/#spell" data-def="A language/runtime adapter (e.g. go, md) that maps generic targets onto a toolchain's real commands.">spell</a> op.</li>
+<code>types.Normalize</code> for every entity name - target, <a class="glossary-term" href="../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, or spell op.</li>
 <li>The bundled PGO profile (<code>libs/gopherbuzz/default.pgo</code>, the <code>cmd/magus/default.pgo</code>
 symlink, and the <code>pgo-generate</code> target) is gone. A profile that has to be regenerated
 by hand after hot-path changes is stale more often than not, and it made <code>go build</code>
@@ -132,7 +172,7 @@ validated against a charset that admits <code>_</code> and uppercase, but every 
 at dispatch has already been kebab-normalized, and dispatch is a map lookup - so an op
 authored <code>go_build</code> was stored under <code>go_build</code>, looked up as <code>go-build</code>, missed, and
 swallowed as a fan-out skip at debug level. Declared, and reachable by nothing. Every
-built-in already used kebab keys, so bundled spells are unaffected; a <a class="glossary-term" href="../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a>-local
+built-in already used kebab keys, so bundled spells are unaffected; a workspace-local
 spell with a <code>camelCase</code> or <code>snake_case</code> op now works instead of silently never
 running.</li>
 <li>Breaking (library callers): the <code>types.Describer</code> methods return slices instead of a
@@ -142,10 +182,10 @@ back <code>[]SpellEntry</code>, <code>[]CharmEntry</code>, <code>[]TargetEntry</
 <code>[]WorkspaceEntry</code> and <code>[]EvaluatedTargetEntry</code>. <code>Definition</code> was a package constant
 and <code>Count</code> was <code>len()</code>, so every call site that filtered had to reassign <code>Count</code> by
 hand - a denormalization one forgotten line shipped as a wrong count. The JSON shape
-of <code><a class="code-xref" href="../reference/manpage/magus-describe/" data-kind="command" data-def="Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">magus describe</a> ... -o json</code> is unchanged; the envelope is rebuilt at the render
+of <code>magus <a class="code-xref" href="../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> ... -o json</code> is unchanged; the envelope is rebuilt at the render
 edge. <code>DescribeProjects</code> and <code>DescribeEvaluatedProjects</code> keep a struct, because both
 carry a real <code>Workspace</code> field. <code>host.ModulesOutput</code> is now <code>host.Modules</code>.</li>
-<li><code>magus <a class="code-xref" href="../reference/manpage/magus-describe/" data-kind="command" data-def="magus describe: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.">describe</a> spell</code> reports how to reach a spell and what it adapts: an <code>import</code>
+<li><code>magus describe spell</code> reports how to reach a spell and what it adapts: an <code>import</code>
 line you can paste (<code>import &quot;magus/spell/go&quot;;</code>) and the source language it adapts.
 <code>SpellEntry</code> carries the import path as <code>buzz_import</code> in <code>-o json</code>. It is a path, not
 a handle: spell imports are read statically to build the target <a class="code-xref" href="../reference/manpage/magus-graph/" data-kind="command" data-def="magus graph: Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage).">graph</a>, so a spell
@@ -154,12 +194,12 @@ reached any other way would lose its edge without failing.</li>
 <code>modules</code> were CLI-only, so an agent could not discover what charms exist, could not
 see the target graph, and could not introspect the <a class="glossary-term" href="../glossary/#buzz" data-def="The language magusfiles are written in (the .buzz engine).">Buzz</a> stdlib at all.</li>
 <li>A non-canonical target or charm spelling now prints a one-time hint naming the
-canonical form (<code><a class="code-xref" href="../reference/manpage/magus-run/" data-kind="command" data-def="Run a named target (build, test, lint, format, ci, etc.) for the selected projects, defaulting to the cwd project when no arguments are given.">magus run</a> goBuild</code> -&gt; <code>target &quot;goBuild&quot; is canonically &quot;go-build&quot;</code>).
+canonical form (<code>magus run goBuild</code> -&gt; <code>target &quot;goBuild&quot; is canonically &quot;go-build&quot;</code>).
 Silent when you already wrote the canonical form.</li>
 <li>Suggestions are case-insensitive. <code>magus run build API</code> missed project <code>api</code> and got
 no suggestion at all, because <code>API</code> -&gt; <code>api</code> scored three edits against a threshold of
 two. Project paths still resolve exactly - they are filesystem paths.</li>
-<li>The <a class="glossary-term" href="../glossary/#sandbox" data-def="The restricted filesystem and environment a target runs in, so builds stay reproducible and side-effect-free.">sandbox</a> passes every <code>GO*</code> variable through (<code><a class="code-xref" href="../reference/config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a>: [&quot;GO*&quot;]</code> in
+<li>The sandbox passes every <code>GO*</code> variable through (<code><a class="code-xref" href="../reference/config/#sandbox" data-kind="config" data-def="list _(comma-separated, env only)_, env MAGUS_SANDBOX_ENV_PASSTHROUGH">sandbox.env.passthrough</a>: [&quot;GO*&quot;]</code> in
 this repo's <code>magus.yaml</code>). A variable that shapes compilation but does not reach the
 compiler does not get ignored, it splits the build <a class="glossary-term" href="../glossary/#cache" data-def="The content-addressed store magus consults before running a target, so unchanged work is skipped.">cache</a>: <code>GOEXPERIMENT</code> reaching one
 <code>go</code> invocation and not another produced a linker <code>fingerprint mismatch</code> that looked
@@ -187,7 +227,7 @@ fails loudly for malformed template syntax, while a parse-tree guard keeps
 bodies limited to deterministic wording branches.</p>
 </li>
 <li>
-<p><code>magus\normalize(name)</code> canonicalizes any entity name from a <a class="glossary-term" href="../glossary/#magusfile" data-def="The magusfile.buzz that declares a project's targets (as export funs) and binds its spells.">magusfile</a> - the same
+<p><code>magus\normalize(name)</code> canonicalizes any entity name from a magusfile - the same
 function targets, charms and spell ops resolve through. It is also live in the browser
 playground, so <a href="https://eli.gladman.cc/magus/concepts/targets/" rel="noopener noreferrer" target="_blank" data-external>the name-normalization docs</a>
 run their examples rather than asserting the rule.</p>
@@ -361,7 +401,7 @@ coverage; <code>--kind</code> to scope). The <code>query</code>/<code>explain</c
 are unchanged.</p>
 </li>
 </ul>
-<h3 id="fixed">Fixed</h3>
+<h3 id="fixed-1">Fixed</h3>
 <ul>
 <li><code>magus.Open(ctx, root)</code> works again for library callers. The literal-argument rule
 over <code>ctx.inputs</code>/<code>outputs</code>/<code>updates</code> was scoped on a per-target <code>skip_cache</code> policy,
@@ -449,7 +489,7 @@ the authored <code>docs/manpage/gen/</code> path segment is flattened out of pub
 (<code>theme.js</code> head-critical, <code>main.js</code> deferred module).</li>
 <li>Docs site: nav link &quot;GitHub&quot; moved to the footer, relabeled &quot;Source Code&quot;.</li>
 </ul>
-<h3 id="fixed-1">Fixed</h3>
+<h3 id="fixed-2">Fixed</h3>
 <ul>
 <li>Docs site: mobile TOC becomes a slide-up bottom-sheet instead of stacking
 above the article; page toolbar reflows so search fills its row and
@@ -473,7 +513,7 @@ above the article; page toolbar reflows so search fills its row and
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../tags/changelog/">changelog</a><a class="tag" href="../search/?q=tag%3A%22releases%22">releases</a><a class="tag" href="../search/?q=tag%3A%22versions%22">versions</a><a class="tag" href="../tags/upgrade/">upgrade</a><a class="tag" href="../tags/breaking-changes/">breaking-changes</a></div>
-    <small>Last updated <time datetime="2026-08-02T23:12:05Z">August 2, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/425b644c72fbcdfed7e0e27d0143efe8b8914b85" data-tooltip="425b644c72fbcdfed7e0e27d0143efe8b8914b85" title="425b644c72fbcdfed7e0e27d0143efe8b8914b85">425b644c</a>)</small>
+    <small>Last updated <time datetime="2026-08-03T03:05:15Z">August 3, 2026, 3:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/38e9171e9d0285ec5c22f194e98b23afed35595f" data-tooltip="38e9171e9d0285ec5c22f194e98b23afed35595f" title="38e9171e9d0285ec5c22f194e98b23afed35595f">38e9171e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

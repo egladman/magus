@@ -1,5 +1,6 @@
 ---
 title: Spells
+order: 4
 page_type: overview
 description: A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.
 tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]

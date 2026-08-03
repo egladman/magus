@@ -159,6 +159,11 @@ anchor for exactly the projects a pull request touched. Because
 and <code>RunCI</code> strips the <code>rw</code> <a class="glossary-term" href="../../../glossary/#charm" data-def="An execution modifier attached with : (lint:rw) that changes _how_ a target runs, not _which_ one; the built-in rw flips a check-only target to mutate in place, and ci always strips it.">charm</a>, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with <code>--plan</code> feeding a shard
 matrix.</p>
+<p>How the pipeline clones the repository decides whether any of this works. affected
+needs a reachable merge base, and a checkout that cannot supply one degrades to a full
+build without failing. <a href="../../../guides/integrations/ci/">CI checkout</a> covers the
+provider recipes, why a blobless partial clone is the right default, and how magus
+deepens a shallow clone rather than silently rebuilding everything.</p>
 <h2 id="watch-integration">Watch integration</h2>
 <p><code>--stdin</code> reads changed paths from a pipe instead of running a diff, so a file
 watcher can drive continuous rebuilds:</p>
@@ -168,6 +173,7 @@ watcher can drive continuous rebuilds:</p>
 newlines. See <a href="../../../guides/tips/">tips</a> for the continuous-build loop.</p>
 <h2 id="see-also">See also</h2>
 <ul>
+<li><a href="../../../guides/integrations/ci/">ci</a> - checking out a repository so the diff is computable and cheap.</li>
 <li><a href="../../dependencies/">dependencies</a> - <code>magus\needs</code> versus <code>depends_on</code>, the edges the closure walks.</li>
 <li><a href="../../targets/">targets</a> - the target grammar these edges resolve against.</li>
 <li><a href="../../operations/">operations</a> - what a target dispatches to per project.</li>
@@ -188,7 +194,7 @@ newlines. See <a href="../../../guides/tips/">tips</a> for the continuous-build 
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../tags/affected/">affected</a><a class="tag" href="../../../tags/vcs/">vcs</a><a class="tag" href="../../../tags/git/">git</a><a class="tag" href="../../../tags/changed-files/">changed-files</a><a class="tag" href="../../../tags/dependency-graph/">dependency-graph</a><a class="tag" href="../../../tags/ci/">ci</a><a class="tag" href="../../../tags/bisect/">bisect</a><a class="tag" href="../../../tags/watch/">watch</a></div>
-    <small>Last updated <time datetime="2026-07-30T05:03:19Z">July 30, 2026, 5:03 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769" data-tooltip="e04631315a51f1890352052ff3fc23d8b3449769" title="e04631315a51f1890352052ff3fc23d8b3449769">e0463131</a>)</small>
+    <small>Last updated <time datetime="2026-08-03T03:30:10Z">August 3, 2026, 3:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f" data-tooltip="7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f" title="7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f">7a56ada0</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/concepts/workspace/affected.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/concepts/workspace/affected.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

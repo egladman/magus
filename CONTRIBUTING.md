@@ -106,6 +106,36 @@ magusfile uses, that change ships in a release *before* the magusfile
 change merges. The other way around is a breaking-change signal, not
 something to paper over.
 
+### Point your worktree's merge driver at your own build
+
+The rule above is about CI. Locally there is one place where "the released
+binary" is the wrong answer, and it is easy to lose an afternoon to:
+
+```sh
+./hack/install-dogfood.sh
+```
+
+`magus init` registers the git merge driver as whichever `magus` leads PATH.
+That is correct for someone *using* magus, because the registration survives an
+upgrade-in-place. In a magus worktree it is backwards: PATH holds a release, and
+the merge driver is part of what you are changing. A rebase then resolves every
+generated conflict with the release, not with your tree.
+
+That is not a theoretical gap. A released driver regenerated the whole docs site
+once per conflicted file, so a rebase over a handful of generated files looked
+exactly like a hang, while the version in the tree resolved the same file in
+under a second.
+
+The script builds `magus-dev` and registers it with `git config --worktree`, so
+the override stays local to that checkout. `.git/config` is shared by every
+linked worktree, so an absolute path there would aim all of them at one
+checkout's binary. It is a separate binary from `./magus` on purpose: `./magus`
+is rebuilt constantly while iterating, and swapping the driver's binary during a
+rebase changes the tool mid-operation.
+
+Re-run it after changing the merge driver, or the registration keeps resolving
+with the older build.
+
 ## Naming
 
 Names are the API most people meet first, so they get decided deliberately

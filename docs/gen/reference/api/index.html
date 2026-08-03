@@ -120,6 +120,11 @@
 <td><code>magus.activity.v1</code></td>
 </tr>
 <tr>
+<td><a href="insight/">InsightService</a></td>
+<td>1</td>
+<td><code>magus.<a class="code-xref" href="../manpage/magus-insight/" data-kind="command" data-def="magus insight: Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, plus volatility from run-outcome history.">insight</a>.v1</code></td>
+</tr>
+<tr>
 <td><a href="job/">JobService</a></td>
 <td>5</td>
 <td><code>magus.job.v1</code></td>
@@ -168,14 +173,14 @@
     <h2 id="related-heading" class="related-heading">Related</h2>
     <div class="related-grid">
         <a class="related-card" href="../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
+        <a class="related-card" href="../../reference/api/insight/"><span class="related-card-title">InsightService</span><span class="related-card-desc">InsightService serves the assembled lenses to the console dashboard.</span></a>
+        <a class="related-card" href="../../guides/integrations/daemon/"><span class="related-card-title">Daemon and concurrency</span><span class="related-card-desc">The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.</span></a>
         <a class="related-card" href="../../reference/api/activity/"><span class="related-card-title">ActivityService</span><span class="related-card-desc">ActivityService serves the trail to a viewer, mirroring magus.viewer.v1&#39;s shape: List a page of events (newest first), Get a payload blob by ref.</span></a>
-        <a class="related-card" href="../../reference/api/job/"><span class="related-card-title">JobService</span><span class="related-card-desc">JobService is the daemon&#39;s control surface for background maintenance jobs.</span></a>
-        <a class="related-card" href="../../reference/config/"><span class="related-card-title">magus.yaml configuration</span><span class="related-card-desc">Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../tags/api/">api</a><a class="tag" href="../../tags/proto/">proto</a><a class="tag" href="../../tags/protobuf/">protobuf</a><a class="tag" href="../../tags/connect/">connect</a><a class="tag" href="../../tags/grpc/">grpc</a><a class="tag" href="../../tags/daemon/">daemon</a><a class="tag" href="../../tags/reference/">reference</a></div>
-    <small>Last updated <time datetime="2026-08-02T23:12:05Z">August 2, 2026, 11:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/425b644c72fbcdfed7e0e27d0143efe8b8914b85" data-tooltip="425b644c72fbcdfed7e0e27d0143efe8b8914b85" title="425b644c72fbcdfed7e0e27d0143efe8b8914b85">425b644c</a>)</small>
+    <small>Last updated <time datetime="2026-08-03T03:05:15Z">August 3, 2026, 3:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/38e9171e9d0285ec5c22f194e98b23afed35595f" data-tooltip="38e9171e9d0285ec5c22f194e98b23afed35595f" title="38e9171e9d0285ec5c22f194e98b23afed35595f">38e9171e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -185,6 +190,9 @@ one-shot target. See <a href="../../concepts/services/">services</a>.</p>
 <h3 id="daemon">Daemon</h3>
 <p>The background magus host that owns shared state such as services and the warm
 knowledge graph. See <a href="../../guides/daemon/">daemon</a>.</p>
+<h3 id="insight">Insight</h3>
+<p>The reports magus derives over the graph and history (hotspots, affinity,
+ownership, trend). See <a href="../../guides/insight/">insight</a>.</p>
 </div>
   </details>
   <details class="ref-section" open>

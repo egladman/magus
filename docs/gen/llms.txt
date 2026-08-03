@@ -4,6 +4,7 @@
 
 ## Documentation
 
+- [Changelog](https://eli.gladman.cc/magus/changelog/index.md): Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.
 - [Concepts](https://eli.gladman.cc/magus/concepts/index.md): Pages in this section.
 - [Cache model](https://eli.gladman.cc/magus/concepts/cache/index.md): How magus computes a content-addressed cache key from a target's declared inputs, replays outputs on a hit without rerunning the body, and stores it all as plain files under .magus.
 - [Target output references](https://eli.gladman.cc/magus/concepts/cache/output-refs/index.md): Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
@@ -79,6 +80,15 @@
 - [Breaking changes](https://eli.gladman.cc/magus/migrating/breaking-changes/index.md): How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
 - [Coming from Nx](https://eli.gladman.cc/magus/migrating/from-nx/index.md): A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.
 - [Reference](https://eli.gladman.cc/magus/reference/index.md): Pages in this section.
+- [Daemon API](https://eli.gladman.cc/magus/reference/api/index.md): The magus daemon's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.
+- [ActivityService](https://eli.gladman.cc/magus/reference/api/activity/index.md): ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a page of events (newest first), Get a payload blob by ref.
+- [InsightService](https://eli.gladman.cc/magus/reference/api/insight/index.md): InsightService serves the assembled lenses to the console dashboard.
+- [JobService](https://eli.gladman.cc/magus/reference/api/job/index.md): JobService is the daemon's control surface for background maintenance jobs.
+- [MemoryService](https://eli.gladman.cc/magus/reference/api/memory/index.md): MemoryService lists, upserts, and deletes memory records, plus reads/overwrites the singleton cursor snapshot.
+- [MetricsService](https://eli.gladman.cc/magus/reference/api/metrics/index.md): MetricsService serves the derived dashboard metrics.
+- [StatusService](https://eli.gladman.cc/magus/reference/api/status/index.md): StatusService serves the snapshot, and streams it for a live dashboard.
+- [TokenService](https://eli.gladman.cc/magus/reference/api/token/index.md): TokenService is a VIEW-AND-REVOKE surface over the daemon's connector and share tokens: List reveals only fingerprints (never the secret bytes) and Revoke removes a token by its fingerprint or name.
+- [ViewerService](https://eli.gladman.cc/magus/reference/api/viewer/index.md): ViewerService serves an invocation's captured output to a log viewer, resource-oriented per AIP: Get the Invocation (the run header), List its Events (paginated), Stream them (live).
 - [magus stdlib](https://eli.gladman.cc/magus/reference/buzz/index.md): Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
 - [archive module](https://eli.gladman.cc/magus/reference/buzz/archive/index.md): Archive creation and extraction with automatic format detection.
 - [charm module](https://eli.gladman.cc/magus/reference/buzz/charm/index.md): Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md).
@@ -135,6 +145,7 @@
 - [MGS1015: cross-project dependency names an unresolvable project](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1015/index.md): Fires at load when ctx.needs references a target through a project import whose path does not resolve to a path in this workspace, so the dependency edge would be dropped and the affected set would silently under-report.
 - [MGS1016: workspace-local Go replace directives drifted](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1016/index.md): Fires when a Go module requires another module in the same magus workspace but its go.mod does not replace it at the workspace-relative path.
 - [MGS1017: magusfile is not a spell](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1017/index.md): Fires when a magusfile imports magus/spell/magusfile or lists magusfile among its spells. Magus binds that driver to every project automatically, so declaring it does nothing.
+- [MGS1018: dead output glob](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1018/index.md): A project declares an output glob that matches nothing while its other outputs match files. A target that inherits the glob fails its snapshot on a cold cache, long after the mistake was made.
 - [output-reference diagnostics](https://eli.gladman.cc/magus/reference/codes/outputref/index.md): Landing page for MGS8xxx diagnostics that flag problems resolving a target-output reference id with magus query, such as a ref that aged out of the cache, an ambiguous prefix, or a malformed ref passed to a ref-only flag.
 - [MGS8001: output ref not found](https://eli.gladman.cc/magus/reference/codes/outputref/MGS8001/index.md): Fires when magus query output <ref> names a well-formed reference id but no captured output is stored for it, because it aged out of the cache or the ref is mistyped.
 - [MGS8002: ambiguous output ref prefix](https://eli.gladman.cc/magus/reference/codes/outputref/MGS8002/index.md): Fires when a shortened magus query output <ref> prefix matches more than one stored output reference, so magus cannot tell which one you meant.

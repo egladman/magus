@@ -53,6 +53,7 @@
         <li><a href="../../../../guides/download/">Download</a></li>
         <li><a href="../../../../tour/">Tour</a></li>
         <li><a href="../../../../playground/">Playground</a></li>
+        <li><a href="../../../../development/contributing/">Contribute</a></li>
         <li><a href="../../../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -94,6 +95,7 @@
           <li><a href="../../../../reference/codes/magusfile/MGS1015/" title="MGS1015: cross-project dependency names an unresolvable project">MGS1015: cross-project dependency names an unresolvable project</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1016/" title="MGS1016: workspace-local Go replace directives drifted">MGS1016: workspace-local Go replace directives drifted</a></li>
           <li><a href="../../../../reference/codes/magusfile/MGS1017/" title="MGS1017: magusfile is not a spell">MGS1017: magusfile is not a spell</a></li>
+          <li><a href="../../../../reference/codes/magusfile/MGS1018/" title="MGS1018: dead output glob">MGS1018: dead output glob</a></li>
         </ul>
         <p class="toc-title">On this page</p>
         <ul><li><a href="#why" title="Why">Why</a></li><li><a href="#fix" title="Fix">Fix</a></li><li><a href="#where-you-see-it" title="Where you see it">Where you see it</a></li><li><a href="#not-a-bug-when" title="Not a bug when">Not a bug when</a></li></ul>
@@ -193,8 +195,8 @@ incremental selection.</p>
     </div>
   </section>
   <div class="page-provenance container">
-    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../search/?q=tag%3A%22MGS1010%22">MGS1010</a><a class="tag" href="../../../../search/?q=tag%3A%22magusfile%22">magusfile</a><a class="tag" href="../../../../search/?q=tag%3A%22affected%22">affected</a><a class="tag" href="../../../../search/?q=tag%3A%22vcs%22">vcs</a><a class="tag" href="../../../../search/?q=tag%3A%22base+ref%22">base ref</a><a class="tag" href="../../../../search/?q=tag%3A%22ci%22">ci</a><a class="tag" href="../../../../search/?q=tag%3A%22shallow+clone%22">shallow clone</a></div>
-    <small>Last updated <time datetime="2026-08-03T02:07:26Z">August 3, 2026, 2:07 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/4cfedce2aa7a510f5fcbd4fd530e8d220edd36be" data-tooltip="4cfedce2aa7a510f5fcbd4fd530e8d220edd36be" title="4cfedce2aa7a510f5fcbd4fd530e8d220edd36be">4cfedce2</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1010.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1010.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../../tags/mgs-1010/">MGS1010</a><a class="tag" href="../../../../tags/magusfile/">magusfile</a><a class="tag" href="../../../../tags/affected/">affected</a><a class="tag" href="../../../../tags/vcs/">vcs</a><a class="tag" href="../../../../search/?q=tag%3A%22base+ref%22">base ref</a><a class="tag" href="../../../../tags/ci/">ci</a><a class="tag" href="../../../../search/?q=tag%3A%22shallow+clone%22">shallow clone</a></div>
+    <small>Last updated <time datetime="2026-08-03T03:30:10Z">August 3, 2026, 3:30 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f" data-tooltip="7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f" title="7a56ada0101a0b7703cc9d5ee66b17f4d61ded5f">7a56ada0</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/codes/magusfile/MGS1010.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/codes/magusfile/MGS1010.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>
@@ -304,6 +306,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../../../playground/">playground</a> via WebAssembly - no

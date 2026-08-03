@@ -53,6 +53,7 @@
         <li><a href="../../guides/download/">Download</a></li>
         <li><a href="../../tour/">Tour</a></li>
         <li><a href="../../playground/">Playground</a></li>
+        <li><a href="../../development/contributing/">Contribute</a></li>
         <li><a href="../../console/" target="_blank" rel="noopener" title="Opens in a new tab">Console <span class="ext-arrow" aria-hidden="true">&#x2197;</span></a></li>
           <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
@@ -75,7 +76,7 @@
     <aside class="toc">
       <nav>
         <p class="toc-title">On this page</p>
-        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#dogfooding-how-magus-builds-magus" title="Dogfooding: how magus builds magus">Dogfooding: how magus builds magus</a></li><li><a href="#naming" title="Naming">Naming</a><ul><li><a href="#source-layout-and-registered-identity-are-independent" title="Source layout and registered identity are independent">Source layout and registered identity are independent</a></li><li><a href="#a-registered-name-has-to-stand-alone" title="A registered name has to stand alone">A registered name has to stand alone</a></li><li><a href="#one-verb-one-job" title="One verb, one job">One verb, one job</a></li><li><a href="#package-names-mirror-the-contract-they-serve" title="Package names mirror the contract they serve">Package names mirror the contract they serve</a></li><li><a href="#hints-belong-in-clihint" title="Hints belong in clihint">Hints belong in clihint</a></li></ul></li><li><a href="#workflow-targets-not-inline-shell" title="Workflow targets, not inline shell">Workflow targets, not inline shell</a></li><li><a href="#workspace-references-workspacepath-and-friends" title="Workspace references: workspace://path and friends">Workspace references: workspace://path and friends</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
+        <ul><li><a href="#build-and-test" title="Build and test">Build and test</a></li><li><a href="#performance-changes-need-evidence" title="Performance changes need evidence">Performance changes need evidence</a></li><li><a href="#docs-site" title="Docs site">Docs site</a></li><li><a href="#dogfooding-how-magus-builds-magus" title="Dogfooding: how magus builds magus">Dogfooding: how magus builds magus</a><ul><li><a href="#point-your-worktrees-merge-driver-at-your-own-build" title="Point your worktree's merge driver at your own build">Point your worktree's merge driver at your own build</a></li></ul></li><li><a href="#naming" title="Naming">Naming</a><ul><li><a href="#source-layout-and-registered-identity-are-independent" title="Source layout and registered identity are independent">Source layout and registered identity are independent</a></li><li><a href="#a-registered-name-has-to-stand-alone" title="A registered name has to stand alone">A registered name has to stand alone</a></li><li><a href="#one-verb-one-job" title="One verb, one job">One verb, one job</a></li><li><a href="#package-names-mirror-the-contract-they-serve" title="Package names mirror the contract they serve">Package names mirror the contract they serve</a></li><li><a href="#hints-belong-in-clihint" title="Hints belong in clihint">Hints belong in clihint</a></li></ul></li><li><a href="#workflow-targets-not-inline-shell" title="Workflow targets, not inline shell">Workflow targets, not inline shell</a></li><li><a href="#workspace-references-workspacepath-and-friends" title="Workspace references: workspace://path and friends">Workspace references: workspace://path and friends</a></li><li><a href="#release-signing-key-rotation" title="Release-signing key rotation">Release-signing key rotation</a></li></ul>
         <p class="toc-hint" aria-hidden="true">Tap outside or press Esc to close</p>
       </nav>
     </aside>
@@ -92,11 +93,14 @@ go test -race ./...
 </code></pre>
 <p>Integration tests sit behind <code>//go:build integration</code> and are named
 <code>TestIntegration*</code>. <code>go test ./...</code> runs the fast unit tests; <code>go test -tags=integration ./...</code> runs everything.</p>
-<p>Lint and the vuln check live in a separate <code>go.tool.mod</code>, so the linter's large
-dependency tree stays out of magus's library module graph:</p>
-<pre><code class="language-sh">go tool -modfile=go.tool.mod golangci-lint run
-go tool -modfile=go.tool.mod govulncheck ./...
+<p>Lint and the vuln check run as pinned binaries from <code>mise.toml</code>, so the linter's
+large dependency tree stays out of magus's module graph entirely:</p>
+<pre><code class="language-sh">magus run lint
 </code></pre>
+<p>They deliberately do not go through <code>go tool</code>. That compiles the tool from source
+with whichever <code>go</code> leads <code>PATH</code>, which is how CI once built golangci-lint with a
+different toolchain than the one it analyzed with, and panicked. <code>mise install</code>
+gets you both binaries at the pinned versions.</p>
 <h2 id="performance-changes-need-evidence">Performance changes need evidence</h2>
 <p>This is the rule I care about most. Any change that claims to be faster ships
 with a checked-in <code>Benchmark*</code> and the benchstat numbers behind it. No
@@ -153,6 +157,28 @@ fallback carries a supply-chain gate - the commit must be reachable from
 magusfile uses, that change ships in a release <em>before</em> the magusfile
 change merges. The other way around is a breaking-change signal, not
 something to paper over.</p>
+<h3 id="point-your-worktrees-merge-driver-at-your-own-build">Point your worktree's merge driver at your own build</h3>
+<p>The rule above is about CI. Locally there is one place where &quot;the released
+binary&quot; is the wrong answer, and it is easy to lose an afternoon to:</p>
+<pre><code class="language-sh">./hack/install-dogfood.sh
+</code></pre>
+<p><code>magus init</code> registers the git merge driver as whichever <code>magus</code> leads PATH.
+That is correct for someone <em>using</em> magus, because the registration survives an
+upgrade-in-place. In a magus worktree it is backwards: PATH holds a release, and
+the merge driver is part of what you are changing. A rebase then resolves every
+generated conflict with the release, not with your tree.</p>
+<p>That is not a theoretical gap. A released driver regenerated the whole docs site
+once per conflicted file, so a rebase over a handful of generated files looked
+exactly like a hang, while the version in the tree resolved the same file in
+under a second.</p>
+<p>The script builds <code>magus-dev</code> and registers it with <code>git config --worktree</code>, so
+the override stays local to that checkout. <code>.git/config</code> is shared by every
+linked worktree, so an absolute path there would aim all of them at one
+checkout's binary. It is a separate binary from <code>./magus</code> on purpose: <code>./magus</code>
+is rebuilt constantly while iterating, and swapping the driver's binary during a
+rebase changes the tool mid-operation.</p>
+<p>Re-run it after changing the merge driver, or the registration keeps resolving
+with the older build.</p>
 <h2 id="naming">Naming</h2>
 <p>Names are the API most people meet first, so they get decided deliberately
 rather than by whatever the file was called. From the outside the results can
@@ -475,12 +501,16 @@ log viewer, graph explorer, dashboard, and activity trail. It is a separate
 static app, not something the daemon serves - the daemon exposes a loopback API
 it calls: read-only views plus one bearer-gated job-control service for
 maintenance jobs. See <a href="../../reference/console/">reference/console</a>.</p>
-<h3 id="surface">Surface</h3>
-<p>One of the console's apps (Log Viewer, Graph Explorer, Dashboard, Activity
-Trail, Settings). &quot;Surface&quot; rather than &quot;page&quot; because one is never a document
-you navigate to: it is mounted into a tab, or into a pane beside another one.
-Each is single-instance - opening one you already have focuses it instead of
-duplicating it. See <a href="../../reference/console/">reference/console</a>.</p>
+<h3 id="console-app">Console app</h3>
+<p>One of the console's applications (Log Viewer, Graph Explorer, Dashboard,
+Activity Trail, Settings). &quot;App&quot; rather than &quot;page&quot; because one is never a
+document you navigate to: it is mounted into a tab, or into a pane beside
+another one. Each is single-instance - opening one you already have focuses it
+instead of duplicating it.</p>
+<p>The glossary term is two words on purpose. As a bare &quot;App&quot; the auto-linker
+matched every unrelated &quot;app&quot; in the corpus - a ChatGPT desktop app, a Postgres
+app - and pointed each at this definition. See
+<a href="../../reference/console/">reference/console</a>.</p>
 <h3 id="pane">Pane</h3>
 <p>A split within a tab. Splitting divides the focused pane along its longer side,
 so the same action tiles side-by-side on a desktop and stacks on a phone; a tab
@@ -496,13 +526,13 @@ command bar whether or not it has one. See <a href="../../reference/console/">re
 opened with <code>mod+k</code>. It is the discoverable route to any action - the menus and
 chords dispatch the same commands it does. See <a href="../../reference/console/">reference/console</a>.</p>
 <h3 id="live-link">Live link</h3>
-<p>The URL that points a surface at a running daemon. The daemon serves the console
-from its own loopback origin, so the link is that origin plus the surface path and
+<p>The URL that points an app at a running daemon. The daemon serves the console
+from its own loopback origin, so the link is that origin plus the app path and
 a bearer token in the fragment (<code>http://127.0.0.1:7391/console/graph/#token=...</code>).
 The daemon prints it; the console consumes the token, stores it, and strips it from
 the URL, so the secret never lingers in history or a copied link. The origin must be
 literal loopback - <code>localhost</code> and hostnames are rejected before any request.
-Without one, a surface
+Without one, an app
 reads only what rides in the link itself. See <a href="../../reference/console/">reference/console</a>.</p>
 <h2 id="see-also">See also</h2>
 <ul>
@@ -597,6 +627,20 @@ magus where --filter type=regex,pattern='^libs/'
 # magus 0.4.2
 </code></pre>
 <p>Windows examples are shown in PowerShell and labelled as such.</p>
+<h2 id="reading-buzz-the-backslash">Reading Buzz: the backslash</h2>
+<p>Buzz code on this site is full of names like <code>fs\readFile</code> and <code>magus\project</code>. The
+backslash is namespace access - it reaches into a module. Most languages spell this
+with a dot, so it is the one piece of syntax worth knowing before you read anything
+else here.</p>
+<p>Buzz uses both separators, and the distinction is what they reach into:</p>
+<pre><code class="language-buzz">final body = fs\readFile(&quot;VERSION&quot;);   // backslash: a function IN the fs module
+ctx.needs(build);                      // dot: a method ON the ctx value
+</code></pre>
+<p>Backslash reaches into a <strong>module</strong>; dot reaches into a <strong>value</strong> you already have.
+So <code>os\exec</code> is the <code>exec</code> function the <code>os</code> module provides, while <code>site.docPages</code>
+is a field on the <code>site</code> object. A module name never appears on the left of a dot,
+and a variable never appears on the left of a backslash.</p>
+<p>The full module list is the <a href="../../reference/buzz/">standard library reference</a>.</p>
 <h2 id="runnable-examples">Runnable examples</h2>
 <p>Some Buzz code blocks are live: a <strong>Run</strong> button appears in the corner and executes
 the snippet in the in-browser <a href="../../playground/">playground</a> via WebAssembly - no

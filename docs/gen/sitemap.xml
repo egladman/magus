@@ -2,6 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://eli.gladman.cc/magus/blog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/blog/2026/07/01/hello-blog/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/changelog/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/cache/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/concepts/cache/output-refs/</loc></url>
@@ -78,6 +79,15 @@
   <url><loc>https://eli.gladman.cc/magus/migrating/breaking-changes/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/migrating/from-nx/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/activity/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/insight/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/job/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/memory/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/metrics/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/status/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/token/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/api/viewer/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/buzz/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/buzz/archive/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/buzz/charm/</loc></url>
@@ -134,6 +144,7 @@
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1015/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1016/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1017/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1018/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/MGS8001/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/codes/outputref/MGS8002/</loc></url>
@@ -198,4 +209,184 @@
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-run/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-sdk/</loc></url>
   <url><loc>https://eli.gladman.cc/magus/reference/skills/magus-vcs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/affected/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/agents/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/allowlist/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/analysis/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/api/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/argv/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/auth/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/authoring/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/bash/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/bisect/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/breaking-changes/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/build/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/buzz/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cache/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cargo/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/changed-files/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/changelog/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/charm/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/charms/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/ci/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/claude/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cli/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/codex/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/completion/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/concurrency/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/configuration/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/connect/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/connector/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/console/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/container/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/conventions/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cosign/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/coupling/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cross-project/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/cycle/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/daemon/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/debugging/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/dependency-graph/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/depends-on/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/depends/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/describe/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/determinism/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/diagnostics/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/discovery/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/docker/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/docs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/doctor/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/documentation/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/download/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/drift/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/ed-25519/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/env/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/environment/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/error-codes/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/eslint/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/exec/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/extraction/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/filesystem/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/fingerprint/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/fish/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/flags/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/fs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/generated/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/getting-started/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/git/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/github-actions/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/gitlab/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/globs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/go/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/graph/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/graphml/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/grpc/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/hotspots/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/http/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/image/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/import/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/inferred/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/inputs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/install/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/interpreter/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/json-patch/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/json/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/keep-warm/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/knowledge-graph/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/landlock/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/lint/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/linux/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/load/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/logs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/magus-run/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/magus-server/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/magus-status/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/magus-yaml/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/magusfile/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/markdown/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mcp/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mgs-1010/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mgs-5001/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mgs-5002/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mgs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/migration/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/mise/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/module/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/monitoring/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/monorepo/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/needs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/node/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/onboarding/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/operations/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/os/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/output-refs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/output/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/outputs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/ownership/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/passthrough/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/path/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/permissions/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/pool/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/powershell/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/prettier/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/project/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/projects/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/proto/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/protobuf/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/pytest/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/python/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/query/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/race/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/readiness/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/reference/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/release/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/remote-cache/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/repl/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/replay/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/rfc-6902/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/ruff/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/run/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/rust/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/sandbox/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/security/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/self-update/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/service-op/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/services/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/setup/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/shared-services/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/sharing/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/shell/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/shorthand/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/signature/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/signing/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/skills/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/snapshot/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/socket/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/spell/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/spells/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/status/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/stdlib/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/supply-chain/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/target/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/targets/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/template/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/terminology/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/test/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/token/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/toolchain/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/tools/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/troubleshooting/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/typescript/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/upgrade/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/uv/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/vcs/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/verify/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/version/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/vitest/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/volatility/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/ward/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/watch/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/workspace/</loc></url>
+  <url><loc>https://eli.gladman.cc/magus/tags/zsh/</loc></url>
 </urlset>

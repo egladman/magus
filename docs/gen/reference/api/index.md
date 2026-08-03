@@ -19,6 +19,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | Service | Methods | Package |
 |---------|---------|--------|
 | [ActivityService](activity.md) | 2 | `magus.activity.v1` |
+| [InsightService](insight.md) | 1 | `magus.insight.v1` |
 | [JobService](job.md) | 5 | `magus.job.v1` |
 | [MemoryService](memory.md) | 5 | `magus.memory.v1` |
 | [MetricsService](metrics.md) | 2 | `magus.metrics.v1` |

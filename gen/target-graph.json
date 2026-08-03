@@ -29,6 +29,27 @@
           ]
         },
         {
+          "name": "dogfood",
+          "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
           "name": "image-build",
           "declared": "image_build",
           "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",

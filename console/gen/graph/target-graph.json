@@ -29,6 +29,27 @@
           ]
         },
         {
+          "name": "dogfood",
+          "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
           "name": "image-build",
           "declared": "image_build",
           "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",
@@ -436,7 +457,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
+          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -444,7 +465,9 @@
             {
               "spell": "go",
               "ops": [
-                "go-vet"
+                "golangci-lint",
+                "go-vet",
+                "govulncheck"
               ]
             },
             {
@@ -459,6 +482,9 @@
                 "shellcheck"
               ]
             }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -717,6 +743,18 @@
             {
               "project": ".",
               "glob": "cmd/magus/skills/**/*.md"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus-protodocs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "proto/gen/descriptor.binpb"
+            },
+            {
+              "project": ".",
+              "glob": "CHANGELOG.md"
             }
           ],
           "writes_files": [
@@ -734,6 +772,12 @@
             },
             {
               "glob": "reference/skills/*.md"
+            },
+            {
+              "glob": "reference/api/*.md"
+            },
+            {
+              "glob": "changelog.md"
             }
           ],
           "modifies_existing_files": [
@@ -935,6 +979,11 @@
           "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
+          ],
+          "writes_files": [
+            {
+              "glob": "gen/assets/mermaid.js"
+            }
           ]
         },
         {
@@ -943,6 +992,11 @@
           "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
+          ],
+          "writes_files": [
+            {
+              "glob": "gen/assets/hljs.js"
+            }
           ]
         },
         {
@@ -954,7 +1008,8 @@
         ".",
         "docs/guides/integrations/agents",
         "libs/gopherbuzz",
-        "libs/textsearch"
+        "libs/textsearch",
+        "proto"
       ]
     },
     {
@@ -1340,7 +1395,8 @@
             {
               "spell": "buf",
               "ops": [
-                "buf-generate"
+                "buf-generate",
+                "buf-build"
               ]
             }
           ]

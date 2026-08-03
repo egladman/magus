@@ -97,7 +97,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">4 min read</small>
+    <small class="reading-time" title="Estimated reading time">5 min read</small>
     <article>
 <h1 id="activityservice">ActivityService</h1>
 <p>ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the <a class="glossary-term" href="../../../glossary/#console" data-def="The browser app that reads a magus workspace: a tabbed, tiling page hosting the log viewer, graph explorer, dashboard, and activity trail. It is a separate static app, not something the daemon serves - the daemon exposes a loopback API it calls: read-only views plus one bearer-gated job-control service for maintenance jobs.">console</a>'s human-facing API surface, never under /mcp (the agent protocol surface).</p>
@@ -201,6 +201,18 @@
 <td>string</td>
 <td>13</td>
 <td>The <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> root the action pertained to; empty for a <a class="glossary-term" href="../../../glossary/#daemon" data-def="The background magus host that owns shared state such as services and the warm knowledge graph.">daemon</a>-wide action not bound to one workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a job by its workspace rather than fragmenting the record across per-workspace directories.</td>
+</tr>
+<tr>
+<td><code>host</code></td>
+<td>string</td>
+<td>14</td>
+<td>The agent host behind the action and that host's own session id, empty when the producer could not know them. The name is an opaque label the caller supplies, not a set magus enumerates: a hook is told its host by the wrapper that ran it, because no local process can discover which agent host started it. An MCP call has no such wrapper and is attributed from its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by host rather than switching on kind first.  They ride the EVENT rather than the request blob, which also carries them: a 200-row feed grouped by host must not cost 200 GetPayload calls.</td>
+</tr>
+<tr>
+<td><code>session</code></td>
+<td>string</td>
+<td>15</td>
+<td></td>
 </tr>
 </tbody>
 </table></figure>
@@ -454,7 +466,7 @@
     </div>
     </div>
     <nav class="page-nav" aria-label="Pagination">
-      <a class="page-nav-next" href="../job/"><span class="page-nav-dir">Next</span><span class="page-nav-title">JobService</span></a>
+      <a class="page-nav-next" href="../insight/"><span class="page-nav-dir">Next</span><span class="page-nav-title">InsightService</span></a>
     </nav>
   </main>
   <section class="related container" aria-labelledby="related-heading">
@@ -462,13 +474,13 @@
     <div class="related-grid">
         <a class="related-card" href="../../../reference/"><span class="related-card-title">Reference</span><span class="related-card-desc">Pages in this section.</span></a>
         <a class="related-card" href="../../../reference/config/"><span class="related-card-title">magus.yaml configuration</span><span class="related-card-desc">Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.</span></a>
+        <a class="related-card" href="../../../reference/api/insight/"><span class="related-card-title">InsightService</span><span class="related-card-desc">InsightService serves the assembled lenses to the console dashboard.</span></a>
         <a class="related-card" href="../../../reference/api/job/"><span class="related-card-title">JobService</span><span class="related-card-desc">JobService is the daemon&#39;s control surface for background maintenance jobs.</span></a>
-        <a class="related-card" href="../../../reference/api/status/"><span class="related-card-title">StatusService</span><span class="related-card-desc">StatusService serves the snapshot, and streams it for a live dashboard.</span></a>
     </div>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../tags/api/">api</a><a class="tag" href="../../../tags/proto/">proto</a><a class="tag" href="../../../tags/connect/">connect</a><a class="tag" href="../../../tags/grpc/">grpc</a><a class="tag" href="../../../search/?q=tag%3A%22activityservice%22">activityservice</a></div>
-    <small>Last updated <time datetime="2026-08-02T23:19:58Z">August 2, 2026, 11:19 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/ff75bc5e1a0d9b808007d380734bfe1d6dae3deb" data-tooltip="ff75bc5e1a0d9b808007d380734bfe1d6dae3deb" title="ff75bc5e1a0d9b808007d380734bfe1d6dae3deb">ff75bc5e</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (1)</summary><ul><li><a href="https://github.com/egladman/magus/commit/425b644c72fbcdfed7e0e27d0143efe8b8914b85"><code>425b644c</code></a> <small><time datetime="2026-08-02T23:12:05Z">Aug 2, 2026</time></small> - generate the daemon API reference from the proto contract; produce the descriptor as a declared output of proto so the chain is visible to the graph; render CHANGELOG.md as a docs page</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/reference/api/activity.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/reference/api/activity.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-03T03:05:15Z">August 3, 2026, 3:05 AM UTC</time> (<a href="https://github.com/egladman/magus/commit/38e9171e9d0285ec5c22f194e98b23afed35595f" data-tooltip="38e9171e9d0285ec5c22f194e98b23afed35595f" title="38e9171e9d0285ec5c22f194e98b23afed35595f">38e9171e</a>)</small>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

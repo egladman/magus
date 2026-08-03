@@ -123,6 +123,34 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {
     });
 }
 
+// Compiles magus-dev, the binary THIS worktree points its own git tooling at. Paired with
+// hack/install-dogfood.sh, which registers it as the worktree's merge driver.
+//
+// A second binary rather than reusing ./magus, for one reason: ./magus is rebuilt constantly
+// while iterating, and the merge driver resolves conflicts with whatever binary it was
+// registered against. Rebuilding the driver's binary in the middle of a rebase swaps the
+// tool under a running git operation. magus-dev moves only when install-dogfood is re-run,
+// so a rebase resolves with one known build from start to finish.
+//
+// Why this exists at all: the driver registration prefers `magus` on PATH (see
+// gitMergeDriverCommand in vcs/git.go), which is right for a normal workspace - it survives
+// an upgrade-in-place - and wrong for magus's own worktrees, where PATH holds a RELEASE and
+// the change under test is in the working tree. That gap is not cosmetic: the released
+// driver regenerated the whole site once per conflicted file, so a rebase touching a handful
+// of generated files looked like a hang, while the fix had been in the tree the whole time.
+// No ctx.writesFiles here, matching go_build: the declared-output globs are what
+// EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
+// marks a path that can never be tracked and so can never conflict.
+export fun dogfood(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gopherbuzz\build);
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+        "args": ["-trimpath",
+            "-ldflags", ld_flags(),
+            "-o", "magus-dev",
+            "./cmd/magus"],
+    });
+}
+
 final IMAGE = "ghcr.io/egladman/magus";
 
 fun image_tag() > str { return "magus:" + commit(); }
