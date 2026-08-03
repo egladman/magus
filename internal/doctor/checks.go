@@ -656,7 +656,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 	}
 }
 
-// checkDeadOutputGlobs is MGS1017: a declared output glob that matches nothing while its
+// checkDeadOutputGlobs is MGS1018: a declared output glob that matches nothing while its
 // SIBLING globs in the same project match files.
 //
 // This is the shape that bit us: the typescript spell contributes `dist/**` to every project
