@@ -53,12 +53,14 @@ Use `latest` unless you know you need the other one. Two things differ beyond th
 image, and both follow from the static image carrying no shared libraries at all:
 
 - **`magus watch` / `fs\watch`** need `inotify-tools`, which only the cgo image ships.
-- **Buzz FFI (`zdef()`) is unavailable in the static image.** FFI opens a shared library
-  at runtime, and the static image has none to open, so it is compiled out (`-tags noffi`)
-  and `zdef()` reports FFI as unsupported rather than failing at the call. Keeping it in
-  would have cost the static property for a capability nothing in that image can use: the
-  loader it pulls in is exactly what `distroless/static` does not provide. Use the cgo
-  image if a magusfile calls `zdef()`.
+- **Buzz FFI (`zdef()`) is unavailable in every static build.** That means this image and
+  the unsuffixed release archives, so it applies equally to a binary you extract with
+  `docker cp` below. FFI opens a shared library at runtime, which is what made those builds
+  need a dynamic loader; they are compiled with `-tags noffi`, and `zdef()` reports FFI as
+  unsupported rather than failing at the call. Keeping it would have cost the static
+  property itself: the loader it pulls in is exactly what `distroless/static`, a scratch
+  image, and a musl host do not provide. Use the cgo image, or a `-cgo` archive, if a
+  magusfile calls `zdef()`.
 
 ## Tags
 
@@ -89,7 +91,9 @@ docker rm "$id"
 than `latest`, so what you extract is reproducible.
 
 This only works with the static image. The binary in the `-cgo` image is linked
-against that image's glibc and will not run on an arbitrary host.
+against that image's glibc and will not run on an arbitrary host. What you extract is
+the same static build the unsuffixed release archives ship, so it has no Buzz FFI
+either (see Variants).
 
 ## Verify the signature
 

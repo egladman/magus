@@ -22,8 +22,10 @@ mv magus ~/.local/bin/
 magus version
 ```
 
-`${VERSION}` above is the current release. The static build is the installer default;
-[GitHub Releases](https://github.com/egladman/magus/releases) also lists dynamic builds when available.
+`${VERSION}` above is the current release. The unsuffixed archive is the static build
+and the installer default. [GitHub Releases](https://github.com/egladman/magus/releases)
+also lists a `-cgo` archive, which is the one to take if a magusfile calls Buzz FFI
+(`zdef()`), since the static build compiles it out.
 
 ## Verify the download
 
