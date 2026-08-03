@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2402,
-  "edge_count": 5417,
+  "node_count": 2398,
+  "edge_count": 5409,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -10337,17 +10337,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.",
-      "source": "evals/magusfile.buzz:65",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:evals/magusfile.buzz:grid",
-      "kind": "function",
-      "label": "grid",
-      "doc": "grid is the full run: every skill, both permutations, every model, 5 trials. Minutes-to-hours and real money. Never on the PR path.",
-      "source": "evals/magusfile.buzz:57",
+      "source": "evals/magusfile.buzz:70",
       "attrs": {
         "exported": "true"
       }
@@ -10374,16 +10364,6 @@
       "kind": "function",
       "label": "preflight",
       "source": "evals/magusfile.buzz:24",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:evals/magusfile.buzz:smoke",
-      "kind": "function",
-      "label": "smoke",
-      "doc": "smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.",
-      "source": "evals/magusfile.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -20954,7 +20934,7 @@
       "source": "evals",
       "attrs": {
         "engine": "buzz",
-        "target_count": "5"
+        "target_count": "3"
       }
     },
     {
@@ -21715,16 +21695,6 @@
       }
     },
     {
-      "id": "target:evals:grid",
-      "kind": "target",
-      "label": "grid",
-      "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
-      "source": "evals",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
       "id": "target:evals:lint",
       "kind": "target",
       "label": "lint",
@@ -21738,16 +21708,6 @@
       "id": "target:evals:preflight",
       "kind": "target",
       "label": "preflight",
-      "source": "evals",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:evals:smoke",
-      "kind": "target",
-      "label": "smoke",
-      "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
       "source": "evals",
       "attrs": {
         "engine": "buzz"
@@ -42510,14 +42470,6 @@
     },
     {
       "source": "file:evals/magusfile.buzz",
-      "target": "function:evals/magusfile.buzz:grid",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals/magusfile.buzz"
-    },
-    {
-      "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -42535,14 +42487,6 @@
     {
       "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:preflight",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals/magusfile.buzz"
-    },
-    {
-      "source": "file:evals/magusfile.buzz",
-      "target": "function:evals/magusfile.buzz:smoke",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -54773,14 +54717,6 @@
       "provenance": "docs/tour/12-magusfile.buzz"
     },
     {
-      "source": "function:evals/magusfile.buzz:grid",
-      "target": "function:evals/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals/magusfile.buzz"
-    },
-    {
       "source": "function:evals/magusfile.buzz:lint",
       "target": "function:evals/magusfile.buzz:install",
       "relation": "calls",
@@ -54790,14 +54726,6 @@
     },
     {
       "source": "function:evals/magusfile.buzz:preflight",
-      "target": "function:evals/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals/magusfile.buzz"
-    },
-    {
-      "source": "function:evals/magusfile.buzz:smoke",
       "target": "function:evals/magusfile.buzz:install",
       "relation": "calls",
       "confidence": "extracted",
@@ -61222,14 +61150,6 @@
     },
     {
       "source": "project:evals",
-      "target": "target:evals:grid",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
-      "source": "project:evals",
       "target": "target:evals:lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -61239,14 +61159,6 @@
     {
       "source": "project:evals",
       "target": "target:evals:preflight",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
-      "source": "project:evals",
-      "target": "target:evals:smoke",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -64674,23 +64586,7 @@
       "provenance": "evals"
     },
     {
-      "source": "target:evals:grid",
-      "target": "target:evals:preflight",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
       "source": "target:evals:lint",
-      "target": "target:evals:preflight",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "evals"
-    },
-    {
-      "source": "target:evals:smoke",
       "target": "target:evals:preflight",
       "relation": "depends_on",
       "confidence": "extracted",

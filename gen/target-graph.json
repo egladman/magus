@@ -992,20 +992,6 @@
           ]
         },
         {
-          "name": "smoke",
-          "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
-          "name": "grid",
-          "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
           "name": "ci",
           "doc": "ci is LINT ONLY, deliberately.",
           "dependencies": [

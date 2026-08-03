@@ -429,24 +429,71 @@ func (r *runner) cacheDir() string {
 
 // checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
 // doctor` gives the whole picture rather than only the target you happened to run.
-func (r *runner) checkCacheYield() Check {
+//
+// A skip_cache target is excluded rather than reported. Never replaying is what that
+// policy MEANS - a drift gate replaying would skip the check it exists to perform - so
+// counting it here fails a workspace for being correct, and a check that fires on the
+// correct state is one people learn to ignore. The journal cannot tell the two apart on
+// its own: "ran, did not replay" looks identical whether the target was forbidden to
+// replay or merely failed to.
+func (r *runner) checkCacheYield(projects []*types.Project) Check {
 	const name = "cache yield"
 	stalled := cache.StalledTargets(r.cacheDir(), nil)
-	if len(stalled) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no target is running uncached"}
+
+	// project path -> normalized target name -> the author's stated reason.
+	declared := map[string]map[string]string{}
+	for _, p := range projects {
+		for target, pol := range p.TargetPolicies {
+			if !pol.SkipCache {
+				continue
+			}
+			if declared[p.Path] == nil {
+				declared[p.Path] = map[string]string{}
+			}
+			declared[p.Path][target] = pol.SkipCacheReason
+		}
 	}
-	details := make([]string, 0, len(stalled)+1)
+
+	var reported []cache.Stalled
+	exempt := 0
 	for _, s := range stalled {
+		// The journal records the invoked form ("generate:rw"); policy is keyed by the
+		// bare normalized name, so the charm suffix has to come off before the lookup.
+		bare := s.Target
+		if t, err := types.ParseTarget(s.Target); err == nil && t.Name != "" {
+			bare = t.Name
+		}
+		if _, ok := declared[s.ProjectPath][types.Normalize(bare)]; ok {
+			exempt++
+			continue
+		}
+		reported = append(reported, s)
+	}
+
+	if len(reported) == 0 {
+		msg := "no target is running uncached"
+		if exempt > 0 {
+			msg = fmt.Sprintf("no target is running uncached (%d declared skip_cache)", exempt)
+		}
+		return Check{Name: name, Status: StatusOK, Message: msg}
+	}
+	details := make([]string, 0, len(reported)+1)
+	for _, s := range reported {
 		details = append(details, fmt.Sprintf("%s %s: %d runs, 0 cached, %.0fs spent (%.0fs avg)",
 			s.Project, s.Target, s.Runs, float64(s.TotalMs)/1000, float64(s.AvgMs())/1000))
 	}
+	// Two causes produce an identical journal, and the old wording asserted the first.
+	// It is wrong for a version-stamped binary: go-build embeds `git describe` and the
+	// commit hash in its ldflags, so every commit legitimately mints a new key and no
+	// footprint change will ever make it replay. magus cannot tell these apart - the key
+	// is opaque and there is no VCS input primitive - so the reader is given both.
 	details = append(details,
-		"a target that never replays usually declares a footprint wider than it reads, so unrelated edits keep changing its key")
+		"two causes look the same here: the target declares a footprint wider than it reads, so unrelated edits keep busting its key; or its key deliberately carries volatile state (a version stamp, a commit hash), which no footprint change will fix. Compare its declared inputs against what it actually reads before assuming the first")
 	return Check{
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf("[%s] %d target(s) executed repeatedly and never replayed from cache",
-			types.TargetNeverReplays, len(stalled)),
+			types.TargetNeverReplays, len(reported)),
 		Details: details,
 	}
 }

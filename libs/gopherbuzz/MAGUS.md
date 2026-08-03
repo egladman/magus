@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2402 nodes** and **5417 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2398 nodes** and **5410 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 90 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| target | 88 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `rust`, `markdown` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -56,7 +56,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 287 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 169 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 225 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1169 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1167 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 123 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 16 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
-| evals | 5 | `magus query project:evals` | `preflight`, `lint`, `ci` |
+| evals | 3 | `magus query project:evals` | `lint`, `ci`, `preflight` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
@@ -153,8 +153,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `lint` | lint validates every task file against the schema and checks that each named constraint predicate exists. |
-| `smoke` | smoke is the PR gate: one trial, a subset of tasks, one model. |
-| `grid` | grid is the full run: every skill, both permutations, every model, 5 trials. |
 | `ci` | ci is LINT ONLY, deliberately. |
 | `preflight` |  |
 

@@ -150,7 +150,7 @@ func (r *runner) run(wsErr error) Report {
 		out.Checks,
 		r.checkConfigFile(),
 		r.checkCacheWritable(),
-		r.checkCacheYield(),
+		r.checkCacheYield(projects),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),
 		r.checkNearDuplicateServices(projects),
