@@ -131,7 +131,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 
 	r, err := c.remote.GetArtifact(ctx, projectPath, hash)
 	if err != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote get %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
@@ -140,7 +140,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 	}
 	defer r.Close()
 	if err := c.importArtifact(ctx, r); err != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
@@ -174,7 +174,7 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 	_ = pr.CloseWithError(putErr)
 	exportErr := <-errCh
 	if exportErr != nil || putErr != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote push %s (%s): export=%v put=%v", s.ProjectPath, shortHash(hash), exportErr, putErr)))
 	}
 }

@@ -498,7 +498,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		telCfg.LocalCollect = m.metricsCollect // daemon: record metrics even when export is off
 		built, err := otlp.New(ctx, telCfg)
 		if err != nil {
-			slog.Warn("magus: telemetry init failed; falling back to no-op", "err", err)
+			slog.WarnContext(ctx, "magus: telemetry init failed; falling back to no-op", "err", err)
 			built, _ = otlp.New(ctx, observability.Config{})
 		}
 		tel = built
@@ -522,7 +522,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 			cfgOpts = append(cfgOpts, cache.WithRemoteBackend(observability.InstrumentRemoteBackend(rb, tel)))
 		}
 	}
-	c, err := cache.Open(cacheDir, cfgOpts...)
+	c, err := cache.Open(ctx, cacheDir, cfgOpts...)
 	if err != nil {
 		return nil, err
 	}

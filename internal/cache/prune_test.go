@@ -11,7 +11,7 @@ import (
 
 func openMutableCache(t *testing.T) *Cache {
 	t.Helper()
-	c, err := Open(t.TempDir(), WithMutable(true))
+	c, err := Open(t.Context(), t.TempDir(), WithMutable(true))
 	require.NoError(t, err)
 	return c
 }

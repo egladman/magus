@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2429,
-  "edge_count": 5506,
+  "node_count": 2431,
+  "edge_count": 5509,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -282,6 +282,14 @@
       "label": "MGS2010",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2010/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS2011",
+      "kind": "diagnostic",
+      "label": "MGS2011",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS2011/"
       }
     },
     {
@@ -1259,7 +1267,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "142",
+        "dir_files": "143",
         "dir_languages": "markdown"
       }
     },
@@ -1292,7 +1300,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "66",
+        "dir_files": "67",
         "dir_languages": "markdown"
       }
     },
@@ -1369,7 +1377,7 @@
       "source": "docs/reference/codes/sandbox",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "11",
+        "dir_files": "12",
         "dir_languages": "markdown"
       }
     },
@@ -4612,6 +4620,18 @@
         "section": "reference",
         "tags": "MGS2010,sandbox,daemon,policy,workspace,landlock,fingerprint",
         "title": "MGS2010: sandbox policy mismatch"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS2011.md",
+      "source": "docs/reference/codes/sandbox/MGS2011.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS2011,secrets,redaction,provider,security,logging",
+        "title": "MGS2011: secret too short to mask"
       }
     },
     {
@@ -24988,6 +25008,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS2011.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/MGS3001.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -34529,6 +34557,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS2010.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "target": "diagnostic:MGS2011",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS2011.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS2011.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS2011.md"
     },
     {
       "source": "doc:docs/reference/codes/sandbox/MGS3001.md",

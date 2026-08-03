@@ -53,7 +53,7 @@ func (t *insightTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: unknown insight lens %q (use hotspots, files, affinity, ownership, or trend)", lens)
 	}
 	if err != nil {
-		toolLogger(ctx).Warn("mcp: insight computation failed", "error", err)
+		toolLogger(ctx).WarnContext(ctx, "mcp: insight computation failed", "error", err)
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: insight: %w", err)
 	}
 	return spells.InvokeResponse{Data: data}, nil

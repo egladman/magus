@@ -3,7 +3,6 @@ package cache
 import (
 	"bytes"
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -388,7 +387,7 @@ func TestRecordAttrExtraction(t *testing.T) {
 func TestWithLoggerOption(t *testing.T) {
 	t.Parallel()
 	var c Cache
-	l := slog.New(slog.NewTextHandler(io.Discard, nil))
+	l := slog.New(slog.DiscardHandler)
 	WithLogger(l)(&c)
 	assert.Same(t, l, c.log, "WithLogger did not replace the cache logger")
 }

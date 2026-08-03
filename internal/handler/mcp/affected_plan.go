@@ -44,7 +44,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		BaseRef:          paramString(req.Params, "base", ""),
 	})
 	if err != nil {
-		toolLogger(ctx).Warn("mcp: build plan failed", "error", err)
+		toolLogger(ctx).WarnContext(ctx, "mcp: build plan failed", "error", err)
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: build plan: %w", err)
 	}
 

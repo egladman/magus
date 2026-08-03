@@ -236,7 +236,7 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
 // uses the manager's configured default, and any other value is clamped to
 // [MinTTL, MaxTTL]. consoleDir must contain the built console.
-func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
+func (m *Manager) Start(ctx context.Context, consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
 		return Session{}, err
@@ -327,15 +327,21 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	}()
 	go func() {
 		<-ctx.Done()
-		shutCtx, sc := context.WithTimeout(context.Background(), 5*time.Second)
+		// WithoutCancel, not Background: this runs precisely BECAUSE ctx is done, so a
+		// shutdown context derived from it directly would arrive already cancelled and
+		// Shutdown would return without draining a single connection. Background would
+		// avoid that but also discard every VALUE on ctx - the logger and the run's
+		// secret resolver among them - so anything logged during shutdown would lose its
+		// redaction. WithoutCancel keeps the values and drops only the cancellation.
+		shutCtx, sc := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer sc()
 		_ = srv.Shutdown(shutCtx)
 	}()
 
 	if superseded {
-		m.log.Info("[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
+		m.log.InfoContext(ctx, "[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
-	m.log.Info("[SHARE] LAN share opened",
+	m.log.InfoContext(ctx, "[SHARE] LAN share opened",
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)

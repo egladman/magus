@@ -209,7 +209,7 @@ func TestWriteShardFileError(t *testing.T) {
 // nanosecond case observed via a real Chtimes round-trip.
 func TestWarnIfCoarseMtimeResolution(t *testing.T) {
 	// Nil logger: must return without panic.
-	warnIfCoarseMtimeResolution(t.TempDir(), nil)
+	warnIfCoarseMtimeResolution(t.Context(), t.TempDir(), nil)
 
 	dir := t.TempDir()
 	var buf bytes.Buffer
@@ -227,7 +227,7 @@ func TestWarnIfCoarseMtimeResolution(t *testing.T) {
 	coarse := info.ModTime().Nanosecond() == 0
 	_ = os.Remove(probe)
 
-	warnIfCoarseMtimeResolution(dir, log)
+	warnIfCoarseMtimeResolution(t.Context(), dir, log)
 	if coarse {
 		assert.Contains(t, buf.String(), "coarse mtime", "coarse fs must warn")
 	} else {

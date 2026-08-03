@@ -44,7 +44,7 @@ func newMtimeStore(cacheDir string, log *slog.Logger) *mtimeStore {
 
 // warnIfCoarseMtimeResolution probes mtime precision and warns if the filesystem
 // rounds to whole seconds (stale-hash false-hit risk).
-func warnIfCoarseMtimeResolution(cacheDir string, log *slog.Logger) {
+func warnIfCoarseMtimeResolution(ctx context.Context, cacheDir string, log *slog.Logger) {
 	if log == nil {
 		return
 	}
@@ -67,7 +67,7 @@ func warnIfCoarseMtimeResolution(cacheDir string, log *slog.Logger) {
 	if info.ModTime().Nanosecond() != 0 {
 		return
 	}
-	log.Warn(
+	log.WarnContext(ctx,
 		"magus/cache: filesystem has coarse mtime resolution; cache may return stale hashes for files modified within the same second with identical size. Clear the cache and rebuild to ensure correctness.",
 		slog.String("dir", cacheDir),
 	)
@@ -207,14 +207,14 @@ func (s *mtimeStore) flush(ctx context.Context) {
 	}
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		if s.log != nil {
-			s.log.Warn("magus/cache: mtime store: cannot create shard dir; inputs will be re-hashed on every build",
+			s.log.WarnContext(ctx, "magus/cache: mtime store: cannot create shard dir; inputs will be re-hashed on every build",
 				slog.String("dir", s.dir), slog.String("err", err.Error()))
 		}
 		return
 	}
 	for _, p := range pending {
 		if err := s.writeShardFile(p.key, p.data); err != nil && s.log != nil {
-			s.log.Warn("magus/cache: mtime store: shard write failed; inputs will be re-hashed on next build",
+			s.log.WarnContext(ctx, "magus/cache: mtime store: shard write failed; inputs will be re-hashed on next build",
 				slog.String("err", err.Error()))
 		}
 	}

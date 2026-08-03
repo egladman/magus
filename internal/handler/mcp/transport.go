@@ -172,7 +172,7 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 		if o.UserAgent != "" { // omit an empty field so the line stays clean over headerless clients
 			attrs = append(attrs, slog.String("user_agent", o.UserAgent))
 		}
-		log.Info("[AGENT] client connected", attrs...)
+		log.InfoContext(hCtx, "[AGENT] client connected", attrs...)
 	})
 	hooks.AddOnUnregisterSession(func(_ context.Context, session mcpserver.ClientSession) {
 		sessionOrigins.Delete(session.SessionID())
@@ -220,7 +220,7 @@ func ServeStdio(ctx context.Context, opts Options) error {
 	hooks.AddBeforeInitialize(func(_ context.Context, _ any, req *mcp.InitializeRequest) {
 		agent := agentFromRequest(req)
 		currentOrigin.Store(origin.Origin{Agent: agent})
-		log.Info("[AGENT] client connected", slog.String("agent", agent))
+		log.InfoContext(ctx, "[AGENT] client connected", slog.String("agent", agent))
 	})
 
 	originFn := func(_ context.Context) origin.Origin {
@@ -232,6 +232,6 @@ func ServeStdio(ctx context.Context, opts Options) error {
 
 	srv := buildServer(opts, log, hooks, originFn)
 
-	log.Info("[AGENT] stdio server started")
+	log.InfoContext(ctx, "[AGENT] stdio server started")
 	return mcpserver.NewStdioServer(srv).Listen(ctx, os.Stdin, os.Stdout)
 }

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"bytes"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -140,7 +139,7 @@ func (s *TokenSuite) TestResolveGeneratesWithoutLoggingSecret() {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 
-	tok, err := Resolve(log)
+	tok, err := Resolve(t.Context(), log)
 	require.NoError(t, err)
 	require.NotEmpty(t, tok, "Resolve returned empty token")
 
@@ -156,10 +155,10 @@ func (s *TokenSuite) TestResolveGeneratesWithoutLoggingSecret() {
 func (s *TokenSuite) TestResolveIdempotent() {
 	t := s.T()
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	a, err := Resolve(log)
+	log := slog.New(slog.DiscardHandler)
+	a, err := Resolve(t.Context(), log)
 	require.NoError(t, err)
-	b, err := Resolve(log)
+	b, err := Resolve(t.Context(), log)
 	require.NoError(t, err)
 	assert.Equal(t, a, b, "Resolve not idempotent")
 }

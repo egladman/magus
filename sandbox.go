@@ -18,7 +18,7 @@ import (
 
 // applySandbox applies the process-wide landlock sandbox and attaches the Policy to ctx.
 func (m *Magus) applySandbox(ctx context.Context) (context.Context, error) {
-	p := sandboxapply.FromConfig(m.ws.Root, m.cfg)
+	p := sandboxapply.FromConfig(ctx, m.ws.Root, m.cfg)
 	return sandboxapply.Apply(ctx, p, m.ws.Root)
 }
 
@@ -44,7 +44,7 @@ func ApplyUnionSandbox(ctx context.Context, roots []string) error {
 		if cfg.Sandbox.Enabled {
 			anyEnabled = true
 		}
-		policies = append(policies, sandboxapply.FromConfig(root, cfg))
+		policies = append(policies, sandboxapply.FromConfig(ctx, root, cfg))
 	}
 
 	if !anyEnabled {

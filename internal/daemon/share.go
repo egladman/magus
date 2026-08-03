@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
@@ -44,11 +45,11 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeShareError(w, http.StatusMethodNotAllowed, "share requires POST", log)
+			writeShareError(r.Context(), w, http.StatusMethodNotAllowed, "share requires POST", log)
 			return
 		}
 		if consoleDir == "" {
-			writeShareError(w, http.StatusServiceUnavailable,
+			writeShareError(r.Context(), w, http.StatusServiceUnavailable,
 				"the built console was not found, so there is nothing to share; build it with `magus run build console` and try again", log)
 			return
 		}
@@ -57,12 +58,12 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 		// falls back to the default. The manager clamps whatever ttl arrives.
 		var req shareRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		sess, err := mgr.Start(consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
+		sess, err := mgr.Start(r.Context(), consoleDir, guarded, time.Duration(req.TTLSeconds)*time.Second)
 		if err != nil {
 			// A missing LAN interface (the common case) is a client-actionable
 			// condition, not a server fault: report it as 503 with the guidance
 			// share.SelectLANIPv4 already put in the message.
-			writeShareError(w, http.StatusServiceUnavailable, err.Error(), log)
+			writeShareError(r.Context(), w, http.StatusServiceUnavailable, err.Error(), log)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -72,14 +73,14 @@ func (s *Daemon) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			ExpiresAt:  sess.ExpiresAt.UTC().Format(time.RFC3339),
 			Superseded: sess.Superseded,
 		}); err != nil {
-			log.Warn("[SHARE] encode response", slog.String("error", err.Error()))
+			log.WarnContext(r.Context(), "[SHARE] encode response", slog.String("error", err.Error()))
 		}
 	})
 }
 
 // writeShareError writes a JSON {error} body with the given status and logs it.
-func writeShareError(w http.ResponseWriter, status int, msg string, log *slog.Logger) {
-	log.Warn("[SHARE] share request failed", slog.Int("status", status), slog.String("error", msg))
+func writeShareError(ctx context.Context, w http.ResponseWriter, status int, msg string, log *slog.Logger) {
+	log.WarnContext(ctx, "[SHARE] share request failed", slog.Int("status", status), slog.String("error", msg))
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)

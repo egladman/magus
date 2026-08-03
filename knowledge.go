@@ -53,7 +53,7 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 		seen[abs] = true
 		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
 		if err != nil {
-			log.Warn("magus: skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "magus: skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
 			continue
 		}
 		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
@@ -180,7 +180,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		Runtime:     knowledge.LoadRuntimeEvents(cacheDir),
 		Timings:     loadKnowledgeTimings(ctx, cfg),
 		OutputRefs:  loadKnowledgeOutputRefs(cacheDir),
-		Symbols: loadKnowledgeSymbols(symbolIngestInputs{
+		Symbols: loadKnowledgeSymbols(ctx, symbolIngestInputs{
 			cfg: cfg, root: root, cacheDir: cacheDir,
 			projects: projects, spells: spells, log: log,
 		}),
@@ -341,9 +341,9 @@ func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root s
 // target has not run) or an unreadable/undecodable one is skipped with a debug log,
 // never an error - symbol ingestion is optional enrichment, so a bad index degrades to
 // "no symbols for that project" rather than failing every graph query.
-func loadKnowledgeSymbols(in symbolIngestInputs) map[string][]types.KnowledgeSymbol {
+func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string][]types.KnowledgeSymbol {
 	log := in.log
-	decls := symbolIndexDeclarations(in)
+	decls := symbolIndexDeclarations(ctx, in)
 	if len(decls) == 0 {
 		return nil
 	}
@@ -354,17 +354,17 @@ func loadKnowledgeSymbols(in symbolIngestInputs) map[string][]types.KnowledgeSym
 			// A not-yet-built index (the scip target has not run) is expected and quiet;
 			// any other read error (permissions) is a misconfig worth surfacing.
 			if errors.Is(err, fs.ErrNotExist) {
-				log.Debug("knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
+				log.DebugContext(ctx, "knowledge: symbol index not built yet, skipping", slog.String("project", decl.project), slog.String("index", decl.path))
 			} else {
-				log.Warn("knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			}
 			continue
 		}
-		syms, err := symbols.ParseIndex(data, decl.project)
+		syms, err := symbols.ParseIndex(ctx, data, decl.project)
 		if err != nil {
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss - surface it.
-			log.Warn("knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
 		out[decl.project] = syms
@@ -398,7 +398,7 @@ type symbolIngestInputs struct {
 // entries are then merged in and win on the same project, pointing instead at a
 // workspace-relative path in the tree for a project whose indexer writes somewhere
 // non-standard. The result is sorted by project for deterministic ingestion.
-func symbolIndexDeclarations(in symbolIngestInputs) []resolvedSymbolIndex {
+func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resolvedSymbolIndex {
 	capable := map[string]bool{}
 	for _, sp := range in.spells {
 		if slices.Contains(sp.Targets, symbols.IndexOp) {
@@ -430,7 +430,7 @@ func symbolIndexDeclarations(in symbolIngestInputs) []resolvedSymbolIndex {
 		// An explicit override names a path in the tree; reject one that escapes the
 		// workspace rather than reading an arbitrary file.
 		if !filepath.IsLocal(decl.Index) {
-			in.log.Warn("knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
+			in.log.WarnContext(ctx, "knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
 			continue
 		}
 		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index)}
@@ -464,17 +464,17 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 	}
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.Source == types.VCSSourceDisabled || res.VCS == nil {
-		log.Debug("knowledge: vcs enabled but no version control resolved, skipping")
+		log.DebugContext(ctx, "knowledge: vcs enabled but no version control resolved, skipping")
 		return nil
 	}
 	reporter, ok := res.VCS.(types.ChurnReporter)
 	if !ok {
-		log.Debug("knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
+		log.DebugContext(ctx, "knowledge: vcs backend cannot report per-commit files, skipping", slog.String("vcs", res.Name))
 		return nil
 	}
 	changes, err := reporter.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
-		log.Warn("knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "knowledge: vcs history scan failed, skipping", slog.String("error", err.Error()))
 		return nil
 	}
 	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))

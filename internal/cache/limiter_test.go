@@ -351,7 +351,7 @@ func TestImportMaxBytesCapsTarBomb(t *testing.T) {
 	t.Parallel()
 
 	cdir := t.TempDir()
-	c, err := Open(cdir, WithMaxImportBytes(1024))
+	c, err := Open(t.Context(), cdir, WithMaxImportBytes(1024))
 	require.NoError(t, err, "Open")
 
 	// Create a "bomb": a single entry that would be 1 MiB without the cap.
@@ -373,7 +373,7 @@ func TestImportDefaultCapApplied(t *testing.T) {
 	t.Parallel()
 
 	cdir := t.TempDir()
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "Open")
 
 	// A small legitimate entry — must pass through untruncated.

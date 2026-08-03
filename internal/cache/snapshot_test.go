@@ -34,7 +34,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 
 	// Open a second write-mode cache that shares the same cache directory.
 	// We will interpose a failing fn to trigger snapshotOne against the CAS.
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err)
 
 	// First run: populate the cache normally.
@@ -75,7 +75,7 @@ func TestSnapshotAtomicBlob(t *testing.T) {
 	require.NoError(t, os.Chmod(casDir, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(casDir, 0o755) })
 
-	c3, err := Open(cdir)
+	c3, err := Open(t.Context(), cdir)
 	require.NoError(t, err)
 	_, runErr := c3.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, newContent, 0o644)
@@ -190,7 +190,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = []string{"test/pkg/out.txt"}
 
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache.
@@ -215,7 +215,7 @@ func TestTruncatedManifestTreatedAsMiss(t *testing.T) {
 	// Re-open in read mode; truncated manifest should cause a rebuild (miss),
 	// not a panic or an error that surfaces to the caller.
 	t.Setenv("MAGUS_CACHE_MODE", "write")
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open(second)")
 	r, err := c2.Run(context.Background(), step, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("rebuilt"), 0o644)
@@ -238,7 +238,7 @@ func TestPermDeniedCacheDirReturnsError(t *testing.T) {
 
 	// Open itself may succeed (it doesn't necessarily create files),
 	// but a Run that needs to write a manifest must fail gracefully.
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	if err != nil {
 		// Fine — some platforms reject unwritable dirs at Open.
 		return
@@ -264,7 +264,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = []string{"test/pkg/out.txt"}
 
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 
 	// Populate the cache successfully.
@@ -279,7 +279,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 
 	// A read-mode cache must not claim a hit when the blobs are gone.
 	t.Setenv("MAGUS_CACHE_MODE", "read")
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open(read)")
 	calls := 0
 	r, err := c2.Run(context.Background(), step, func(_ context.Context) error {
@@ -295,7 +295,7 @@ func TestPartialSnapshotDoesNotProduceHit(t *testing.T) {
 // It is also used by the hash tests, so it must stay a package-level helper.
 func newBareCache(t *testing.T) *Cache {
 	t.Helper()
-	c, err := Open(filepath.Join(t.TempDir(), ".magus"), WithMutable(true))
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(true))
 	require.NoError(t, err, "Open")
 	return c
 }

@@ -29,7 +29,7 @@ func TestFromContext_RoundTrip(t *testing.T) {
 	assert.Nil(t, FromContext(ctx), "empty context: FromContext should be nil")
 
 	cacheDir := t.TempDir()
-	c, err := Open(cacheDir, WithMutable(false))
+	c, err := Open(t.Context(), cacheDir, WithMutable(false))
 	require.NoError(t, err)
 	ctx = NewContext(ctx, c)
 	assert.Equal(t, c, FromContext(ctx))

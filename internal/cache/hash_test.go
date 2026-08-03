@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -392,10 +391,10 @@ func BenchmarkHashFilesBatch(b *testing.B) {
 				files[i] = relAbs{rel: rel, abs: abs}
 			}
 
-			c, err := Open(
+			c, err := Open(b.Context(),
 				b.TempDir(),
 				WithMutable(true),
-				WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+				WithLogger(slog.New(slog.DiscardHandler)),
 			)
 			if err != nil {
 				b.Fatal(err)
@@ -424,10 +423,10 @@ func BenchmarkHashFilesBatch(b *testing.B) {
 // serialization dominates. This is the gate for the fmt.Fprintf → direct-write
 // optimization on the key path.
 func BenchmarkHashStep(b *testing.B) {
-	c, err := Open(
+	c, err := Open(b.Context(),
 		b.TempDir(),
 		WithMutable(true),
-		WithLogger(slog.New(slog.NewTextHandler(io.Discard, nil))),
+		WithLogger(slog.New(slog.DiscardHandler)),
 	)
 	if err != nil {
 		b.Fatal(err)

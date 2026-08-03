@@ -12,20 +12,20 @@ import (
 )
 
 // LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
-func (m *Magus) LogScope(label, source string) {
+func (m *Magus) LogScope(ctx context.Context, label, source string) {
 	if m.cache == nil {
 		return
 	}
-	m.cache.LogScope(label, source)
+	m.cache.LogScope(ctx, label, source)
 }
 
 // LogCharms emits the active-charm header through the cache logger. No-op on Inspect
 // workspaces.
-func (m *Magus) LogCharms(charms string) {
+func (m *Magus) LogCharms(ctx context.Context, charms string) {
 	if m.cache == nil {
 		return
 	}
-	m.cache.LogCharms(charms)
+	m.cache.LogCharms(ctx, charms)
 }
 
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.

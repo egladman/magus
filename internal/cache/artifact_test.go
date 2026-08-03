@@ -48,7 +48,7 @@ func writeBlob(t *testing.T, c *Cache, body string) string {
 
 func testCacheDir(t *testing.T) *Cache {
 	t.Helper()
-	c, err := Open(filepath.Join(t.TempDir(), "cache"))
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), "cache"))
 	require.NoError(t, err)
 	return c
 }

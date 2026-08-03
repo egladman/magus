@@ -109,7 +109,7 @@ func TestLoadKnowledgeSymbolsAutoDerives(t *testing.T) {
 	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 
 	projects, spells := goWorkspace("pkg/a")
-	got := loadKnowledgeSymbols(ingest(config.Config{}, root, cacheDir, projects, spells))
+	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
 	require.Len(t, got["pkg/a"], 1, "a project bound to a symbol-capable spell is ingested with no config")
 	assert.Equal(t, "gomod example.com/a Foo#", got["pkg/a"][0].Key)
@@ -118,7 +118,7 @@ func TestLoadKnowledgeSymbolsAutoDerives(t *testing.T) {
 func TestLoadKnowledgeSymbolsSkipsUnbuilt(t *testing.T) {
 	root := t.TempDir()
 	projects, spells := goWorkspace("pkg/a") // no index written yet
-	got := loadKnowledgeSymbols(ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
+	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
 	assert.Empty(t, got, "a derived index whose scip target has not run is skipped")
 }
 
@@ -126,7 +126,7 @@ func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
 	root := t.TempDir()
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "web", Spell: "ts", Spells: []string{"ts"}}}}
 	spells := []types.Spell{{Name: "ts", Targets: []string{"tsc"}}} // no scip op
-	got := loadKnowledgeSymbols(ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
+	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells))
 	assert.Nil(t, got, "a project whose spell exposes no scip op is not ingested")
 }
 
@@ -138,7 +138,7 @@ func TestLoadKnowledgeSymbolsSkipsCorrupt(t *testing.T) {
 	require.NoError(t, os.WriteFile(idx, []byte("not a protobuf"), 0o644))
 
 	projects, spells := goWorkspace("pkg/a")
-	got := loadKnowledgeSymbols(ingest(config.Config{}, root, cacheDir, projects, spells))
+	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 	assert.Empty(t, got, "an undecodable index is skipped, not fatal")
 }
 
@@ -149,7 +149,7 @@ func TestLoadKnowledgeSymbolsExplicitOverride(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
 		{Project: "pkg/a", Index: "build/custom.scip"},
 	}}}
-	got := loadKnowledgeSymbols(ingest(cfg, root, filepath.Join(root, ".magus"), types.ProjectsOutput{}, nil))
+	got := loadKnowledgeSymbols(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), types.ProjectsOutput{}, nil))
 
 	require.Len(t, got["pkg/a"], 1, "an explicit override is read from its tree path")
 	assert.Equal(t, "gomod example.com/a Foo#", got["pkg/a"][0].Key)
@@ -161,7 +161,7 @@ func TestSymbolIndexDeclarationsOverrideWinsOverDerived(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
 		{Project: "pkg/a", Index: "build/custom.scip"},
 	}}}
-	decls := symbolIndexDeclarations(ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells))
+	decls := symbolIndexDeclarations(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells))
 
 	require.Len(t, decls, 1, "one project yields one declaration, not two")
 	assert.Equal(t, filepath.Join(root, "build/custom.scip"), decls[0].path, "the override path wins over the derived cache path")
@@ -171,7 +171,7 @@ func TestSymbolIndexDeclarationsDerivesCachePath(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
 	projects, spells := goWorkspace("pkg/a")
-	decls := symbolIndexDeclarations(ingest(config.Config{}, root, cacheDir, projects, spells))
+	decls := symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
 	require.Len(t, decls, 1)
 	assert.Equal(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")), decls[0].path, "the derived index lives under the cache dir")
@@ -182,7 +182,7 @@ func TestSymbolIndexDeclarationsRejectsPathEscape(t *testing.T) {
 	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
 		{Project: "pkg/a", Index: "../outside.scip"},
 	}}}
-	decls := symbolIndexDeclarations(ingest(cfg, root, filepath.Join(root, ".magus"), types.ProjectsOutput{}, nil))
+	decls := symbolIndexDeclarations(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), types.ProjectsOutput{}, nil))
 	assert.Empty(t, decls, "an override path that escapes the workspace is rejected")
 }
 

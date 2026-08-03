@@ -26,15 +26,20 @@ package secret
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/sync/singleflight"
+
+	"github.com/egladman/magus/types"
 )
 
 // Provider fetches the value behind an opaque reference. The reference format is the
@@ -293,6 +298,20 @@ func (r *Resolver) Read(ctx context.Context, ref string) (string, error) {
 		if v == "" {
 			return nil, fmt.Errorf("secret %q: provider resolved it to an empty value", ref)
 		}
+		if len(v) < minRedactLen {
+			// Say it out loud rather than declining in silence. record refuses to register
+			// a value this short because masking it would shred ordinary output, which
+			// means this credential is returned to the magusfile with NO redaction behind
+			// it - and the caller has no other way to discover that. Telling the user is
+			// the whole value here; magus cannot protect the value itself.
+			slog.WarnContext(ctx, "secret.short",
+				slog.String("code", string(types.SecretTooShortToMask)),
+				slog.String("ref", ref),
+				slog.Int("min_length", minRedactLen),
+				slog.String("msg", fmt.Sprintf(
+					"secret %q is shorter than %d characters, so its value is NOT redacted from magus output; see %s",
+					ref, minRedactLen, types.CodeURL(types.SecretTooShortToMask))))
+		}
 		r.record(key, v)
 		return v, nil
 	})
@@ -331,6 +350,14 @@ func (r *Resolver) provider(ctx context.Context, name string) (Provider, error) 
 // redaction set ordered longest first. Longest-first matters: when one secret contains
 // another, masking the shorter first would leave the longer one's remaining bytes in the
 // output.
+//
+// The common ENCODINGS of the value are registered alongside the raw form. Redaction is
+// literal substring matching, so a credential a tool re-encodes before printing passes
+// straight through - and the two that actually happen are not exotic: a token in an
+// `Authorization: Basic` header is base64, and a token in a URL is percent-escaped. This
+// does not make the transform problem solved; a child can encode arbitrarily, and the
+// LIMITS on Redact still stand. It closes the two shapes seen in practice for the cost of
+// a few extra entries per secret.
 func (r *Resolver) record(key memoKey, v string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -338,6 +365,29 @@ func (r *Resolver) record(key memoKey, v string) {
 		r.memo = make(map[memoKey]string)
 	}
 	r.memo[key] = v
+	for _, form := range encodedForms(v) {
+		r.addRedactable(form)
+	}
+}
+
+// encodedForms returns v plus the encodings of it worth matching. Duplicates are harmless
+// (addRedactable dedupes) and expected: a value with no special characters percent-escapes
+// to itself.
+func encodedForms(v string) []string {
+	return []string{
+		v,
+		base64.StdEncoding.EncodeToString([]byte(v)),
+		base64.RawStdEncoding.EncodeToString([]byte(v)),
+		base64.URLEncoding.EncodeToString([]byte(v)),
+		hex.EncodeToString([]byte(v)),
+		url.QueryEscape(v),
+		url.PathEscape(v),
+	}
+}
+
+// addRedactable inserts one value into the redaction set, keeping it ordered longest
+// first. Callers hold r.mu.
+func (r *Resolver) addRedactable(v string) {
 	if len(v) < minRedactLen {
 		return
 	}
@@ -362,8 +412,10 @@ func (r *Resolver) record(key memoKey, v string) {
 // LIMITS, which callers must not overstate to users:
 //   - Only values read through this resolver are known. A credential a magusfile read
 //     with os\env, bypassing the provider, is invisible here.
-//   - It is literal substring replacement. A child that base64-encodes, URL-escapes or
-//     splits the value defeats it.
+//   - It is literal substring replacement. record registers the base64, hex and
+//     percent-escaped forms alongside the raw value, so those specific re-encodings are
+//     covered; ANY other transform - a different alphabet, compression, splitting the
+//     value across a delimiter - still defeats it.
 //   - A secret straddling two writes is masked only if both halves land in one call.
 //     This applies to the live stream, the raw log, AND the output store: the capture tap
 //     redacts per Write, and all three read those same chunks. Only run.Exec's buffered
@@ -434,6 +486,11 @@ func RedactString(ctx context.Context, s string) string {
 // chosen handler covers every format by construction, including one added later.
 type redactingHandler struct {
 	inner slog.Handler
+	// plain is inner with every pre op ALREADY applied, unredacted. It is the handler used
+	// when the resolver holds nothing to redact, which is the overwhelmingly common case;
+	// building it as the ops arrive keeps the no-secret log path free of a per-record
+	// rebuild. It is never used once a secret exists - then pre is replayed instead.
+	plain slog.Handler
 	// pre records WithAttrs/WithGroup calls in order instead of forwarding them to inner
 	// immediately. Those calls carry no context, so there is no resolver to redact
 	// against at the time they are made - forwarding them meant a logger built with
@@ -451,9 +508,12 @@ type handlerOp struct {
 }
 
 // NewRedactingHandler wraps inner. Wrapping is unconditional and cheap: a run that read no
-// secret - which is nearly all of them, and every run before the first read - short-circuits
-// on hasSecrets before any attr is walked, so it costs one atomic-free length check.
-func NewRedactingHandler(inner slog.Handler) slog.Handler { return redactingHandler{inner: inner} }
+// secret - which is nearly all of them, and every run before the first read - hands the
+// record to a handler chain built ONCE at WithAttrs/WithGroup time, so it costs one length
+// check and nothing else.
+func NewRedactingHandler(inner slog.Handler) slog.Handler {
+	return redactingHandler{inner: inner, plain: inner}
+}
 
 func (h redactingHandler) Enabled(ctx context.Context, l slog.Level) bool {
 	return h.inner.Enabled(ctx, l)
@@ -461,6 +521,7 @@ func (h redactingHandler) Enabled(ctx context.Context, l slog.Level) bool {
 
 func (h redactingHandler) WithAttrs(as []slog.Attr) slog.Handler {
 	h.pre = append(append([]handlerOp(nil), h.pre...), handlerOp{attrs: as})
+	h.plain = h.plain.WithAttrs(as)
 	return h
 }
 
@@ -472,6 +533,7 @@ func (h redactingHandler) WithGroup(n string) slog.Handler {
 		return h
 	}
 	h.pre = append(append([]handlerOp(nil), h.pre...), handlerOp{group: n})
+	h.plain = h.plain.WithGroup(n)
 	return h
 }
 
@@ -533,10 +595,14 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 	}
 }
 
-// redactAttrs returns as with every value redacted.
+// redactAttrs returns as with every key and value redacted. The KEY matters too: an attr
+// built as slog.String(userSuppliedName, v) puts caller-controlled text where only the
+// value is usually suspect, and redacting one half of a pair is the kind of gap this
+// package keeps finding.
 func redactAttrs(r *Resolver, as []slog.Attr) []slog.Attr {
 	out := make([]slog.Attr, len(as))
 	for i, a := range as {
+		a.Key = r.RedactString(a.Key)
 		a.Value = redactValue(r, a.Value)
 		out[i] = a
 	}
@@ -547,28 +613,30 @@ func redactAttrs(r *Resolver, as []slog.Attr) []slog.Attr {
 func (h redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 	res := ResolverFromContext(ctx)
 
-	// Replay the deferred WithAttrs/WithGroup calls now that a resolver is reachable.
+	// Nothing to redact: hand the record to the chain WithAttrs/WithGroup already built.
+	// A Resolver is installed for every workspace Open, so `res != nil` is the common case,
+	// and replaying h.pre here would rebuild the whole handler chain once per log line for
+	// runs that never read a secret.
+	if !res.hasSecrets() {
+		return h.plain.Handle(ctx, r)
+	}
+
+	// Something to redact, so the preset attrs have to be rebuilt: they were captured by
+	// WithAttrs, which carries no context and therefore had no resolver to redact against.
+	// Binding them at wrap time is what leaked a `slog.With("token", v)` logger on every
+	// later record; replaying them here, where a context exists, is what closed it.
 	inner := h.inner
 	for _, op := range h.pre {
 		if op.group != "" {
 			inner = inner.WithGroup(op.group)
 			continue
 		}
-		attrs := op.attrs
-		if res.hasSecrets() {
-			attrs = redactAttrs(res, attrs)
-		}
-		inner = inner.WithAttrs(attrs)
-	}
-	// A Resolver is installed for every workspace Open, so `res != nil` is the common case
-	// and would put a full render of every attr on the log path of runs that never read a
-	// secret. hasSecrets is what keeps the wrapper as cheap as its doc claims.
-	if !res.hasSecrets() {
-		return inner.Handle(ctx, r)
+		inner = inner.WithAttrs(redactAttrs(res, op.attrs))
 	}
 
 	out := slog.NewRecord(r.Time, r.Level, res.RedactString(r.Message), r.PC)
 	r.Attrs(func(a slog.Attr) bool {
+		a.Key = res.RedactString(a.Key)
 		a.Value = redactValue(res, a.Value)
 		out.AddAttrs(a)
 		return true

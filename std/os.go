@@ -33,12 +33,12 @@ var magusWarnOnce sync.Once
 
 // warnIfMagusBinary emits a one-shot slog warning when cmd resolves to the
 // magus binary. Execution is not blocked; the escape hatch stays open.
-func warnIfMagusBinary(cmd string) {
+func warnIfMagusBinary(ctx context.Context, cmd string) {
 	if filepath.Base(cmd) != "magus" {
 		return
 	}
 	magusWarnOnce.Do(func() {
-		slog.Warn("magusfile: os.exec called with 'magus' binary",
+		slog.WarnContext(ctx, "magusfile: os.exec called with 'magus' binary",
 			"hint", "use magus.cmd({...}) instead - in-process, version-pinned, no arg-quoting issues")
 	})
 }
@@ -358,7 +358,7 @@ func looksLikeShellCommand(cmd string) bool {
 // unless opts.allow_failure is true. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
-	warnIfMagusBinary(cmd)
+	warnIfMagusBinary(ctx, cmd)
 	wd := resolveDir(ctx, dir)
 	if wd != "" {
 		if err := checkRead(ctx, wd); err != nil {

@@ -123,7 +123,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 				if _, err := os.Stat(root); err == nil || !errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
-				slog.Warn("lock.root_vanished",
+				slog.WarnContext(ctx, "lock.root_vanished",
 					slog.String("root", root),
 					slog.String("action", "released this run's locks so peers are not blocked behind a tree that no longer exists"))
 				release()
@@ -220,7 +220,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		if l.noWait {
 			return nil, &lockContendedError{Project: projectPath}
 		}
-		l.emitWaiting(projectPath)
+		l.emitWaiting(ctx, projectPath)
 		stopWaiter := l.recordWaiter(projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
 		got, err = fl.TryLockContext(ctx, lockRetryDelay)
@@ -236,7 +236,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 			}
 			return nil, fmt.Errorf("workspace lock: could not lock %s", projectPath)
 		}
-		l.emitResumed(projectPath)
+		l.emitResumed(ctx, projectPath)
 	}
 	l.recordOwner(projectPath)
 	return func() { l.removeOwner(projectPath); _ = fl.Unlock() }, nil
@@ -284,7 +284,7 @@ func (l *projectLocker) lockPath(projectPath string) string {
 // and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to stderr unconditionally
 // (even under -s/--silent) - a run that stalls without explanation is the exact UX we
 // are avoiding. The notify hook diverts it for tests and the console.
-func (l *projectLocker) emitWaiting(projectPath string) {
+func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if l.notify != nil {
 		l.notify(projectPath)
 		return
@@ -308,7 +308,7 @@ func (l *projectLocker) emitWaiting(projectPath string) {
 	// presentation for a surface magus cannot see inside magus. The region composes
 	// its own from these fields.
 	rec := l.readOwner(projectPath)
-	slog.Info("lock.waiting",
+	slog.InfoContext(ctx, "lock.waiting",
 		slog.String("project", p),
 		slog.Int("holder_pid", rec.PID),
 		slog.String("holder_command", rec.Command))
@@ -373,7 +373,7 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 // and this run now holds the lock and proceeds. Only reached after a wait, so it never
 // prints on the common uncontended path. Suppressed when a notify hook is installed so
 // the hook stays the single waiting signal tests count.
-func (l *projectLocker) emitResumed(projectPath string) {
+func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	if l.notify != nil {
 		return
 	}
@@ -382,7 +382,7 @@ func (l *projectLocker) emitResumed(projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(os.Stderr, "magus: lock on project %s released; starting.\n", p)
-	slog.Info("lock.acquired", slog.String("project", p))
+	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))
 }
 
 // lockOwner is the best-effort record of which process holds a project lock,

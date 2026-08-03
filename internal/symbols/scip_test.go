@@ -44,7 +44,7 @@ func TestParseIndexDefsRefsAndDedup(t *testing.T) {
 		},
 	}}
 
-	syms, err := ParseIndex(marshalIndex(t, idx), "")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "")
 	require.NoError(t, err)
 	require.Len(t, syms, 1, "v1 and v2 collapse to one symbol")
 
@@ -72,7 +72,7 @@ func TestParseIndexTypedRange(t *testing.T) {
 			{Symbol: monikerV1, SymbolRoles: int32(scip.SymbolRole_Definition), TypedRange: defRange.AsTypedRange()},
 		},
 	}}}
-	syms, err := ParseIndex(marshalIndex(t, idx), "")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "")
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
 	assert.Equal(t, "pkg/foo/foo.go:11", syms[0].Source, "typed range resolved to the 1-based line, not 0")
@@ -87,7 +87,7 @@ func TestParseIndexSkipsLocalAndUnparseable(t *testing.T) {
 			{Symbol: "not a valid moniker", Range: []int32{2, 0, 1}},
 		},
 	}}}
-	syms, err := ParseIndex(marshalIndex(t, idx), "")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "")
 	require.NoError(t, err)
 	assert.Empty(t, syms, "local, empty, and unparseable monikers all skipped")
 }
@@ -99,7 +99,7 @@ func TestParseIndexRefLineCap(t *testing.T) {
 	}
 	idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "big.go", Occurrences: occs}}}
 
-	syms, err := ParseIndex(marshalIndex(t, idx), "")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "")
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
 	assert.Equal(t, MaxRefLines+5, syms[0].Refs[0].Count, "count is exact")
@@ -107,7 +107,7 @@ func TestParseIndexRefLineCap(t *testing.T) {
 }
 
 func TestParseIndexBadBytes(t *testing.T) {
-	_, err := ParseIndex([]byte("not a protobuf"), "")
+	_, err := ParseIndex(t.Context(), []byte("not a protobuf"), "")
 	assert.Error(t, err)
 }
 
@@ -123,7 +123,7 @@ func TestParseIndexRebasesProjectPaths(t *testing.T) {
 			{Symbol: monikerV1, Range: []int32{4, 0, 3}, EnclosingRange: nil},
 		},
 	}}}
-	syms, err := ParseIndex(marshalIndex(t, idx), "gopherbuzz")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "gopherbuzz")
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
 	assert.Equal(t, []string{"gopherbuzz/compiler.go"}, syms[0].Defs, "def path rebased under the project")
@@ -211,7 +211,7 @@ func TestParseIndexSkipsEscapingDocuments(t *testing.T) {
 		},
 	}}
 
-	syms, err := ParseIndex(marshalIndex(t, idx), ".")
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), ".")
 	require.NoError(t, err)
 	require.Len(t, syms, 1, "only the in-workspace document contributes")
 	assert.Equal(t, []string{"pkg/foo.go"}, syms[0].Defs)

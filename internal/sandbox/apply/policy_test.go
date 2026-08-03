@@ -24,9 +24,9 @@ func TestFromConfigFlowsAllowIntoPolicy(t *testing.T) {
 	root := t.TempDir()
 	extra := t.TempDir()
 
-	base := FromConfig(root, config.Config{})
+	base := FromConfig(t.Context(), root, config.Config{})
 	require.NotNil(t, base)
-	withAllow := FromConfig(root, config.Config{
+	withAllow := FromConfig(t.Context(), root, config.Config{
 		Sandbox: config.SandboxConfig{
 			Allow: []config.SandboxAllowPath{{Path: extra, Mode: "rw"}},
 		},
@@ -42,8 +42,8 @@ func TestFromConfigFlowsAllowIntoPolicy(t *testing.T) {
 // the mismatch guard exercised below.
 func TestFromConfigFingerprintDiffersByRoot(t *testing.T) {
 	t.Parallel()
-	a := FromConfig(t.TempDir(), config.Config{})
-	b := FromConfig(t.TempDir(), config.Config{})
+	a := FromConfig(t.Context(), t.TempDir(), config.Config{})
+	b := FromConfig(t.Context(), t.TempDir(), config.Config{})
 	assert.NotEqual(t, a.Fingerprint(), b.Fingerprint(),
 		"different workspace roots should produce different fingerprints")
 }
@@ -72,8 +72,8 @@ func TestApplyFingerprintMismatch(t *testing.T) {
 	ctx := context.Background()
 	rootA := t.TempDir()
 	rootB := t.TempDir()
-	policyA := FromConfig(rootA, config.Config{})
-	policyB := FromConfig(rootB, config.Config{})
+	policyA := FromConfig(t.Context(), rootA, config.Config{})
+	policyB := FromConfig(t.Context(), rootB, config.Config{})
 	require.NotEqual(t, policyA.Fingerprint(), policyB.Fingerprint(),
 		"test needs two policies with different fingerprints")
 

@@ -174,7 +174,7 @@ func MagusHasCharm(ctx context.Context, name string) (bool, error) {
 // all manifests are cleared; otherwise only entries for that project are removed.
 // A structured warning is always emitted: this is an escape hatch, not routine.
 func MagusBustCache(ctx context.Context, projectPath string) error {
-	slog.Warn("magus.bust_cache called - consider modeling the missing input as a Source instead",
+	slog.WarnContext(ctx, "magus.bust_cache called - consider modeling the missing input as a Source instead",
 		"project_path", projectPath)
 	c := cache.FromContext(ctx)
 	if c == nil {

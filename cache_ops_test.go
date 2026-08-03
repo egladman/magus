@@ -22,8 +22,8 @@ func TestCacheOperationsWithoutOpenCache(t *testing.T) {
 	require.NoError(t, err)
 	workspace := m.(*Magus)
 
-	workspace.LogScope("test", "unit")
-	workspace.LogCharms("rw")
+	workspace.LogScope(t.Context(), "test", "unit")
+	workspace.LogCharms(t.Context(), "rw")
 	_, _, err = workspace.PruneCache(context.Background(), time.Now(), false)
 	assert.ErrorIs(t, err, types.ErrNoCache)
 	assert.ErrorIs(t, workspace.PruneRemoteCache(context.Background(), time.Hour, 1, false), types.ErrNoCache)

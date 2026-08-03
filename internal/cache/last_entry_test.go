@@ -13,7 +13,7 @@ import (
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
 	cdir := t.TempDir()
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err)
 	_, _, err = c.LastEntry("nonexistent/project")
 	assert.ErrorIs(t, err, fs.ErrNotExist)
@@ -43,7 +43,7 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 		return os.WriteFile(abs, []byte("binary"), 0o755)
 	}
 
-	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
+	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 	_, err = c.Run(context.Background(), step, fn)
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("package main\nfunc main(){}\n"), 0o644))
 
-	c, err := Open(cdir, WithMutable(true), WithLogger(discardLogger))
+	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
 	require.NoError(t, err)
 
 	buildStep := Step{

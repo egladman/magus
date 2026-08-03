@@ -174,7 +174,7 @@ func deferMtimeFlush() RunOption {
 
 // Open returns a Cache rooted at dir (created on demand). MAGUS_CACHE_IMMUTABLE=true
 // opens read-only (replays hits, never writes). Logger respects MAGUS_LOG_FORMAT/LEVEL.
-func Open(dir string, opts ...Option) (*Cache, error) {
+func Open(ctx context.Context, dir string, opts ...Option) (*Cache, error) {
 	dir = filepath.Clean(dir)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("magus/cache: mkdir %q: %w", dir, err)
@@ -210,7 +210,7 @@ func Open(dir string, opts ...Option) (*Cache, error) {
 	if c.sizeMB == 0 {
 		c.sizeMB = parseSizeMB()
 	}
-	warnIfCoarseMtimeResolution(dir, c.log)
+	warnIfCoarseMtimeResolution(ctx, dir, c.log)
 	return c, nil
 }
 
@@ -373,7 +373,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				if m, err := c.readManifest(s.ProjectPath, hash); err == nil {
 					manifest, mErr, fromRemote = m, nil, true
 				} else {
-					c.log.Warn("cache.warn", slog.String("msg",
+					c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 						fmt.Sprintf("remote manifest %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
 				}
 			}
@@ -429,7 +429,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				if fromRemote {
 					event = "cache.remote.hit"
 				}
-				c.log.Info(
+				c.log.InfoContext(ctx,
 					event,
 					append(netAttrs(netRec),
 						slog.String("project", s.ProjectPath),
@@ -447,7 +447,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				rc.fireResults(rc.step, &result, nil)
 				return result, nil
 			}
-			c.log.Warn(
+			c.log.WarnContext(ctx,
 				"cache.warn",
 				slog.String("msg", fmt.Sprintf("replay failed for %s (%s); rebuilding", s.ProjectPath, shortHash(hash))),
 			)
@@ -468,7 +468,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		// output stays retrievable via `magus query ref`.
 		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, runErr)
 		result.Ref = ref
-		c.log.Error(
+		c.log.ErrorContext(ctx,
 			"cache.error",
 			slog.String("project", s.ProjectPath),
 			slog.String("label", s.Label),
@@ -515,7 +515,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	c.misses.Add(1)
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
 	result.Ref = ref
-	c.log.Info(
+	c.log.InfoContext(ctx,
 		"cache.miss",
 		append(netAttrs(netRec),
 			slog.String("project", s.ProjectPath),
@@ -563,7 +563,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	if c.outputs != nil {
 		r, err := c.outputs.Persist(ctx, hash, output, d)
 		if err != nil {
-			c.log.Warn("cache.warn", slog.String("msg",
+			c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
 		} else {
 			ref = r
@@ -989,12 +989,12 @@ func (c *Cache) gcBlobs(ctx context.Context) error {
 		}
 		data, err := os.ReadFile(p) // p is always under c.dir; symlink escapes are not a concern for a local cache
 		if err != nil {
-			c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("gc: read %s: %v", p, err)))
+			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("gc: read %s: %v", p, err)))
 			return nil
 		}
 		var m Manifest
 		if jErr := json.Unmarshal(data, &m); jErr != nil {
-			c.log.Warn("cache.warn", slog.String("msg", fmt.Sprintf("gc: corrupt manifest %s: %v", p, jErr)))
+			c.log.WarnContext(ctx, "cache.warn", slog.String("msg", fmt.Sprintf("gc: corrupt manifest %s: %v", p, jErr)))
 			return nil
 		}
 		for _, out := range m.Outputs {

@@ -42,7 +42,7 @@ func newCache(t *testing.T) (root string, c *cache.Cache) {
 	root = t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	t.Setenv("MAGUS_CACHE_MODE", "auto")
-	c, err := cache.Open(cdir)
+	c, err := cache.Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }

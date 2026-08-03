@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -106,6 +109,41 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 	// Unregistered, so ordinary output containing those letters survives intact. This is
 	// a documented hole, not an accident - see minRedactLen.
 	assert.Equal(t, "grab a table", string(r.Redact([]byte("grab a table"))))
+}
+
+// TestReadWarnsWhenAValueIsTooShortToMask pins MGS2011. Declining to redact is correct;
+// declining in SILENCE was the hole - the caller treats the value as protected and has no
+// way to find out it is not. The notice is the entire mitigation available here.
+func TestReadWarnsWhenAValueIsTooShortToMask(t *testing.T) {
+	var sink bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx, _ := withResolver(t)
+	t.Setenv("MAGUS_TEST_TINY", "ab")
+	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_TINY")
+	require.NoError(t, err, "the read succeeds; only the protection is declined")
+
+	out := sink.String()
+	assert.Contains(t, out, string(types.SecretTooShortToMask), "the notice names its code")
+	assert.Contains(t, out, "MAGUS_TEST_TINY", "and the reference it applies to")
+	assert.Contains(t, out, "NOT redacted", "and states plainly that the value is unprotected")
+}
+
+// A long enough value must NOT trip the notice, or it becomes noise every run.
+func TestReadDoesNotWarnForAMaskableValue(t *testing.T) {
+	var sink bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx, _ := withResolver(t)
+	t.Setenv("MAGUS_TEST_LONG_ENOUGH", "long-enough-token")
+	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LONG_ENOUGH")
+	require.NoError(t, err)
+
+	assert.NotContains(t, sink.String(), string(types.SecretTooShortToMask))
 }
 
 func TestReadMemoizesPerProviderAndReference(t *testing.T) {
@@ -263,6 +301,56 @@ func TestRedactingHandlerCoversNonPrettyFormats(t *testing.T) {
 	// rendering the value would collapse it to a string and break anything parsing the
 	// stream, so the []string arm exists for this and only this test proves it.
 	assert.Contains(t, sink.String(), `"args":["-p","`+mask+`"]`, "argv must survive as an array")
+}
+
+// TestRedactCoversCommonEncodings pins the re-encoded forms record registers alongside the
+// raw value. These are not hypothetical: a token in an `Authorization: Basic` header is
+// base64, and a token in a URL is percent-escaped, so a tool that composes either and logs
+// it would otherwise print a trivially recoverable credential.
+func TestRedactCoversCommonEncodings(t *testing.T) {
+	ctx, r := withResolver(t)
+	const tok = "ghp_encode_me_please"
+	t.Setenv("MAGUS_TEST_LOG_TOKEN", tok)
+	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	require.NoError(t, err)
+
+	for name, encoded := range map[string]string{
+		"raw":       tok,
+		"base64":    base64.StdEncoding.EncodeToString([]byte(tok)),
+		"base64raw": base64.RawStdEncoding.EncodeToString([]byte(tok)),
+		"base64url": base64.URLEncoding.EncodeToString([]byte(tok)),
+		"hex":       hex.EncodeToString([]byte(tok)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, mask, r.RedactString(encoded), "%s form must be masked", name)
+		})
+	}
+
+	// A percent-escaped value only differs when it contains reserved characters, so use one
+	// that does rather than asserting on a form identical to the raw value.
+	const urly = "p@ss/word+with spaces"
+	t.Setenv("MAGUS_TEST_URL_TOKEN", urly)
+	_, err = ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_URL_TOKEN")
+	require.NoError(t, err)
+	assert.Equal(t, mask, r.RedactString(url.QueryEscape(urly)), "percent-escaped form must be masked")
+}
+
+// TestRedactingHandlerRedactsAttrKeys covers the other half of an attr. A key built from
+// caller-supplied text can carry the credential just as a value can, and redacting only
+// one half is the shape of gap this package keeps rediscovering.
+func TestRedactingHandlerRedactsAttrKeys(t *testing.T) {
+	ctx, _ := withResolver(t)
+	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_key_side_leak")
+	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	require.NoError(t, err)
+
+	var sink bytes.Buffer
+	h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	// Both an inline attr key and one bound through With, which takes the precomputed path.
+	slog.New(h).With("preset_ghp_key_side_leak", 1).
+		DebugContext(ctx, "keys", "ghp_key_side_leak", "value")
+
+	assert.NotContains(t, sink.String(), "ghp_key_side_leak", "an attr KEY must be redacted too")
 }
 
 // TestRedactingHandlerCoversNestedAndWrappedValues guards the carriers that are not a

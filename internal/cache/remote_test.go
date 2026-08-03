@@ -33,7 +33,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	openWithRemote := func(t *testing.T) (root string, c *Cache) {
 		t.Helper()
 		root = t.TempDir()
-		c, err = Open(
+		c, err = Open(t.Context(), 
 			filepath.Join(t.TempDir(), ".magus"),
 			WithMutable(true),
 			WithRemoteBackend(remote),
@@ -169,7 +169,7 @@ func learnHash(t *testing.T) (project, hash string) {
 func runAgainst(t *testing.T, backend RemoteBackend) (hit bool, output string, ran bool) {
 	t.Helper()
 	root := t.TempDir()
-	c, err := Open(filepath.Join(t.TempDir(), ".magus"),
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true), WithRemoteBackend(backend),
 		WithInsecureRemote()) // integrity-only path: no trust set
 	require.NoError(t, err, "cache.Open")
@@ -243,7 +243,7 @@ func openSigned(t *testing.T, remote RemoteBackend, seed []byte, trusted [][]byt
 	} else {
 		opts = append(opts, WithInsecureRemote()) // no trust set: unsigned-producer case
 	}
-	c, err := Open(filepath.Join(t.TempDir(), ".magus"), opts...)
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opts...)
 	require.NoError(t, err, "cache.Open")
 	return root, c
 }
@@ -333,10 +333,10 @@ func TestRemoteRejectsUntrustedSigner(t *testing.T) {
 func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
 	require.NoError(t, err, "NewFSRemoteBackend")
-	_, err = Open(filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true), WithRemoteBackend(remote))
 	assert.Error(t, err, "Open accepted a remote backend with no trust set and no opt-out")
-	_, err = Open(filepath.Join(t.TempDir(), ".magus"),
+	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true), WithRemoteBackend(remote),
 		WithInsecureRemote())
 	assert.NoError(t, err, "Open rejected remote + explicit opt-out")
@@ -414,7 +414,7 @@ func TestRemoteRejectsOversizedArchive(t *testing.T) {
 	})
 
 	root := t.TempDir()
-	c, err := Open(filepath.Join(t.TempDir(), ".magus"),
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithMutable(true),
 		WithRemoteBackend(&staticBackend{project: project, hash: hash, entry: entry}),
 		WithInsecureRemote(),

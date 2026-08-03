@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
@@ -63,7 +64,7 @@ func VerifyCLIBearer(presented string) bool {
 // in journald/nohup.out, and a 256-bit shared secret must not persist there.
 // On generation Resolve logs only a notice; the operator retrieves the value
 // out-of-band via `magus config mcp token print`.
-func Resolve(log *slog.Logger) (string, error) {
+func Resolve(ctx context.Context, log *slog.Logger) (string, error) {
 	tok, err := Load()
 	if err == nil {
 		return tok, nil
@@ -85,7 +86,7 @@ func Resolve(log *slog.Logger) (string, error) {
 		}
 		return "", err
 	}
-	log.Warn("[AGENT] generated a new MCP auth token; retrieve it with `magus config mcp token print`",
+	log.WarnContext(ctx, "[AGENT] generated a new MCP auth token; retrieve it with `magus config mcp token print`",
 		slog.String("path", path),
 	)
 	return tok, nil

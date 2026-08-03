@@ -113,8 +113,40 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 	if len(targets) == 0 {
 		return nil
 	}
-	return m.runResolved(ctx, targets, applyRunOpts(opts))
+	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
 }
+
+// redactError masks any resolved secret in err's MESSAGE while leaving the error chain
+// intact.
+//
+// This is the boundary where a run's error stops being something magus handles with a
+// context and becomes text a caller prints. The CLI's final line is `slog.Error(err.Error())`
+// with no context, so the log handler's redaction cannot reach it - and a magusfile's
+// `throw "auth failed: " + magus\secret.read(...)` propagates its message all the way there.
+// Redacting once here covers every consumer of a run error instead of asking each to
+// remember, which is the mistake this package's history is made of.
+//
+// The chain is preserved through Unwrap, so errors.Is/As - which exitCodeOf relies on to
+// recognize ExitError and the usage errors - keep working.
+func (m *Magus) redactError(err error) error {
+	if err == nil || m.resolver == nil {
+		return err
+	}
+	msg := m.resolver.RedactString(err.Error())
+	if msg == err.Error() {
+		return err
+	}
+	return redactedError{msg: msg, err: err}
+}
+
+// redactedError carries a masked message over the original error.
+type redactedError struct {
+	msg string
+	err error
+}
+
+func (e redactedError) Error() string { return e.msg }
+func (e redactedError) Unwrap() error { return e.err }
 
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
@@ -175,7 +207,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
 		}
 	}
-	return m.runResolved(ctx, targets, o)
+	return m.redactError(m.runResolved(ctx, targets, o))
 }
 
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
@@ -549,7 +581,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		recCtx := types.WithTrace(ctx)
 		dryStart := time.Now()
 		if m.cache != nil {
-			m.cache.LogDryBanner()
+			m.cache.LogDryBanner(ctx)
 		} else {
 			fmt.Println("dry run - commands shown, not executed")
 		}
@@ -559,7 +591,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
 				if m.cache != nil {
-					m.cache.LogDry(p.Path, label, st.target)
+					m.cache.LogDry(ctx, p.Path, label, st.target)
 				} else {
 					fmt.Printf("[dry] %s\n", label)
 				}
@@ -576,7 +608,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// simply stopped after the last plan line, so the one shape a reader looks
 		// for at the bottom was missing precisely when they were reviewing a plan.
 		if m.cache != nil {
-			m.cache.LogDrySummary(planned, time.Since(dryStart))
+			m.cache.LogDrySummary(ctx, planned, time.Since(dryStart))
 		}
 		return nil
 	}
@@ -702,7 +734,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		defer func() {
 			if evs := diag.snapshot(); len(evs) > 0 {
 				if err := knowledge.RecordRuntimeEvents(resolveCacheDir(m.Root(), m.cfg), evs); err != nil {
-					slog.Debug("magus: could not persist runtime diagnostics", slog.String("error", err.Error()))
+					slog.DebugContext(ctx, "magus: could not persist runtime diagnostics", slog.String("error", err.Error()))
 				}
 			}
 		}()
@@ -760,7 +792,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.Race {
 		raceRT = m.buildRaceRuntime()
 		if err := raceRT.Start(ctx); err != nil {
-			slog.Warn("magus: race detector unavailable", "err", err)
+			slog.WarnContext(ctx, "magus: race detector unavailable", "err", err)
 			raceRT = nil
 		} else {
 			ctx = race.WithRuntime(ctx, raceRT)
@@ -778,7 +810,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = interp.WithCrossDispatch(ctx, interp.NewCrossDispatch())
 	lim := m.limiter()
 	if opts.Step {
-		slog.Info("magus: --step forces Concurrency=1")
+		slog.InfoContext(ctx, "magus: --step forces Concurrency=1")
 		lim = cache.NewLimiter(1)
 	}
 	cacheOpts := []cache.RunOption{cache.WithLimiter(lim)}
@@ -842,7 +874,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	if volatilityRT != nil {
 		if err := volatilityRT.Save(ctx); err != nil {
-			slog.Warn("magus: failed to save volatility history", "err", err)
+			slog.WarnContext(ctx, "magus: failed to save volatility history", "err", err)
 		}
 	}
 
@@ -855,7 +887,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if raceRT != nil {
 		writtenByProject := raceRT.WrittenPaths()
 		if err := raceRT.Flush(ctx, opts.Report); err != nil {
-			slog.Warn("magus: race detector flush failed", "err", err)
+			slog.WarnContext(ctx, "magus: race detector flush failed", "err", err)
 		}
 		checkMissingDependencies(m.ws.All(), byPath, writtenByProject, scopeLabel, opts.Report)
 	}
@@ -863,7 +895,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Footer summary for a fan-out: a single line tallying the per-project results.
 	// Skipped for a single project, where the per-project status line already says it all.
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
-		m.cache.LogSummary(time.Since(start))
+		m.cache.LogSummary(ctx, time.Since(start))
 	}
 
 	return runErr
@@ -878,8 +910,10 @@ type stageObserver struct {
 	label string // normalized project display name (never "" or "."); see types.ProjectLabel
 }
 
-func (o stageObserver) TargetEnd(_ context.Context, name string, elapsed time.Duration, err error) {
-	o.cache.LogStage(o.label, name, elapsed, err)
+func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
+	// ctx, not _: LogStage puts runErr.Error() in an attr, and a magusfile can throw an
+	// interpolated credential. Without the context the record redacts against nothing.
+	o.cache.LogStage(ctx, o.label, name, elapsed, err)
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).
@@ -923,7 +957,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 
 	for _, p := range replayable {
 		if err := handler(ctx, byPath[p.Path]); err != nil {
-			slog.Warn("magus: race-replay handler failed", "project", p.Path, "err", err)
+			slog.WarnContext(ctx, "magus: race-replay handler failed", "project", p.Path, "err", err)
 		}
 	}
 

@@ -1,14 +1,15 @@
 package cache
 
 import (
+	"context"
 	"log/slog"
 	"time"
 )
 
 // LogScope emits the projects header through the cache logger so all
 // output formats (pretty/text/JSON) receive the same event.
-func (c *Cache) LogScope(label, source string) {
-	c.log.Info(
+func (c *Cache) LogScope(ctx context.Context, label, source string) {
+	c.log.InfoContext(ctx,
 		"cache.scope",
 		slog.String("label", label),
 		slog.String("source", source),
@@ -19,15 +20,15 @@ func (c *Cache) LogScope(label, source string) {
 // magus.yaml default_charms like `rw`) so the reader sees up front what state the run
 // executes under - and can tell at a glance whether a default charm actually took
 // effect. Routed through the cache logger like LogScope so every format receives it.
-func (c *Cache) LogCharms(charms string) {
-	c.log.Info("cache.charms", slog.String("charms", charms))
+func (c *Cache) LogCharms(ctx context.Context, charms string) {
+	c.log.InfoContext(ctx, "cache.charms", slog.String("charms", charms))
 }
 
 // LogStage emits a per-stage progress event for one magus.needs sub-target that ran
 // under a project, routed through the cache logger like the other events. In collapse
 // mode (where a project's subprocess output is withheld) these lines give the reader a
 // checklist of what ran and whether it passed; runErr is nil on success.
-func (c *Cache) LogStage(label, target string, elapsed time.Duration, runErr error) {
+func (c *Cache) LogStage(ctx context.Context, label, target string, elapsed time.Duration, runErr error) {
 	attrs := []any{
 		slog.String("label", label),
 		slog.String("target", target),
@@ -36,7 +37,7 @@ func (c *Cache) LogStage(label, target string, elapsed time.Duration, runErr err
 	if runErr != nil {
 		attrs = append(attrs, slog.String("error", runErr.Error()))
 	}
-	c.log.Info("cache.stage", attrs...)
+	c.log.InfoContext(ctx, "cache.stage", attrs...)
 }
 
 // Collapsing reports whether the cache is withholding per-project subprocess output
@@ -45,15 +46,15 @@ func (c *Cache) LogStage(label, target string, elapsed time.Duration, runErr err
 func (c *Cache) Collapsing() bool { return c.collapse }
 
 // LogDryBanner emits the one-time dry-run banner through the cache logger.
-func (c *Cache) LogDryBanner() {
-	c.log.Info("cache.dry.banner")
+func (c *Cache) LogDryBanner(ctx context.Context) {
+	c.log.InfoContext(ctx, "cache.dry.banner")
 }
 
 // LogDry emits a per-target dry-run line through the cache logger, in place of the
 // executed pass/fail line. project is the workspace-relative path, carried so the
 // line can print the same repro command an executed one does.
-func (c *Cache) LogDry(project, label, target string) {
-	c.log.Info("cache.dry",
+func (c *Cache) LogDry(ctx context.Context, project, label, target string) {
+	c.log.InfoContext(ctx, "cache.dry",
 		slog.String("project", project),
 		slog.String("label", label),
 		slog.String("target", target))
@@ -70,8 +71,8 @@ func (c *Cache) LogDry(project, label, target string) {
 //
 // The cache's own counters are not consulted: nothing executed, so they are all
 // zero and would report "0 ran" for a plan that intends to run plenty.
-func (c *Cache) LogDrySummary(planned int, elapsed time.Duration) {
-	c.log.Info(
+func (c *Cache) LogDrySummary(ctx context.Context, planned int, elapsed time.Duration) {
+	c.log.InfoContext(ctx,
 		"cache.summary",
 		slog.Bool("dry", true),
 		slog.Int("planned", planned),
@@ -82,9 +83,9 @@ func (c *Cache) LogDrySummary(planned int, elapsed time.Duration) {
 // LogSummary emits an end-of-run [summary] footer through the cache logger, drawn
 // from the cache's own hit/miss/error counters. Like LogScope it routes through the
 // logger so every output format receives the same event.
-func (c *Cache) LogSummary(elapsed time.Duration) {
+func (c *Cache) LogSummary(ctx context.Context, elapsed time.Duration) {
 	s := c.Stats()
-	c.log.Info(
+	c.log.InfoContext(ctx,
 		"cache.summary",
 		slog.Int("hits", s.Hit),
 		slog.Int("misses", s.Miss),
