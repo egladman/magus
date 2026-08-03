@@ -132,3 +132,33 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	assert.Nil(t, run.GetTargets()[1].GetEndedAt()) // still running: no end
 	assert.Equal(t, statusv1.TargetRun_STATE_CACHED, run.GetTargets()[2].GetState())
 }
+
+// TestStatusProtoCarriesSecretProviderName pins that the selected provider's NAME reaches
+// the dashboard, and that a workspace which declared none reports empty rather than
+// inventing the built-in one's name. The console keys "is a provider declared" off exactly
+// that emptiness, so a default filled in here would put a badge on every row.
+//
+// The name and nothing else: there is no reference list and no value on this wire, and
+// there must not be. magus does not store secrets - it reads them through a provider - so
+// publishing what a build CAN reach would be a map of what to go after.
+func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
+	r := types.StatusReport{
+		Pool: &types.StatusOutput{
+			Mode: "daemon",
+			Workspaces: []types.StatusWorkspace{
+				{Root: "/repo", SecretProvider: "onepassword"},
+				{Root: "/svc"},
+			},
+		},
+	}
+	p := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
+	require.NotNil(t, p)
+	require.Len(t, p.GetWorkspaces(), 2)
+
+	assert.Equal(t, "onepassword", p.GetWorkspaces()[0].GetSecretProvider())
+	assert.Empty(t, p.GetWorkspaces()[1].GetSecretProvider(),
+		"a workspace with no declared provider reports empty, not the built-in's name")
+
+	// Nothing resembling a credential or a reference list rides along.
+	assert.NotContains(t, p.String(), "secret_ref")
+}

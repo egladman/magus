@@ -221,13 +221,14 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 	}
 	for _, ws := range r.Workspaces {
 		out.Workspaces = append(out.Workspaces, types.StatusWorkspace{
-			Root:       ws.Root,
-			LoadedAt:   ws.LoadedAt,
-			LastAccess: ws.LastAccess,
-			CacheHit:   ws.CacheHit,
-			CacheMiss:  ws.CacheMiss,
-			CacheError: ws.CacheError,
-			CacheBytes: ws.CacheBytes,
+			Root:           ws.Root,
+			LoadedAt:       ws.LoadedAt,
+			LastAccess:     ws.LastAccess,
+			CacheHit:       ws.CacheHit,
+			CacheMiss:      ws.CacheMiss,
+			CacheError:     ws.CacheError,
+			CacheBytes:     ws.CacheBytes,
+			SecretProvider: ws.SecretProvider,
 		})
 	}
 	return out

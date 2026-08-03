@@ -948,6 +948,15 @@ type Workspace struct {
 	LoadTime       *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=load_time,json=loadTime,proto3" json:"load_time,omitempty"`
 	LastAccessTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_access_time,json=lastAccessTime,proto3" json:"last_access_time,omitempty"`
 	Cache          *Cache                 `protobuf:"bytes,4,opt,name=cache,proto3" json:"cache,omitempty"` // this workspace's cache activity
+	// secret_provider is the NAME of the provider spell this workspace's magusfile selected;
+	// empty means no declaration and the built-in environment provider applies. It exists so
+	// a reader can see that credential resolution is wired up and through what - the same
+	// config visibility the cache cap gets.
+	//
+	// The name and nothing else. No reference list, no value: magus does not store secrets,
+	// it reads them through a provider, and publishing what a build CAN reach would be a map
+	// of what to go after.
+	SecretProvider string `protobuf:"bytes,5,opt,name=secret_provider,json=secretProvider,proto3" json:"secret_provider,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1008,6 +1017,13 @@ func (x *Workspace) GetCache() *Cache {
 		return x.Cache
 	}
 	return nil
+}
+
+func (x *Workspace) GetSecretProvider() string {
+	if x != nil {
+		return x.SecretProvider
+	}
+	return ""
 }
 
 // Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
@@ -1422,12 +1438,13 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\x04step\x18\x04 \x01(\tR\x04step\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x05 \x01(\tR\n" +
-	"invocation\"\xcc\x01\n" +
+	"invocation\"\xf5\x01\n" +
 	"\tWorkspace\x12\x12\n" +
 	"\x04root\x18\x01 \x01(\tR\x04root\x127\n" +
 	"\tload_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bloadTime\x12D\n" +
 	"\x10last_access_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastAccessTime\x12,\n" +
-	"\x05cache\x18\x04 \x01(\v2\x16.magus.status.v1.CacheR\x05cache\"\x8a\x01\n" +
+	"\x05cache\x18\x04 \x01(\v2\x16.magus.status.v1.CacheR\x05cache\x12'\n" +
+	"\x0fsecret_provider\x18\x05 \x01(\tR\x0esecretProvider\"\x8a\x01\n" +
 	"\x05Cache\x12\x12\n" +
 	"\x04hits\x18\x01 \x01(\x03R\x04hits\x12\x16\n" +
 	"\x06misses\x18\x02 \x01(\x03R\x06misses\x12\x16\n" +

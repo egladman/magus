@@ -153,6 +153,15 @@ message Workspace {
   google.protobuf.Timestamp load_time = 2;
   google.protobuf.Timestamp last_access_time = 3;
   Cache cache = 4;             // this workspace's cache activity
+  // secret_provider is the NAME of the provider spell this workspace's magusfile selected;
+  // empty means no declaration and the built-in environment provider applies. It exists so
+  // a reader can see that credential resolution is wired up and through what - the same
+  // config visibility the cache cap gets.
+  //
+  // The name and nothing else. No reference list, no value: magus does not store secrets,
+  // it reads them through a provider, and publishing what a build CAN reach would be a map
+  // of what to go after.
+  string secret_provider = 5;
 }
 
 // Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this

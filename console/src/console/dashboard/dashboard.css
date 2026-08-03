@@ -548,6 +548,26 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-row__wscache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
 .console-dashboard-row__wscache [data-cache="hit"] { color: var(--console-status-ok); } .console-dashboard-row__wscache [data-cache="miss"] { color: var(--console-status-warn); } .console-dashboard-row__wscache [data-cache="err"] { color: var(--console-status-danger); }
 
+/* A declared secret provider, shown as its initial in a square monospaced slot. Square and
+   flush-cornered on purpose: a circle here would read as a person's avatar, and the thing
+   being named is a configured backend, not a user. Muted by default so it registers as
+   configuration rather than status - nothing is wrong when it is present. */
+.console-dashboard-row__secret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  margin-inline-end: 0.4rem;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--pf-t--global--text--color--subtle);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+
 /* Configuration card: key/value rows; default charms are PF Labels colored by effect (built in config.ts). */
 .console-dashboard-config__body { display: flex; flex-direction: column; gap: 0.5rem; }
 .console-dashboard-config__row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }

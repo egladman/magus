@@ -165,6 +165,7 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 	for _, w := range p.Workspaces {
 		ws := &statusv1.Workspace{
 			Root: w.Root, LoadTime: tsFromTime(w.LoadedAt), LastAccessTime: tsFromTime(w.LastAccess),
+			SecretProvider: w.SecretProvider,
 		}
 		if w.CacheHit != 0 || w.CacheMiss != 0 || w.CacheError != 0 || w.CacheBytes != 0 {
 			ws.Cache = &statusv1.Cache{

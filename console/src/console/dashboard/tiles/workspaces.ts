@@ -48,6 +48,21 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
       } else {
         meta.textContent = relTime(w.lastAccessTime);
       }
+      // A declared secret provider gets a one-glyph slot before the path: enough to say
+      // credential resolution is wired up and through what, without a panel for it.
+      //
+      // Shown ONLY when a magusfile declared one. The built-in environment provider always
+      // applies, so marking it too would put a badge on every row and stop meaning
+      // anything. Absence here reads as "nothing declared", which is the truth.
+      //
+      // The initial, not a vendor logo: a provider is whatever spell the workspace names,
+      // so there is no bounded set to ship art for - and a letter carries no trademark.
+      // Square and monospaced on purpose; a round one reads as a person's avatar.
+      if (w.secretProvider) {
+        const slot = h("span", "console-dashboard-row__secret", w.secretProvider[0]);
+        slot.title = "secrets via " + w.secretProvider;
+        li.append(slot);
+      }
       li.append(root, meta);
       list.append(li);
     }

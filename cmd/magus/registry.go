@@ -342,6 +342,8 @@ func (r *wsRegistry) status() []proc.Workspace {
 			CacheMiss:  st.Miss,
 			CacheError: st.Error,
 			CacheBytes: e.m.CacheDiskBytes(),
+			// Which provider is loaded, not what it can reach.
+			SecretProvider: e.m.SecretProvider(),
 		})
 	}
 	return out
