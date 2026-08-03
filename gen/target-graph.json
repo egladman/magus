@@ -408,38 +408,6 @@
           ]
         },
         {
-          "name": "buzz-check",
-          "declared": "buzz_check",
-          "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-          "spells": [
-            {
-              "spell": "buzz",
-              "ops": [
-                "buzz-check"
-              ]
-            }
-          ],
-          "exec_overrides": [
-            "cwd:cmd/magus/starter/spells"
-          ]
-        },
-        {
-          "name": "buzz-run",
-          "declared": "buzz_run",
-          "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-          "spells": [
-            {
-              "spell": "buzz",
-              "ops": [
-                "magus-buzz"
-              ]
-            }
-          ],
-          "exec_overrides": [
-            "cwd:cmd/magus/starter/spells"
-          ]
-        },
-        {
           "name": "preflight",
           "doc": "Gates the build on workspace health by running `magus doctor`."
         },

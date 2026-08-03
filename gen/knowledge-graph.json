@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2402,
-  "edge_count": 5413,
+  "node_count": 2399,
+  "edge_count": 5401,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7676,7 +7676,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:70",
+      "source": "console/magusfile.buzz:69",
       "attrs": {
         "exported": "true"
       }
@@ -7686,7 +7686,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
-      "source": "console/magusfile.buzz:98",
+      "source": "console/magusfile.buzz:95",
       "attrs": {
         "exported": "true"
       }
@@ -7695,15 +7695,15 @@
       "id": "function:console/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.",
-      "source": "console/magusfile.buzz:53"
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "source": "console/magusfile.buzz:55"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:85",
+      "source": "console/magusfile.buzz:83",
       "attrs": {
         "exported": "true"
       }
@@ -7712,7 +7712,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:48",
+      "source": "console/magusfile.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -8391,7 +8391,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. Lint is the whole gate: there is nothing to build and no unit tests here, because the templates' BEHAVIOR is asserted from the repo root (dogfood_test.go runs them against real host events).",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:86",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:85",
       "attrs": {
         "exported": "true"
       }
@@ -8400,8 +8400,8 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "install restores the dev-only gate deps (typescript, biome, and the two type packages) with pnpm, honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:61"
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:63"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
@@ -8417,7 +8417,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:56",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:55",
       "attrs": {
         "exported": "true"
       }
@@ -9232,7 +9232,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:281",
+      "source": "docs/magusfile.buzz:293",
       "attrs": {
         "exported": "true"
       }
@@ -9242,7 +9242,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:346",
+      "source": "docs/magusfile.buzz:355",
       "attrs": {
         "exported": "true"
       }
@@ -9252,7 +9252,7 @@
       "kind": "function",
       "label": "build_mermaid",
       "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so diagrams and page styling work offline without any CDN. Bump the mermaid version in package.json and the next generate picks it up; gen/ is not committed, so there is no artifact to commit and generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:330",
+      "source": "docs/magusfile.buzz:342",
       "attrs": {
         "exported": "true"
       }
@@ -9262,7 +9262,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. Run after changing the interpreter (../gopherbuzz) or the playground host (../internal/playground), then commit. TinyGo >= 0.40; the glue must come from the same TinyGo that built the wasm.  vendor/, not gen/. These two are the only published bytes CI cannot reproduce - it has no TinyGo, deliberately - so",
-      "source": "docs/magusfile.buzz:309",
+      "source": "docs/magusfile.buzz:321",
       "attrs": {
         "exported": "true"
       }
@@ -9272,7 +9272,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:362",
+      "source": "docs/magusfile.buzz:368",
       "attrs": {
         "exported": "true"
       }
@@ -9282,7 +9282,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:286",
+      "source": "docs/magusfile.buzz:298",
       "attrs": {
         "exported": "true"
       }
@@ -9291,7 +9291,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:294",
+      "source": "docs/magusfile.buzz:306",
       "attrs": {
         "exported": "true"
       }
@@ -9301,7 +9301,7 @@
       "kind": "function",
       "label": "content_generate",
       "doc": "content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/manpage), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). The generator tools live at the repo root, so they run from here (the docs cwd) through the g",
-      "source": "docs/magusfile.buzz:163",
+      "source": "docs/magusfile.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -9310,7 +9310,7 @@
       "id": "function:docs/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "docs/magusfile.buzz:264",
+      "source": "docs/magusfile.buzz:277",
       "attrs": {
         "exported": "true"
       }
@@ -9320,17 +9320,24 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate is the one public docs publication target. Its small drift gate always runs; its content, catalog, changelog, and site stages replay independently when unchanged.",
-      "source": "docs/magusfile.buzz:233",
+      "source": "docs/magusfile.buzz:246",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/magusfile.buzz:install",
+      "kind": "function",
+      "label": "install",
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled or interrupted install leaves a node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))` guard this replaced read that tree as ready and handed the missing packages to esbuild instead - surfacing as `Could not resolve \"@codemirror/view\"` from build-playground-editor, which reads like a source bug rather than a half-installed tree. On a warm tree --frozen-loc",
+      "source": "docs/magusfile.buzz:151"
     },
     {
       "id": "function:docs/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both TS tools need node_modules, so install first like the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/magusfile.buzz:269",
+      "source": "docs/magusfile.buzz:282",
       "attrs": {
         "exported": "true"
       }
@@ -9340,7 +9347,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. generate calls it; run standalone after editing targets: `magus run md-generate docs`.",
-      "source": "docs/magusfile.buzz:145",
+      "source": "docs/magusfile.buzz:158",
       "attrs": {
         "exported": "true"
       }
@@ -9359,7 +9366,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:373",
+      "source": "docs/magusfile.buzz:376",
       "attrs": {
         "exported": "true"
       }
@@ -9369,7 +9376,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.",
-      "source": "docs/magusfile.buzz:219",
+      "source": "docs/magusfile.buzz:232",
       "attrs": {
         "exported": "true"
       }
@@ -9378,7 +9385,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:290",
+      "source": "docs/magusfile.buzz:302",
       "attrs": {
         "exported": "true"
       }
@@ -9387,8 +9394,8 @@
       "id": "function:docs/render.buzz:generateJsBundles",
       "kind": "function",
       "label": "generateJsBundles",
-      "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml; a warm tree skips installation, while a cold checkout restores the locked set before esbuild runs the declared build scripts.",
-      "source": "docs/render.buzz:351"
+      "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time rather than behind an isDir check: an interrupted install leaves a node_modules that exists but is incomplete, and the guard read that as ready and fed esbuild a half tree. See the install() note in magusfile.buzz.",
+      "source": "docs/render.buzz:353"
     },
     {
       "id": "function:docs/render.buzz:site_publish",
@@ -15638,7 +15645,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.",
-      "source": "libs/textsearch/magusfile.buzz:141",
+      "source": "libs/textsearch/magusfile.buzz:140",
       "attrs": {
         "exported": "true"
       }
@@ -15648,7 +15655,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift = regeneration dirtied a file that was clean, via vcs.isDirty, so a locally-regenerated MAGUS.md passes whether or not it is committed; only a regeneration that changes a clean file fails.",
-      "source": "libs/textsearch/magusfile.buzz:72",
+      "source": "libs/textsearch/magusfile.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -15657,15 +15664,15 @@
       "id": "function:libs/textsearch/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "install restores the dev-only gate deps (typescript + biome) with pnpm, honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the gate.",
-      "source": "libs/textsearch/magusfile.buzz:62"
+      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "source": "libs/textsearch/magusfile.buzz:65"
     },
     {
       "id": "function:libs/textsearch/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json). os.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "libs/textsearch/magusfile.buzz:92",
+      "source": "libs/textsearch/magusfile.buzz:93",
       "attrs": {
         "exported": "true"
       }
@@ -15675,7 +15682,7 @@
       "kind": "function",
       "label": "md_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/textsearch/magusfile.buzz:84",
+      "source": "libs/textsearch/magusfile.buzz:85",
       "attrs": {
         "exported": "true"
       }
@@ -15714,7 +15721,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:790",
+      "source": "magusfile.buzz:795",
       "attrs": {
         "exported": "true"
       }
@@ -15741,26 +15748,6 @@
       "source": "magusfile.buzz:163"
     },
     {
-      "id": "function:magusfile.buzz:buzz_check",
-      "kind": "function",
-      "label": "buzz_check",
-      "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": "magusfile.buzz:777",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:magusfile.buzz:buzz_run",
-      "kind": "function",
-      "label": "buzz_run",
-      "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": "magusfile.buzz:782",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
       "id": "function:magusfile.buzz:changelog_generate",
       "kind": "function",
       "label": "changelog_generate",
@@ -15775,7 +15762,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:824",
+      "source": "magusfile.buzz:829",
       "attrs": {
         "exported": "true"
       }
@@ -15785,7 +15772,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:860",
+      "source": "magusfile.buzz:865",
       "attrs": {
         "exported": "true"
       }
@@ -15801,7 +15788,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out.  One image per shell, pinned to a major-version tag, and nothing is installed into any of them: each image already carries its shell. There is no magus binary inside, so the checks",
-      "source": "magusfile.buzz:843",
+      "source": "magusfile.buzz:848",
       "attrs": {
         "exported": "true"
       }
@@ -15821,7 +15808,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:970",
+      "source": "magusfile.buzz:975",
       "attrs": {
         "exported": "true"
       }
@@ -15841,7 +15828,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted): markdownlint runs in lint; there is no markdown FORMATTER any more - biome (used for all TypeScript/CSS) has no markdown support, and prettier was dropped rather than kept solely to format markdown.",
-      "source": "magusfile.buzz:821",
+      "source": "magusfile.buzz:826",
       "attrs": {
         "exported": "true"
       }
@@ -15913,7 +15900,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. golangci-lint and govulncheck go through the go spell's ops rather than a raw os\\exec, so the spell's version probes (mgs_getVersionCommands) reach the cache key - without them a linter upgrade changes which code passes while every cache entry replays the old verdict. Neither runs through `go tool`: that COMPILES the tool with whichever go leads PATH, which is how CI built the linter with a different toolchain than it anal",
-      "source": "magusfile.buzz:809",
+      "source": "magusfile.buzz:814",
       "attrs": {
         "exported": "true"
       }
@@ -15973,7 +15960,7 @@
       "kind": "function",
       "label": "preflight",
       "doc": "Gates the build on workspace health by running `magus doctor`.",
-      "source": "magusfile.buzz:787",
+      "source": "magusfile.buzz:792",
       "attrs": {
         "exported": "true"
       }
@@ -15983,7 +15970,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json.",
-      "source": "magusfile.buzz:918"
+      "source": "magusfile.buzz:923"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -16026,14 +16013,14 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:932"
+      "source": "magusfile.buzz:937"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1019",
+      "source": "magusfile.buzz:1024",
       "attrs": {
         "exported": "true"
       }
@@ -20900,7 +20887,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "34"
+        "target_count": "32"
       }
     },
     {
@@ -20984,11 +20971,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:843:TODO",
+      "id": "rationale:magusfile.buzz:848:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:843"
+      "source": "magusfile.buzz:848"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -21129,28 +21116,6 @@
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
       "source": ".",
       "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:buzz-check",
-      "kind": "target",
-      "label": "buzz-check",
-      "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
-      "source": ".",
-      "attrs": {
-        "declared_as": "buzz_check",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:buzz-run",
-      "kind": "target",
-      "label": "buzz-run",
-      "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
-      "source": ".",
-      "attrs": {
-        "declared_as": "buzz_run",
         "engine": "buzz"
       }
     },
@@ -38070,14 +38035,6 @@
     },
     {
       "source": "file:console/magusfile.buzz",
-      "target": "import:fs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "console/magusfile.buzz"
-    },
-    {
-      "source": "file:console/magusfile.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
@@ -39486,14 +39443,6 @@
     },
     {
       "source": "file:docs/guides/integrations/agents/magusfile.buzz",
-      "target": "import:fs",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
-    },
-    {
-      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
@@ -40463,6 +40412,14 @@
     {
       "source": "file:docs/magusfile.buzz",
       "target": "function:docs/magusfile.buzz:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/magusfile.buzz",
+      "target": "function:docs/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -49934,22 +49891,6 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:buzz_check",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:buzz_run",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:changelog_generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -53805,31 +53746,7 @@
       "provenance": "badge.buzz"
     },
     {
-      "source": "function:console/magusfile.buzz:build",
-      "target": "function:console/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console/magusfile.buzz"
-    },
-    {
-      "source": "function:console/magusfile.buzz:lint",
-      "target": "function:console/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console/magusfile.buzz"
-    },
-    {
       "source": "function:console/magusfile.buzz:preflight",
-      "target": "function:console/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "console/magusfile.buzz"
-    },
-    {
-      "source": "function:console/magusfile.buzz:test",
       "target": "function:console/magusfile.buzz:install",
       "relation": "calls",
       "confidence": "extracted",
@@ -54085,7 +54002,7 @@
       "provenance": "docs/engine/search.buzz"
     },
     {
-      "source": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
+      "source": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "target": "function:docs/guides/integrations/agents/magusfile.buzz:install",
       "relation": "calls",
       "confidence": "extracted",
@@ -54491,6 +54408,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/lib/url.buzz"
+    },
+    {
+      "source": "function:docs/magusfile.buzz:preflight",
+      "target": "function:docs/magusfile.buzz:install",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/magusfile.buzz"
     },
     {
       "source": "function:docs/render.buzz:site_publish",
@@ -58045,15 +57970,7 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
-      "source": "function:libs/textsearch/magusfile.buzz:lint",
-      "target": "function:libs/textsearch/magusfile.buzz:install",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "libs/textsearch/magusfile.buzz"
-    },
-    {
-      "source": "function:libs/textsearch/magusfile.buzz:test",
+      "source": "function:libs/textsearch/magusfile.buzz:preflight",
       "target": "function:libs/textsearch/magusfile.buzz:install",
       "relation": "calls",
       "confidence": "extracted",
@@ -60486,22 +60403,6 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:buzz-check",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
-      "target": "target:.:buzz-run",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "project:.",
       "target": "target:.:changelog-generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -61501,12 +61402,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:843:TODO",
+      "source": "rationale:magusfile.buzz:848:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:843"
+      "provenance": "magusfile.buzz:848"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:123:NOTE",
@@ -62101,38 +62002,6 @@
       "source": "target:.:build",
       "target": "target:.:image-build",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:buzz-check",
-      "target": "op:buzz:buzz-check",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:buzz-check",
-      "target": "spell:buzz",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:buzz-run",
-      "target": "op:buzz:magus-buzz",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
-      "source": "target:.:buzz-run",
-      "target": "spell:buzz",
-      "relation": "uses",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."

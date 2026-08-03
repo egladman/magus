@@ -1,6 +1,5 @@
 import "magus";
-// Modules the targets use: fs (node_modules guard), os (pnpm/esbuild), vcs (drift gate).
-import "fs";
+// Modules the targets use: os (pnpm/esbuild), vcs (drift gate).
 import "os";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
@@ -47,19 +46,19 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 
-// install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf
-// clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
-// local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. An interrupted install leaves a node_modules
+// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
+// handing the missing packages straight to tsc/esbuild. Reached once per invocation
+// through preflight, which every target below already needs, so the unconditional
+// --frozen-lockfile costs about a second on a warm tree and never races itself.
 fun install() > void {
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    install();
     os\exec("pnpm", ["run", "test"], ".", {});
 }
 
@@ -71,7 +70,6 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
     final clean_before = vcs\isDirty(["gen"]) == false;
-    install();
     os\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.has_charm("rw")) {
         return;
@@ -87,7 +85,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
-    install();
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
     os\exec("pnpm", ["run", "stylelint"], ".", {});

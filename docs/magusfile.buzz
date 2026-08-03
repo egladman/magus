@@ -1,5 +1,5 @@
 import "magus";
-// Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
+// Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
@@ -137,7 +137,20 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. A canceled or interrupted install leaves a
+// node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
+// guard this replaced read that tree as ready and handed the missing packages to
+// esbuild instead - surfacing as `Could not resolve "@codemirror/view"` from
+// build-playground-editor, which reads like a source bug rather than a half-installed
+// tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
+// Reached once per invocation through preflight, so the fan-out of build-* targets
+// below does not race several installs in the same directory.
+fun install() > void {
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+}
 
 // md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
@@ -274,7 +287,6 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // Same reasoning, one directory down: the guide embeds these templates, so their
     // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
-    if (!fs\isDir("node_modules")) { os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
@@ -332,9 +344,6 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     // Declared so the snapshot records THIS artifact. Without it the target inherits the
     // project baseline (the typescript spell's `dist/**`, which this project never writes).
     ctx.writesFiles("gen/assets/mermaid.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-mermaid"], ".", {});
     magus\info("rebuilt gen/assets/mermaid.js");
 }
@@ -347,9 +356,6 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-hljs"], ".", {});
     magus\info("rebuilt gen/assets/hljs.js");
 }
@@ -363,9 +369,6 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-editor"], ".", {});
 }
 

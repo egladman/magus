@@ -773,15 +773,20 @@ export fun test(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).
-export fun buzz_check(ctx: magus\Context, args: [str]) > void {
-    buzz["buzz-check"](ctx.withCwd("cmd/magus/starter/spells"));
-}
-
-// Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).
-export fun buzz_run(ctx: magus\Context, args: [str]) > void {
-    buzz["magus-buzz"](ctx.withCwd("cmd/magus/starter/spells"));
-}
+// buzz-check and buzz-run lived here and are gone: they ran the upstream `buzz`
+// toolchain and magus's embedded engine over cmd/magus/starter/spells, whose only two
+// files (a .bzz and a .tl) were deleted with the lua/teal interpreter in b60e99be. They
+// have been checking an absent directory and passing ever since, which this repo treats
+// as worse than no gate.
+//
+// They are deleted rather than repointed because there is no standalone Buzz left to
+// aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
+// constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
+// drift. What they were meant to protect is already covered: spells/examples/**
+// by TestExamplesParseAndRecord (ParseEmbedded), every spells/<dir>/spell.buzz by the
+// registry compile that doctor's spell-contract check exercises, and every magusfile by
+// doctor's magusfile-syntax check. Reviving them means first having standalone Buzz and
+// pinning `buzz` in mise.toml, which is not the case today.
 
 // Gates the build on workspace health by running `magus doctor`.
 export fun preflight(ctx: magus\Context, args: [str]) > void { magus\doctor([]); }
