@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -40,7 +41,7 @@ func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 }
 
 func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	cmd := gitExec(ctx, "rev-parse", "--show-toplevel")
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {
@@ -199,7 +200,7 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 // repository, never a submodule's contents.
 func gitFetchQuiet(ctx context.Context, dir, depthFlag, remote string, refspec ...string) error {
 	args := append([]string{"fetch", "--quiet", depthFlag, "--no-tags", "--no-recurse-submodules", remote}, refspec...)
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := gitExec(ctx, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	_, err := cmd.Output()
@@ -207,7 +208,7 @@ func gitFetchQuiet(ctx context.Context, dir, depthFlag, remote string, refspec .
 }
 
 func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "HEAD").Output()
+	out, err := gitExec(ctx, "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return types.DiffCommandHints{}, fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
@@ -261,11 +262,11 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 // the repository under bisect, not the process cwd: the dir-scoping the VCSDriver
 // contract requires for correctness under concurrent runs.
 func (v gitVCS) isAncestor(ctx context.Context, dir, sha string) error {
-	return exec.CommandContext(ctx, "git", "-C", dir, "merge-base", "--is-ancestor", sha, "HEAD").Run()
+	return gitExec(ctx, "-C", dir, "merge-base", "--is-ancestor", sha, "HEAD").Run()
 }
 
 func (v gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "log",
+	out, err := gitExec(ctx, "-C", dir, "log",
 		"--before="+t.UTC().Format(time.RFC3339),
 		"-n", "1", "--format=%H").Output()
 	if err != nil {
@@ -279,7 +280,7 @@ func (v gitVCS) commitBeforeTime(ctx context.Context, dir string, t time.Time) (
 }
 
 func (v gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "log", "-1",
+	out, err := gitExec(ctx, "-C", dir, "log", "-1",
 		"--format=%s  (%an, %ad)", "--date=short", sha).Output()
 	if err != nil {
 		return "", err
@@ -288,7 +289,7 @@ func (v gitVCS) commitInfo(ctx context.Context, dir, sha string) (string, error)
 }
 
 func (v gitVCS) start(ctx context.Context, dir, bad, good string) error {
-	cmd := exec.CommandContext(ctx, "git", "bisect", "start", bad, good)
+	cmd := gitExec(ctx, "bisect", "start", bad, good)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -296,7 +297,7 @@ func (v gitVCS) start(ctx context.Context, dir, bad, good string) error {
 }
 
 func (v gitVCS) run(ctx context.Context, dir, shellCmd string) error {
-	cmd := exec.CommandContext(ctx, "git", "bisect", "run", "sh", "-c", shellCmd)
+	cmd := gitExec(ctx, "bisect", "run", "sh", "-c", shellCmd)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -304,7 +305,7 @@ func (v gitVCS) run(ctx context.Context, dir, shellCmd string) error {
 }
 
 func (v gitVCS) reset(ctx context.Context, dir string) error {
-	cmd := exec.CommandContext(ctx, "git", "bisect", "reset")
+	cmd := gitExec(ctx, "bisect", "reset")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -312,7 +313,7 @@ func (v gitVCS) reset(ctx context.Context, dir string) error {
 }
 
 func (v gitVCS) culprit(ctx context.Context, dir string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "bisect", "log").Output()
+	out, err := gitExec(ctx, "-C", dir, "bisect", "log").Output()
 	if err != nil {
 		return "", fmt.Errorf("git bisect log: %w", err)
 	}
@@ -599,7 +600,7 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 // registeredDriver returns the command currently registered as the magus merge driver,
 // or "" when nothing is registered.
 func (v gitVCS) registeredDriver(ctx context.Context, root string) string {
-	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
+	out, _ := gitExec(ctx, "-C", root, "config", "merge.magus.driver").Output()
 	return strings.TrimSpace(string(out))
 }
 
@@ -699,7 +700,7 @@ func driverExecutable(registered string) bool {
 }
 
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	cmd := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand())
+	cmd := gitExec(ctx, "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}
@@ -793,7 +794,7 @@ func runGitBatched(ctx context.Context, root string, args []string, paths []stri
 		argv := append([]string{"-C", root}, args...)
 		argv = append(argv, "--")
 		argv = append(argv, chunk...)
-		if out, err := exec.CommandContext(ctx, "git", argv...).CombinedOutput(); err != nil {
+		if out, err := gitExec(ctx, argv...).CombinedOutput(); err != nil {
 			return fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, out)
 		}
 	}
@@ -818,7 +819,7 @@ func gitPathPrefix(ctx context.Context, root string) string {
 // --no-renames and -uno narrow what git emits. parseConflicts stays correct without them
 // (see its rename note), so these are a second line of defense.
 func (v gitVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", root,
+	out, err := gitExec(ctx, "-C", root,
 		"status", "--porcelain=v1", "-z", "--no-renames", "-uno").Output()
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
@@ -930,7 +931,7 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 		return ignored, nil
 	}
 	for _, chunk := range gitPathChunks(paths) {
-		cmd := exec.CommandContext(ctx, "git", "-C", root, "check-ignore", "--no-index", "-z", "--stdin")
+		cmd := gitExec(ctx, "-C", root, "check-ignore", "--no-index", "-z", "--stdin")
 		cmd.Stdin = strings.NewReader(strings.Join(chunk, "\x00") + "\x00")
 		out, err := cmd.Output()
 		var exitErr *exec.ExitError
@@ -946,11 +947,68 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 	return ignored, nil
 }
 
+// gitRedirectVars are the environment variables that move git off the repository the
+// caller named. They are the reason every git subprocess here needs a scrubbed environment
+// rather than just -C or cmd.Dir.
+//
+// GIT_DIR is the dangerous one: it OVERRIDES both -C and cmd.Dir, and git exports it into
+// every hook, `rebase --exec`, and `bisect run`. magus refreshes the merge-driver
+// registration on workspace load, so before this scrub, running any magus command from a
+// pre-commit hook wrote `merge.magus.driver` into whatever repository was being committed
+// to. The others redirect the work tree, index, object store, or ref namespace the same
+// way, and GIT_CONFIG_* can inject config into a run that asked for none.
+var gitRedirectVars = []string{
+	"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_NAMESPACE", "GIT_PREFIX", "GIT_CEILING_DIRECTORIES",
+	"GIT_CONFIG", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
+}
+
+// gitEnviron is the process environment with gitRedirectVars removed, so -C and cmd.Dir
+// decide which repository a subprocess acts on.
+//
+// Deliberately NOT "drop everything matching GIT_*". That prefix is not one category, it is
+// two, and only one of them is a problem. The variables above answer WHICH repository; the
+// rest answer HOW to work on it - GIT_SSH_COMMAND, GIT_ASKPASS and GIT_PROXY_COMMAND are
+// how a fetch authenticates (recoverMergeBase really does fetch), GIT_TERMINAL_PROMPT=0 is
+// what stops CI hanging on a credential prompt, GIT_EXEC_PATH is how a nonstandard install
+// finds its own subcommands, and GIT_TRACE is someone actively debugging. Stripping those
+// turns a working fetch into an auth failure, or silently discards the flag the user set to
+// find out why. The blanket rule is simpler to write and strictly worse to run.
+//
+// The maintenance rule, so this does not become guesswork: add a variable here only if it
+// changes which repository, work tree, index, object store, or ref namespace git acts on.
+// Anything governing transport, credentials, identity, or diagnostics stays inherited.
+func gitEnviron() []string {
+	env := os.Environ()
+	out := env[:0:0]
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		if slices.Contains(gitRedirectVars, name) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// gitExec builds a git subprocess whose environment cannot redirect it off the repository
+// the caller named. Use it instead of exec.CommandContext for every git invocation; the
+// caller still sets cmd.Dir or passes -C as before.
+func gitExec(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Env = gitEnviron()
+	return cmd
+}
+
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.
 // An empty dir uses the process working directory (the exec.Cmd.Dir convention).
 func vcsOutput(ctx context.Context, dir, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	if name == "git" {
+		cmd.Env = gitEnviron()
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -980,7 +1038,7 @@ func (gitVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error
 	if err := checkRef(rev); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "git", "-C", dir, "archive", "--format=tar", rev, "--", ".")
+	cmd := gitExec(ctx, "-C", dir, "archive", "--format=tar", rev, "--", ".")
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	stdout, err := cmd.StdoutPipe()
