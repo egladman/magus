@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
@@ -716,6 +717,48 @@ export fun top(ctx: magus\Context, _a: [str]) > void { ctx.needs(dep, dep); }
 	got, err := os.ReadFile(filepath.Join(dir, "mark"))
 	require.NoError(t, err, "dep did not run")
 	assert.Equal(t, "x", string(got), "dep should run once")
+}
+
+// runPooledTargetIn runs target over the magusfile in dir through the VM pool, with
+// the pool registry and per-invocation TargetMemo a real `magus run` step installs
+// (run.go). runTargetIn deliberately has neither, so it takes dispatchBuzzDeps'
+// inline sequential branch — the branch where a dependency cycle recurses instead of
+// being memo-deduped. Anything about cycle detection or concurrent dispatch has to
+// come through here to be testing the code that ships.
+func runPooledTargetIn(t *testing.T, dir, target string) error {
+	t.Helper()
+	reg := buzz.NewPoolRegistry(nil, 4)
+	t.Cleanup(func() { _ = reg.Close() })
+	ctx := buzz.WithPoolRegistry(context.Background(), reg)
+	ctx = buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
+	_, err := interp.RunDir(ctx, dir, target, nil)
+	return err
+}
+
+// TestNeedsCycleThroughEntryTargetErrors covers the cycle that comes back around to
+// the target the USER named. The entry target is invoked directly (runBuzz calls its
+// callable), so it entered neither the memo nor the ancestor stack: a dependency that
+// needed it back re-executed its body, and with two dependencies in flight the second
+// one parked on the first's memo entry while the re-executed entry parked on the
+// second — a hang, not a diagnostic. The timeout is the assertion; a cycle must
+// always surface as an error.
+func TestNeedsCycleThroughEntryTargetErrors(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+export fun ci(ctx: magus\Context, _a: [str]) > void { ctx.needs(lint, docs); }
+export fun lint(ctx: magus\Context, _a: [str]) > void { ctx.needs(ci); }
+export fun docs(ctx: magus\Context, _a: [str]) > void { ctx.needs(ci); }
+`)
+	done := make(chan error, 1)
+	go func() { done <- runPooledTargetIn(t, dir, "ci") }()
+	select {
+	case err := <-done:
+		require.Error(t, err, "a cycle back to the entry target must be an error")
+		assert.Contains(t, err.Error(), "cycle detected")
+	case <-time.After(20 * time.Second):
+		t.Fatal("run hung on a cycle back to the entry target instead of erroring")
+	}
 }
 
 // TestMagusLoggingBuzz exercises the logging methods bound onto the magus

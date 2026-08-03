@@ -105,6 +105,13 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	// run without colliding with the caller's (target names are per-project). The
 	// ancestor key guards a cycle back through this same remote target.
 	rctx := buzz.WithTargetMemo(ctx, buzz.NewTargetMemo())
+	// Same reason the memo is fresh, applied to the dispatch ancestor stack: its
+	// entries are bare target names, and a name only means something within one
+	// project. Carried across, a sub-project target that merely SHARES a name with
+	// one of the caller's ancestors read as a cycle - deterministically, and for a
+	// graph that has none. The cross-project cycle it might otherwise have caught is
+	// the key below's job.
+	rctx = buzz.WithAncestors(rctx, nil)
 	rctx = withCrossAncestor(rctx, key)
 	// e.done is the publication point: e.err is written before close, and a waiter
 	// only reads it after <-e.done, so the write is visible without a data race.
