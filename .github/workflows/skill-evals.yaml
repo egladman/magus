@@ -29,10 +29,12 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
+      # See ci.yaml: build from the checkout, not git-ref, so a workflow_dispatch
+      # off a branch is not rejected by the reachable-from-main gate.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       - name: Run skill smoke matrix
         run: magus run smoke evals

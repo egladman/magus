@@ -62,6 +62,11 @@ func WithExclusive() ProjectOption {
 	return func(p *types.Project) error { p.Exclusive = true; return nil }
 }
 
+// WithNoLanguage records why a project binds no toolchain spell deliberately.
+func WithNoLanguage(reason string) ProjectOption {
+	return func(p *types.Project) error { p.NoLanguage = reason; return nil }
+}
+
 // WithWatchIgnore appends patterns to the project's watch ignore list.
 func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {

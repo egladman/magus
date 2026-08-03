@@ -14,10 +14,11 @@ inputs:
       prebuilt requires a signed release artifact for git-ref and fails if one
       is unavailable, with no source fallback. source skips the
       release-artifact lookup entirely and always builds git-ref from source.
-      Any source build - whether automatic's fallback or an explicit source -
-      additionally requires the resolved commit to be an ancestor of main (see
-      the "Verify source commit is reachable from main" step below), so
-      automatic can still fail if git-ref is a real but unmerged tag.
+      Any source build off git-ref - whether automatic's fallback or an explicit
+      source - additionally requires the resolved commit to be an ancestor of
+      main (see the "Verify source commit is reachable from main" step below),
+      so automatic can still fail if git-ref is a real but unmerged tag. Only
+      source-path skips that gate.
       One of: automatic, prebuilt, source.
     required: false
     default: automatic
@@ -31,13 +32,40 @@ inputs:
       the exact commit already on disk (e.g. a release workflow bootstrapping
       itself from the tag it is building) must pass that ref explicitly.
       Release tags are required for automatic and prebuilt; branches and
-      commit SHAs only work with source.
+      commit SHAs only work with source. Ignored when source-path is set.
     required: false
     default: v0.3.0
+
+  source-path:
+    description: >
+      Path to a magus source tree the caller has ALREADY checked out, relative
+      to the workspace. When set, git-ref is ignored, nothing is cloned, and the
+      reachable-from-main gate below does not apply - there is no foreign code
+      being fetched to gate, only source the caller already put on disk and is
+      already running its own workflow from. Requires installation-strategy:
+      source.
+      This is the dogfooding input: magus's own CI passes '.' so a pull request
+      is tested against the magus built from that very pull request. Note that
+      git-ref cannot express this - on a pull_request event github.sha is the
+      ephemeral refs/pull/N/merge commit, a DESCENDANT of main, so the gate
+      below rejects it every time.
+      Callers installing magus as a dependency should leave this unset.
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
+    # source-path silently losing to a release install would be the worst
+    # possible failure here: the job would look green while testing a magus
+    # that is not the one on disk.
+    - name: Reject source-path without a source build
+      if: inputs.source-path != '' && inputs.installation-strategy != 'source'
+      shell: bash
+      run: |
+        echo "::error::magus: source-path is set but installation-strategy is '${{ inputs.installation-strategy }}'; source-path builds the tree already on disk, so it only applies with installation-strategy: source" >&2
+        exit 1
+
     - name: Sparse checkout install script
       if: inputs.installation-strategy != 'source'
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -91,9 +119,10 @@ runs:
     # "ci" job - installs those itself. Keying that on installation-strategy
     # would be wrong: it has nothing to do with what the caller does after
     # this action returns.
-    # Checked out into an isolated subdirectory (path:), never the workspace
-    # root: a caller may already have its own checkout there - CD's release
-    # jobs need their full-history clone intact for `git describe --tags`
+    # Skipped entirely when source-path is set: the source is already on disk.
+    # Otherwise checked out into an isolated subdirectory (path:), never the
+    # workspace root: a caller may already have its own checkout there - CD's
+    # release jobs need their full-history clone intact for `git describe --tags`
     # afterward - and checking out over it would shrink it to this action's
     # depth. fetch-depth: 0 because the ancestry check below needs main's
     # full commit graph - but only the graph: filter: blob:none leaves every
@@ -101,7 +130,7 @@ runs:
     # answer. The checkout materializes git-ref's own blobs, which is what the
     # source build compiles.
     - name: Clone magus source code
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      if: (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       with:
         repository: egladman/magus
@@ -117,7 +146,7 @@ runs:
       if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
       uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
       with:
-        go-version-file: .setup-magus-src/go.mod
+        go-version-file: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}/go.mod
         # No cache: true here. The Go this step provisions is a one-shot,
         # transient toolchain used only for the magus source build below; the
         # workflow's primary Go comes from mise, and doubling up the GHA
@@ -134,42 +163,58 @@ runs:
     # compromise than full repo takeover) from getting an unreviewed commit
     # built and executed with this job's permissions. It does not protect
     # against main itself being compromised.
+    # Gates git-ref only. source-path skips this by construction: the caller
+    # checked that tree out under its own workflow and is already executing it.
     - name: Verify source commit is reachable from main
-      if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
+      if: (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
       shell: bash
       working-directory: .setup-magus-src
       run: |
         set -euo pipefail
         git fetch origin main
         SHA="$(git rev-parse HEAD)"
-        if ! git merge-base --is-ancestor "${SHA}" origin/main; then
-          echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, which is not reachable from egladman/magus main. Refusing to build unreviewed source." >&2
+        if git merge-base --is-ancestor "${SHA}" origin/main; then
+          echo "magus: ${SHA} is reachable from main" >&2
+          exit 0
+        fi
+        # A pull_request event's github.sha is the ephemeral refs/pull/N/merge
+        # commit: parents are (main tip, PR head), so it is a DESCENDANT of main
+        # and this gate rejects it 100% of the time. That is a caller mistake,
+        # not a supply-chain finding, and it read as one for long enough to be
+        # worth naming outright.
+        if git rev-parse -q --verify "${SHA}^2" >/dev/null && git merge-base --is-ancestor "${SHA}^1" origin/main; then
+          echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, a merge of an unmerged commit into main. This is what github.sha expands to on a pull_request event, and it is never reachable from main, so git-ref cannot express it. To build a pull request against its own magus, check the source out yourself and pass source-path instead of git-ref." >&2
           exit 1
         fi
-        echo "magus: ${SHA} is reachable from main" >&2
+        echo "::error::magus: git-ref '${{ inputs.git-ref }}' resolves to ${SHA}, which is not reachable from egladman/magus main. Refusing to build unreviewed source." >&2
+        exit 1
 
     - name: Build magus from source
       if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
       shell: bash
-      working-directory: .setup-magus-src
+      working-directory: ${{ inputs.source-path != '' && inputs.source-path || '.setup-magus-src' }}
       # CGO_ENABLED=0: the bootstrap magus only orchestrates builds (it never needs
       # internal/codec's cgo xz/zstd fast path), so build it pure-Go. This keeps the
       # bootstrap off pkg-config/liblzma/libzstd entirely - on Windows the default
       # cgo build otherwise grabs Strawberry Perl's broken pkg-config and fails before
       # the real release-build (which sets up the mingw toolchain) ever runs.
+      env:
+        SOURCE_DESC: ${{ inputs.source-path != '' && format('source-path ''{0}''', inputs.source-path) || format('git-ref ''{0}''', inputs.git-ref) }}
       run: |
         if [ "${{ inputs.installation-strategy }}" = "source" ]; then
-          echo "::notice::magus: installation-strategy is source; compiling git-ref '${{ inputs.git-ref }}' instead of downloading a release" >&2
+          echo "::notice::magus: installation-strategy is source; compiling ${SOURCE_DESC} instead of downloading a release" >&2
         fi
         mkdir -p "$RUNNER_TOOL_CACHE/magus/bin"
         CGO_ENABLED=0 go build -o "$RUNNER_TOOL_CACHE/magus/bin/magus" ./cmd/magus
-        echo "magus: built ${{ inputs.git-ref }} from source (CGO_ENABLED=0 bootstrap)" >&2
+        echo "magus: built ${SOURCE_DESC} from source (CGO_ENABLED=0 bootstrap)" >&2
 
     # A leftover magus checkout under the caller's workspace is a second
     # magusfile.buzz/spells tree; if the caller is magus's own repo, its next
     # `magus` invocation trips MGS1002 (duplicate spell sources) over it.
+    # Never runs on the source-path route: that directory belongs to the caller
+    # and nothing was cloned to clean up.
     - name: Remove magus source checkout
-      if: always() && (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure')
+      if: always() && (inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure') && inputs.source-path == ''
       shell: bash
       run: rm -rf .setup-magus-src
 
@@ -197,6 +242,8 @@ runs:
         {
           if [ "${{ steps.prebuilt.outcome }}" = "success" ]; then
             echo "magus: installed prebuilt release, git-ref \`${{ inputs.git-ref }}\` (signature verified)"
+          elif [ -n "${{ inputs.source-path }}" ]; then
+            echo "magus: built from source, source-path \`${{ inputs.source-path }}\` (the caller's own checkout)"
           else
             echo "magus: built from source, git-ref \`${{ inputs.git-ref }}\` (verified reachable from main)"
           fi

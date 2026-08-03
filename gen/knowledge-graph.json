@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2409,
-  "edge_count": 5427,
+  "node_count": 2402,
+  "edge_count": 5413,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -923,7 +923,7 @@
       "source": "cmd",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "26",
+        "dir_files": "27",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -945,8 +945,8 @@
       "source": "cmd/magus",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "24",
-        "dir_languages": "markdown"
+        "dir_files": "25",
+        "dir_languages": "buzz,markdown"
       }
     },
     {
@@ -1079,6 +1079,17 @@
         "dir_commits": "0",
         "dir_files": "1",
         "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:cmd/magus/starter",
+      "kind": "dir",
+      "label": "cmd/magus/starter",
+      "source": "cmd/magus/starter",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "buzz"
       }
     },
     {
@@ -5464,10 +5475,10 @@
       }
     },
     {
-      "id": "file:cmd/magus/starter/magusfile.buzz",
+      "id": "file:cmd/magus/starter/magusfile.tmpl.buzz",
       "kind": "file",
-      "label": "cmd/magus/starter/magusfile.buzz",
-      "source": "cmd/magus/starter/magusfile.buzz",
+      "label": "cmd/magus/starter/magusfile.tmpl.buzz",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -7597,65 +7608,65 @@
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:build",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "cmd/magus/starter/magusfile.buzz:27",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:27",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:ci",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the conventional anchor that `magus affected ci` keys off. magus does not hardcode its steps — compose them here with magus.needs. magus runs ci read-only. Each stage declares its own prerequisites so the DAG is expressed as edges: ci fans out lint/build/test in parallel; they each wait for format, which waits for generate, which waits for preflight. Shared deps run once.",
-      "source": "cmd/magus/starter/magusfile.buzz:35",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:35",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:format",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "cmd/magus/starter/magusfile.buzz:25",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:25",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:generate",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:generate",
       "kind": "function",
       "label": "generate",
-      "source": "cmd/magus/starter/magusfile.buzz:24",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:24",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:lint",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "cmd/magus/starter/magusfile.buzz:26",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:26",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:preflight",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "cmd/magus/starter/magusfile.buzz:23",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:23",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:cmd/magus/starter/magusfile.buzz:test",
+      "id": "function:cmd/magus/starter/magusfile.tmpl.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "cmd/magus/starter/magusfile.buzz:28",
+      "source": "cmd/magus/starter/magusfile.tmpl.buzz:28",
       "attrs": {
         "exported": "true"
       }
@@ -10299,7 +10310,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.",
-      "source": "evals/magusfile.buzz:67",
+      "source": "evals/magusfile.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -10309,7 +10320,7 @@
       "kind": "function",
       "label": "grid",
       "doc": "grid is the full run: every skill, both permutations, every model, 5 trials. Minutes-to-hours and real money. Never on the PR path.",
-      "source": "evals/magusfile.buzz:59",
+      "source": "evals/magusfile.buzz:60",
       "attrs": {
         "exported": "true"
       }
@@ -10319,14 +10330,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled install can leave a node_modules directory that exists but is incomplete, so isDir alone is not a valid readiness check.",
-      "source": "evals/magusfile.buzz:32"
+      "source": "evals/magusfile.buzz:33"
     },
     {
       "id": "function:evals/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists. No network, no API key.",
-      "source": "evals/magusfile.buzz:44",
+      "source": "evals/magusfile.buzz:45",
       "attrs": {
         "exported": "true"
       }
@@ -10335,7 +10346,7 @@
       "id": "function:evals/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "evals/magusfile.buzz:26",
+      "source": "evals/magusfile.buzz:27",
       "attrs": {
         "exported": "true"
       }
@@ -10345,7 +10356,7 @@
       "kind": "function",
       "label": "smoke",
       "doc": "smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.",
-      "source": "evals/magusfile.buzz:51",
+      "source": "evals/magusfile.buzz:52",
       "attrs": {
         "exported": "true"
       }
@@ -20893,16 +20904,6 @@
       }
     },
     {
-      "id": "project:cmd/magus/starter",
-      "kind": "project",
-      "label": "cmd/magus/starter",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz",
-        "target_count": "7"
-      }
-    },
-    {
       "id": "project:console",
       "kind": "project",
       "label": "console",
@@ -21466,70 +21467,6 @@
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
       "source": ".",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:build",
-      "kind": "target",
-      "label": "build",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:ci",
-      "kind": "target",
-      "label": "ci",
-      "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:format",
-      "kind": "target",
-      "label": "format",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:generate",
-      "kind": "target",
-      "label": "generate",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:lint",
-      "kind": "target",
-      "label": "lint",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:preflight",
-      "kind": "target",
-      "label": "preflight",
-      "source": "cmd/magus/starter",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:cmd/magus/starter:test",
-      "kind": "target",
-      "label": "test",
-      "source": "cmd/magus/starter",
       "attrs": {
         "engine": "buzz"
       }
@@ -23061,6 +22998,14 @@
     },
     {
       "source": "dir:cmd/magus",
+      "target": "dir:cmd/magus/starter",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/starter"
+    },
+    {
+      "source": "dir:cmd/magus",
       "target": "doc:cmd/magus/agents-section.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -23242,6 +23187,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/skills/magus-vcs/SKILL.md"
+    },
+    {
+      "source": "dir:cmd/magus/starter",
+      "target": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
       "source": "dir:docs/concepts",
@@ -30289,6 +30242,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/concepts/workspace.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/concepts/workspace.md"
     },
     {
@@ -37988,76 +37949,76 @@
       "provenance": "cmd/buzz-playground/hello.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:build",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:ci",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:format",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:generate",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:lint",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:preflight",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
-      "target": "function:cmd/magus/starter/magusfile.buzz:test",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
+      "target": "function:cmd/magus/starter/magusfile.tmpl.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
-      "source": "file:cmd/magus/starter/magusfile.buzz",
+      "source": "file:cmd/magus/starter/magusfile.tmpl.buzz",
       "target": "import:os",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
+      "provenance": "cmd/magus/starter/magusfile.tmpl.buzz"
     },
     {
       "source": "file:console/magusfile.buzz",
@@ -60780,70 +60741,6 @@
       "provenance": "."
     },
     {
-      "source": "project:cmd/magus/starter",
-      "target": "file:cmd/magus/starter/magusfile.buzz",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter/magusfile.buzz"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:build",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:ci",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:format",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:preflight",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "project:cmd/magus/starter",
-      "target": "target:cmd/magus/starter:test",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
       "source": "project:console",
       "target": "doc:console/PATTERNFLY.md",
       "relation": "contains",
@@ -63241,70 +63138,6 @@
       "provenance": "."
     },
     {
-      "source": "target:cmd/magus/starter:build",
-      "target": "target:cmd/magus/starter:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:ci",
-      "target": "target:cmd/magus/starter:build",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:ci",
-      "target": "target:cmd/magus/starter:lint",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:ci",
-      "target": "target:cmd/magus/starter:test",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:format",
-      "target": "target:cmd/magus/starter:generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:generate",
-      "target": "target:cmd/magus/starter:preflight",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:lint",
-      "target": "target:cmd/magus/starter:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
-      "source": "target:cmd/magus/starter:test",
-      "target": "target:cmd/magus/starter:format",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "cmd/magus/starter"
-    },
-    {
       "source": "target:console:build",
       "target": "target:.:graph-generate",
       "relation": "depends_on",
@@ -64316,14 +64149,6 @@
       "source": "target:docs:lint",
       "target": "target:libs/textsearch:lint",
       "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:cmd/magus/starter/magusfile.buzz",
-      "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs"

@@ -82,15 +82,30 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
 	}
 }
 
+// checkLanguageCoverage flags a project that binds no toolchain spell, which usually means
+// an import was forgotten and the project's real work is invisible to affected tracking and
+// the cache. Usually, not always: a polyglot harness no single pack describes is legitimate,
+// and a project says so with magus.project's "no_language" key. The opt-out carries a reason
+// rather than a bool so the exemption reads as a decision instead of a silenced check.
 func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	var noLang []string
+	exempt := 0
 	for _, p := range projects {
-		if p.Spell == "" {
-			noLang = append(noLang, p.Path)
+		if p.Spell != "" {
+			continue
 		}
+		if p.NoLanguage != "" {
+			exempt++
+			continue
+		}
+		noLang = append(noLang, p.Path)
 	}
 	if len(noLang) == 0 {
-		return Check{Name: "language coverage", Status: StatusOK, Message: "every project matched a spell"}
+		msg := "every project matched a spell"
+		if exempt > 0 {
+			msg = fmt.Sprintf("every project matched a spell or declared no_language (%d exempt)", exempt)
+		}
+		return Check{Name: "language coverage", Status: StatusOK, Message: msg}
 	}
 	slices.Sort(noLang)
 	return Check{
@@ -738,24 +753,41 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 // has been produced yet, the project simply has not been built and every glob matching zero is
 // expected; reporting then would fire on every fresh clone and train people to ignore it. Only
 // when some outputs exist and one glob still matches nothing is that glob suspect.
+//
+// "Some outputs exist" has to mean UNTRACKED outputs exist. A generated tree that is committed
+// (console/src/gen from buf-generate, proto/gen) is declared as an output for staleness
+// tracking and is present on a fresh clone, so counting it as evidence says "this was built"
+// about a tree nobody has built - and then reports every sibling glob writing to an untracked
+// gen/ as dead. That is the exact false positive this check was written to avoid, arriving
+// through the back door: it fired on console's `gen/**` on every CI runner while passing on
+// every developer machine, where gen/ had been built. A backend that cannot answer "is this
+// tracked?" cannot tell those apart, so it degrades to plain presence rather than guess.
 func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 	const name = "dead output globs"
+
+	var tracked types.TrackedFileReporter
+	if res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
+		tracked, _ = res.VCS.(types.TrackedFileReporter)
+	}
+
 	var details []string
 	for _, p := range projects {
 		var dead []string
-		matchedAny := false
+		builtAny := false
 		for _, glob := range p.Outputs {
 			hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
 			if err != nil {
 				continue
 			}
 			if len(hits) > 0 {
-				matchedAny = true
+				if provesBuilt(tracked, p.Dir, hits) {
+					builtAny = true
+				}
 				continue
 			}
 			dead = append(dead, glob)
 		}
-		if !matchedAny {
+		if !builtAny {
 			continue
 		}
 		for _, glob := range dead {
@@ -774,6 +806,35 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 			len(details), types.CodeURL(types.DeadOutputGlob)),
 		Details: details,
 	}
+}
+
+// provesBuilt reports whether a glob's matches are evidence that the project was actually
+// built, which is true only when nothing the glob matched is committed. Matching a committed
+// file proves the clone happened, not the build.
+//
+// Whether ls-files ECHOES the paths is the whole answer, so its output is only ever tested for
+// emptiness: a directory argument makes it print the tracked files underneath instead of the
+// directory itself, and comparing those names against the globbed ones would never line up.
+// A hit set mixing tracked and untracked files reads as "not evidence", which under-reports
+// rather than over-reports - the right way to be wrong for a check whose failure mode is
+// training people to ignore it.
+func provesBuilt(reporter types.TrackedFileReporter, dir string, hits []string) bool {
+	if reporter == nil {
+		return true
+	}
+	rels := make([]string, 0, len(hits))
+	for _, h := range hits {
+		rel, err := filepath.Rel(dir, h)
+		if err != nil {
+			return true
+		}
+		rels = append(rels, filepath.ToSlash(rel))
+	}
+	found, err := reporter.TrackedFiles(context.Background(), dir, rels)
+	if err != nil {
+		return true
+	}
+	return len(found) == 0
 }
 
 // magusfileSourcesInDir returns every Buzz magusfile source for a project

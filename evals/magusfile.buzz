@@ -14,6 +14,7 @@ magus\project({
                 "fixtures/**", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
                 "pnpm-workspace.yaml"],
     "outputs": ["results/**"],
+    "no_language": "polyglot harness: promptfoo yaml tasks, .mjs libs, .py analysis tools; no single language pack describes it, and the work runs through promptfoo rather than a toolchain",
     "targets": {
         // These targets deliberately produce no result artifact. The live smoke
         // and grid targets retain the project output snapshot.

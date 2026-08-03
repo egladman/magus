@@ -62,10 +62,15 @@ jobs:
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      # Builds the magus this very commit defines, from the checkout above, so a
+      # change that magusfile.buzz needs is exercised by the run that introduces
+      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
+      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
+      # is rejected by the action's reachable-from-main gate every single time.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       # setup-magus builds its bootstrap binary with actions/setup-go, which reads go.mod's
       # `go` directive and PREPENDS that toolchain to PATH. It outranks mise's pinned Go for
@@ -122,10 +127,15 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
+      # Builds the magus this very commit defines, from the checkout above, so a
+      # change that magusfile.buzz needs is exercised by the run that introduces
+      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
+      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
+      # is rejected by the action's reachable-from-main gate every single time.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       # See the preflight job: setup-magus's bootstrap toolchain outranks mise's on PATH.
       - name: Restore the mise-pinned Go toolchain

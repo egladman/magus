@@ -125,6 +125,13 @@ type Project struct {
 	Outputs        []string   // doublestar globs snapshotted into and replayed from cache
 	DependsOn      []string
 	Exclusive      bool
+	// NoLanguage is the reason a project binds no toolchain spell ON PURPOSE, from
+	// magus.project's "no_language" key. A spell-less project is legal and common, so
+	// doctor's language-coverage check cannot tell an intentional one (a polyglot
+	// harness no single pack describes) from a real gap (someone forgot to import the
+	// go spell) without being told. Carrying the REASON rather than a bare bool is what
+	// keeps the opt-out honest: it has to say what it is instead of silencing a check.
+	NoLanguage string
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via

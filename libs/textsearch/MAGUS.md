@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2409 nodes** and **5434 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2399 nodes** and **5411 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -44,17 +44,17 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 10 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 99 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
-| spell | 12 | `magus query kind:spell` | `go`, `rust`, `markdown` |
+| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 92 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| spell | 13 | `magus query kind:spell` | `go`, `rust`, `markdown` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
-| tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
 | charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 50 | `magus query kind:diagnostic` | `MGS2001`, `MGS3001`, `MGS1002` |
-| doc | 286 | `magus query kind:doc` | `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 168 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
+| doc | 286 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 169 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 225 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
 | function | 1169 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 123 | `magus query kind:import` | `std`, `magus`, `fs` |
@@ -63,7 +63,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 34 | `magus query project:.` | `skills-generate`, `generate`, `lint` |
-| cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 16 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -100,7 +99,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
 | `ci-shard` | Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed. |
-| `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 | `serve` | serve is the workspace-root dev loop for BOTH deployables. |
 | `go-build` | Compiles the version-stamped magus binary. |
 | `image-build` | Under the cd charm, build+push+sign both static and CGO images unconditionally. |
@@ -111,18 +109,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `mod-sync` | The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod. |
-
-## Project: cmd/magus/starter
-
-| Target | What it does |
-|---|---|
-| `generate` |  |
-| `format` |  |
-| `lint` |  |
-| `build` |  |
-| `test` |  |
-| `ci` | 'ci' is the conventional anchor that `magus affected ci` keys off. |
-| `preflight` |  |
+| `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |
 
 ## Project: console
 

@@ -17,7 +17,16 @@ import (
 // directory has none. It doubles as the canonical example magusfile referenced in
 // the docs, so edits here are user-facing in both places.
 //
-//go:embed starter/magusfile.buzz
+// Named magusfile.tmpl.buzz, NOT magusfile.buzz: this is template data that ships
+// inside the binary, and "magusfile.buzz" is a project marker (see projectMarkers),
+// so the old name made discovery register magus's own repository as owning a project
+// here. It then failed doctor's language-coverage check, and the only ways to quiet
+// that were to bind a spell the template must not have or to write an opt-out into
+// the very file `magus init` hands new users - ceremony in the one file whose whole
+// point is that a magusfile's mere presence is enough. The .buzz suffix stays so the
+// shipped template is still linted and syntax-checked as Buzz.
+//
+//go:embed starter/magusfile.tmpl.buzz
 var starterMagusfileBuzz string
 
 // initCmd implements `magus init`: bootstrap a magus workspace in the

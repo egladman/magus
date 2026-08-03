@@ -48,6 +48,7 @@ func magusfileNotASpellErr(what string) error {
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
 	"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
+	"no_language",
 }
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
@@ -162,6 +163,19 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		if ev.Bool() {
 			opts = append(opts, workspace.WithExclusive())
 		}
+	}
+	// A reason, not a flag. `"no_language": true` would silence doctor's language-coverage
+	// check anonymously; requiring prose means the next reader learns why this project has
+	// no toolchain spell instead of finding a switch someone flipped.
+	if nv, ok := v.MapGet("no_language"); ok {
+		var reason string
+		if nv.IsStr() {
+			reason = strings.TrimSpace(nv.AsString())
+		}
+		if reason == "" {
+			return nil, fmt.Errorf(`magus.project: "no_language" needs a reason string explaining why this project binds no toolchain spell, e.g. "polyglot harness; no single language pack describes it"`)
+		}
+		opts = append(opts, workspace.WithNoLanguage(reason))
 	}
 	if sv, ok := v.MapGet("spells"); ok && sv.IsList() {
 		// Each item is a spell handle. A local spell (.load) is registered by value

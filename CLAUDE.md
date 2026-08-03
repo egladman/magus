@@ -73,10 +73,23 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-The compatibility contract lives in CI: `setup-magus` runs the pinned,
-checksum-verified release against this repo's magusfile. If `magusfile.buzz`
-ever needs an unreleased magus feature, that is a breaking-change signal to
-surface (release first), not to paper over.
+CI runs `setup-magus` two different ways, on purpose:
+
+- `source-path: .` (preflight, the ci shards, skill-evals) builds the magus THIS
+  commit defines and runs it against this commit's magusfile. So a change that
+  `magusfile.buzz` needs is exercised by the very run that introduces it - there
+  is no "release first" chicken-and-egg.
+- `git-ref: <latest release tag>` (completions, deploy-build, merge-history,
+  postflight) runs the pinned, checksum-verified release instead. That is the
+  compatibility contract: if one of those jobs breaks because the magusfile
+  needs an unreleased feature, that is a breaking-change signal to surface, not
+  to paper over.
+
+Do NOT write `git-ref: ${{ github.sha }}` for the first case. On a
+`pull_request` event `github.sha` is the ephemeral `refs/pull/N/merge` commit, a
+DESCENDANT of main, which the action's reachable-from-main gate rejects every
+time (it reads as "Refusing to build unreviewed source", which is a misdirect).
+`source-path` is the input for building a checkout you already have.
 
 ## Running the daemon locally
 

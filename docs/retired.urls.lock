@@ -14,6 +14,13 @@ development/projects/gopherbuzz/
 # slug has no page to alias to once the directory is gone.
 development/libs-diag/
 
+# retired when cmd/magus/starter stopped being a discovered project: its magusfile
+# was renamed magusfile.tmpl.buzz because it is embedded template data that `magus
+# init` writes, not a project of this workspace. Retired rather than redirected for
+# the same reason as libs-diag above - a /development/ page is derived from a
+# PROJECT, and there is no longer a project here to alias to.
+development/cmd-magus-starter/
+
 # retired by the concepts/guides/reference/migrating docs reorg (pre-1.0 URL break)
 affected/
 agents/

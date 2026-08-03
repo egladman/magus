@@ -540,55 +540,6 @@
       ]
     },
     {
-      "path": "cmd/magus/starter",
-      "name": "cmd/magus/starter",
-      "engine": "buzz",
-      "nodes": [
-        {
-          "name": "preflight"
-        },
-        {
-          "name": "generate",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
-          "name": "format",
-          "dependencies": [
-            "generate"
-          ]
-        },
-        {
-          "name": "lint",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "build",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "test",
-          "dependencies": [
-            "format"
-          ]
-        },
-        {
-          "name": "ci",
-          "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
-          "dependencies": [
-            "lint",
-            "build",
-            "test"
-          ]
-        }
-      ]
-    },
-    {
       "path": "console",
       "name": "console",
       "engine": "buzz",
