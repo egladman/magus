@@ -141,3 +141,87 @@ func TestParseMonikerStripsVersion(t *testing.T) {
 	_, _, ok = parseMoniker("local 5")
 	assert.False(t, ok)
 }
+
+// TestWorkspacePath pins the containment rule on indexer output.
+//
+// scip-go records occurrences in the packages it resolved, so a document path can point
+// into the module or build cache. Those paths flowed into the knowledge graph as real
+// nodes: a committed graph carried 93 of them, bottoming out in one developer's
+// ~/Library/Caches/go-build shards.
+func TestWorkspacePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		project string
+		rel     string
+		want    string
+		wantOK  bool
+	}{
+		{name: "root project path", project: ".", rel: "pkg/foo.go", want: "pkg/foo.go", wantOK: true},
+		{name: "empty project path", project: "", rel: "./pkg/foo.go", want: "pkg/foo.go", wantOK: true},
+		{name: "nested project rebases", project: "libs/gopherbuzz", rel: "pool.go", want: "libs/gopherbuzz/pool.go", wantOK: true},
+		{name: "nested project cleans", project: "libs/gopherbuzz", rel: "./sub/../pool.go", want: "libs/gopherbuzz/pool.go", wantOK: true},
+
+		{name: "root project escape", project: ".", rel: "../../../../../Library/Caches/go-build/01/x", wantOK: false},
+		{name: "bare parent", project: ".", rel: "..", wantOK: false},
+		{name: "absolute path", project: ".", rel: "/Users/someone/go/pkg/mod/x.go", wantOK: false},
+		{name: "empty", project: ".", rel: "", wantOK: false},
+		{name: "dot", project: ".", rel: ".", wantOK: false},
+
+		// The ".." count here is WITHIN the project's depth, which is what makes it the
+		// interesting case: validating after path.Join cancels it against the project
+		// path and yields "internal/interp/x.go" with nothing left to detect, silently
+		// re-attributing a document to a project that never owned it. A fixture that
+		// overshoots the depth (four ".." here) is rejected either way and proves
+		// nothing.
+		{name: "nested project escape within its own depth", project: "libs/gopherbuzz", rel: "../../internal/interp/x.go", wantOK: false},
+		{name: "nested project escape past its depth", project: "libs/gopherbuzz", rel: "../../../../escape.go", wantOK: false},
+		{name: "nested project escape by one", project: "libs/gopherbuzz", rel: "../../../escape.go", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := workspacePath(tt.project, tt.rel)
+			assert.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				assert.Empty(t, got, "a refused path returns no path, so a caller ignoring ok cannot use one")
+				return
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestParseIndexSkipsEscapingDocuments checks the whole ingest, not just the helper: a
+// dependency document the indexer resolved outside the workspace contributes nothing,
+// while the in-workspace document beside it is unaffected.
+func TestParseIndexSkipsEscapingDocuments(t *testing.T) {
+	idx := &scip.Index{Documents: []*scip.Document{
+		{
+			RelativePath: "../../../../../Library/Caches/go-build/01/dep.go",
+			Language:     "go",
+			Occurrences: []*scip.Occurrence{
+				{Symbol: monikerV2, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 0, 3}},
+			},
+		},
+		{
+			RelativePath: "pkg/foo.go",
+			Language:     "go",
+			Occurrences: []*scip.Occurrence{
+				{Symbol: monikerV1, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{7, 0, 3}},
+			},
+		},
+	}}
+
+	syms, err := ParseIndex(marshalIndex(t, idx), ".")
+	require.NoError(t, err)
+	require.Len(t, syms, 1, "only the in-workspace document contributes")
+	assert.Equal(t, []string{"pkg/foo.go"}, syms[0].Defs)
+	for _, s := range syms {
+		assert.NotContains(t, s.Source, "..", "no symbol sources outside the workspace")
+		for _, d := range s.Defs {
+			assert.NotContains(t, d, "..")
+		}
+		for _, r := range s.Refs {
+			assert.NotContains(t, r.Path, "..")
+		}
+	}
+}

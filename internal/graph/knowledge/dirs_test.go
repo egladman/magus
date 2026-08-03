@@ -110,3 +110,16 @@ func TestDirNodeStructuralAndAggregateMerge(t *testing.T) {
 	assert.Equal(t, "go", n.Attrs[AttrDirLanguages])
 	assert.True(t, hasEdge(out, "dir:internal", "dir:internal/interp", types.RelationContains))
 }
+
+// TestAssembleDirsRefusesEscape pins the aggregate pass, which walks the same shape and
+// is what actually emitted the 93 escaping dir nodes.
+func TestAssembleDirsRefusesEscape(t *testing.T) {
+	projects := []types.TargetGraphProject{{Path: "."}}
+	leaves := []string{"cmd/magus/vcs.go", "../../../../../Library/Caches/go-build/01/x"}
+
+	s := assembleDirs(projects, leaves, map[string]int{})
+	require.NotEmpty(t, s.Nodes, "the in-workspace leaf still aggregates")
+	for _, n := range s.Nodes {
+		assert.True(t, workspaceContainsPath(n.Source), "dir node %q stays inside the workspace", n.Source)
+	}
+}

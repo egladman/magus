@@ -393,13 +393,18 @@ func parseChangesByCommit(out string) []types.CommitChange {
 	return changes
 }
 
+// Managed-section markers: a locator plus the full line written. Matchers use the
+// locator alone, so a section written by an older magus - whose banner used an em-dash -
+// is still found and rewritten rather than duplicated below.
 const (
-	gitAttrsBegin = "# BEGIN magus-generated — do not edit this section manually"
-	gitAttrsEnd   = "# END magus-generated"
-	gitDriverArgs = " merge-driver %O %A %B %L %P"
+	gitAttrsBegin     = "# BEGIN magus-generated"
+	gitAttrsBeginLine = gitAttrsBegin + " - do not edit this section manually"
+	gitAttrsEnd       = "# END magus-generated"
+	gitDriverArgs     = " vcs merge-driver %O %A %B %L %P"
 
-	gitHookBegin = "# BEGIN magus-refresh — do not edit this section manually"
-	gitHookEnd   = "# END magus-refresh"
+	gitHookBegin     = "# BEGIN magus-refresh"
+	gitHookBeginLine = gitHookBegin + " - do not edit this section manually"
+	gitHookEnd       = "# END magus-refresh"
 )
 
 // gitRefreshHooks fire on a history-changing event that can stale the knowledge graph /
@@ -427,29 +432,57 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 		return false, nil
 	}
 	attrsCurrent, attrsWanted := v.gitAttrsState(root, outputGlobs)
-	registered, _ := v.CheckMergeDriver(ctx, root)
-	if attrsCurrent == attrsWanted && registered && v.driverExecutable(ctx, root) {
+	// One read answers all three questions. Ensure runs on every workspace load and its
+	// contract is to be cheap in the steady state, so it cannot spawn a subprocess each.
+	registered := v.registeredDriver(ctx, root)
+	attrsPresent := v.attrsSectionPresent(root)
+	if attrsCurrent == attrsWanted && registered != "" && attrsPresent &&
+		driverExecutable(registered) && driverCurrent(registered) {
 		return false, nil
 	}
 	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
 }
 
+// registeredDriver returns the command currently registered as the magus merge driver,
+// or "" when nothing is registered.
+func (v gitVCS) registeredDriver(ctx context.Context, root string) string {
+	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
+	return strings.TrimSpace(string(out))
+}
+
+// attrsSectionPresent reports whether .gitattributes carries the managed section.
+func (v gitVCS) attrsSectionPresent(root string) bool {
+	data, _ := os.ReadFile(filepath.Join(root, ".gitattributes"))
+	return strings.Contains(string(data), gitAttrsBegin)
+}
+
+// driverCurrent reports whether a registered command still names the subcommand this
+// binary answers to. The driver moved from `magus merge-driver` to `magus vcs
+// merge-driver`, and the registration lives in each clone's .git/config, which no commit
+// can update. Without this an old clone invokes a spelling that no longer dispatches, git
+// reads the failure as a conflict, and every generated file falls back to markers with
+// nothing naming the cause. Rewriting the registration is what lets us carry no alias.
+//
+// The probe derives from gitDriverArgs, so changing the argument string cannot leave it
+// matching the old spelling.
+func driverCurrent(registered string) bool {
+	verb, _, _ := strings.Cut(strings.TrimSpace(gitDriverArgs), " %")
+	return strings.Contains(registered, " "+verb+" ")
+}
+
 // CheckMergeDriver reports whether both .gitattributes and git config driver registration are present.
 func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error) {
-	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
-	if strings.TrimSpace(string(out)) == "" {
+	if v.registeredDriver(ctx, root) == "" {
 		return false, nil // not configured; not an error
 	}
-	attrsPath := filepath.Join(root, ".gitattributes")
-	data, _ := os.ReadFile(attrsPath)
-	return strings.Contains(string(data), gitAttrsBegin), nil
+	return v.attrsSectionPresent(root), nil
 }
 
 // gitAttrsState returns .gitattributes as it is now and as the declared globs say it
 // should be, so callers can compare the two without writing.
 func (v gitVCS) gitAttrsState(root string, outputGlobs []string) (current, wanted string) {
 	var section strings.Builder
-	section.WriteString(gitAttrsBegin + "\n")
+	section.WriteString(gitAttrsBeginLine + "\n")
 	for _, glob := range outputGlobs {
 		fmt.Fprintf(&section, "%s merge=magus linguist-generated\n", glob)
 	}
@@ -492,13 +525,11 @@ func gitMergeDriverCommand() string {
 // path into a since-removed install is no better. git treats a driver it cannot execute
 // as a conflict, so a rotted registration behaves exactly like no driver - the failure it
 // causes never mentions the driver, so nothing points at the cause.
-func (v gitVCS) driverExecutable(ctx context.Context, root string) bool {
-	out, _ := exec.CommandContext(ctx, "git", "-C", root, "config", "merge.magus.driver").Output()
-	cmdline := strings.TrimSpace(string(out))
-	if cmdline == "" {
+func driverExecutable(registered string) bool {
+	if registered == "" {
 		return false
 	}
-	exe := cmdline
+	exe := registered
 	if strings.HasPrefix(exe, `"`) {
 		if end := strings.Index(exe[1:], `"`); end >= 0 {
 			exe = exe[1 : end+1]
@@ -567,14 +598,16 @@ func gitHookBody(name, command string) string {
 // giving a new file a POSIX-sh shebang and preserving any existing user body. It reports
 // whether the file changed and keeps the hook executable.
 func writeManagedHook(path, body string) (bool, error) {
-	section := gitHookBegin + "\n" + body + gitHookEnd + "\n"
+	section := gitHookBeginLine + "\n" + body + gitHookEnd + "\n"
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("vcs: read %s: %w", path, err)
 	}
 	var next string
 	if os.IsNotExist(err) {
-		next = "#!/bin/sh\n" + section
+		// replaceManagedSection normalizes to one blank line before a section, so a new
+		// file written without it differs from itself on the next install, forever.
+		next = "#!/bin/sh\n\n" + section
 	} else {
 		next = replaceManagedSection(string(existing), section, gitHookBegin, gitHookEnd)
 	}
@@ -585,6 +618,179 @@ func writeManagedHook(path, body string) (bool, error) {
 		return false, fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return true, nil
+}
+
+// gitArgChunkSize bounds pathspecs per git invocation. Resolving in bulk exists to avoid
+// per-path process cost, but an unbounded argv hits E2BIG on the tightest platforms.
+const gitArgChunkSize = 256
+
+// gitPathChunks splits paths into argv-sized batches, preserving order.
+func gitPathChunks(paths []string) [][]string {
+	var chunks [][]string
+	for start := 0; start < len(paths); start += gitArgChunkSize {
+		end := min(start+gitArgChunkSize, len(paths))
+		chunks = append(chunks, paths[start:end])
+	}
+	return chunks
+}
+
+// runGitBatched runs `git -C root <args...> -- <paths>` in argv-sized batches.
+func runGitBatched(ctx context.Context, root string, args []string, paths []string) error {
+	for _, chunk := range gitPathChunks(paths) {
+		argv := append([]string{"-C", root}, args...)
+		argv = append(argv, "--")
+		argv = append(argv, chunk...)
+		if out, err := exec.CommandContext(ctx, "git", argv...).CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	return nil
+}
+
+// gitPathPrefix returns root's path relative to the repository top level with a trailing
+// slash, or "" when root is the top level. Porcelain paths are top-level-relative, so a
+// workspace rooted deeper needs this to translate them.
+func gitPathPrefix(ctx context.Context, root string) string {
+	out, err := vcsOutput(ctx, root, "git", "rev-parse", "--show-prefix")
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// Conflicts implements types.ConflictResolver. It reads porcelain status rather than
+// `diff --diff-filter=U` because the classification matters: a path git marks D on either
+// side has no content to merge, and a caller needs that apart from a content conflict.
+//
+// --no-renames and -uno narrow what git emits. parseConflicts stays correct without them
+// (see its rename note), so these are a second line of defense.
+func (v gitVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", root,
+		"status", "--porcelain=v1", "-z", "--no-renames", "-uno").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git status: %w", err)
+	}
+	return parseConflicts(string(out), gitPathPrefix(ctx, root)), nil
+}
+
+// parseConflicts turns `git status --porcelain=v1 -z` output into the unmerged paths.
+//
+// The NUL stream is walked by index, not ranged over: a rename or copy occupies TWO
+// fields ("R  new", then the original path alone) and the second is that entry's payload.
+// Read as its own status entry, an original path like "Utils/x.txt" parses as XY="Ut",
+// passes the U test, and surfaces as a phantom conflict at "ls/x.txt" - which either
+// aborts the resolve naming a file that does not exist, or feeds a never-conflicted path
+// to checkout and rm.
+//
+// prefix is the workspace's path relative to the repository top level. Status paths are
+// top-level-relative, so a workspace rooted deeper needs them rebased and should skip the
+// ones outside itself.
+func parseConflicts(out, prefix string) []types.Conflict {
+	fields := strings.Split(out, "\x00")
+	var conflicts []types.Conflict
+	for i := 0; i < len(fields); i++ {
+		entry := fields[i]
+		if len(entry) < 4 {
+			continue
+		}
+		xy, path := entry[:2], entry[3:]
+		// A rename/copy carries its original path in the following field.
+		if strings.ContainsAny(xy, "RC") {
+			i++
+			continue
+		}
+		if !strings.ContainsRune(xy, 'U') && xy != "AA" && xy != "DD" {
+			continue
+		}
+		if prefix != "" {
+			rel, ok := strings.CutPrefix(path, prefix)
+			if !ok {
+				continue
+			}
+			path = rel
+		}
+		kind := types.ConflictKindContent
+		switch {
+		case xy == "DD":
+			kind = types.ConflictKindBothDeleted
+		case strings.ContainsRune(xy, 'D'):
+			kind = types.ConflictKindDeleted
+		}
+		conflicts = append(conflicts, types.Conflict{Path: filepath.ToSlash(path), Kind: kind})
+	}
+	return conflicts
+}
+
+// KeepIncoming implements types.ConflictResolver, taking git's `--theirs`: during a
+// rebase, the commit being replayed.
+//
+// The batch attempt only saves processes. `git checkout --theirs` is atomic across its
+// pathspecs (a path with no stage 3 fails the invocation and writes nothing), so the
+// per-path fallback cannot find a half-applied side. A path resolving from neither stage
+// errors rather than being skipped; callers send both-deleted paths to RemoveConflicts.
+func (v gitVCS) KeepIncoming(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if err := runGitBatched(ctx, root, []string{"checkout", "--theirs"}, paths); err == nil {
+		return nil
+	}
+	for _, p := range paths {
+		if err := runGitBatched(ctx, root, []string{"checkout", "--theirs"}, []string{p}); err == nil {
+			continue
+		}
+		if err := runGitBatched(ctx, root, []string{"checkout", "--ours"}, []string{p}); err != nil {
+			return fmt.Errorf("git checkout %q: the merge left content on neither side; resolve it by hand: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// MarkResolved implements types.ConflictResolver.
+func (v gitVCS) MarkResolved(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	return runGitBatched(ctx, root, []string{"add"}, paths)
+}
+
+// RemoveConflicts implements types.ConflictResolver. --ignore-unmatch stops a path the
+// merge already removed from failing the batch.
+func (v gitVCS) RemoveConflicts(ctx context.Context, root string, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	return runGitBatched(ctx, root, []string{"rm", "-q", "-f", "--ignore-unmatch"}, paths)
+}
+
+// IgnoredPaths implements types.ConflictResolver. `git check-ignore` exits 1 when nothing
+// matches, which answers "none are ignored" rather than failing.
+//
+// --no-index makes the answer useful. By default check-ignore consults the index and
+// calls a TRACKED path not-ignored, since ignore rules do not apply to what git already
+// follows. Every conflicted path is tracked, so the default answers "not ignored" for all
+// of them - including the generated file whose conflict is that one side stopped tracking
+// it. The question is about the RULES: would this path be ignored if nothing tracked it.
+func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {
+	ignored := make(map[string]bool, len(paths))
+	if len(paths) == 0 {
+		return ignored, nil
+	}
+	for _, chunk := range gitPathChunks(paths) {
+		cmd := exec.CommandContext(ctx, "git", "-C", root, "check-ignore", "--no-index", "-z", "--stdin")
+		cmd.Stdin = strings.NewReader(strings.Join(chunk, "\x00") + "\x00")
+		out, err := cmd.Output()
+		var exitErr *exec.ExitError
+		if err != nil && (!errors.As(err, &exitErr) || exitErr.ExitCode() != 1) {
+			return nil, fmt.Errorf("git check-ignore: %w", err)
+		}
+		for _, p := range strings.Split(string(out), "\x00") {
+			if p != "" {
+				ignored[filepath.ToSlash(p)] = true
+			}
+		}
+	}
+	return ignored, nil
 }
 
 // vcsOutput runs a VCS subcommand in dir and returns its trimmed stdout.

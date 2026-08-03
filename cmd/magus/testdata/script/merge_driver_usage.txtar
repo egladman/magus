@@ -1,4 +1,4 @@
-# magus merge-driver is the VCS merge driver git/hg invoke for declared output
+# magus vcs merge-driver is the VCS merge driver git/hg invoke for declared output
 # files: on a merge conflict in a path matching a declared Output glob, it keeps the
 # version the VCS already staged instead of leaving conflict markers, and an explicit
 # `magus run <target>` settles the result afterwards. Users never type this command
@@ -11,21 +11,22 @@
 # MERGE DRIVER is the wrong signal to hand back: 0 is how the driver tells git the
 # conflict was resolved. git always passes all five placeholders so this path is only
 # reachable by a human, but 0 also disagreed with the 1-argument case, which errored.
-! exec magus merge-driver
+! exec magus vcs merge-driver
 stderr 'expected 5 arguments'
-stderr 'Usage: magus merge-driver %O %A %B %L %P'
+stderr 'Usage: magus vcs merge-driver %O %A %B %L %P'
 stderr 'git and hg invoke this'
 stderr 'Wire it once per clone with .magus init.'
+stderr 'magus vcs resolve'
 
 # The wrong number of arguments (git/hg always pass exactly 5) is a distinct,
 # nonzero-exit error path.
-! exec magus merge-driver onlyonearg
-stderr '\[error\] magus merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
+! exec magus vcs merge-driver onlyonearg
+stderr '\[error\] magus vcs merge-driver: expected 5 arguments \(ancestor result other markerSize path\), got 1'
 
 # Five arguments naming a path no project declares as an Output. magus has no
 # regeneration that would settle it later, so it fails and lets the VCS write ordinary
 # conflict markers rather than silently picking a side of a hand-merged file.
-! exec magus merge-driver base.txt local.txt other.txt 0 local.txt
+! exec magus vcs merge-driver base.txt local.txt other.txt 0 local.txt
 stderr '\[error\] merge-driver: no project declares "local.txt" as an output; cannot resolve'
 
 -- magus.yaml --

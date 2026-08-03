@@ -297,6 +297,71 @@ type ChurnReporter interface {
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }
 
+// ConflictKind classifies why a path is unresolved in an in-progress merge.
+type ConflictKind string
+
+const (
+	// ConflictKindContent is both sides changing the same file. The VCS has written
+	// conflict markers into the working tree.
+	ConflictKindContent ConflictKind = "content"
+	// ConflictKindDeleted is one side deleting a file the other changed. No content
+	// merge is possible, and no VCS invokes a merge driver for it - which is why a
+	// driver alone never settles a workspace whose generated files moved.
+	ConflictKindDeleted ConflictKind = "deleted"
+	// ConflictKindBothDeleted is both sides deleting the file. No content on either
+	// side, so recording the removal settles it.
+	ConflictKindBothDeleted ConflictKind = "both-deleted"
+)
+
+// Conflict is one unresolved path in an in-progress merge, rebase, or cherry-pick.
+type Conflict struct {
+	// Path is relative to the root passed to Conflicts, using forward slashes.
+	Path string
+	// Kind is why the path is unresolved, and so what can settle it.
+	Kind ConflictKind
+}
+
+// ConflictResolver is an optional capability (sibling of MergeDriverInstaller) for
+// VCSDriver implementations that can report and settle an in-progress merge's
+// unresolved paths in bulk.
+//
+// A merge driver is the wrong shape for generated files: the VCS invokes one per
+// conflicted path, inside its own index manipulation, so cost scales with the conflict
+// count and a regeneration cannot run there. Deciding every path first, regenerating
+// once, then staging inverts that, and is the only way to settle ConflictKindDeleted,
+// which a driver is never called for.
+//
+// Callers type-assert for it and degrade (tell the user to resolve by hand) when a
+// backend lacks it.
+//
+// Every method takes the repository root and root-relative slash paths. A VCS reports
+// conflict paths relative to the top level but reads pathspecs relative to the process
+// directory, so mixing the two addresses the wrong files instead of failing.
+type ConflictResolver interface {
+	// Conflicts returns the unresolved paths of the in-progress operation. No
+	// operation in progress is not an error: it returns none.
+	Conflicts(ctx context.Context, root string) ([]Conflict, error)
+	// KeepIncoming clears the conflict markers by taking the INCOMING side wholesale -
+	// git's "theirs", the commit being replayed during a rebase - falling back to the
+	// surviving side where the incoming side has none. The side is named here so two
+	// backends cannot disagree about which change survives.
+	//
+	// It marks nothing resolved. A caller regenerates between KeepIncoming and
+	// MarkResolved, so the regenerated content is what gets recorded.
+	KeepIncoming(ctx context.Context, root string, paths []string) error
+	// MarkResolved records paths as resolved with their current working-tree content
+	// (git's staging, hg's `resolve --mark`).
+	MarkResolved(ctx context.Context, root string, paths []string) error
+	// RemoveConflicts resolves paths by deleting them from both the working tree and
+	// the recorded state.
+	RemoveConflicts(ctx context.Context, root string, paths []string) error
+	// IgnoredPaths reports which paths the VCS's ignore RULES cover, tracked or not.
+	// Resolution needs it to tell a generated file that is still tracked from one since
+	// ignored: both are declared outputs, but only the first survives a
+	// ConflictKindDeleted. Paths absent from the result are not ignored.
+	IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error)
+}
+
 // RevisionExporter is an optional capability for VCSDriver implementations that can
 // materialize a revision's tracked files into a directory (a "checkout to a throwaway
 // tree" without touching the working copy). Callers type-assert for it and degrade

@@ -124,6 +124,13 @@ deliberately instead:
 
 ## Local gotchas
 
+- A fresh worktree needs `mise trust` before `magus run lint` will pass. mise keys
+  trust on the config file's ABSOLUTE path, so every worktree gets its own
+  untrusted `mise.toml`, and the tools it provides (golangci-lint, govulncheck,
+  shellcheck) then exit non-zero. The failure names neither mise nor trust in the
+  target's error - it surfaces as `govulncheck exited 1` - so check the run log
+  before believing the tool found something. Trust the tree once instead of per
+  worktree: `mise settings add trusted_config_paths ~/Repos/magus`.
 - Verifying the console locally: the service worker precaches aggressively and
   serves stale bundles. Serve `console/gen` on a fresh port, or unregister the
   SW and clear caches before trusting what you see.

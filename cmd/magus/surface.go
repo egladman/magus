@@ -36,7 +36,7 @@ var subcommands = []subcommand{
 	{Name: "watch", Short: "emit changed file paths (pipe into affected --stdin)"},
 	{Name: "status", Short: "inspect the concurrency pool of a running parent magus"},
 	{Name: "clean", Short: "remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]"},
-	{Name: "merge-driver", Short: "VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)"},
+	{Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver)"},
 	{Name: "doctor", Short: "validate the workspace"},
 	{Name: "config", Short: "view or update magus configuration"},
 	{Name: "memory", Short: "durable cross-session project memory (list, get, put, delete, verify)"},

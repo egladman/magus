@@ -56,7 +56,7 @@ _magus() {
                 'watch:emit changed file paths (pipe into affected --stdin)'
                 'status:inspect the concurrency pool of a running parent magus'
                 'clean:remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]'
-                'merge-driver:VCS merge driver for generated outputs (invoked by git/hg; wired via `config init`)'
+                'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
                 'memory:durable cross-session project memory (list, get, put, delete, verify)'

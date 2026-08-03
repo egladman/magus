@@ -170,6 +170,18 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// that should be routed through a remote process; a notify must reach
 		// the local OS notifier, not one on the daemon's host).
 		return dispatchProfile{needsConfig: true}
+	case "vcs":
+		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
+		// working tree, so a daemon serving another workspace must not adopt one.
+		//
+		// The preload matters as much. Opening a workspace refreshes the merge-driver
+		// registration, which writes the tracked .gitattributes - and both merge-facing
+		// verbs run while that file may be unmerged, or while the VCS holds the index.
+		// loadMagus is a sync.Once singleton, so a preload wins the race and performs the
+		// write each verb defers: merge-driver would dirty the tree against what git
+		// staged and stop `git rebase --continue`, resolve would splice a section between
+		// conflict markers. Each verb opens what it needs under its own guard.
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "server":
@@ -544,8 +556,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return status(ctx, subArgs)
 	case "clean":
 		return cleanCmd(ctx, root, subArgs)
-	case "merge-driver":
-		return mergeDriverCmd(ctx, root, subArgs)
+	case "vcs":
+		return vcsCmd(ctx, root, rc, subArgs)
 	case "doctor":
 		return doctorCmd(ctx, root, subArgs)
 	case "config":

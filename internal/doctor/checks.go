@@ -174,6 +174,73 @@ func (r *runner) checkSymlinks() Check {
 	return checkSymlinks(r.ws.Root())
 }
 
+func (r *runner) checkGraphBounds() Check {
+	return checkGraphBounds(r.ws.Root())
+}
+
+// checkGraphBounds fails when the committed knowledge graph holds a node naming a
+// location outside the workspace. It is the sibling of checkSymlinks: both answer "does
+// anything here reach out of the tree", one for the filesystem and one for the artifact
+// the workspace publishes.
+//
+// It matters because the graph is committed, rendered into the docs site, and shared
+// through the remote cache, so a node naming a path on one machine reaches all three. A
+// real graph carried 93 of them, bottoming out in a developer's ~/Library/Caches/go-build
+// shards, put there by a language indexer reporting document paths for the dependencies
+// it resolved.
+//
+// The ingest guard in internal/symbols is what stops those getting in. This is what
+// notices if a future extractor finds a way around it, which is why it reads the merged,
+// committed artifact and keys on the node ID rather than any one field: several node
+// kinds carry their path only in an ID or a Label.
+//
+// Import nodes are exempt. Their ID is the specifier a source file literally wrote, so
+// "../../badge" records what the code says rather than a path magus resolved.
+func checkGraphBounds(root string) Check {
+	const name = "graph bounds"
+	path := filepath.Join(root, "gen", "knowledge-graph.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Check{Name: name, Status: StatusOK, Message: "no committed knowledge graph to check"}
+	}
+	var g struct {
+		Nodes []struct {
+			ID     string `json:"id"`
+			Kind   string `json:"kind"`
+			Label  string `json:"label"`
+			Source string `json:"source"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(data, &g); err != nil {
+		return Check{Name: name, Status: StatusFail, Message: fmt.Sprintf("could not read the committed knowledge graph: %v", err)}
+	}
+	var escaping []string
+	for _, n := range g.Nodes {
+		if n.Kind == types.KindImport {
+			continue
+		}
+		if escapesRoot(strings.TrimPrefix(n.ID, n.Kind+":")) || escapesRoot(n.Source) || escapesRoot(n.Label) {
+			escaping = append(escaping, n.ID)
+		}
+	}
+	if len(escaping) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%d graph node(s); none name a path outside the workspace", len(g.Nodes))}
+	}
+	slices.Sort(escaping)
+	return Check{
+		Name:    name,
+		Status:  StatusFail,
+		Message: fmt.Sprintf("%d graph node(s) name a location outside the workspace; the graph is committed and shared, so they leak a local machine's layout", len(escaping)),
+		Details: escaping,
+	}
+}
+
+// escapesRoot reports whether s carries a ".." segment. Empty and non-path values are not
+// escapes: many node kinds put a name rather than a path in these fields.
+func escapesRoot(s string) bool {
+	return s != "" && slices.Contains(strings.Split(s, "/"), "..")
+}
+
 // checkSymlinks fails on symlinks whose resolved target escapes root. They are
 // a sandbox-escape vector where landlock is unavailable. In-tree symlinks are
 // reported as context, since project discovery skips them.

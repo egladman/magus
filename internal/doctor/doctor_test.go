@@ -635,3 +635,59 @@ func TestCheckNearDuplicateServices(t *testing.T) {
 		assert.Equal(t, StatusOK, got.Status)
 	})
 }
+
+// TestCheckGraphBounds pins the sibling of the escaping-symlink check: the committed
+// graph must not name a location outside the workspace. A real graph carried 93 such
+// nodes, put there by a language indexer reporting document paths for the dependencies it
+// resolved.
+func TestCheckGraphBounds(t *testing.T) {
+	write := func(t *testing.T, body string) string {
+		t.Helper()
+		root := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "knowledge-graph.json"), []byte(body), 0o644))
+		return root
+	}
+
+	t.Run("no committed graph passes", func(t *testing.T) {
+		got := checkGraphBounds(t.TempDir())
+		assert.Equal(t, StatusOK, got.Status)
+	})
+
+	t.Run("in-workspace nodes pass", func(t *testing.T) {
+		root := write(t, `{"nodes":[
+			{"id":"file:cmd/magus/vcs.go","kind":"file","label":"cmd/magus/vcs.go","source":"cmd/magus/vcs.go"},
+			{"id":"dir:cmd/magus","kind":"dir","label":"cmd/magus","source":"cmd/magus"}]}`)
+		got := checkGraphBounds(root)
+		assert.Equal(t, StatusOK, got.Status)
+	})
+
+	t.Run("escaping dir node fails", func(t *testing.T) {
+		root := write(t, `{"nodes":[
+			{"id":"dir:../../../../../Library/Caches/go-build/01","kind":"dir","label":"../../../../../Library/Caches/go-build/01","source":"../../../../../Library/Caches/go-build/01"}]}`)
+		got := checkGraphBounds(root)
+		assert.Equal(t, StatusFail, got.Status)
+		assert.Contains(t, got.Details, "dir:../../../../../Library/Caches/go-build/01")
+	})
+
+	t.Run("path carried only in the label is still caught", func(t *testing.T) {
+		// The overlay shards (@coverage, @vcs) mint partial nodes with no Source, so a
+		// check reading Source alone would wave these through.
+		root := write(t, `{"nodes":[{"id":"file:../escape.go","kind":"file","label":"../escape.go"}]}`)
+		got := checkGraphBounds(root)
+		assert.Equal(t, StatusFail, got.Status)
+	})
+
+	t.Run("import specifiers are exempt", func(t *testing.T) {
+		// An import node's ID is the specifier a source file literally wrote, so it
+		// records what the code says rather than a path magus resolved.
+		root := write(t, `{"nodes":[{"id":"import:../../badge","kind":"import","label":"../../badge"}]}`)
+		got := checkGraphBounds(root)
+		assert.Equal(t, StatusOK, got.Status)
+	})
+
+	t.Run("unreadable graph fails loudly", func(t *testing.T) {
+		got := checkGraphBounds(write(t, "not json"))
+		assert.Equal(t, StatusFail, got.Status)
+	})
+}
