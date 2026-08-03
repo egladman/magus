@@ -3,6 +3,23 @@
 magus is a one-person project. Issues and PRs are welcome; responses may be slow.
 Open an issue before a large change so neither of us wastes the effort.
 
+## Using AI tools
+
+magus is built with AI assistance. Stating that seems more useful than leaving you
+to infer it, and you are welcome to use the same tools here.
+
+One request, and it is about calibration rather than tooling: make your first few
+contributions small enough that you could have written them by hand. A doc fix, a
+test, a one-line behavior change. These tools are useful in proportion to the
+context of the person driving them, and the failure mode is a quiet one - a change
+that reads as correct to someone who does not yet know this codebase well enough to
+see that it is not. Starting small is how you build that judgment, and a small
+change is cheap to review either way.
+
+After that, use whatever helps you. Review looks at the change rather than at how
+it was produced: you can explain what it does and why, it follows the conventions
+below, and `magus affected ci` passes. No disclosure required.
+
 ## Build and test
 
 ```sh
