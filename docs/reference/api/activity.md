@@ -49,6 +49,8 @@ ActivityEvent is one recorded action - the atom of the trail. The envelope (time
 | `request_bytes` | int64 | 11 |  |
 | `response_bytes` | int64 | 12 |  |
 | `workspace` | string | 13 | The workspace root the action pertained to; empty for a daemon-wide action not bound to one workspace (an MCP call). The trail is a single daemon-wide stream, so this disambiguates a job by its workspace rather than fragmenting the record across per-workspace directories. |
+| `host` | string | 14 | The agent host behind the action and that host's own session id, empty when the producer could not know them. The name is an opaque label the caller supplies, not a set magus enumerates: a hook is told its host by the wrapper that ran it, because no local process can discover which agent host started it. An MCP call has no such wrapper and is attributed from its HTTP User-Agent instead, mapped into this same field so one view can group both kinds by host rather than switching on kind first.  They ride the EVENT rather than the request blob, which also carries them: a 200-row feed grouped by host must not cost 200 GetPayload calls. |
+| `session` | string | 15 |  |
 
 ### ActivityQuery
 

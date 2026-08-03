@@ -13,16 +13,18 @@ magus ships as a single self-contained binary. Download it with `curl`, extract 
 ```sh
 VERSION=__MAGUS_VERSION__
 ARCH=amd64            # or arm64 on ARM
-curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}-static.tar.gz"
+curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/magus_${VERSION}_linux_${ARCH}.tar.gz"
 mkdir -p ~/.local/bin
-tar -xzf "magus_${VERSION}_linux_${ARCH}-static.tar.gz"
+tar -xzf "magus_${VERSION}_linux_${ARCH}.tar.gz"
 mv magus ~/.local/bin/
 magus version
 ```
 
-`${VERSION}` above is the current release. This is the static build, the default for
-the installer. Dynamic builds are also attached to each [GitHub release](https://github.com/egladman/magus/releases)
-when you need one.
+`${VERSION}` above is the current release. The unsuffixed archive is the static build
+and the installer default; it links nothing, so it runs on musl and glibc alike. The
+`-cgo` archive attached to each [GitHub release](https://github.com/egladman/magus/releases)
+is the glibc build, and it is the one to take if a magusfile calls Buzz FFI (`zdef()`),
+which the static build compiles out.
 
 ## Verify the download
 

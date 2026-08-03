@@ -59,6 +59,10 @@ magus\project({
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
         "serve": {"skip_cache": true},
+        // deploy-generate writes a gitignored tree and nothing else.
+        // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
+        // writes into .gitattributes, and an ignored path can never conflict.
+        "deploy-generate": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
         "image-build": {"skip_cache": true},
@@ -119,6 +123,34 @@ export fun go_build(ctx: magus\Context, args: [str]) > void {
         "args": ["-trimpath",
             "-ldflags", ld_flags(),
             "-o", "magus",
+            "./cmd/magus"],
+    });
+}
+
+// Compiles magus-dev, the binary THIS worktree points its own git tooling at. Paired with
+// hack/install-dogfood.sh, which registers it as the worktree's merge driver.
+//
+// A second binary rather than reusing ./magus, for one reason: ./magus is rebuilt constantly
+// while iterating, and the merge driver resolves conflicts with whatever binary it was
+// registered against. Rebuilding the driver's binary in the middle of a rebase swaps the
+// tool under a running git operation. magus-dev moves only when install-dogfood is re-run,
+// so a rebase resolves with one known build from start to finish.
+//
+// Why this exists at all: the driver registration prefers `magus` on PATH (see
+// gitMergeDriverCommand in vcs/git.go), which is right for a normal workspace - it survives
+// an upgrade-in-place - and wrong for magus's own worktrees, where PATH holds a RELEASE and
+// the change under test is in the working tree. That gap is not cosmetic: the released
+// driver regenerated the whole site once per conflicted file, so a rebase touching a handful
+// of generated files looked like a hang, while the fix had been in the tree the whole time.
+// No ctx.writesFiles here, matching go_build: the declared-output globs are what
+// EnsureMergeDriver writes into .gitattributes, and declaring a gitignored binary there
+// marks a path that can never be tracked and so can never conflict.
+export fun dogfood(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(gopherbuzz\build);
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+        "args": ["-trimpath",
+            "-ldflags", ld_flags(),
+            "-o", "magus-dev",
             "./cmd/magus"],
     });
 }
@@ -376,7 +408,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty() == false;
     ctx.needs(mod_sync);
-    ctx.needs(ctx.glob("*-generate"));
+    ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty()) {
@@ -446,9 +478,18 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
         env["CGO_ENABLED"] = "0";
     }
 
-    go["go-build"](ctx.withEnv(env), {
-        "args": ["-trimpath", "-ldflags", ld_flags(), "-o", fs\join(stage, binary), "./cmd/magus"],
-    });
+    // The -static archives have to drop Buzz FFI, or the name is a lie. Its provider reaches
+    // dlopen through purego's //go:cgo_import_dynamic, which gives the binary a PT_INTERP and
+    // a libc dependency even under CGO_ENABLED=0 - so the archive we ship as "static" needed a
+    // dynamic loader, and would not run on a musl or scratch host. zdef() reports FFI
+    // unsupported in that build; the default (cgo) archives keep it. Same reasoning and the
+    // same tag as Dockerfile.static.
+    var build_args = mut ["-trimpath"];
+    if (!cgo) { build_args.append("-tags"); build_args.append("noffi"); }
+    build_args.append("-ldflags"); build_args.append(ld_flags());
+    build_args.append("-o"); build_args.append(fs\join(stage, binary));
+    build_args.append("./cmd/magus");
+    go["go-build"](ctx.withEnv(env), {"args": build_args});
 
     final asset = fs\join("dist", "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz");
     archive\compress(stage, asset, {});
@@ -490,11 +531,18 @@ export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
     ctx.writesFiles("dist/*");
+    // The UNSUFFIXED archive is the static one, and the cgo build carries "-cgo". That is
+    // the same convention as the image tags (`latest` static, `latest-cgo` cgo), and it was
+    // inverted here: the archives spelled static with a suffix and gave the bare name to
+    // cgo, so the identical default was named two opposite ways across one release. The
+    // installer has always defaulted to VARIANT=static and the download guides have always
+    // linked the static asset, so this renames what people already take, rather than
+    // changing which build they get.
     final p = release_target_platform(goos, goarch);
     if (ctx.has_charm("static")) {
-        build_release_variant(ctx, p[0], p[1], false, "-static");
+        build_release_variant(ctx, p[0], p[1], false, "");
     } else {
-        build_release_variant(ctx, p[0], p[1], true, "");
+        build_release_variant(ctx, p[0], p[1], true, "-cgo");
     }
 }
 
@@ -887,8 +935,74 @@ fun rerender_docs() > void {
     os\exec("" + bin, ["run", "render", "docs"], ".", {});
 }
 
+// deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at
+// the root of it and the console app under /console/.
+//
+// It lives here rather than in the Pages workflow because that workflow is meant to be thin -
+// set up a toolchain, name targets, upload the artifact - and the layout below is portable
+// logic that would otherwise be GitHub-specific shell. It is also what makes the deploy
+// reproducible locally: run the same three commands, then serve gen/site, and what you see
+// is what publishes.
+//
+// It ASSEMBLES ONLY. It used to drive the two builds itself (magus\run of docs generate and
+// console build) so one command reproduced the deploy, and that tripped MGS3001: a root
+// target that writes into a descendant project's tree breaks the boundary the cache and the
+// affected set are computed over. The ward is right, and the fix is not to widen the parent's
+// footprint - it is for each project to write its own tree. So the caller runs the two
+// builds, then this. That is still three target names and no logic in the workflow, which is
+// what the thin-workflow rule actually asks for.
+//
+// Named -generate, and excluded from the umbrella by name. The root `generate` target above
+// is `ctx.needs(ctx.glob("*-generate", "!deploy-generate"))`: the suffix would otherwise
+// enrol a full tree copy in every `magus run generate`, to satisfy a drift gate over output
+// that is deliberately gitignored. Before negation existed the only remedy was to avoid the
+// name - which is what the `tapes` target above still records, and what this target was first
+// called (build-site). Renaming around a matcher hides the reason at both ends: the glob does
+// not say what it is missing, and the target does not say why it is called something else.
+// "!deploy-generate" says it once, where it applies.
+//
+// NOT site-generate: the docs project already exports a target by that name, and two targets
+// called the same thing in one workspace - one rendering docs/gen, one assembling the whole
+// deploy - is a coin flip every time someone types it. NOT website-generate either: this repo
+// renamed website/ to docs/ deliberately, so "website" is retired vocabulary. "site" itself is
+// the house term (the Site type, site_render, site_publish, docs/site/), which is exactly why
+// it needed a qualifier here rather than a replacement.
+export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
+    final DOCS_GEN = "docs/gen";
+    final CONSOLE_GEN = "console/gen";
+    // gen/site, not a new top-level name: gen/ is what every project in this workspace
+    // calls its generated output (docs/gen, console/gen, proto/gen, and this project's own
+    // gen/*.json). The root's gen/*.json output glob is file-level, so the two do not
+    // overlap. Inventing a second convention for "generated output" would only ever be a
+    // thing to explain.
+    final OUT = "gen/site";
+
+    // Both trees are generated now, not committed, so "missing" no longer means someone
+    // deleted a file - it means a build did not run, or silently produced nothing. Publishing
+    // that would replace a working site with an empty one, so say which command is missing.
+    if (!fs\exists(DOCS_GEN + "/index.html")) {
+        throw "deploy-generate: " + DOCS_GEN + "/index.html is missing - run `magus run generate docs` first";
+    }
+    if (!fs\exists(CONSOLE_GEN + "/index.html")) {
+        throw "deploy-generate: " + CONSOLE_GEN + "/index.html is missing - run `magus run build console` first";
+    }
+
+    // Rebuilt from empty every time: a stale page left behind by a previous assembly would
+    // publish as a live URL that no source produces any more.
+    if (fs\exists(OUT)) { fs\delete(OUT); }
+    fs\copyDir(DOCS_GEN, OUT);
+    // The console project OWNS /console/, so its subtree is replaced wholesale. This discards
+    // the docs render's /console/ redirect stub, which exists only to satisfy the docs
+    // asset-integrity gate, so the real app wins - the same precedence `serve` gets from
+    // longest-prefix mount routing.
+    if (fs\exists(OUT + "/console")) { fs\delete(OUT + "/console"); }
+    fs\copyDir(CONSOLE_GEN, OUT + "/console");
+
+    magus\info("assembled " + OUT + " - docs at /, console at /console/");
+}
+
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
-// two committed gen/ trees with the GitHub Pages pathing - "/" serves docs/gen and
+// two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - "/" serves docs/gen and
 // "/console/" serves console/gen, where the console SPA SHADOWS the docs render's
 // /console/ redirect stub (longest-prefix routing in http.server's mounts mode),
 // exactly like the deploy that assembles docs/gen at the root and console/gen under

@@ -11,6 +11,20 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Fixed
 
+- The container images build again. Both Dockerfiles copied only `go.mod` and `go.sum`
+  before `go mod download`, but the root `go.mod` `replace`s two in-repo modules and the
+  download reads each replacement's own `go.mod` to build the module graph. It failed with
+  `reading libs/<name>/go.mod: no such file or directory`, which meant no container image
+  had ever been published: the failure only fires on a `v*` tag, so every release attempt
+  died at the same step. The manifests are now copied before the download, which keeps that
+  layer cacheable on the manifests alone.
+- The `-static` release archives and the `latest` container image are now actually static.
+  Buzz's FFI provider reaches `dlopen` through purego's `//go:cgo_import_dynamic`, which
+  gives the binary a `PT_INTERP` and a `libc`/`libdl`/`libpthread` dependency even under
+  `CGO_ENABLED=0`. The archive advertised as static therefore needed a dynamic loader and
+  would not run on a musl or scratch host, and the `distroless/static` image could not exec
+  its own binary at all, reporting only `exec /magus: no such file or directory`. Both now
+  build with `-tags noffi` (see Changed).
 - The sandbox no longer denies a write into a directory the run has yet to create.
   A non-existent write target is normalized by resolving its parent, but when that
   parent was missing too the whole path stayed lexical, so a symlink anywhere above
@@ -27,6 +41,33 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   the child process reported its broken output pipe as `exit -1` - surfacing as an
   unrelated-looking tool failure rather than as a crash. The shared log sink beside
   it already had the equivalent guard.
+
+### Changed
+
+- Breaking: the release archives now name the static build WITHOUT a suffix, and the cgo
+  build with `-cgo`. `magus_<version>_<os>_<arch>.tar.gz` used to be the cgo build, and the
+  static build carried `-static`; the container tags said the opposite (`latest` static,
+  `latest-cgo` cgo), so one release described the same default two opposite ways. Both now
+  follow the image convention.
+
+  This renames what people already download rather than changing which build they get: the
+  install script has always defaulted to `VARIANT=static` and the download guides have
+  always linked the static asset. It does break a pinned URL. A pin to
+  `..._<os>_<arch>-static.tar.gz` no longer resolves - drop the suffix - and a pin to the
+  bare name now yields the static build instead of the cgo one. `VARIANT=cgo` selects the
+  glibc build from the install script.
+
+- Breaking: Buzz FFI (`zdef()`) is unavailable in the `-static` release archives and in the
+  `ghcr.io/egladman/magus:latest` container image. FFI opens a shared library at runtime,
+  and that capability is what made those builds non-static (see Fixed); a build carrying it
+  cannot also be loader-free. In those two artifacts `zdef()` now reports FFI as
+  unsupported, the same graceful degradation an unsupported OS/arch already got, rather
+  than failing at the call.
+
+  Nothing else changes. Default builds, `go build`, `go install`, the cgo release archives,
+  and the `latest-cgo` image all keep FFI. If a magusfile calls `zdef()`, use the cgo image
+  or a non-`-static` archive. In the static image the capability was unusable regardless:
+  it ships no shared libraries for `dlopen` to open.
 
 ### Removed
 

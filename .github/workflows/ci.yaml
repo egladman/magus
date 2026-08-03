@@ -40,7 +40,10 @@ jobs:
 
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          # Commit graph in full, history's file contents left on the server: affected
+          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
+          filter: blob:none
 
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
@@ -106,7 +109,10 @@ jobs:
 
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          # Commit graph in full, history's file contents left on the server: affected
+          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
+          filter: blob:none
 
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
         with:
@@ -178,7 +184,9 @@ jobs:
         with:
           # The path gate below diffs against the base commit, which a shallow
           # checkout would not have; without this it always fails open and gates nothing.
+          # --name-only compares tree entries, so the blobs it skips are never missed.
           fetch-depth: 0
+          filter: blob:none
       - name: Did the shipped shell change?
         id: changed
         run: |
@@ -203,6 +211,58 @@ jobs:
       - name: Exercise each completion script in its shell's official image
         if: steps.changed.outputs.run == 'true'
         run: magus run completion-test .
+
+  deploy-build:
+    name: deploy build
+    needs: [preflight]
+    # Separate from `magus affected ci` on purpose: affected ci shards per-project
+    # correctness, and the deploy is a workspace-level composition no single project owns.
+    #
+    # It exists because the publish workflow runs only on main, so without this the first
+    # run of the deploy build for a change was after that change merged - "the merge is the
+    # first time a step runs" (docs/concepts/targets/ci.md).
+    #
+    # Unfiltered by path for the same reason the publish workflow is: the input set spans
+    # the docs and console trees, root Markdown, assets, releases, embedded skills, and the
+    # Go packages the content generators read. A stale filter would skip the smoke test
+    # silently, which is the hole this closes.
+    if: needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      # Matches the publish workflow: page footers read `git log`, so a shallow clone would
+      # exercise a different render than the one that ships.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install pinned toolchain
+        run: mise install
+
+      # The released binary, matching the publish workflow; a source build would test a
+      # magus the deploy never runs.
+      - uses: ./.github/actions/setup-magus
+        with:
+          git-ref: ${{ needs.preflight.outputs.magus_version }}
+
+      # deploy-generate throws when either tree lacks its index.html, so it is the
+      # assertion. Nothing is uploaded: this proves the build, it does not publish.
+      - name: Render the docs site
+        run: magus run generate docs
+
+      - name: Build the console app
+        run: magus run build console
+
+      - name: Assemble the deploy tree
+        run: magus run deploy-generate .
 
   merge-history:
     name: merge run history
@@ -233,7 +293,10 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
+          # Commit graph in full, history's file contents left on the server: affected
+          # needs a merge base, never an old blob. See docs/guides/integrations/ci.md.
           fetch-depth: 0
+          filter: blob:none
       - uses: ./.github/actions/setup-magus
         with:
           git-ref: ${{ needs.preflight.outputs.magus_version }}

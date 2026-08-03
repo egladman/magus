@@ -283,7 +283,7 @@ export fun renderDevelopment(site: Site) > void {
     var contributingSection = "";
     if (haveContributing) {
         contributingSection = "<h2 id=\"contributing\">Contributing</h2>\n"
-            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw docs</code>) so the committed <code>gen/</code> tree never drifts from its source.</p>\n";
+            + "<p>The <a href=\"contributing/\">Contributing guide</a> covers the conventions worth knowing before you open a pull request: run the suite with <code>magus run ci</code>, back any performance change with benchmark evidence, and regenerate the docs site (<code>magus run generate:rw docs</code>) before you push, so a broken render fails in review rather than in the deploy that publishes it.</p>\n";
     }
     // Development is the contributor landing the root README points at as the full
     // contributor reference, so it orients a newcomer: dogfooding framing, build/test

@@ -21,6 +21,17 @@ RUN apt-get update -q && apt-get install -y inotify-tools
 
 # Cache module fetches independent of the source tree.
 COPY go.mod go.sum ./
+# The local modules go.mod `replace`s. `go mod download` reads each replacement's own
+# go.mod to build the module graph, so without these it fails with "reading
+# libs/<name>/go.mod: no such file or directory" and takes the whole release build with
+# it. Only the manifests are copied, so this layer still caches on a source-only change.
+#
+# Listed explicitly rather than globbed: COPY --parents would cover a module added later,
+# but it needs a newer Dockerfile frontend than this has been built against, and this is
+# the one build path that cannot afford an untested flag. TestDockerfilesCopyLocalReplaces
+# fails when a replace directive has no line here, so the list cannot drift unnoticed.
+COPY libs/diagnostics/go.mod libs/diagnostics/
+COPY libs/gopherbuzz/go.mod libs/gopherbuzz/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go mod download

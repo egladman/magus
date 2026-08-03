@@ -4,8 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"regexp"
-	"strings"
 
 	"github.com/egladman/magus/internal/interactive"
 )
@@ -32,23 +30,6 @@ func emitMagusLog(ctx context.Context, level slog.Level, msg string, fields map[
 		attrs = append(attrs, k, v)
 	}
 	slog.Default().Log(ctx, level, msg, attrs...)
-}
-
-// compileTargetPatterns turns target match patterns into anchored regexps,
-// shared by the Buzz dispatch matchers. A pattern with no "*" is suffix
-// shorthand ("build" → names ending in "-build"); a pattern with "*" is a glob
-// ("*" → ".*"). Both forms are QuoteMeta'd first, so the result is always a valid
-// regexp and MustCompile never panics.
-func compileTargetPatterns(patterns []string) []*regexp.Regexp {
-	res := make([]*regexp.Regexp, 0, len(patterns))
-	for _, pat := range patterns {
-		if !strings.Contains(pat, "*") {
-			res = append(res, regexp.MustCompile(`^.*-`+regexp.QuoteMeta(pat)+`$`))
-			continue
-		}
-		res = append(res, regexp.MustCompile("^"+strings.ReplaceAll(regexp.QuoteMeta(pat), `\*`, `.*`)+"$"))
-	}
-	return res
 }
 
 // dedupStrings returns names with duplicates removed, preserving first-occurrence

@@ -31,9 +31,19 @@ believing you have an incremental one, and on CI that difference can be the whol
 budget. Worse, it is stable: a misconfigured base ref does not fail loudly once,
 it silently degrades every run forever.
 
-The commonest cause by far is a **shallow clone**. A CI checkout with
-`fetch-depth: 1` contains no history, so there is no merge base to diff against.
-Others:
+A **shallow clone** used to be the commonest cause on its own. It no longer is:
+when the merge base is missing and the repository is shallow, magus fetches
+progressively more history until the common ancestor appears, and only reports
+MGS1010 if that recovery cannot run. So a shallow checkout reaching this
+diagnostic means the deepening itself failed:
+
+- The runner has no network, or the remote is unreachable.
+- The base ref names a branch the remote does not have (`origin/master` against a
+  repository whose default branch is `main`).
+- The base is not a remote-tracking name at all, so there is nothing to deepen
+  from - a bare SHA the clone does not contain, or a local-only branch.
+
+Independently of depth:
 
 - The configured base ref does not exist in this clone (a branch that was never
   fetched, or a typo in `vcs.base_ref` / `MAGUS_VCS_BASE_REF`).
@@ -43,13 +53,21 @@ Others:
 
 ## Fix
 
-**In CI, fetch enough history.** For GitHub Actions:
+**Give CI a base branch it can reach.** For GitHub Actions:
 
 ```yaml
-- uses: actions/checkout@v4
+- uses: actions/checkout@v5
   with:
-    fetch-depth: 0 # or enough depth to contain the base ref
+    fetch-depth: 0
+    filter: blob:none # commit graph only; history's file contents stay on the server
 ```
+
+`filter: blob:none` is the important half. affected reads tree identities, never a
+historical file's contents, so the blobs a full clone downloads are pure cost - 96%
+of the payload in magus's own repository, and a share that grows with age. A bounded
+`fetch-depth` works too, since magus deepens past it when a branch outruns it. See
+[CI checkout](../../../guides/integrations/ci.md) for the per-provider recipes and the
+measurements behind this.
 
 **Verify the base ref resolves.** `magus doctor` probes it directly and reports a
 `vcs base ref` failure when it does not. `magus affected --explain <project>` shows

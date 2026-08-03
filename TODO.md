@@ -12,7 +12,7 @@ The three buckets mean different things:
   user-facing vocabulary, so doing it after a release makes it a change users
   have to absorb rather than a thing that was simply always true.
 - **After the tag** is anything that ships on its own cadence. The docs site and
-  the console deploy from `pages.yaml`, independent of the release, so a broken
+  the console deploy from `publish-site.yaml`, independent of the release, so a broken
   page is worth fixing but never worth holding a tag for.
 
 ## Release gate

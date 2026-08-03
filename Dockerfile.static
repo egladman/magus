@@ -18,6 +18,17 @@ WORKDIR /src
 
 # Cache module fetches independent of the source tree.
 COPY go.mod go.sum ./
+# The local modules go.mod `replace`s. `go mod download` reads each replacement's own
+# go.mod to build the module graph, so without these it fails with "reading
+# libs/<name>/go.mod: no such file or directory" and takes the whole release build with
+# it. Only the manifests are copied, so this layer still caches on a source-only change.
+#
+# Listed explicitly rather than globbed: COPY --parents would cover a module added later,
+# but it needs a newer Dockerfile frontend than this has been built against, and this is
+# the one build path that cannot afford an untested flag. TestDockerfilesCopyLocalReplaces
+# fails when a replace directive has no line here, so the list cannot drift unnoticed.
+COPY libs/diagnostics/go.mod libs/diagnostics/
+COPY libs/gopherbuzz/go.mod libs/gopherbuzz/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go mod download
@@ -30,10 +41,19 @@ ARG DATE=unknown
 ENV CGO_ENABLED=0
 ENV GOEXPERIMENT=jsonv2
 
+# -tags noffi is what makes this image's binary actually static. Buzz's FFI provider
+# (libs/gopherbuzz/vm/ffi_purego.go) reaches dlopen through purego, whose
+# //go:cgo_import_dynamic gives the binary a PT_INTERP and a libc/libdl/libpthread
+# dependency even under CGO_ENABLED=0 - and distroless/static has no loader, so the
+# image built fine and then failed to exec with "no such file or directory". The tag
+# drops that provider; zdef() then reports FFI unsupported, which costs nothing here
+# because this image ships no shared libraries for dlopen to open. The cgo variant
+# (Dockerfile) keeps FFI: it runs on glibc.
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg/mod \
     go build \
       -trimpath \
+      -tags noffi \
       -ldflags="-s -w -buildid= \
         -X main.version=${VERSION} \
         -X main.commit=${COMMIT} \

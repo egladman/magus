@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -271,14 +270,19 @@ func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) 
 // a pattern resolves to handles, keeping needs monomorphic.
 func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
-		var handles []vm.Value
+		// Every pattern is collected BEFORE matching: "!" negation subtracts from the
+		// union, so it is a property of the whole list, not of one pattern in isolation.
+		var patterns []string
 		for _, a := range args {
 			if !a.IsStr() {
 				continue
 			}
-			for _, name := range tr.matchTargets(globToRegexp(a.AsString())) {
-				handles = append(handles, fn(name, retNull))
-			}
+			patterns = append(patterns, a.AsString())
+		}
+		matched := types.MatchTargetPatterns(tr.targetKeys, patterns)
+		handles := make([]vm.Value, 0, len(matched))
+		for _, name := range matched {
+			handles = append(handles, fn(name, retNull))
 		}
 		return vm.ListValue(handles), nil
 	}
@@ -592,30 +596,6 @@ func splitTargetRef(ref string) (target string, charms []string) {
 		}
 	}
 	return target, charms
-}
-
-// globToRegexp compiles a target glob into a regexp, mirroring the real binding's
-// compileTargetPatterns: a pattern with no `*` matches any target ending in
-// `-<pattern>` (^.*-<pattern>$); a pattern with `*` treats each `*` as `.*`,
-// anchored end to end.
-func globToRegexp(pattern string) *regexp.Regexp {
-	if !strings.Contains(pattern, "*") {
-		return regexp.MustCompile(`^.*-` + regexp.QuoteMeta(pattern) + `$`)
-	}
-	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
-}
-
-// matchTargets returns the discovered target keys matching re, sorted for a
-// deterministic edge order.
-func (r *Tracer) matchTargets(re *regexp.Regexp) []string {
-	var out []string
-	for _, name := range r.targetKeys {
-		if re.MatchString(name) {
-			out = append(out, name)
-		}
-	}
-	slices.Sort(out)
-	return out
 }
 
 // normalizeTarget maps an export name, a depends_on argument, or a name typed at

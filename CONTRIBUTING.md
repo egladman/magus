@@ -1,7 +1,36 @@
 # Contributing to magus
 
-magus is a one-person project. Issues and PRs are welcome; responses may be slow.
-Open an issue before a large change so neither of us wastes the effort.
+Thanks for being here. magus is a one-person project, and anyone who takes the time
+to try it, file an issue, or send a patch is doing me a favor.
+
+Issues and PRs are both welcome. Replies may be slow, which is about how much time
+I have rather than how interested I am. If you're planning something big, open an
+issue first so we can talk it through before you spend an evening on it.
+
+## Using AI tools
+
+I use AI assistance to build magus, so it would be strange to tell you not to. Use
+whatever you like.
+
+If you're new to the codebase, one suggestion rather than a rule: make your first
+couple of PRs without it, and keep them small. A docs fix, a test, a one-line
+change. Nothing controversial.
+
+That's less about the tools than about the size of the change. What I'd rather not
+get is a big multi-file PR rewriting how something works, from someone who hasn't
+had a chance to poke around yet. These tools are about as good as the context of
+the person steering them, and when they're wrong they're usually wrong in a way
+that still reads fine, which is hard to spot if you're new to a codebase. Doing a
+couple of small things by hand is the quickest way past that.
+
+After that, go for it. I'm looking at the change, not at how you made it: can you
+explain what it does and why, does it match the conventions below, does
+`magus affected ci` pass. You don't need to tell me either way.
+
+And if any of this is unclear, or the setup fights you, please open an issue. I'd
+much rather answer a question than have someone give up on it quietly. Friction is
+the thing this project exists to remove, so hitting some on the way in is worth
+telling me about.
 
 ## Build and test
 
@@ -59,16 +88,34 @@ fallback; never gate behavior on a fast path.
 
 ## Docs site
 
-The docs site under `docs/` is generated into the committed `docs/gen/`
-tree; regenerate and commit it after any doc change:
+The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
+`.github/workflows/publish-site.yaml` renders it on every push to `main` and publishes
+that. Render locally to check your change:
 
 ```sh
-magus run generate:rw docs   # re-render, keep the output
-# review `git status docs/gen`, then commit gen/ alongside your source edit
+magus run generate:rw docs   # re-render into docs/gen/, then open it
 ```
 
-A plain `magus run generate docs` gates on drift and fails if `gen/` was not
-re-rendered, so CI catches a forgotten regen.
+It was committed for years. The reason it no longer is: every page embeds the
+commit that last touched its source, so committing a source change immediately
+staled the rendered output committed beside it. That bought a second "refresh
+generated metadata" commit after every real one, and amending could not escape
+it, because the new hash restales the footer it just recorded. Rendering at
+deploy time knows the final commit already.
+
+What still gates on drift is the generated Markdown that *is* tracked:
+`MAGUS.md`, the root `CHANGELOG.md`, `docs/src/gen`, and the derived pages under
+`docs/reference/`. A plain `magus run generate docs` fails if any of those was
+left un-regenerated, so CI still catches a forgotten regen for everything a
+reader can find in the repository.
+
+Two things under `docs/` stay tracked on purpose:
+
+- `docs/vendor/playground/` holds the playground wasm and its TinyGo glue. They
+  are the only published bytes CI cannot reproduce, because it has no TinyGo.
+  The render copies them into `gen/`. Rebuild with `magus run build-playground docs`.
+- `docs/active.urls.lock` is the ledger proving a previously published URL never
+  starts 404-ing. That gate only works if the ledger outlives a single build.
 
 Pages use extensionless URLs (`/magus/documentation/`, served from
 `documentation/index.html`). If you rename or move a page, keep the old URL alive
@@ -105,6 +152,36 @@ If your change adds a flag, a target, or a host-binding shape the
 magusfile uses, that change ships in a release *before* the magusfile
 change merges. The other way around is a breaking-change signal, not
 something to paper over.
+
+### Point your worktree's merge driver at your own build
+
+The rule above is about CI. Locally there is one place where "the released
+binary" is the wrong answer, and it is easy to lose an afternoon to:
+
+```sh
+./hack/install-dogfood.sh
+```
+
+`magus init` registers the git merge driver as whichever `magus` leads PATH.
+That is correct for someone *using* magus, because the registration survives an
+upgrade-in-place. In a magus worktree it is backwards: PATH holds a release, and
+the merge driver is part of what you are changing. A rebase then resolves every
+generated conflict with the release, not with your tree.
+
+That is not a theoretical gap. A released driver regenerated the whole docs site
+once per conflicted file, so a rebase over a handful of generated files looked
+exactly like a hang, while the version in the tree resolved the same file in
+under a second.
+
+The script builds `magus-dev` and registers it with `git config --worktree`, so
+the override stays local to that checkout. `.git/config` is shared by every
+linked worktree, so an absolute path there would aim all of them at one
+checkout's binary. It is a separate binary from `./magus` on purpose: `./magus`
+is rebuilt constantly while iterating, and swapping the driver's binary during a
+rebase changes the tool mid-operation.
+
+Re-run it after changing the merge driver, or the registration keeps resolving
+with the older build.
 
 ## Naming
 

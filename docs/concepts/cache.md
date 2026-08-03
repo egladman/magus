@@ -406,6 +406,153 @@ source glob that isn't in a given target's `Step.Sources` simply doesn't key tha
 target, which is a footprint question, never a "what does the project consume"
 one.
 
+## Should generated output be committed?
+
+Two ecosystems answer this in opposite directions, and each answer follows from
+its own build model. Go projects commit generated code - `*.pb.go`, `stringer`
+output, mocks - and a clean clone then builds with only the Go toolchain.
+TypeScript projects regenerate at build time and gitignore the result, since you
+cannot build without `node_modules` in the first place, so the committed copy
+would duplicate something the build already produces.
+
+Both follow the same rule applied to different starting conditions: **is the
+generator already required to build?** Ask that first.
+
+```mermaid
+flowchart TD
+    S[a target generates a file] --> P{pure function of<br/>its committed sources?}
+    P -- "no: records the commit,<br/>the clock, or the network" --> R[do not commit it]
+    P -- yes --> B{is the generator already<br/>required to build?}
+    B -- yes --> R
+    B -- no --> C{does anything read it<br/>without running the build?<br/>module zip, IDE, code browser}
+    C -- yes --> K[commit it]
+    C -- no --> Z{large, or does it churn<br/>on every commit?}
+    Z -- yes --> R
+    Z -- no --> K
+    K --> KG[gate: plain `magus run generate`<br/>fails when the tree changes]
+    R --> RG[gate: CI builds it on the<br/>path that publishes it]
+```
+
+The first question is the one that decides it outright. A file recording its own
+commit cannot be committed and stay correct, whatever the other answers are - that
+is [the next section](#the-self-staling-output-generated-files-that-record-vcs-state).
+The rest trade cost against reach:
+
+| Question | Commit it | Regenerate it |
+| --- | --- | --- |
+| Is the generator already required to build? | No - committing removes a dependency | Yes - committing adds churn, removes nothing |
+| Does anything read it without running the build? | Yes - IDEs, `pkg.go.dev`, a downstream module | No |
+| Is it a pure function of committed sources? | Yes | No - see the next section |
+| Is it small and slow-churning? | Yes | No - large or per-commit churn |
+
+**Commit it when a consumer cannot regenerate it.** A Go module's generated code
+ships in the module zip. Leave it out and everyone importing your package needs
+`protoc` and your `buf.gen.yaml` to build. Committing moves that dependency from
+every consumer onto you, which is what the Go convention buys.
+
+**Regenerate it when the build already needs the generator.** A generated
+TypeScript client is the usual case: the package manager and the bundler are
+prerequisites either way, so the committed copy duplicates them. It also churns,
+since bundled output shifts on a dependency bump.
+
+**Regenerate it when it is large or churns per commit.** Every clone pays for
+committed output, CI included, and it pays forever. Untracking the rendered docs
+site and the console here removed 27% of this repository's blob history. Untracking
+does not shrink what earlier commits already hold, which is a separate problem that
+a [blobless clone](../guides/integrations/ci.md) solves.
+
+### What each choice costs, and where magus sits
+
+Not committing turns an artifact into a **build-order dependency**. Something has
+to regenerate the client before the code importing it compiles, and a repository
+without a build graph records that ordering in a README or a script. A committed
+file carries no such edge: it is present before anything runs.
+
+magus lets you declare the edge instead. A generator states what it writes
+(`magus\outputs`), a consumer states what it depends on, and the run order comes
+from those declarations - `magus affected` reruns codegen when a `.proto` changes,
+`FindOutputOwner` resolves which project owns a generated path, and
+[MGS4004](../reference/codes/race/MGS4004.md) reports a project reading a path
+another project wrote without declaring the dependency.
+
+That is a deliberate bias: magus prefers a coupling you write down to one you
+remember, so it invests in making the "regenerate it" option checkable. Where the
+ordering is declared, the main argument for committing falls away, and the reasons
+that remain are about consumers outside the workspace and readers who never run
+a build.
+
+**Either way, gate it.** Committed output needs a plain `magus run generate` that
+fails when the tree changes, so review catches a forgotten regeneration. Untracked
+output needs CI to build it on the path that publishes it, or a broken generator
+ships the last good copy without anyone noticing.
+
+## The self-staling output: generated files that record VCS state
+
+There is one combination of ordinary decisions that produces a build which can
+never be clean. Each half of it reads as sound practice on its own:
+
+1. A generator records **VCS state** in its output - a "Last updated" line, the
+   commit that produced a page, a build stamp.
+2. That output is **committed**, because generated files are usually committed so
+   a reader can see them and CI can drift-gate them.
+
+Each is defensible. Together they cannot converge. Committing the source changes
+the commit, the commit is an input to the output, so the output you just
+committed is now stale. Regenerate and commit that, and the new commit stales the
+output again. Amending does not escape it either: a new hash restales the footer
+that recorded the previous one.
+
+The only stable resting point is a **second commit containing nothing but
+regenerated output**, because a commit that does not touch a page's source does
+not change the commit that page records. That is why repositories in this state
+grow a trail of "refresh generated metadata" commits after every real one. Those
+commits are not sloppiness; they are the fixed point of the loop.
+
+### How to recognise it
+
+The tell is a drift gate that passes before you commit and fails immediately
+after, with a diff containing only timestamps, hashes, or "last updated" lines.
+If `magus run generate` is clean, you commit, and `magus run generate` is
+suddenly dirty again, you are in this loop.
+
+magus does not diagnose this today. It is genuinely hard to detect without a
+false positive: after the fix below, the same generator still writes the same
+commit hash into the same files, and the only thing that changed is whether those
+files are tracked. Distinguishing the broken state from the fixed one needs a
+"is this path tracked?" primitive that `types.VCSDriver` does not currently
+expose. Until it does, this section is the diagnostic.
+
+### The fix: stop committing the output, or stop recording the state
+
+Two ways out, and they are not equally good.
+
+**Untrack the output and render at publish time.** The generator keeps its
+provenance line, and the deploy renders from source with the final commit already
+known, so there is nothing to restale. This is what this repository does: the
+rendered docs site is generated into `docs/gen/` and never committed
+(`.github/workflows/publish-site.yaml` renders it on every push to `main`). Cost: the
+output is no longer reviewable in a diff, and a broken generator now blocks a
+deploy that a file copy could never fail.
+
+**Or drop the VCS state from the output.** If the provenance line is not worth
+the cycle, remove it and the output becomes a pure function of its sources, which
+is what a drift gate wants anyway.
+
+What does _not_ work is keeping both and being disciplined about it. The loop is
+structural, so "remember to regenerate and commit again" is a rule that has to
+hold forever, and the failure mode when it lapses is a silent one: the committed
+output simply describes a commit that is no longer the one it sits in.
+
+### The narrower rule this is an instance of
+
+A committed generated file must be a **pure function of its committed sources**.
+Anything else in its inputs - the clock, the machine, the branch, the commit -
+turns "regenerate and diff" from a correctness check into noise. magus's drift
+gate assumes that purity, which is why the `tapes` target here is deliberately
+kept out of the `generate` umbrella: it screen-records the CLI, so its bytes are
+never the same twice and a drift gate over it would fail every run by
+construction.
+
 ## On disk: just files
 
 The cache lives at **`.magus/`** in the workspace root (override with

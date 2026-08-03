@@ -12,9 +12,9 @@ magus ships as a single self-contained binary. Download it with `curl.exe`, extr
 
 ```powershell
 $VERSION = "__MAGUS_VERSION__"
-curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64-static.tar.gz"
+curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/magus_${VERSION}_windows_amd64.tar.gz"
 mkdir -Force $Env:USERPROFILE\bin | Out-Null
-tar -xzf "magus_${VERSION}_windows_amd64-static.tar.gz"
+tar -xzf "magus_${VERSION}_windows_amd64.tar.gz"
 Move-Item -Force magus.exe $Env:USERPROFILE\bin\magus.exe
 magus version
 ```

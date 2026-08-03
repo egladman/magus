@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -1271,4 +1272,175 @@ func newestGoSource(root string) (time.Time, string) {
 		}
 	}
 	return newest, at
+}
+
+// selfStalingScanLimits bound what checkSelfStalingOutputs is willing to read. A workspace
+// can declare thousands of output files, and doctor runs interactively, so an unbounded scan
+// would turn a health check into a build step. The caps are generous enough that a real
+// finding is not missed in practice: the pattern this looks for is a provenance line in a
+// rendered text file, and those are small.
+const (
+	selfStalingMaxFiles    = 5000
+	selfStalingMaxFileSize = 1 << 20 // 1 MiB: past this it is a bundle or a binary, not a page
+	selfStalingMaxReported = 10
+)
+
+// checkSelfStalingOutputs is MGS1019: a COMMITTED generated file whose bytes contain this
+// repository's own HEAD commit, which is a build that can never be clean.
+//
+// The loop closes on itself. Committing a source change moves HEAD; HEAD is an input to the
+// generated file; so the file committed alongside the source is stale the instant it lands.
+// Regenerating and committing that moves HEAD again. Amending does not escape it either - a
+// new hash restales the footer that recorded the previous one. The only fixed point is a
+// second commit containing nothing but regenerated output, which is why a repository in this
+// state grows a trail of "refresh generated metadata" commits. This one has several, made
+// before anyone traced them to a cause.
+//
+// The tracked test carries the whole check. After the fix the same generator still writes the
+// same commit hash into the same files; all that changed is that those files stopped being
+// committed. A check that skipped the tracked test would fire on the repaired state as loudly
+// as on the broken one, so a backend that cannot answer "is this path tracked?"
+// (types.TrackedFileReporter) makes this check skip rather than guess.
+//
+// Matching HEAD's OWN hash is what keeps it precise. A lockfile pinning some other
+// repository's commit, a vendored dependency, a test fixture full of hashes: none of them
+// contain this repo's current HEAD, so none of them match.
+func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
+	const name = "self-staling outputs"
+
+	res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return Check{Name: name, Status: StatusOK, Message: "no VCS resolved; nothing to check"}
+	}
+	reporter, ok := res.VCS.(types.TrackedFileReporter)
+	if !ok {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
+	}
+	meta, err := res.VCS.Metadata(context.Background(), r.root)
+	if err != nil || meta.Hash == "" {
+		return Check{Name: name, Status: StatusOK, Message: "no commit yet; nothing to check"}
+	}
+
+	var details []string
+	scanned := 0
+	for _, p := range projects {
+		rels := declaredOutputFiles(p)
+		if len(rels) == 0 {
+			continue
+		}
+		tracked, err := reporter.TrackedFiles(context.Background(), p.Dir, rels)
+		if err != nil {
+			continue
+		}
+		for _, rel := range tracked {
+			if scanned >= selfStalingMaxFiles {
+				break
+			}
+			scanned++
+			if !fileRecordsCommit(filepath.Join(p.Dir, filepath.FromSlash(rel)), meta) {
+				continue
+			}
+			details = append(details, fmt.Sprintf("%s: %s is committed and records this repository's own HEAD commit",
+				types.ProjectDisplayName(p.Path, p.Name, p.Dir), rel))
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "no committed output records the current commit"}
+	}
+	slices.Sort(details)
+	total := len(details)
+	if len(details) > selfStalingMaxReported {
+		details = details[:selfStalingMaxReported]
+	}
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d committed output file(s) record the commit that produced them, so regenerating after a commit always drifts; untrack them or drop the VCS stamp (see %s)",
+			total, types.CodeURL(types.SelfStalingOutput)),
+		Details: details,
+	}
+}
+
+// declaredOutputFiles expands a project's declared output globs to the project-relative files
+// that exist now. AllOutputs (not p.Outputs) because an output declared per-target with
+// ctx.writesFiles is just as committable as a project-wide one, and the per-target form is
+// the one this workspace actually uses.
+func declaredOutputFiles(p *types.Project) []string {
+	var rels []string
+	for _, glob := range p.AllOutputs() {
+		hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
+		if err != nil {
+			continue
+		}
+		for _, hit := range hits {
+			info, err := os.Stat(hit)
+			if err != nil || info.IsDir() {
+				continue
+			}
+			rel, err := filepath.Rel(p.Dir, hit)
+			if err != nil {
+				continue
+			}
+			rels = append(rels, filepath.ToSlash(rel))
+		}
+	}
+	slices.Sort(rels)
+	return slices.Compact(rels)
+}
+
+// fileRecordsCommit reports whether path's bytes contain HEAD's short or full hash.
+//
+// Oversized and binary files are skipped rather than searched: a provenance stamp lands in
+// rendered text, and reading a multi-megabyte bundle to look for a 40-character string is
+// cost with no corresponding finding. The NUL probe is the usual cheap binary test.
+func fileRecordsCommit(path string, meta types.VCSMeta) bool {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > selfStalingMaxFileSize {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	head := data
+	if len(head) > 1024 {
+		head = head[:1024]
+	}
+	if bytes.IndexByte(head, 0) >= 0 {
+		return false
+	}
+	if meta.Hash != "" && bytes.Contains(data, []byte(meta.Hash)) {
+		return true
+	}
+	// The short hash only counts when it is not part of a longer hex run, or every file
+	// holding any 7-hex-digit substring of a longer id would match.
+	return meta.ShortHash != "" && containsShortHash(data, meta.ShortHash)
+}
+
+// containsShortHash finds the short hash as a standalone hex token: the byte on each side
+// must not itself be a hex digit, so an abbreviation is not matched inside a full hash or
+// inside some other longer identifier.
+func containsShortHash(data []byte, short string) bool {
+	needle := []byte(short)
+	for i := 0; ; {
+		j := bytes.Index(data[i:], needle)
+		if j < 0 {
+			return false
+		}
+		start := i + j
+		end := start + len(needle)
+		if !isHexByte(data, start-1) && !isHexByte(data, end) {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+func isHexByte(data []byte, i int) bool {
+	if i < 0 || i >= len(data) {
+		return false
+	}
+	c := data[i]
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }

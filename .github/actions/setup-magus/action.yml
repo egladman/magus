@@ -96,7 +96,10 @@ runs:
     # jobs need their full-history clone intact for `git describe --tags`
     # afterward - and checking out over it would shrink it to this action's
     # depth. fetch-depth: 0 because the ancestry check below needs main's
-    # full commit graph.
+    # full commit graph - but only the graph: filter: blob:none leaves every
+    # historical file content on the server and still lets merge-base --is-ancestor
+    # answer. The checkout materializes git-ref's own blobs, which is what the
+    # source build compiles.
     - name: Clone magus source code
       if: inputs.installation-strategy == 'source' || steps.prebuilt.outcome == 'failure'
       uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
@@ -105,6 +108,7 @@ runs:
         ref: ${{ inputs.git-ref }}
         path: .setup-magus-src
         fetch-depth: 0
+        filter: blob:none
 
     # setup-go reads the version from the source revision being installed. Clone
     # first: on an automatic fallback the caller's checkout can be a different

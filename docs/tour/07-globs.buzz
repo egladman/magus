@@ -26,6 +26,50 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-generate"));
 }
 
+// Excluding one member of a family.
+//
+// Sooner or later a target belongs to a family by name but not by behavior. Here
+// snapshot-generate re-records fixtures: it is slow and needs a live service, so
+// running it from the umbrella would make `run generate` fail on a laptop with
+// nothing listening. A leading "!" subtracts it.
+export fun snapshot_generate(ctx: magus\Context, args: [str]) > void {
+    go["go-generate"](ctx);
+}
+
+// "*-generate" gathers the family; "!snapshot-generate" removes one member. Order
+// does not matter - the negation applies to the union of the includes - and the
+// result is deduplicated and sorted, so dispatch order never varies between runs.
+export fun generate_fast(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate", "!snapshot-generate"));
+}
+
+// A negation can be a glob too, which is how you drop a whole sub-family:
+//   ctx.glob("*-generate", "!vendor-*")
+//
+// Three rules that save an afternoon:
+//
+//   1. Suffix shorthand never matches the bare name. glob("generate") resolves
+//      proto-generate and friends, NEVER the `generate` target above - which is
+//      exactly why the umbrella can safely glob its own suffix without depending
+//      on itself. To depend on `generate` itself, pass the function.
+//
+//   2. A negation is a NAME or a glob, never suffix shorthand.
+//      "!snapshot-generate" excludes the target actually called that. Were it
+//      shorthand it would mean "anything ending in -snapshot-generate" and
+//      subtract nothing, which is the one thing an exclusion must never do
+//      silently.
+//
+//   3. Only-negations select nothing. glob("!snapshot-generate") yields no
+//      handles rather than "everything else": a pattern list whose last positive
+//      entry got deleted should collapse to nothing, not silently widen to the
+//      whole project.
+//
+// The surface is glob, not regex. Patterns are escaped before "*" is translated,
+// so a regex like "^(?!x-).*-generate$" matches a target with that literal name,
+// which is to say none. Go's regexp engine has no lookaround anyway, so "every
+// -generate except one" could not be written as a regex even if it accepted them.
+// That gap is what "!" fills.
+
 // When a set is not a clean suffix family, skip the pattern and pass the target
 // functions to magus.needs directly. proto-all gathers just the proto- family
 // (its generate and its lint), and nothing else - the handles say exactly which.

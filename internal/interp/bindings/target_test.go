@@ -77,6 +77,17 @@ func TestMatchBuzzTargets(t *testing.T) {
 		{"no match", []string{"python-*"}, nil},
 		// The full wildcard matches every registered target, sorted.
 		{"match all", []string{"*"}, []string{"go-build", "go-test", "lint", "rust-build"}},
+		// Negation subtracts from the union of the includes.
+		{"negate one name", []string{"*-build", "!go-build"}, []string{"rust-build"}},
+		// Order independent: the exclusion is a property of the list, not a step.
+		{"negate before include", []string{"!go-build", "*-build"}, []string{"rust-build"}},
+		// A negation may be a glob, so a whole sub-family can be dropped.
+		{"negate a glob", []string{"*", "!go-*"}, []string{"lint", "rust-build"}},
+		// A negation is exact, never suffix shorthand: "!build" must NOT read as
+		// "^.*-build$" here, or this would subtract both -build targets.
+		{"negate bare name is exact", []string{"*-build", "!build"}, []string{"go-build", "rust-build"}},
+		// Subtracting from nothing is nothing - never "everything else".
+		{"only negation selects nothing", []string{"!go-build"}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

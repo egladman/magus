@@ -58,13 +58,23 @@ func (v gitVCS) Root(ctx context.Context, dir string) (string, error) {
 // staged and unstaged edits, matching the jj and hg drivers and the module's
 // "current working tree" contract. With a clean tree this still equals base...HEAD,
 // so CI behavior is unchanged.
+//
+// Diff is not purely a read. In a SHALLOW clone whose merge base is missing it fetches
+// more history before answering (see recoverMergeBase), so it can touch the network and
+// add refs. A full clone is never fetched into.
 func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
 	mergeBase, err := vcsOutput(ctx, dir, "git", "merge-base", base, "HEAD")
 	if err != nil {
-		return nil, fmt.Errorf("git merge-base: %w", err)
+		recovered := v.recoverMergeBase(ctx, dir, base)
+		if recovered == "" {
+			// Report the original failure, not the recovery's: a shallow clone that could
+			// not be deepened is still, to the caller, a repository with no merge base.
+			return nil, fmt.Errorf("git merge-base: %w", err)
+		}
+		mergeBase = recovered
 	}
 	out, err := vcsOutput(ctx, dir, "git", "diff", "--name-only", mergeBase)
 	if err != nil {
@@ -80,6 +90,120 @@ func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 	return append(files, splitLines([]byte(untracked))...), nil
+}
+
+// recoverMergeBase fetches history until base and HEAD share an ancestor in a shallow
+// clone, returning that merge base, or "" when it cannot get one.
+//
+// A shallow CI checkout holds HEAD, and maybe base, without holding their common
+// ancestor, so `git merge-base` fails exactly the way it does for a ref that does not
+// exist. Diff cannot tell those two apart, affected reports MGS1010, and the run silently
+// builds every project rather than the affected ones - on every run, forever. The
+// documented escape has been to clone the entire history, which makes CI pay for the
+// whole life of the repository to learn which handful of files a branch touched. Fetching
+// just enough history instead makes the cost track how far the branch diverged.
+//
+// Both sides need history, and neither fetch alone supplies it: fetching only base leaves
+// HEAD grafted at its original depth, while fetching only the remote's configured refspec
+// never brings base in at all (a single-branch CI checkout has no base ref whatsoever).
+// Each round does both.
+//
+// Which flag depends on whether the ref is already here, and getting this wrong destroys
+// history:
+//
+//   - --depth is absolute in BOTH directions. `git fetch --depth=32` against a checkout
+//     cloned at depth 50 leaves it holding 32. A ladder built on --depth would truncate
+//     every checkout deeper than its first rung, and a rung failing partway would leave
+//     the repository shallower than it was found - breaking a `git describe --tags` later
+//     in the same job. So anything already present is grown with --deepen, which only
+//     ever extends the boundary.
+//   - A base ref arriving for the FIRST time still needs --depth, because --deepen has no
+//     existing boundary to extend there and lets the new ref land with all its history,
+//     which is the whole cost this function exists to avoid.
+//
+// Only a shallow repository is touched, so a full clone - where a missing merge base means
+// a bad ref no fetch will fix - is left alone. A shallow developer checkout IS fetched
+// into, which is a real side effect of an otherwise read-only query; it only ever adds
+// history, never removes it.
+func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
+	if shallow, err := vcsOutput(ctx, dir, "git", "rev-parse", "--is-shallow-repository"); err != nil || shallow != "true" {
+		return ""
+	}
+	// base is a remote-tracking name ("origin/main") whose first segment must be a
+	// CONFIGURED remote. Verifying that is load-bearing, not a courtesy: the segment is
+	// passed to `git fetch` as the repository argument, which is a URL sink, so an
+	// unchecked value sends git off to whatever it names. ("refs/remotes/origin/main"
+	// would have it looking for a repository at the relative path ./refs.)
+	remote, branch, _ := strings.Cut(base, "/")
+	if branch == "" {
+		slog.DebugContext(ctx, "cannot deepen: base ref is not a remote-tracking name", slog.String("base", base))
+		return ""
+	}
+	if _, err := vcsOutput(ctx, dir, "git", "config", "--get", "remote."+remote+".url"); err != nil {
+		slog.DebugContext(ctx, "cannot deepen: base ref names no configured remote",
+			slog.String("base", base), slog.String("remote", remote))
+		return ""
+	}
+	tracking := fmt.Sprintf("refs/remotes/%s/%s", remote, branch)
+	refspec := fmt.Sprintf("+refs/heads/%s:%s", branch, tracking)
+	_, err := vcsOutput(ctx, dir, "git", "rev-parse", "--verify", "--quiet", tracking)
+	baseIsHere := err == nil
+
+	// Growing rungs: a branch cut a few commits ago lands on the first, while a long-lived
+	// branch still converges in a handful of round trips instead of one full download.
+	for _, depth := range []int{32, 128, 512, 2048} {
+		baseFlag := fmt.Sprintf("--deepen=%d", depth)
+		if !baseIsHere {
+			baseFlag = fmt.Sprintf("--depth=%d", depth)
+		}
+		// A failed fetch ends the recovery rather than advancing to the next rung: no
+		// network, no such branch, and a concurrent run holding .git/shallow.lock are all
+		// conditions a larger depth cannot fix, and retrying each of them four times only
+		// stalls the run behind timeouts.
+		if err := gitFetchQuiet(ctx, dir, baseFlag, remote, refspec); err != nil {
+			slog.DebugContext(ctx, "cannot deepen: fetching the base ref failed",
+				slog.String("base", base), slog.String("error", err.Error()))
+			return ""
+		}
+		baseIsHere = true
+		if err := gitFetchQuiet(ctx, dir, fmt.Sprintf("--deepen=%d", depth), remote); err != nil {
+			slog.DebugContext(ctx, "cannot deepen: extending HEAD's own history failed",
+				slog.String("base", base), slog.String("error", err.Error()))
+			return ""
+		}
+		if mergeBase, err := vcsOutput(ctx, dir, "git", "merge-base", base, "HEAD"); err == nil {
+			// Info, not Debug: this quietly spent several network round trips, and the depth
+			// it settled on tells a reader whether their checkout depth is set too low.
+			slog.InfoContext(ctx, "deepened shallow clone to reach the merge base",
+				slog.String("base", base), slog.Int("depth", depth), slog.String("merge_base", mergeBase))
+			return mergeBase
+		}
+		// Once the whole history is here, no larger depth can add a commit, so a still
+		// missing merge base means the two really are unrelated. Stop rather than spend
+		// three more round trips proving it.
+		if shallow, err := vcsOutput(ctx, dir, "git", "rev-parse", "--is-shallow-repository"); err == nil && shallow != "true" {
+			break
+		}
+	}
+	slog.DebugContext(ctx, "cannot deepen: no merge base within the deepest fetch", slog.String("base", base))
+	return ""
+}
+
+// gitFetchQuiet runs one of recoverMergeBase's fetches.
+//
+// GIT_TERMINAL_PROMPT=0 is the load-bearing part: git and ssh read a credential prompt
+// from /dev/tty directly, not from the stdin vcsOutput hands them, so an auth-required
+// remote would hang a build tool forever on a prompt nobody can see - strictly worse than
+// the over-build this recovery exists to prevent. --no-recurse-submodules because
+// fetch.recurseSubmodules defaults to on-demand and the recovery wants commits in THIS
+// repository, never a submodule's contents.
+func gitFetchQuiet(ctx context.Context, dir, depthFlag, remote string, refspec ...string) error {
+	args := append([]string{"fetch", "--quiet", depthFlag, "--no-tags", "--no-recurse-submodules", remote}, refspec...)
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	_, err := cmd.Output()
+	return err
 }
 
 func (v gitVCS) DiffCommands(ctx context.Context, dir, base string) (types.DiffCommandHints, error) {
@@ -256,6 +380,35 @@ func splitStatusLines(out string) []string {
 		return nil
 	}
 	return strings.Split(out, "\n")
+}
+
+// gitTrackedBatch caps how many pathspecs go into one `git ls-files`. A workspace can
+// declare thousands of output files (docs/gen alone was ~700 when it was committed), and
+// every one becomes an argv entry; batching keeps the command clear of ARG_MAX instead of
+// failing on the one workspace big enough to hit it.
+const gitTrackedBatch = 256
+
+// TrackedFiles implements types.TrackedFileReporter. `git ls-files -- <paths>` prints the
+// subset of those pathspecs that are in the index, which is exactly "tracked": an ignored
+// path and an untracked-but-not-ignored path are both absent, and neither is distinguishable
+// through Dirty.
+//
+// core.quotePath=false for the same reason ChangesByCommit sets it: git otherwise renders a
+// non-ASCII path double-quoted with octal escapes, and the caller compares the result against
+// real paths, so a quoted name silently matches nothing.
+func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	var tracked []string
+	for start := 0; start < len(paths); start += gitTrackedBatch {
+		end := min(start+gitTrackedBatch, len(paths))
+		args := []string{"-c", "core.quotePath=false", "ls-files", "--"}
+		args = append(args, paths[start:end]...)
+		out, err := vcsOutput(ctx, dir, "git", args...)
+		if err != nil {
+			return nil, fmt.Errorf("git ls-files: %w", err)
+		}
+		tracked = append(tracked, splitLines([]byte(out))...)
+	}
+	return tracked, nil
 }
 
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a

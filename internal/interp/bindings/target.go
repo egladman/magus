@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
@@ -311,26 +310,16 @@ func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) erro
 	})
 }
 
-// matchBuzzTargets matches registered Buzz target names against glob/suffix patterns.
-// Patterns without "*" match as suffix shorthand: "build" → ".*-build".
-// Patterns with "*" are translated to regexps ("*" → ".*", anchored).
+// matchBuzzTargets matches registered Buzz target names against ctx.glob's patterns
+// (suffix shorthand, "*" globs, and "!" negation). types.MatchTargetPatterns owns the
+// semantics so this dispatch set, the dry-run tracer's, and describe's static edge set
+// cannot drift apart.
 func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []string {
-	res := compileTargetPatterns(patterns)
-	seen := map[string]struct{}{}
-	var matched []string
+	names := make([]string, 0, len(targets))
 	for name := range targets {
-		for _, re := range res {
-			if re.MatchString(name) {
-				if _, dup := seen[name]; !dup {
-					seen[name] = struct{}{}
-					matched = append(matched, name)
-				}
-				break
-			}
-		}
+		names = append(names, name)
 	}
-	slices.Sort(matched)
-	return matched
+	return types.MatchTargetPatterns(names, patterns)
 }
 
 // ctxMarker identifies a value as a magus.Context, base or derived. An op call needs

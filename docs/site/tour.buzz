@@ -129,9 +129,9 @@ export fun tourSteps() > [TourStep] {
     steps.append(TourStep{ file = "06-cache.buzz", title = "Cache: replay, and catch drift",
         desc = "Targets replay from cache and run once per plan; skip_cache opts a check out.",
         docLabel = "Caching", docSlug = "concepts/remote-cache" });
-    steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family",
-        desc = "Name targets by a shared suffix and gather them with one glob; regex for the rest.",
-        docLabel = "Targets", docSlug = "concepts/targets" });
+    steps.append(TourStep{ file = "07-globs.buzz", title = "Globs: gather a target family, minus one",
+        desc = "Name targets by a shared suffix, gather them with one glob, and subtract the odd one out with a negation.",
+        docLabel = "Dependencies", docSlug = "concepts/dependencies" });
     steps.append(TourStep{ file = "08-charms.buzz", title = "Charms: check, then apply",
         desc = "A charm rides down the plan; the built-in rw flips read-only checks to rewrites.",
         docLabel = "Charms", docSlug = "concepts/charms" });

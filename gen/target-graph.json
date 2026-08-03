@@ -29,6 +29,27 @@
           ]
         },
         {
+          "name": "dogfood",
+          "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ],
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
           "name": "image-build",
           "declared": "image_build",
           "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",
@@ -268,16 +289,16 @@
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
             "mod-sync",
-            "man-generate",
-            "changelog-generate",
-            "types-generate",
             "bindings-generate",
-            "spells-generate",
+            "changelog-generate",
+            "config-generate",
+            "graph-generate",
+            "man-generate",
+            "md-generate",
             "mocks-generate",
             "skills-generate",
-            "config-generate",
-            "md-generate",
-            "graph-generate"
+            "spells-generate",
+            "types-generate"
           ],
           "charms": [
             "rw"
@@ -503,6 +524,11 @@
           "charms": [
             "gha"
           ]
+        },
+        {
+          "name": "deploy-generate",
+          "declared": "deploy_generate",
+          "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/."
         },
         {
           "name": "serve",
@@ -876,6 +902,9 @@
             "preflight",
             "content-generate",
             "md-generate",
+            "build-mermaid",
+            "build-hljs",
+            "build-playground-editor",
             "site-generate"
           ],
           "charms": [
@@ -941,7 +970,7 @@
         {
           "name": "build-playground",
           "declared": "build_playground",
-          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
+          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
           "dependencies": [
             "preflight"
           ],
@@ -955,7 +984,7 @@
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
           ],
@@ -968,13 +997,26 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
           ],
           "writes_files": [
             {
               "glob": "gen/assets/hljs.js"
+            }
+          ]
+        },
+        {
+          "name": "build-playground-editor",
+          "declared": "build_playground_editor",
+          "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
+          "dependencies": [
+            "preflight"
+          ],
+          "writes_files": [
+            {
+              "glob": "gen/playground/editor.js"
             }
           ]
         },

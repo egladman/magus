@@ -22,7 +22,6 @@
 package describe
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 
@@ -137,9 +136,18 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// (<alias>.<target>) is a MemberExpr arg, collected as a cross
 								// edge by the MemberExpr walk case below.
 								if ctxCall(arg, "glob") {
+									// Collected before matching: "!" negation subtracts from
+									// the union of the other patterns, so the whole list has
+									// to be read together or an exclusion is simply lost.
+									var patterns []string
 									for _, ga := range arg.Args {
 										if lit, ok := ga.(*ast.StringLit); ok {
-											node.Dependencies = appendMatching(node.Dependencies, names, node.Name, targetPatternRe(lit.Val))
+											patterns = append(patterns, lit.Val)
+										}
+									}
+									for _, m := range types.MatchTargetPatterns(names, patterns) {
+										if m != node.Name {
+											node.Dependencies = appendUniq(node.Dependencies, m)
 										}
 									}
 								}
@@ -619,17 +627,6 @@ func groupSpellOps(hits []spellHit) []types.TargetSpellUse {
 	return uses
 }
 
-// appendMatching appends every name (other than self) that re matches, deduped,
-// in names order.
-func appendMatching(deps, names []string, self string, re *regexp.Regexp) []string {
-	for _, n := range names {
-		if n != self && re.MatchString(n) {
-			deps = appendUniq(deps, n)
-		}
-	}
-	return deps
-}
-
 // Cycle returns a dependency cycle as a path of node names ending where it began
 // (e.g. ["a","b","a"]), or nil if the graph is acyclic. Edges to undeclared
 // targets are ignored here — that is a separate "unknown target" error the run
@@ -722,19 +719,6 @@ func firstSentence(s string) string {
 		}
 	}
 	return s
-}
-
-// targetPatternRe compiles a ctx.glob pattern to an anchored regexp with
-// the runtime matcher's semantics (bindings' compileTargetPatterns): a pattern
-// with no "*" is suffix shorthand ("build" matches names ending in "-build"),
-// a pattern with "*" is a glob ("*" matches any run). Both forms are
-// QuoteMeta'd first, so the result is always a valid regexp - the static edge
-// set and the runtime dispatch set agree by construction.
-func targetPatternRe(pattern string) *regexp.Regexp {
-	if !strings.Contains(pattern, "*") {
-		return regexp.MustCompile(`^.*-` + regexp.QuoteMeta(pattern) + `$`)
-	}
-	return regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, `.*`) + "$")
 }
 
 // lastPathSegment returns the text after the final '/', or the whole string if
