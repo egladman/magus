@@ -21,12 +21,37 @@ import { Card, h, type Tile } from "./card";
 
 const PREVIEW_LINES = 120; // most recent captured lines kept in the streaming preview
 
+// externalIcon is the "opens elsewhere" mark: a box with an arrow leaving it. Same construction as
+// bigPictureIcon and shareGlyph (24-unit viewBox, 14px, currentColor stroke) so every button icon in
+// the console is drawn the one way.
+function externalIcon(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.7");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const path = (d: string): void => {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  };
+  path("M13 4h7v7"); // arrowhead
+  path("M20 4 11 13"); // shaft
+  path("M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"); // the box it leaves
+  return svg;
+}
+
 export function activityTile(): Tile {
   const card = new Card("activity", "Live activity", {
     why:
-      "What magus is executing at this instant, with the tail of its captured output. This is the" +
-      " panel to read when a run feels stuck: a target that stays here with its step unchanged is" +
-      " hung rather than slow, and the output tail usually says on what.",
+      "What magus is executing right now, with the tail of its captured output. A target that sits" +
+      " here with its step unchanged is hung rather than slow, and the tail usually says why.",
   });
 
   // Header note: a running-count chip plus an "Open in log viewer" deep-link (repointed at
@@ -35,8 +60,27 @@ export function activityTile(): Tile {
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");
   countLabel.append(count);
-  const open = h("a", "console-dashboard-activity__open", "Open in log viewer");
-  open.setAttribute("href", "../logs/");
+  // A real <button>, structurally identical to the Big Picture button in bigPicture.ts: the same
+  // component classes, the same __icon pf-m-start + __text children, in the same order.
+  //
+  // A <button> rather than the <a> this was through two revisions, so it is the same ELEMENT as the
+  // control it has to match, not an anchor dressed as one. The glyph's vertical centring is not a
+  // PatternFly behaviour at all - it comes from the shared icon-button rule in dashboard.css, which
+  // this button is listed in alongside the Big Picture button.
+  //
+  // The cost is that a middle-click no longer opens a new tab, so the click handler below opens the
+  // destination in one explicitly - the same window.open the multi-target menu items already use.
+  const open = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary console-dashboard-activity__open",
+  ) as HTMLButtonElement;
+  open.type = "button";
+  const openIcon = h("span", "pf-v6-c-button__icon pf-m-start");
+  openIcon.append(externalIcon());
+  open.append(openIcon, h("span", "pf-v6-c-button__text", "Open in log viewer"));
+  // Where a plain click goes when there is nothing to choose between. Held here rather than on an
+  // href because this is no longer an anchor.
+  let openHref = "../logs/";
   noteWrap.append(countLabel, open);
   card.noteNode().replaceWith(noteWrap);
 
@@ -44,7 +88,7 @@ export function activityTile(): Tile {
   const caption = h("p", "console-dashboard-activity__caption");
   caption.append(document.createTextNode("Each running target is a live "));
   caption.append(glossaryLink("Trace"));
-  caption.append(document.createTextNode(" - open it to read the full output."));
+  caption.append(document.createTextNode(". Open it to read the full output."));
 
   const list = h("ul", "console-dashboard-rowlist");
   const empty = h("p", "console-dashboard-row__empty", "Pool is idle. Nothing running right now.");
@@ -107,7 +151,7 @@ export function activityTile(): Tile {
       open.removeAttribute("aria-expanded");
       openMenu.hidden = true;
       if (targets.length === 1 && liveHost && targets[0].invocation) {
-        open.setAttribute("href", logsLink(liveHost, { inv: targets[0].invocation }));
+        openHref = logsLink(liveHost, { inv: targets[0].invocation });
       }
       return;
     }
@@ -150,7 +194,11 @@ export function activityTile(): Tile {
   }
 
   open.addEventListener("click", (ev) => {
-    if (!open.hasAttribute("aria-haspopup")) return; // single target: let the link navigate
+    if (!open.hasAttribute("aria-haspopup")) {
+      // Single target: go straight there, in a new tab so the live board stays put.
+      window.open(openHref, "_blank", "noopener");
+      return;
+    }
     ev.preventDefault();
     ev.stopPropagation();
     const willOpen = openMenu.hidden;
@@ -183,16 +231,25 @@ export function activityTile(): Tile {
     return c.invocation + "|" + c.args.join(" ");
   }
 
-  function reconcileRows(targets: RunningTargetView[], liveHost: string | null): void {
+  function reconcileRows(
+    targets: RunningTargetView[],
+    liveHost: string | null,
+    base: string,
+  ): void {
     const seen = new Set<string>();
     for (const c of targets) {
       const key = rowKey(c);
       seen.add(key);
       let row = rows.get(key);
       if (!row) {
-        const clickable = liveHost && c.invocation;
-        row = clickable ? h("a", "console-dashboard-row") : h("li", "console-dashboard-row");
-        if (clickable) (row as HTMLAnchorElement).href = logsLink(liveHost, { inv: c.invocation });
+        // Every row is a link. It used to be one only when a live host AND an invocation id were
+        // both present, which is false in the demo and on a freshly opened board - so the rows a
+        // reader is most likely to try first were exactly the inert ones. Without a specific
+        // invocation to deep-link, the row still opens the log viewer at `base`, which is a worse
+        // destination than the run itself but an infinitely better one than nothing happening.
+        const href = liveHost && c.invocation ? logsLink(liveHost, { inv: c.invocation }) : base;
+        row = h("a", "console-dashboard-row");
+        (row as HTMLAnchorElement).href = href;
         row.append(h("code", "console-dashboard-row__cmd", fmtArgs(c.args)));
         row.append(h("span", "console-dashboard-row__meta"));
         // data-entering for one frame, then cleared: the transition runs from the entering style to
@@ -244,7 +301,7 @@ export function activityTile(): Tile {
     // Live: deep-link to the host's stream. Demo: stay inside the unified demo (../logs/#demo)
     // instead of dropping into the empty log viewer (demo has no live host). Otherwise plain.
     const base = liveHost ? logsLink(liveHost, {}) : demo ? "../logs/#demo" : "../logs/";
-    open.setAttribute("href", base);
+    openHref = base;
     // With more than one thing running, "open in log viewer" has no single answer, so it stops
     // being a link and becomes a CHOICE.
     //
@@ -256,7 +313,7 @@ export function activityTile(): Tile {
     renderOpenMenu(targets, liveHost, base);
 
     empty.hidden = targets.length > 0;
-    reconcileRows(targets, liveHost);
+    reconcileRows(targets, liveHost, base);
 
     // Streaming preview: only when a raw-output buffer is present (the demo feed). Keep the last
     // PREVIEW_LINES and follow the newest line so it reads as a live tail - BUT only while pinned.

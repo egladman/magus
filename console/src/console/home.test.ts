@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { launcherTagline } from "./home";
+import { launcherTagline, launcherTitle } from "./home";
 
 // launcherTagline picks a time-eligible tagline. These pin the hour-window gating (including the
 // midnight-wrapping night window) and that a choice is always available at every hour.
@@ -37,4 +37,24 @@ test("the original tagline is still in the pool", () => {
   const seen = new Set<string>();
   for (let i = 0; i < 12; i++) seen.add(launcherTagline(at(13), () => i / 12));
   assert.ok(seen.has("See what magus is up to."));
+});
+
+// launcherTitle rotates the launcher heading. Unlike the taglines it is not time-gated, so the only
+// contract is that every entry is reachable and none is empty.
+
+test("launcherTitle reaches more than one heading and never returns empty", () => {
+  const seen = new Set<string>();
+  for (let i = 0; i < 24; i++) {
+    const t = launcherTitle(() => i / 24);
+    assert.ok(t.length > 0, `pick ${i} produced an empty title`);
+    seen.add(t);
+  }
+  assert.ok(seen.size > 1, "the heading never varied");
+  assert.ok(seen.has("What do you want to open?"), "the original heading left the pool");
+});
+
+test("launcherTitle stays in range at the pick boundaries", () => {
+  assert.ok(launcherTitle(() => 0).length > 0);
+  // Math.random() is [0,1), so this is the largest value the default ever yields.
+  assert.ok(launcherTitle(() => 0.999999).length > 0);
 });

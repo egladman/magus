@@ -87,6 +87,78 @@ function wsLabel(root: string): string {
   return parts[parts.length - 1] || root;
 }
 
+// How many workspaces get a chip before the rest fold into the overflow menu. Three fits beside the
+// label and the Big Picture button at a phone width without the row wrapping.
+const VISIBLE_WORKSPACES = 3;
+
+// wsAccessMs is a workspace's last-touched instant in epoch ms, 0 when the daemon did not report
+// one, so an unreported workspace sorts to the end rather than to the front.
+function wsAccessMs(w: WorkspaceView): number {
+  return w.lastAccessTime ? Number(w.lastAccessTime.seconds) * 1000 : 0;
+}
+
+// overflowItem builds the "+N" chip that ends the toggle group and the menu behind it. Same PF menu
+// vocabulary as the hero's failing-target chips and the activity tile's open picker, so every
+// "choose one of these" on this board looks and behaves the same.
+function overflowItem(rest: WorkspaceView[]): HTMLElement {
+  const wrap = h("div", "pf-v6-c-toggle-group__item console-dashboard-viewbar__more");
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "pf-v6-c-toggle-group__button";
+  btn.setAttribute("aria-haspopup", "menu");
+  btn.setAttribute("aria-expanded", "false");
+  // The count, not a bare ellipsis: "+4" says how much is hidden, which is the thing a reader
+  // wants before deciding whether opening the menu is worth it.
+  btn.append(h("span", "pf-v6-c-toggle-group__text", "+" + rest.length));
+  btn.title = rest.length + " more workspace" + (rest.length === 1 ? "" : "s");
+
+  const menu = h("div", "pf-v6-c-menu console-dashboard-viewbar__moremenu");
+  menu.hidden = true;
+  menu.setAttribute("role", "menu");
+  const list = h("ul", "pf-v6-c-menu__list");
+  const content = h("div", "pf-v6-c-menu__content");
+  content.append(list);
+  menu.append(content);
+  const close = (): void => {
+    menu.hidden = true;
+    btn.setAttribute("aria-expanded", "false");
+  };
+  list.replaceChildren(
+    ...rest.map((w) => {
+      const li = h("li", "pf-v6-c-menu__list-item");
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "pf-v6-c-menu__item";
+      item.setAttribute("role", "menuitem");
+      item.title = w.root;
+      item.append(h("span", "pf-v6-c-menu__item-main", wsLabel(w.root)));
+      item.addEventListener("click", () => {
+        close();
+        // Selecting promotes it into the visible chips on the next paint, because the picker always
+        // keeps the active workspace visible.
+        activeWorkspace.set(w.root);
+      });
+      li.append(item);
+      return li;
+    }),
+  );
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const open = menu.hidden;
+    menu.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  });
+  menu.addEventListener("click", (ev) => ev.stopPropagation());
+  if (typeof document !== "undefined") {
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") close();
+    });
+  }
+  wrap.append(btn, menu);
+  return wrap;
+}
+
 // A small PF ToggleGroup builder for the workspace picker: N labeled buttons, one selected at a
 // time, painted from a persisted cell.
 // The caller names the group (a visible label element it owns, via aria-labelledby), so this no
@@ -254,8 +326,29 @@ export function dashboardHeader(): Tile {
       activeWorkspace.set(lastWorkspaces[0].root);
     }
 
-    const roots = lastWorkspaces.map((w) => w.root).join("\n");
-    if (roots === lastRoots) return; // same set: the toggle group already reflects it
+    // Order by recency and show only the first few as chips; the rest go behind an overflow menu.
+    //
+    // A ToggleGroup with one chip per workspace is fine at two and unusable at ten: it is a single
+    // unwrapped row sharing the bar with the Big Picture button, so every extra workspace squeezes
+    // the others until the row overflows. Recency is the right cut because the workspaces an
+    // operator switches between are the ones the daemon has touched lately, and the long tail is
+    // typically checkouts that were adopted once and went idle.
+    const ordered = [...lastWorkspaces].sort((a, b) => wsAccessMs(b) - wsAccessMs(a));
+    const active = activeWorkspace.get();
+    let visible = ordered.slice(0, VISIBLE_WORKSPACES);
+    // The ACTIVE workspace is always a chip, even when it is not among the most recent. Otherwise
+    // the one workspace whose name the reader most needs to see is the one hidden in the menu, and
+    // the bar shows a selection that appears to be nothing at all.
+    if (!visible.some((w) => w.root === active)) {
+      const activeView = ordered.find((w) => w.root === active);
+      if (activeView) visible = [...visible.slice(0, VISIBLE_WORKSPACES - 1), activeView];
+    }
+    const overflow = ordered.filter((w) => !visible.some((v) => v.root === w.root));
+
+    // The memo key includes the ACTIVE root, not just the set: which workspaces are visible depends
+    // on the selection, so keying on the set alone would leave a stale chip row after a switch.
+    const roots = active + " " + ordered.map((w) => w.root).join("\n");
+    if (roots === lastRoots) return; // same set and same selection: the bar already reflects it
     lastRoots = roots;
 
     // A VISIBLE label, not just the group's aria-label. Two bare chips reading "acme" and "magus"
@@ -267,11 +360,12 @@ export function dashboardHeader(): Tile {
     const label = h("span", "console-dashboard-viewbar__label", "Workspace");
     label.id = labelId;
     const group = toggleGroup<string>(
-      lastWorkspaces.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
+      visible.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
       activeWorkspace,
     );
     group.removeAttribute("aria-label");
     group.setAttribute("aria-labelledby", labelId);
+    if (overflow.length > 0) group.append(overflowItem(overflow));
     wsWrap.replaceChildren(label, group);
   }
   // Entering/leaving Big Picture must show/hide the workspace picker immediately, not on the

@@ -171,7 +171,7 @@ function failChip(f: FailedTarget, href: string): HTMLElement {
   btn.textContent = f.label;
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", "false");
-  btn.title = f.label + " failed - open its output or copy the command to rerun it";
+  btn.title = f.label + " failed. Open its output or copy the command to rerun it";
 
   const menu = h("div", "pf-v6-c-menu console-dashboard-hero__failmenu");
   menu.hidden = true;
@@ -269,11 +269,8 @@ export function attentionTile(): Tile {
   verdictRow.append(
     verdict,
     helpGlyph(
-      "This line is a judgement, not a measurement, and it is made in a fixed order: any target" +
-        " FAILING outranks everything and says Attention needed; otherwise an unhealthy daemon says" +
-        " degraded or down; otherwise it is All clear, whether or not work is running. So All clear" +
-        " means nothing is broken - it does not mean nothing is happening, and a busy pool is still" +
-        " all clear. Anything failing is named underneath, and each name opens its own output.",
+      "Failing targets outrank everything, then daemon health. All clear means nothing is broken," +
+        " not that nothing is running. Anything failing is named below and opens its own output.",
       "this verdict",
     ),
   );

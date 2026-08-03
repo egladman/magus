@@ -39,7 +39,24 @@
 .console-render-badge--pass { background: var(--console-status-ok); }
 .console-render-badge--fail, .console-render-badge--error { background: var(--console-status-danger); }
 .console-render-badge--warn, .console-render-badge--dry { background: var(--console-status-warn); }
-.console-render-badge--info, .console-render-badge--summary, .console-render-badge--cached { background: var(--pf-t--global--text--color--subtle); }
+/* The three non-outcome badges, separated by FORM as well as hue.
+ *
+ * CACHED is the quietest thing in a magus log: it means no work happened at all. So it is the one
+ * badge that is not a filled chip - an outline, ink-on-nothing. That makes it the most subdued mark
+ * on the line while still being instantly separable from info and summary, which no third shade of
+ * grey could manage. Filling it, as an earlier revision did, made the most common line in a warm
+ * run the loudest thing on screen, which is backwards. */
+.console-render-badge--cached {
+  background: none;
+  color: var(--console-stone);
+  box-shadow: inset 0 0 0 1px var(--console-stone);
+}
+/* INFO and SUMMARY are both narration, and were both grey, so nothing separated them. They take two
+   distinct hues from the console's earthy palette instead: spruce reads as neutral information,
+   indigo as the heavier line that closes a run. Neither borrows an outcome colour, so neither can
+   be mistaken for a pass or a failure. */
+.console-render-badge--info { background: var(--console-spruce); }
+.console-render-badge--summary { background: var(--console-indigo); }
 
 /* A single output line: a fixed line-number gutter plus the wrapping content. */
 .console-render-line {

@@ -64,11 +64,22 @@ export function ganttTile(): Tile {
     label: "trace",
     note: "idle",
     why:
-      "Where a run's wall-clock actually went. The dashed leader on a bar is time the target spent" +
-      " QUEUED, not working - a row that is mostly dashes is waiting on the pool, and a row that is" +
-      " mostly bar is genuinely slow. The two look identical as a single duration and need opposite" +
-      " fixes. A run whose bars step down one after another is serialised by its dependencies.",
+      "Where a run's wall clock actually went. The dashed leader is queued time and the solid bar is" +
+      " real work. One duration hides that difference, and the two need opposite fixes.",
   });
+  // How to READ the chart, printed on the tile rather than hidden behind the "?".
+  //
+  // The tile encodes four separate things - horizontal position (when), bar length (how long), the
+  // dashed leader (queued rather than working), and the shaded block (which run) - and the legend
+  // decoded only the fifth, colour. Someone looking at it cold could name the colours and still not
+  // know which way time ran or what the dashes meant. A popover is the wrong home for this: it is
+  // unreachable on a wall display, which is exactly where an unexplained chart is most expensive.
+  const howto = h(
+    "p",
+    "console-dashboard-gantt__howto",
+    "Time runs left to right over the last minute and the right edge is now. Each shaded block is" +
+      " one run, one row per target, and a bar is as long as the target took.",
+  );
   const wrap = h("div", "console-dashboard-gantt__scroll");
   const empty = h("p", "console-dashboard-row__empty", "No active runs.");
   const legend = h("div", "console-dashboard-gantt__legend");
@@ -78,10 +89,13 @@ export function ganttTile(): Tile {
     ["passed", "passed"],
     ["failed", "failed"],
     ["cached", "cached"],
+    // The one legend entry that is not a colour. The dashed leader is the chart's most useful mark
+    // and the least guessable, since nothing else on the board uses dashes to mean elapsed time.
+    ["wait", "waiting to start"],
   ] as const) {
     legend.append(h("span", "console-dashboard-legend console-dashboard-legend--" + cls, text));
   }
-  card.body.append(wrap, empty, legend);
+  card.body.append(howto, wrap, empty, legend);
 
   let runs: RunView[] = [];
   let liveHost: string | null = null;
@@ -259,13 +273,45 @@ export function ganttTile(): Tile {
 
     let y = AXIS_H;
     let running = 0;
+    let group = 0;
     for (const run of visibleRuns) {
+      // Group banding, drawn first so it sits behind the labels and bars.
+      //
+      // Zebra at RUN granularity, not row granularity. One tint per invocation blocks its targets
+      // into a single readable unit; striping every row would put twenty alternating lines into a
+      // tile that is already dense, and the stripes would compete with the bars for attention.
+      const groupH = RUN_H + run.targets.length * ROW_H;
+      const band = svg("rect");
+      band.setAttribute("x", "0");
+      band.setAttribute("y", String(y - 2));
+      band.setAttribute("width", String(VIEW_W));
+      band.setAttribute("height", String(groupH));
+      band.setAttribute("class", "console-dashboard-gantt__runband");
+      band.setAttribute("data-zebra", group % 2 === 0 ? "even" : "odd");
+      root.appendChild(band);
+      group++;
+
       const head = svg("text");
-      head.setAttribute("x", "2");
+      // x=8 matches the target labels below, so the header and its rows share one left edge and the
+      // group reads as a block. At x=2 it sat on top of the rule.
+      head.setAttribute("x", "8");
       head.setAttribute("y", String(y + 12));
       head.setAttribute("class", "console-dashboard-gantt__runlabel");
-      const inv = run.inv ? run.inv.slice(0, 12) : "run";
-      head.textContent = (run.trigger || "run") + " " + inv;
+      // Trigger and invocation id are two different kinds of thing on one line, so they are two
+      // tspans rather than one string. The trigger is the word an operator reads; the id is an
+      // opaque handle wanted only when copying it. Weighting the whole line made the id the loudest
+      // text in the tile, and bold on a 12-char hex string is harder to read, not easier.
+      const trigger = svg("tspan");
+      trigger.setAttribute("class", "console-dashboard-gantt__runtrigger");
+      trigger.textContent = run.trigger || "run";
+      head.appendChild(trigger);
+      if (run.inv) {
+        const ref = svg("tspan");
+        ref.setAttribute("class", "console-dashboard-gantt__runref");
+        ref.setAttribute("dx", "6");
+        ref.textContent = run.inv.slice(0, 12);
+        head.appendChild(ref);
+      }
       root.appendChild(head);
 
       // A per-run summary, right-aligned on the header row: how many targets, how much wall clock

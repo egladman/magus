@@ -9,7 +9,7 @@
 
 <!-- Coverage is generated locally by `magus run coverage` (Go toolchain only, no third-party service); regenerate and commit to refresh. -->
 
-<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Coverage" src="./assets/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
+<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="textsearch coverage" src="./libs/textsearch/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
 A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, config as code, no second toolchain to install.
 
@@ -18,7 +18,7 @@ Change a file and magus works out which projects it reaches, rebuilds only those
 <!-- Recorded by `magus run tapes` from tapes/core-loop.tape; regenerate and commit to refresh. -->
 
 <p align="center">
-  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them in 802ms reporting '0 cached, 4 ran', and the same command run again reports '4 cached, 0 ran' in 130ms, replaying the captured test output from cache." src="./assets/gen/core-loop.gif">
+  <img alt="Terminal recording: magus ls lists four projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 4 ran', the same command run again reports '4 cached, 0 ran' and replays the captured test output from cache, and finally one file is edited and magus affected ci reports '4 cached, 1 ran' so only the edited project does work." src="./assets/gen/core-loop.gif" width="820">
 </p>
 
 ## Why magus exists

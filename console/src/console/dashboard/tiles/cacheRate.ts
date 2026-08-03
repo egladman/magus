@@ -19,11 +19,8 @@ export function cacheRateTile(): Tile {
     term: "Cache",
     note: "per-interval hits / (hits + misses)",
     why:
-      "The cache hit rate over time, rather than the running total. The shape is what matters: a" +
-      " rate that falls off a cliff and stays down usually means an input started changing every" +
-      " run - a generated file, a timestamp, a lockfile - and everything downstream of it has" +
-      " been rebuilding from scratch since. The cumulative number hides that, because it averages" +
-      " the bad period against all the good history before it.",
+      "Hit rate over time, not the running total. A rate that drops and stays down means some" +
+      " input now changes on every run. The cumulative number averages that away.",
     onReveal: () => {
       chart.build();
       chart.resize();

@@ -430,6 +430,7 @@ the stable fields Magus needs for usage analysis:
 ```json
 {
   "schema_version": 1,
+  "host": "claude-code",
   "session": "abc123",
   "event": "PreToolUse",
   "tool": "Bash",
@@ -444,6 +445,13 @@ host's tool name as `action`, a host-provided agent/session identifier as
 `actor` when one exists, and the workspace root. The command itself remains in
 the request blob rather than the list row, so the Activity view can group and
 scan safely while an operator can inspect the exact invocation when needed.
+
+`host` and `session` are also carried on the event row itself, not only in the
+blob, so a view can group a page of observations by host without fetching a
+payload per row. No local process can discover which agent host started it, so
+the wrapper passes the name in (`magus hook --host`); a wrapper that does not
+leaves the field empty rather than guessing. An MCP call has no wrapper to ask,
+and is attributed from its HTTP `User-Agent` into the same field instead.
 
 `agent_command` means **observed invocation**, not successful execution. A
 pre-tool hook runs before the host decides whether to call the tool, so an
@@ -596,9 +604,16 @@ One implementation per guard; a host file sets overrides and delegates:
 | variable | what it is |
 | --- | --- |
 | `HOST_EVENT_PATH` | dot-path to the command or file path inside your host's event JSON |
+| `HOST_SESSION_PATH` | dot-path to the session id inside your host's event JSON |
 | `HOST_RESPONSE` | Go template rendering your host's reply from the verdict |
+| `GUARD_HOST` | the agent host name recorded on the activity event (`claude-code`, `codex`, ...) |
 | `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance |
 | `GUARD_MAGUS_BIN` | absolute path to magus when it is not on PATH |
+
+`GUARD_HOST` and `HOST_SESSION_PATH` feed `magus hook --host` and `--session`, which are pure
+attribution: they label the recorded observation with the host and session that produced it and
+cannot change a verdict. A host that supplies neither is judged identically and simply records
+less about itself.
 
 `GUARD_MAGUS_BIN` deliberately avoids the `MAGUS_*` prefix: that space is magus's own configuration
 surface, and a variable these templates invent must not look like a setting magus reads.
@@ -616,16 +631,24 @@ overrides and execs it, so there is one implementation to reason about.
 # repository invokes it, and you can download it and do the same. POSIX sh, no
 # bashisms; nothing in it is magus-internal.
 #
-# Contract: reads the host's event as JSON on stdin, writes the host's response
-# on stdout, exits 0 either way. Override any of the three variables below:
+# Contract: reads the host's event as JSON on stdin, selects its command with
+# jq, then pipes the command into magus hook. It writes the host's response on
+# stdout and exits 0 either way. Override any of the variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_RESPONSE    Go template rendering your host's reply
+#   GUARD_HOST       the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
 #
 # The defaults are Claude Code's event and response shape.
+#
+# GUARD_HOST and the session are ATTRIBUTION, not policy. magus records them on
+# its activity event so a reader can tell which host produced an observation;
+# neither one can change the verdict, and a host whose event carries no session
+# id records none and is judged exactly the same.
 #
 # GUARD_MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -638,6 +661,8 @@ overrides and execs it, so there is one implementation to reason about.
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.command'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$GUARD_HOST" ] || GUARD_HOST='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
@@ -647,7 +672,29 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook -o "template=$HOST_RESPONSE"
+# stdin is a pipe and can only be drained once, so the event is read into a
+# variable and selected from twice - the command to judge, and the session id to
+# attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+
+# Attribution is BEST EFFORT; the verdict is not.
+#
+# --host and --session postdate the current magus release, and this template is downloaded and run
+# against whatever binary a reader already has. Passing them unconditionally does not degrade the
+# guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
+# exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
+# stops being enforced. A guard that fails because of a metadata flag has its priorities backwards.
+#
+# So: try with attribution, and on any failure re-run without it - exactly the call this script made
+# before attribution existed. One extra process only on an older binary, and none once the flags are
+# in a release.
+guard() {
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook "$@" -o "template=$HOST_RESPONSE"
+}
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || verdict=$(guard 2>/dev/null)
+printf '%s' "$verdict"
 ```
 
 #### `magus-guard-path.sh`
@@ -675,10 +722,16 @@ editing a generated file is wasteful, not destructive.
 #
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
+#
+# GUARD_HOST and HOST_SESSION_PATH work exactly as they do in
+# magus-guard-command.sh: attribution recorded on the activity event, never an
+# input to the verdict.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$GUARD_HOST" ] || GUARD_HOST='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -689,7 +742,21 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path -o "template=$HOST_RESPONSE"
+# One drain of stdin, two selections from it: the path to judge, and the session
+# id to attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal "null".
+event=$(cat)
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+
+# Attribution is BEST EFFORT; the verdict is not. --host and --session postdate the current magus
+# release, and an older binary rejects the unknown flag outright - printing usage to stdout and
+# exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
+# attribution, fall back to the call this script made before it existed.
+guard() {
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path "$@" -o "template=$HOST_RESPONSE"
+}
+verdict=$(guard --host "$GUARD_HOST" --session "$session" 2>/dev/null) || verdict=$(guard 2>/dev/null)
+printf '%s' "$verdict"
 ```
 
 #### `codex-hooks.json`
@@ -707,7 +774,7 @@ Save as `~/.codex/hooks.json` (or `.codex/hooks.json`) and enable hooks with
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -717,7 +784,7 @@ Save as `~/.codex/hooks.json` (or `.codex/hooks.json`) and enable hooks with
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -762,6 +829,10 @@ needing three files to install a guard is how a guard ends up not installed.
 #     generated files rather than blocking them, so reporting after the write is
 #     the intended behavior everywhere, not a Cursor concession. What Cursor
 #     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
+#
+# Both calls pass --host cursor so the observation magus records says which host
+# produced it. Neither Cursor event carries a session id, so none is sent; that
+# is attribution missing, not a verdict changing.
 
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
@@ -775,7 +846,7 @@ case "$event" in
     fi
     # -o name prints the bare decision word, which is all this needs. magus
     # re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path -o name 2>/dev/null)
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --host cursor -o name 2>/dev/null)
     [ "$verdict" = "advise" ] || exit 0
     # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
     # prose rather than as a verdict it would not read.
@@ -797,7 +868,7 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
     exit 0
 fi
 
-printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook \
+printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --host cursor \
     -o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}'
 ```
 
@@ -816,7 +887,8 @@ Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `ope
 //
 // It encodes no magus rule. Every decision comes from `magus hook`, so
 // this stays host-only glue rather than a second rule set that drifts out of
-// step with the other hosts' templates.
+// step with the other hosts' templates. `--host opencode` only labels the
+// observation magus records; it cannot change a verdict.
 //
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules (deny; advise surfaced to the human)
@@ -943,7 +1015,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["agent", "hook", "-o", "json", "--", command]));
+        apply(await judge(["agent", "hook", "--host", "opencode", "-o", "json", "--", command]));
         return;
       }
 
@@ -952,7 +1024,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(await judge(["agent", "hook", "--path", "-o", "json", "--", path]));
+        apply(await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]));
       }
     },
   };

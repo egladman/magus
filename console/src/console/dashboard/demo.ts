@@ -55,9 +55,18 @@ const HISTORY = 200; // seed samples (~a GitHub-year strip fills fast at ~1/s)
 //
 // A few lines carry what real captured output carries, because the preview renders through the same
 // renderLine() the log viewer uses (tiles/activity.ts) and the demo is where that is seen:
-//   - a leading [pass]/[fail]/[warn]/[cached]/[info]/[summary] token, which magus itself emits and
-//     the renderer promotes to a colored badge (note that a tool's own brackets - buildkit's "#12"
-//     step lines, magus's "[cache]" chatter - are NOT status tokens and stay plain, which is right)
+//   - a leading [pass]/[fail]/[warn]/[info]/[summary] token, which magus itself emits and the
+//     renderer promotes to a colored badge (a tool's own brackets, like buildkit's "#12" step
+//     lines, are NOT status tokens and stay plain, which is right)
+//
+// A CACHE HIT IS "[pass] ... (cached, 95ms)", never "[cached] ...".
+//
+// An earlier revision of this list invented both a "[cached]" head token and "[cache] hit/miss"
+// chatter lines. magus emits neither. internal/cache/log.go prints the outcome word and the cache
+// state in separate places on purpose - "[pass] api (cached, 42ms)" - because whether a target
+// passed and whether it had to run are orthogonal, which is the same split Bazel makes. The demo
+// showing them fused was worse than cosmetic: this is the only place most people ever see magus
+// output rendered, so a reader learned a log format the tool does not have.
 //   - real ANSI SGR escapes, on exactly the lines whose tool actually colours them (golangci-lint,
 //     eslint, buildkit, vite), which the renderer maps onto the theme-aware --console-ansi-* slots
 // Without them the showcase would render the whole pipeline and look identical to the flat
@@ -65,9 +74,7 @@ const HISTORY = 200; // seed samples (~a GitHub-year strip fills fast at ~1/s)
 const LOG_SNIPPETS: string[] = [
   "projects: services/identity, apps/dashboard, libs/authkit, services/ledger, . (affected)",
   "charms: rw",
-  "[cache] hit  spell=go op=go-build target=libs/authkit:build",
-  "[cached] libs/authkit build (cached, 95ms)",
-  "[cache] miss spell=go op=go-test target=services/identity:test (running)",
+  "[pass] libs/authkit build (cached, 95ms)",
   "ok  \tgithub.com/acme/acme/services/identity/internal/session\t0.188s",
   "ok  \tgithub.com/acme/acme/services/identity/internal/token\t0.436s",
   "[pass] services/identity test (ran, 3.9s)",

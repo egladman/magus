@@ -424,7 +424,18 @@
   margin: 0; align-self: flex-start; font-size: 0.78rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-shell-share__durations { align-self: stretch; }
+/* The lifetime picker. Five options fit the 24rem panel, but the group WRAPS rather than
+   overflowing, because a ToggleGroup is a single non-wrapping row by default and an overflowing one
+   silently clips its last chip - here the longest-lived link, the one an ambient display needs. */
+/* flex-wrap on the element ITSELF: pf-v6-c-toggle-group and this class sit on the same node, so a
+   descendant selector here matches nothing. Five options fit the 24rem panel exactly, with no slack
+   at all, and a ToggleGroup is a non-wrapping row by default - so without this the next label that
+   grows by a character silently clips the last chip, which is the longest-lived link and the one an
+   ambient display needs. */
+.console-shell-share__durations {
+  align-self: stretch;
+  flex-wrap: wrap;
+}
 .console-shell-share__generate { align-self: stretch; }
 .console-shell-share__revoked {
   margin: 0; align-self: flex-start; font-size: 0.78rem;

@@ -129,7 +129,7 @@
 <h3 id="lint"><code>lint</code></h3>
 <p>lint is the library's static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no <code>any</code>, no non-null assertions - see biome.json).</p>
 <h3 id="test"><code>test</code></h3>
-<p>test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).</p>
+<p>test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.</p>
 <h3 id="ci"><code>ci</code></h3>
 <p>'ci' is the anchor <code>magus affected ci</code> keys off: the lint gate and the unit tests.</p>
 <h2 id="run-order">Run order</h2>

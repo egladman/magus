@@ -124,10 +124,41 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-pool__grid {
   display: grid;
   grid-template-columns: repeat(var(--pool-cols, 8), minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   justify-content: start;
   gap: 4px;
   margin: 0.1rem 0 0.55rem;
   max-width: calc(var(--pool-cols, 8) * 2.6rem);
+}
+/* Fill the panel's spare height instead of leaving it empty.
+ *
+ * The pool card is routinely stretched by a taller neighbour (Local cache), and the grid used to
+ * sit as a small block in the top-left with the rest of the card blank. Making the body a flex
+ * column and letting the grid grow turns that dead space into bigger cubes, which is the whole
+ * point of the seating read - a filled fraction of an AREA.
+ *
+ * aspect-ratio goes on the GRID (cols:rows), not on each cube. One ratio on the container keeps
+ * every cell square as the box scales, whereas per-cube aspect-ratio derives size from WIDTH only
+ * and so cannot grow into height. max-width still bounds it, so a wide card does not produce
+ * enormous tiles.
+ *
+ * Scoped OUT of Big Picture on purpose. That mode sizes the same grid against a fixed canvas, tuned
+ * so a 3x3 block clears the legend; letting the grid also flex-grow there would re-introduce
+ * exactly the legend clipping the rule further down documents fixing. */
+:root:not([data-bigpicture]) [data-card="pool"] .pf-v6-c-card__body {
+  display: flex;
+  flex-direction: column;
+}
+:root:not([data-bigpicture]) [data-card="pool"] .console-dashboard-pool__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: var(--pool-cols, 8) / var(--pool-rows, 2);
+  justify-self: start;
+}
+:root:not([data-bigpicture]) [data-card="pool"] .console-dashboard-pool__slot {
+  max-width: none;
+  aspect-ratio: auto;
+  height: 100%;
 }
 .console-dashboard-pool__slot {
   width: 100%; aspect-ratio: 1; height: auto;
@@ -176,6 +207,27 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-agents__seat[data-host="opencode"] { border-color: var(--console-moss); }
 .console-dashboard-agents__seat[data-host="opencode"][data-warm="yes"] { background: var(--console-moss); }
 
+/* The seat key: which hue is which agent.
+ *
+ * Without it the seat row was decorative - four colours and nothing on the board saying what any of
+ * them meant, so the only reader who could decode it was the person who wrote the palette. The
+ * swatch reuses the same tokens as the seats above, so the two cannot drift apart. */
+.console-dashboard-agents__key {
+  display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem;
+  margin: -0.35rem 0 0.6rem;
+  font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle);
+}
+.console-dashboard-agents__keyitem::before {
+  content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px;
+  margin-right: 0.3em; vertical-align: middle;
+  background: var(--console-stone);
+}
+.console-dashboard-agents__keyitem[data-host="claude-code"]::before { background: var(--console-clay); }
+.console-dashboard-agents__keyitem[data-host="codex"]::before { background: var(--console-spruce); }
+.console-dashboard-agents__keyitem[data-host="cursor"]::before { background: var(--console-indigo); }
+.console-dashboard-agents__keyitem[data-host="opencode"]::before { background: var(--console-moss); }
+[data-bigpicture] .console-dashboard-agents__key { font-size: calc(var(--bp-u) * 1); }
+
 /* The recent-calls list under the per-host totals: what agents actually did, not just how much.
    A denial takes the danger accent and an advisory the warning one, so the entries that might need
    a human are findable without reading every row. */
@@ -196,12 +248,79 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
   font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-dashboard-agents__recent .console-dashboard-row[data-decision="deny"] {
-  border-color: var(--console-status-danger);
+/* Guard-judged rows read as documentation admonitions: a severity glyph, a tinted left edge, and
+   the text. Colour is the SECONDARY cue here, not the only one. It is invisible to a reader who
+   cannot separate the hues, and a tinted 1px edge does not resolve at all from across a room, which
+   is the distance this tile is meant to be read from. The glyph survives both. */
+/* Compounded with .console-dashboard-row on purpose, not for emphasis. Both classes are on the same
+   element at equal specificity, and the shared row rule is declared LATER in this file, so a lone
+   .console-dashboard-agents__call silently lost every property the two share - align-items among
+   them, which is what left these glyphs sitting on the text baseline instead of centred. */
+.console-dashboard-row.console-dashboard-agents__call {
+  /* Declared on the ROW, not on the block, because the row needs it for padding and custom
+     properties inherit downward only. */
+  --agents-notice-w: 2.1rem; /* ~= a one-line row's height, so the block reads square */
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  /* The severity block is FLUSH against the accent edge and runs the row's full height, so it reads
+     as part of the row's frame rather than as a chip floating inside it. It is taken OUT OF FLOW
+     (see below), so the row reserves its width as padding instead of as a gap. The row already
+     clips, so its rounded corners trim the block for free. */
+  position: relative;
+  padding-left: calc(var(--agents-notice-w) + 0.55rem);
+  border-left: 3px solid var(--pf-t--global--border--color--default);
 }
-.console-dashboard-agents__recent .console-dashboard-row[data-decision="advise"] {
-  border-color: var(--console-status-warn);
+/* The tool name hugs the glyph; the meta is pushed to the far edge.
+ *
+ * The shared row rule spaces its children apart, which is right for the two-child rows it was
+ * written for and wrong here: with a glyph added, three children got spread evenly and every tool
+ * name landed at a DIFFERENT x, set by however long its meta text happened to be. The result was a
+ * column of names you could not scan down. One auto margin restores two-group behaviour. */
+.console-dashboard-row.console-dashboard-agents__call .console-dashboard-row__cmd { margin-right: auto; }
+/* The glyph is a badge, not a bare mark: a tinted block the same size as the status chips elsewhere
+   in the console, so the severity has weight at a glance and the rows keep one left edge.
+   display:block matters - an inline SVG sits on the text BASELINE, which is what left these
+   sitting low against the row rather than centred in it. */
+/* Absolutely positioned, NOT a stretched flex item.
+ *
+ * The obvious spelling - align-self:stretch plus aspect-ratio:1 - is circular and blows up: stretch
+ * takes the height from the row, aspect-ratio turns that height into a width, and the row then sizes
+ * itself around its tallest item, which is now this square. It settled at 709px per row. Taking the
+ * block out of flow breaks the loop: the width is stated, the height comes from top/bottom, and the
+ * row's own height is set by its text exactly as it was before. */
+.console-dashboard-agents__notice {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  width: var(--agents-notice-w);
+  height: auto;
+  padding: 0.45rem;
+  border-radius: 0;
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--subtle);
 }
+/* A passed call gets the SAME green as everything else that passed: the PASS badge, the gantt's
+   passed bars, the hit-rate area. One green means one thing across the whole console. */
+.console-dashboard-row.console-dashboard-agents__call[data-decision="pass"] { border-left-color: var(--console-status-ok); }
+.console-dashboard-row.console-dashboard-agents__call[data-decision="pass"] .console-dashboard-agents__notice {
+  color: var(--console-status-ok);
+  background: color-mix(in srgb, var(--console-status-ok) 13%, transparent);
+}
+.console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] { border-left-color: var(--console-status-danger); }
+.console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] .console-dashboard-agents__notice {
+  color: var(--console-status-danger);
+  background: color-mix(in srgb, var(--console-status-danger) 16%, transparent);
+}
+.console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] { border-left-color: var(--console-status-warn); }
+.console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] .console-dashboard-agents__notice {
+  color: var(--console-status-warn);
+  background: color-mix(in srgb, var(--console-status-warn) 18%, transparent);
+}
+[data-bigpicture] .console-dashboard-row.console-dashboard-agents__call { --agents-notice-w: calc(var(--bp-u) * 2.8); }
+[data-bigpicture] .console-dashboard-agents__notice { padding: calc(var(--bp-u) * 0.5); }
 [data-bigpicture] .console-dashboard-agents__subhead { font-size: calc(var(--bp-u) * 1); }
 
 [data-bigpicture] .console-dashboard-agents__grid {
@@ -260,12 +379,43 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 /* Live execution timeline (gantt). One SVG scales to the tile via its viewBox; bar geometry
    rides presentation attributes, fills come from the .console-dashboard-gantt__bar state classes so light/dark
    and the console status palette carry over. Tall runs scroll inside the tile. */
+/* The read-me line above the chart. Same weight as the other tile captions so it reads as guidance
+   rather than as data, and it stays on the tile in Big Picture: a wall board is the one place a
+   viewer cannot open a popover to ask what the marks mean. */
+.console-dashboard-gantt__howto {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--pf-t--global--text--color--subtle);
+}
+[data-bigpicture] .console-dashboard-gantt__howto { font-size: calc(var(--bp-u) * 1); margin-bottom: calc(var(--bp-u) * 0.4); }
+/* The dashed-leader swatch: a short rule, not a filled square, because it stands for a LINE on the
+   chart and a square would read as another state colour. */
+.console-dashboard-gantt__legend .console-dashboard-legend--wait::before {
+  width: 1.1em;
+  height: 0;
+  border-radius: 0;
+  border-top: 2px dashed var(--pf-t--global--border--color--default);
+  background: none;
+}
 .console-dashboard-gantt__scroll { max-height: 340px; overflow-y: auto; margin: 0.1rem 0 0.4rem; }
 .console-dashboard-gantt__svg { display: block; width: 100%; height: auto; }
 .console-dashboard-gantt__axisline { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
 .console-dashboard-gantt__grid { stroke: var(--pf-t--global--border--color--default); stroke-width: 0.5; stroke-dasharray: 2 3; opacity: 0.6; }
 .console-dashboard-gantt__axislabel { fill: var(--pf-t--global--text--color--subtle); font-size: 8px; font-family: var(--pf-t--global--font--family--mono); }
-.console-dashboard-gantt__runlabel { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-weight: 600; font-family: var(--pf-t--global--font--family--mono); }
+.console-dashboard-gantt__runlabel { fill: var(--pf-t--global--text--color--subtle); font-size: 9px; font-family: var(--pf-t--global--font--family--mono); }
+/* The run header carries two different things. The trigger is a word, so weight helps it read; the
+   invocation id is an opaque hex handle, and weight there fights legibility instead of aiding it.
+   The id recedes to subtle and picks up letter-spacing so its characters stay distinct at 9px. */
+.console-dashboard-gantt__runtrigger { fill: var(--pf-t--global--text--color--regular); font-weight: 600; }
+.console-dashboard-gantt__runref { fill: var(--pf-t--global--text--color--subtle); font-weight: 400; letter-spacing: 0.06em; }
+/* Run grouping: one tint per INVOCATION. Zebra here is deliberately coarse. Striping every target
+   row would draw twenty alternating lines that compete with the bars; one band per run blocks the
+   group instead, which is the unit an operator reads. The band is the whole grouping device - a
+   state-coloured rule alongside it was tried and removed, because the bars in the group already
+   carry state and the rule only restated it in a second visual language. */
+.console-dashboard-gantt__runband { fill: var(--pf-t--global--text--color--regular); fill-opacity: 0; }
+.console-dashboard-gantt__runband[data-zebra="odd"] { fill-opacity: 0.04; }
 .console-dashboard-gantt__targetlabel { fill: var(--pf-t--global--text--color--regular); font-size: 10px; font-family: var(--pf-t--global--font--family--mono); }
 /* Per-bar duration and per-run summary. Both quiet and monospace: they are read as figures beside
    the shapes, and a bar's LENGTH is only ever a comparison within the window - it cannot tell you
@@ -449,13 +599,27 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    first glance, and the console's filled blue already means running work. */
 .console-dashboard-viewbar__bigpicture {
   margin-left: auto; flex: 0 0 auto;
-  /* Centre the glyph against the LABEL rather than letting it sit on the text baseline. An SVG is
-     an inline replaced element, so by default its bottom edge lands on the baseline and the icon
-     rides visibly high next to the words. Centring both children fixes it for any icon size. */
+}
+
+/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline.
+ *
+ * An SVG is an inline replaced element, so by default its bottom edge lands on the baseline and the
+ * icon rides visibly high next to the words - 2px, consistently. PatternFly does NOT do this for
+ * us, which is the trap: a new button can wear pf-v6-c-button and every PF modifier, match on fill,
+ * padding, radius and colour, and still have its glyph sit high, because the fix was never in the
+ * component to begin with.
+ *
+ * So this is the ONE place it lives, and every icon+label button in the dashboard is listed here.
+ * Adding a button means adding its selector to these two rules - not copying the declarations into
+ * a private block, which is exactly how the log-viewer button drifted from the Big Picture button
+ * it was supposed to match. */
+.console-dashboard-viewbar__bigpicture,
+.console-dashboard-activity__open {
   display: inline-flex;
   align-items: center;
 }
-.console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon {
+.console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
+.console-dashboard-activity__open .pf-v6-c-button__icon {
   display: inline-flex;
   align-items: center;
 }
@@ -1132,7 +1296,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    the link therefore has no single destination. Same anchored-menu treatment as the failing chips
    above; it hangs BELOW its trigger, which sits in a card header with room under it. */
 .console-dashboard-activity__note { position: relative; }
-.console-dashboard-activity__openmenu {
+.console-dashboard-activity__openmenu,
+.console-dashboard-viewbar__moremenu {
   position: absolute;
   top: calc(100% + 0.25rem);
   right: 0;
@@ -1140,6 +1305,12 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   min-width: max-content;
   box-shadow: var(--pf-t--global--box-shadow--md);
 }
+/* The overflow chip anchors its own menu, so it is the positioned ancestor. Left-aligned rather
+   than right, because it sits at the START of the bar and a right-aligned menu would hang off
+   toward the Big Picture button. */
+.console-dashboard-viewbar__more { position: relative; }
+.console-dashboard-viewbar__moremenu { right: auto; left: 0; }
+.console-dashboard-viewbar__moremenu[hidden] { display: none; }
 .console-dashboard-activity__openmenu[hidden] { display: none; }
 .console-dashboard-hero__failmore {
   align-self: center;
@@ -1223,9 +1394,15 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Live activity / log preview: running rows, an "open in log viewer" deep-link, and a streaming
    output tail (fed only when a raw-output buffer is present, i.e. the demo). */
 .console-dashboard-activity__note { display: inline-flex; align-items: center; gap: 0.6rem; }
-.console-dashboard-activity__open { font-size: 0.72rem; color: var(--console-status-running); text-decoration: none; white-space: nowrap; }
-.console-dashboard-activity__open::after { content: " \2197"; }
-.console-dashboard-activity__open:hover { text-decoration: underline; }
+/* Styled as a PF secondary button (see activity.ts); only the outbound arrow and the no-wrap are
+   authored here. The colour and hover now come from the PF component rather than being hand-rolled,
+   so it matches every other secondary button in the console. */
+/* Only what is specific to THIS button; its icon centring is shared with the Big Picture button in
+ * the icon-button rule above, and everything else comes from pf-v6-c-button pf-m-secondary. Earlier
+ * revisions each grew a private fix here and each broke differently: a ::after pseudo-element for
+ * the arrow (not a flex child, so it sat mid-box) and a hand-restated `color` (overrode the
+ * component's own and turned the label black). */
+.console-dashboard-activity__open { white-space: nowrap; }
 .console-dashboard-activity__caption { margin: 0 0 0.5rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-activity__log {
   /* 340px, not the 200px this used to be. The tile is the board's "what is running right now"

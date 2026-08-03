@@ -38,13 +38,18 @@ import { encodeToCanvas } from "../lib/qr";
 // option. This is a bearer credential: whoever holds the URL is the audience, and URLs end up
 // pasted into chat, photographed off screens, and left in a kiosk browser's history. Every one of
 // those becomes permanent the moment the link does. A bounded worst case is the whole point.
+//
+// FIVE options on a roughly exponential ladder (24x, 7x, 4x, 3x), not seven on a linear-ish one.
+// Seven chips did not fit the panel and wrapped into a ragged block, and the extra rungs bought
+// nothing: nobody meaningfully distinguishes a 15-minute link from a 1-hour one, and 8 hours and 24
+// hours are the same decision ("today"). Each remaining step is a different INTENT - show someone
+// now, leave it up today, leave it up this week, leave it up this month, leave it up this quarter -
+// which is the only axis a picker like this should offer.
 const DAY = 24 * 60 * 60;
 const DURATIONS: readonly { label: string; seconds: number }[] = [
-  { label: "15 min", seconds: 15 * 60 },
   { label: "1 hour", seconds: 60 * 60 },
-  { label: "8 hours", seconds: 8 * 60 * 60 },
-  { label: "24 hours", seconds: DAY },
-  { label: "7 days", seconds: 7 * DAY },
+  { label: "1 day", seconds: DAY },
+  { label: "1 week", seconds: 7 * DAY },
   { label: "30 days", seconds: 30 * DAY },
   { label: "90 days", seconds: 90 * DAY },
 ];

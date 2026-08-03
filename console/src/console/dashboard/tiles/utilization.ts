@@ -33,10 +33,9 @@ export function utilizationTile(): Tile {
   titleWrap.append(
     title,
     helpGlyph(
-      "Pool occupancy over time, one square per sample, so saturation reads as a PATTERN rather" +
-        " than as a single instant. A band of saturated squares with work queued behind them means" +
-        " the machine was the constraint for that whole stretch - which the instantaneous pool tile" +
-        " cannot tell you, because by the time you look at it the moment has passed.",
+      "Pool occupancy over time, one square per sample, so saturation reads as a pattern rather" +
+        " than as one instant. A band of saturated squares with work queued means the machine was" +
+        " the constraint for that whole stretch.",
       "pool utilization",
     ),
   );
@@ -64,7 +63,16 @@ export function utilizationTile(): Tile {
     scale,
     h("span", "console-dashboard-legend console-dashboard-legend--queued", "queued"),
   );
-  body.append(grid, legend);
+  // The legend below decodes the SHADING but not the layout, and the layout is the part nobody
+  // guesses: this is not a bar chart, it is one square per sample laid out in reading order. Told
+  // that, the tile becomes obvious; left to work it out, a viewer reads the rows as categories.
+  const howto = h(
+    "p",
+    "console-dashboard-gantt__howto",
+    "One square per sample in reading order, oldest first and newest at the end. A dark run of" +
+      " squares is a stretch where the pool stayed busy.",
+  );
+  body.append(howto, grid, legend);
 
   card.append(header, body, footer);
 

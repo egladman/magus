@@ -54,11 +54,8 @@ export function targetsTile(): Tile {
     label: "targets",
     note: "latency and cache by target",
     why:
-      "Which targets actually cost you time, ranked. Build time is almost never spread evenly -" +
-      " it concentrates in a handful of targets, and this is how you find them rather than" +
-      " guessing. Read the cache-hit column beside the duration: a slow target that always hits" +
-      " cache costs nothing in practice, while a fast one that never hits it is paid on every" +
-      " single run.",
+      "Which targets actually cost you time, ranked. Read the cache column next to the duration: a" +
+      " slow target that always hits cache costs nothing, while a fast miss is paid every run.",
   });
   const table = new SortableTable<TargetStatView>(columns, {
     sortKey: "count",

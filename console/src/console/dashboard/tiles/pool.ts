@@ -13,10 +13,8 @@ export function poolTile(): Tile {
     term: "Pool",
     note: "0 / 0 slots",
     why:
-      "How much of magus's concurrency is actually in use. A pool sitting full with work queued behind" +
-      " it means the machine, not the build graph, is the constraint - raising concurrency will help." +
-      " A pool that stays mostly empty while runs feel slow means the opposite: the graph is" +
-      " serialised, and more slots will change nothing.",
+      "How much concurrency is actually in use. Full with work queued means raising it will help." +
+      " Mostly empty while runs drag means the graph is serialised and more slots change nothing.",
   });
   const grid = h("div", "console-dashboard-pool__grid");
   grid.setAttribute("aria-label", "Concurrency slots");
@@ -54,6 +52,10 @@ export function poolTile(): Tile {
     // small capacities and still fit at large ones.
     const cols = Math.max(4, Math.ceil(Math.sqrt(total)));
     grid.style.setProperty("--pool-cols", String(cols));
+    // The row count is published alongside the columns so CSS can give the grid an aspect-ratio and
+    // let it FILL the panel's spare height instead of sitting as a small block with dead space under
+    // it. Only the stylesheet needs it; the layout here is unchanged.
+    grid.style.setProperty("--pool-rows", String(Math.max(1, Math.ceil(total / cols))));
 
     const frag = document.createDocumentFragment();
     for (let i = 0; i < total; i++) {

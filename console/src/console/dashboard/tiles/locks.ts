@@ -17,10 +17,8 @@ export function locksTile(): Tile {
     term: "Lock",
     label: "workspace locks",
     why:
-      "A held lock is what a mutating run looks like, so this is normal - what matters is its AGE and" +
-      " whether anyone is waiting. An OS file lock carries no identity and lives exactly as long as" +
-      " its holder, so one held by a process nobody remembers starting blocks every other run with no" +
-      " explanation. Seconds is a peer mid-run; hours is an orphan worth killing.",
+      "A held lock is just a mutating run, so this is normal. Age is what matters. Seconds means a" +
+      " peer is working; hours means an orphan is blocking every other run.",
   });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");

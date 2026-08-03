@@ -14,10 +14,8 @@ export function cacheStatsTile(): Tile {
   const card = new Card("cache-local", "Local cache", {
     note: "hits / misses this session",
     why:
-      "The share of work magus skipped entirely. This is where build time actually goes: a low hit" +
-      " rate means most targets are rebuilding from scratch, and the usual cause is an input that" +
-      " changes every run - a timestamp, an absolute path, an undeclared file - rather than genuinely" +
-      " new work. Errors here are worse than misses: they mean the cache tried and failed.",
+      "The share of work magus skipped entirely. A low hit rate usually means some input changes on" +
+      " every run rather than genuinely new work. Errors are worse than misses: the cache failed.",
   });
   const strip = new StatStrip([
     { key: "hits", label: "Cache hits", accent: "hit" },

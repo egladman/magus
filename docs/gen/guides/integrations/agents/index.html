@@ -88,7 +88,7 @@
       </nav>
     </aside>
     <div>
-    <small class="reading-time" title="Estimated reading time">43 min read</small>
+    <small class="reading-time" title="Estimated reading time">45 min read</small>
     <article>
 <h1 id="agents">Agents</h1>
 <p>magus knows more about a <a class="glossary-term" href="../../../glossary/#workspace" data-def="The magus root directory that owns a set of projects and shared config; the unit magus operates over.">workspace</a> than any agent can rediscover by reading
@@ -509,6 +509,7 @@ not the opaque host event. The request is schema-versioned and contains only
 the stable fields Magus needs for usage analysis:</p>
 <pre><code class="language-json">{
   &quot;schema_version&quot;: 1,
+  &quot;host&quot;: &quot;claude-code&quot;,
   &quot;session&quot;: &quot;abc123&quot;,
   &quot;event&quot;: &quot;PreToolUse&quot;,
   &quot;tool&quot;: &quot;Bash&quot;,
@@ -522,6 +523,12 @@ host's tool name as <code>action</code>, a host-provided agent/session identifie
 <code>actor</code> when one exists, and the workspace root. The command itself remains in
 the request blob rather than the list row, so the Activity view can group and
 scan safely while an operator can inspect the exact invocation when needed.</p>
+<p><code>host</code> and <code>session</code> are also carried on the event row itself, not only in the
+blob, so a view can group a page of observations by host without fetching a
+payload per row. No local process can discover which agent host started it, so
+the wrapper passes the name in (<code>magus hook --host</code>); a wrapper that does not
+leaves the field empty rather than guessing. An MCP call has no wrapper to ask,
+and is attributed from its HTTP <code>User-Agent</code> into the same field instead.</p>
 <p><code>agent_command</code> means <strong>observed invocation</strong>, not successful execution. A
 pre-tool hook runs before the host decides whether to call the tool, so an
 <code>OUTCOME_OK</code> event means Magus recorded and evaluated the observation; it does
@@ -692,8 +699,16 @@ the workspace (<code>magus run lint docs/guides/integrations/agents</code> runs 
 <td>dot-path to the command or file path inside your host's event JSON</td>
 </tr>
 <tr>
+<td><code>HOST_SESSION_PATH</code></td>
+<td>dot-path to the session id inside your host's event JSON</td>
+</tr>
+<tr>
 <td><code>HOST_RESPONSE</code></td>
 <td>Go template rendering your host's reply from the verdict</td>
+</tr>
+<tr>
+<td><code>GUARD_HOST</code></td>
+<td>the agent host name recorded on the activity event (<code>claude-code</code>, <code>codex</code>, ...)</td>
 </tr>
 <tr>
 <td><code>GUARD_UNAVAILABLE_RESPONSE</code></td>
@@ -705,6 +720,10 @@ the workspace (<code>magus run lint docs/guides/integrations/agents</code> runs 
 </tr>
 </tbody>
 </table></figure>
+<p><code>GUARD_HOST</code> and <code>HOST_SESSION_PATH</code> feed <code>magus hook --host</code> and <code>--session</code>, which are pure
+attribution: they label the recorded observation with the host and session that produced it and
+cannot change a verdict. A host that supplies neither is judged identically and simply records
+less about itself.</p>
 <p><code>GUARD_MAGUS_BIN</code> deliberately avoids the <code>MAGUS_*</code> prefix: that space is magus's own configuration
 surface, and a variable these templates invent must not look like a setting magus reads.</p>
 <h4 id="magus-guard-commandsh"><code>magus-guard-command.sh</code></h4>
@@ -717,16 +736,24 @@ overrides and execs it, so there is one implementation to reason about.</p>
 # repository invokes it, and you can download it and do the same. POSIX sh, no
 # bashisms; nothing in it is magus-internal.
 #
-# Contract: reads the host's event as JSON on stdin, writes the host's response
-# on stdout, exits 0 either way. Override any of the three variables below:
+# Contract: reads the host's event as JSON on stdin, selects its command with
+# jq, then pipes the command into magus hook. It writes the host's response on
+# stdout and exits 0 either way. Override any of the variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_RESPONSE    Go template rendering your host's reply
+#   GUARD_HOST       the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
 #
 # The defaults are Claude Code's event and response shape.
+#
+# GUARD_HOST and the session are ATTRIBUTION, not policy. magus records them on
+# its activity event so a reader can tell which host produced an observation;
+# neither one can change the verdict, and a host whose event carries no session
+# id records none and is judged exactly the same.
 #
 # GUARD_MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
 # magus's own configuration surface, so a variable this template invents must stay
@@ -739,6 +766,8 @@ overrides and execs it, so there is one implementation to reason about.</p>
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
 [ -n &quot;$HOST_EVENT_PATH&quot; ] || HOST_EVENT_PATH='tool_input.command'
+[ -n &quot;$HOST_SESSION_PATH&quot; ] || HOST_SESSION_PATH='session_id'
+[ -n &quot;$GUARD_HOST&quot; ] || GUARD_HOST='claude-code'
 [ -n &quot;$HOST_RESPONSE&quot; ] || HOST_RESPONSE='{{if eq .decision &quot;deny&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;permissionDecision&quot;:&quot;deny&quot;,&quot;permissionDecisionReason&quot;:{{toJson .reason}}}}{{else if eq .decision &quot;advise&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:{{toJson .context}}}}{{end}}'
 [ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
 [ -n &quot;$GUARD_UNAVAILABLE_RESPONSE&quot; ] || GUARD_UNAVAILABLE_RESPONSE='{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:&quot;magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard.&quot;}}'
@@ -748,7 +777,29 @@ if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ];
   exit 0
 fi
 
-jq -r &quot;.$HOST_EVENT_PATH&quot; | &quot;$GUARD_MAGUS_BIN&quot; hook -o &quot;template=$HOST_RESPONSE&quot;
+# stdin is a pipe and can only be drained once, so the event is read into a
+# variable and selected from twice - the command to judge, and the session id to
+# attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal &quot;null&quot;.
+event=$(cat)
+session=$(printf '%s' &quot;$event&quot; | jq -r &quot;.$HOST_SESSION_PATH // empty&quot;)
+
+# Attribution is BEST EFFORT; the verdict is not.
+#
+# --host and --session postdate the current magus release, and this template is downloaded and run
+# against whatever binary a reader already has. Passing them unconditionally does not degrade the
+# guard, it BREAKS it: an older binary rejects the unknown flag, prints its usage to stdout, and
+# exits non-zero, so the host receives no verdict at all and every deny and advise rule silently
+# stops being enforced. A guard that fails because of a metadata flag has its priorities backwards.
+#
+# So: try with attribution, and on any failure re-run without it - exactly the call this script made
+# before attribution existed. One extra process only on an older binary, and none once the flags are
+# in a release.
+guard() {
+  printf '%s' &quot;$event&quot; | jq -r &quot;.$HOST_EVENT_PATH&quot; | &quot;$GUARD_MAGUS_BIN&quot; hook &quot;$@&quot; -o &quot;template=$HOST_RESPONSE&quot;
+}
+verdict=$(guard --host &quot;$GUARD_HOST&quot; --session &quot;$session&quot; 2&gt;/dev/null) || verdict=$(guard 2&gt;/dev/null)
+printf '%s' &quot;$verdict&quot;
 </code></pre>
 <h4 id="magus-guard-pathsh"><code>magus-guard-path.sh</code></h4>
 <p>The declared-output guard. Wire to your host's file-editing tool. It explains rather than blocks -
@@ -772,10 +823,16 @@ editing a generated file is wasteful, not destructive.</p>
 #
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
+#
+# GUARD_HOST and HOST_SESSION_PATH work exactly as they do in
+# magus-guard-command.sh: attribution recorded on the activity event, never an
+# input to the verdict.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n &quot;$HOST_EVENT_PATH&quot; ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n &quot;$HOST_SESSION_PATH&quot; ] || HOST_SESSION_PATH='session_id'
+[ -n &quot;$GUARD_HOST&quot; ] || GUARD_HOST='claude-code'
 [ -n &quot;$HOST_RESPONSE&quot; ] || HOST_RESPONSE='{{if eq .decision &quot;advise&quot;}}{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;additionalContext&quot;:{{toJson .context}}}}{{end}}'
 [ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
 
@@ -786,7 +843,21 @@ if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ];
   exit 0
 fi
 
-jq -r &quot;.$HOST_EVENT_PATH&quot; | &quot;$GUARD_MAGUS_BIN&quot; hook --path -o &quot;template=$HOST_RESPONSE&quot;
+# One drain of stdin, two selections from it: the path to judge, and the session
+# id to attribute it to. `// empty` keeps a host without that field at the empty
+# string rather than the literal &quot;null&quot;.
+event=$(cat)
+session=$(printf '%s' &quot;$event&quot; | jq -r &quot;.$HOST_SESSION_PATH // empty&quot;)
+
+# Attribution is BEST EFFORT; the verdict is not. --host and --session postdate the current magus
+# release, and an older binary rejects the unknown flag outright - printing usage to stdout and
+# exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
+# attribution, fall back to the call this script made before it existed.
+guard() {
+  printf '%s' &quot;$event&quot; | jq -r &quot;.$HOST_EVENT_PATH&quot; | &quot;$GUARD_MAGUS_BIN&quot; hook --path &quot;$@&quot; -o &quot;template=$HOST_RESPONSE&quot;
+}
+verdict=$(guard --host &quot;$GUARD_HOST&quot; --session &quot;$session&quot; 2&gt;/dev/null) || verdict=$(guard 2&gt;/dev/null)
+printf '%s' &quot;$verdict&quot;
 </code></pre>
 <h4 id="codex-hooksjson"><code>codex-hooks.json</code></h4>
 <p>Codex wiring. Codex's event and reply match Claude Code's, so both scripts above run unmodified.
@@ -800,7 +871,7 @@ Save as <code>~/.codex/hooks.json</code> (or <code>.codex/hooks.json</code>) and
         &quot;hooks&quot;: [
           {
             &quot;type&quot;: &quot;command&quot;,
-            &quot;command&quot;: &quot;sh docs/guides/integrations/agents/magus-guard-command.sh&quot;,
+            &quot;command&quot;: &quot;GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-command.sh&quot;,
             &quot;statusMessage&quot;: &quot;magus guard: checking command&quot;
           }
         ]
@@ -810,7 +881,7 @@ Save as <code>~/.codex/hooks.json</code> (or <code>.codex/hooks.json</code>) and
         &quot;hooks&quot;: [
           {
             &quot;type&quot;: &quot;command&quot;,
-            &quot;command&quot;: &quot;sh docs/guides/integrations/agents/magus-guard-path.sh&quot;,
+            &quot;command&quot;: &quot;GUARD_HOST=codex sh docs/guides/integrations/agents/magus-guard-path.sh&quot;,
             &quot;statusMessage&quot;: &quot;magus guard: checking file&quot;
           }
         ]
@@ -851,6 +922,10 @@ needing three files to install a guard is how a guard ends up not installed.</p>
 #     generated files rather than blocking them, so reporting after the write is
 #     the intended behavior everywhere, not a Cursor concession. What Cursor
 #     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
+#
+# Both calls pass --host cursor so the observation magus records says which host
+# produced it. Neither Cursor event carries a session id, so none is sent; that
+# is attribution missing, not a verdict changing.
 
 [ -n &quot;$GUARD_MAGUS_BIN&quot; ] || GUARD_MAGUS_BIN=$(command -v magus 2&gt;/dev/null)
 
@@ -864,7 +939,7 @@ case &quot;$event&quot; in
     fi
     # -o name prints the bare decision word, which is all this needs. magus
     # re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' &quot;$event&quot; | jq -r '.file_path' | &quot;$GUARD_MAGUS_BIN&quot; hook --path -o name 2&gt;/dev/null)
+    verdict=$(printf '%s' &quot;$event&quot; | jq -r '.file_path' | &quot;$GUARD_MAGUS_BIN&quot; hook --path --host cursor -o name 2&gt;/dev/null)
     [ &quot;$verdict&quot; = &quot;advise&quot; ] || exit 0
     # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
     # prose rather than as a verdict it would not read.
@@ -886,7 +961,7 @@ if [ -z &quot;$GUARD_MAGUS_BIN&quot; ] || [ ! -x &quot;$GUARD_MAGUS_BIN&quot; ];
     exit 0
 fi
 
-printf '%s' &quot;$event&quot; | jq -r '.command' | &quot;$GUARD_MAGUS_BIN&quot; hook \
+printf '%s' &quot;$event&quot; | jq -r '.command' | &quot;$GUARD_MAGUS_BIN&quot; hook --host cursor \
     -o 'template={{if eq .decision &quot;deny&quot;}}{&quot;permission&quot;:&quot;deny&quot;,&quot;user_message&quot;:{{toJson .reason}},&quot;agent_message&quot;:{{toJson .reason}}}{{else}}{&quot;permission&quot;:&quot;allow&quot;}{{end}}'
 </code></pre>
 <h4 id="opencode-plugints"><code>opencode-plugin.ts</code></h4>
@@ -901,7 +976,8 @@ Save to <code>~/.config/opencode/plugins/</code> or <code>.opencode/plugins/</co
 //
 // It encodes no magus rule. Every decision comes from `magus hook`, so
 // this stays host-only glue rather than a second rule set that drifts out of
-// step with the other hosts' templates.
+// step with the other hosts' templates. `--host opencode` only labels the
+// observation magus records; it cannot change a verdict.
 //
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules (deny; advise surfaced to the human)
@@ -1028,7 +1104,7 @@ export const MagusGuard: Plugin = async () =&gt; {
       if (input.tool === &quot;bash&quot;) {
         const command = argString(output.args, [&quot;command&quot;]);
         if (command === &quot;&quot;) return;
-        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, command]));
+        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--host&quot;, &quot;opencode&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, command]));
         return;
       }
 
@@ -1037,7 +1113,7 @@ export const MagusGuard: Plugin = async () =&gt; {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, [&quot;filePath&quot;, &quot;file_path&quot;, &quot;path&quot;]);
         if (path === &quot;&quot;) return;
-        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--path&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, path]));
+        apply(await judge([&quot;agent&quot;, &quot;hook&quot;, &quot;--path&quot;, &quot;--host&quot;, &quot;opencode&quot;, &quot;-o&quot;, &quot;json&quot;, &quot;--&quot;, path]));
       }
     },
   };
@@ -1320,7 +1396,7 @@ model; the value is in the graph and the curation.</p>
   </section>
   <div class="page-provenance container">
     <div class="post-tags" aria-label="Tags"><a class="tag" href="../../../search/?q=tag%3A%22agents%22">agents</a><a class="tag" href="../../../search/?q=tag%3A%22skills%22">skills</a><a class="tag" href="../../../search/?q=tag%3A%22agent+install%22">agent install</a><a class="tag" href="../../../search/?q=tag%3A%22MCP%22">MCP</a><a class="tag" href="../../../search/?q=tag%3A%22MAGUS.md%22">MAGUS.md</a><a class="tag" href="../../../search/?q=tag%3A%22AGENTS.md%22">AGENTS.md</a><a class="tag" href="../../../search/?q=tag%3A%22hooks%22">hooks</a><a class="tag" href="../../../search/?q=tag%3A%22guard%22">guard</a><a class="tag" href="../../../search/?q=tag%3A%22knowledge+graph%22">knowledge graph</a><a class="tag" href="../../../search/?q=tag%3A%22memory%22">memory</a><a class="tag" href="../../../search/?q=tag%3A%22claude%22">claude</a><a class="tag" href="../../../search/?q=tag%3A%22codex%22">codex</a><a class="tag" href="../../../search/?q=tag%3A%22opencode%22">opencode</a><a class="tag" href="../../../search/?q=tag%3A%22drift%22">drift</a></div>
-    <small>Last updated <time datetime="2026-08-01T20:12:33Z">August 1, 2026, 8:12 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3366c3a19d0e16f9fca194c29a19952adf93c1d8" data-tooltip="3366c3a19d0e16f9fca194c29a19952adf93c1d8" title="3366c3a19d0e16f9fca194c29a19952adf93c1d8">3366c3a1</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (4)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b8c44887da918366965a2a7753f4d81354fdfa61"><code>b8c44887</code></a> <small><time datetime="2026-08-01T02:02:07Z">Aug 1, 2026</time></small> - integrate release worktree changes</li><li><a href="https://github.com/egladman/magus/commit/53742bce46cc2de8dd57d9cf448b228849924fb4"><code>53742bce</code></a> <small><time datetime="2026-08-01T01:53:12Z">Aug 1, 2026</time></small> - integrate session 019fb9b2 release work</li><li><a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292"><code>3e1b75ad</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - the agent harness generator layout</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/integrations/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/integrations/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
+    <small>Last updated <time datetime="2026-08-02T23:40:12Z">August 2, 2026, 11:40 PM UTC</time> (<a href="https://github.com/egladman/magus/commit/3769cb95a1af36a4abbb3eae7569af1310868128" data-tooltip="3769cb95a1af36a4abbb3eae7569af1310868128" title="3769cb95a1af36a4abbb3eae7569af1310868128">3769cb95</a>)</small><details class="recent-changes"><summary>Earlier changes on this page (6)</summary><ul><li><a href="https://github.com/egladman/magus/commit/b529b75fcbb1934b13dbeb2180d4d7d70b5adae9"><code>b529b75f</code></a> <small><time datetime="2026-08-02T23:25:15Z">Aug 2, 2026</time></small> - Fix tty (#3)</li><li><a href="https://github.com/egladman/magus/commit/3366c3a19d0e16f9fca194c29a19952adf93c1d8"><code>3366c3a1</code></a> <small><time datetime="2026-08-01T20:12:33Z">Aug 1, 2026</time></small> - finish release consolidation</li><li><a href="https://github.com/egladman/magus/commit/b8c44887da918366965a2a7753f4d81354fdfa61"><code>b8c44887</code></a> <small><time datetime="2026-08-01T02:02:07Z">Aug 1, 2026</time></small> - integrate release worktree changes</li><li><a href="https://github.com/egladman/magus/commit/53742bce46cc2de8dd57d9cf448b228849924fb4"><code>53742bce</code></a> <small><time datetime="2026-08-01T01:53:12Z">Aug 1, 2026</time></small> - integrate session 019fb9b2 release work</li><li><a href="https://github.com/egladman/magus/commit/3e1b75ad3c15540050d36b2d7c67372f8e3ad292"><code>3e1b75ad</code></a> <small><time datetime="2026-07-30T19:08:00Z">Jul 30, 2026</time></small> - the agent harness generator layout</li><li><a href="https://github.com/egladman/magus/commit/e04631315a51f1890352052ff3fc23d8b3449769"><code>e0463131</code></a> <small><time datetime="2026-07-30T05:03:19Z">Jul 30, 2026</time></small> - Add install script for easy curling (#2)</li></ul><p><small><a href="https://github.com/egladman/magus/commits/HEAD/docs/guides/integrations/agents.md" data-tooltip="All commits that touched this page" title="All commits that touched this page">Full history &#x2197;</a> &middot; <a href="https://github.com/egladman/magus/blame/HEAD/docs/guides/integrations/agents.md" data-tooltip="Line-by-line commit attribution on GitHub" title="Line-by-line commit attribution on GitHub">Blame source &#x2197;</a></small></p></details>
   </div>
   <details class="ref-section" open>
     <summary>Glossary</summary>

@@ -284,6 +284,25 @@
           ]
         },
         {
+          "name": "tapes",
+          "doc": "Records every VHS tape in tapes/ into assets/gen/.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "tapes/*.tape"
+            },
+            {
+              "project": ".",
+              "glob": "tapes/demo-init.sh"
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "assets/gen/*.gif"
+            }
+          ]
+        },
+        {
           "name": "release-build",
           "declared": "release_build",
           "doc": "Builds one release binary for one platform.",
@@ -1286,9 +1305,17 @@
         },
         {
           "name": "test",
-          "doc": "test runs the node:test suite over the bundled *.test.ts (the search-grammar tests).",
+          "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.",
           "dependencies": [
             "preflight"
+          ],
+          "charms": [
+            "rw"
+          ],
+          "writes_files": [
+            {
+              "glob": "coverage.svg"
+            }
           ]
         },
         {

@@ -482,8 +482,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
     share.dataset.shareToggle = "";
     share.setAttribute("aria-label", "Share a read-only view");
-    share.title =
-      "Share a read-only view: a time-boxed link any device on this network can open - a phone, a TV, a spare monitor";
+    share.title = "Share a read-only view. A time-boxed link any device on this network can open.";
     const shareIcon = document.createElement("span");
     shareIcon.className = "pf-v6-c-button__icon";
     shareIcon.append(shareGlyph());

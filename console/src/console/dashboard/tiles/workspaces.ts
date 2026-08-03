@@ -16,9 +16,8 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
     term: "Workspace",
     label: "workspaces",
     why:
-      "Which checkouts this daemon is holding warm, and how well each is served by the cache. One" +
-      " workspace with a far worse hit rate than its siblings usually means it is a worktree whose" +
-      " absolute paths differ, so it cannot reuse anything the others cached.",
+      "Which checkouts this daemon holds warm, and how well the cache serves each. One with a far" +
+      " worse hit rate is usually a worktree whose absolute paths differ, so it reuses nothing.",
   });
   const countLabel = h("span", "pf-v6-c-label pf-m-compact");
   const count = h("span", "pf-v6-c-label__content", "0");
