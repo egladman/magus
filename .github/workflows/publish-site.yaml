@@ -1,7 +1,8 @@
-name: Pages
+name: Publish site
 
-# Render the docs site and build the console app, then publish both to GitHub Pages: the
-# docs site at the root and the standalone console under /console/.
+# Publishes the DOCS SITE: renders it and the console app, then serves both from GitHub
+# Pages, docs at the root and the console under /console/. Binary releases are a
+# separate workflow (cd.yaml, displayed as Release), triggered by a v* tag.
 #
 # This job used to be a `cp` of two committed gen/ trees. They are no longer committed, so
 # it renders them here instead. The reason is not repository size (though the two trees were

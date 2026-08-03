@@ -276,6 +276,23 @@ type DefaultBranchReporter interface {
 	DefaultBranch(ctx context.Context, dir string) (string, error)
 }
 
+// TrackedFileReporter is an optional capability (sibling of RemoteReporter) for
+// VCSDriver implementations that can report which paths the VCS actually tracks.
+//
+// "Tracked" is not answerable from Dirty or DirtyFiles, which is why this exists
+// separately: an ignored file and a clean tracked file both report nothing dirty, so
+// a caller that needs to tell a committed artifact from a build product cannot infer
+// it from cleanliness. Callers type-assert for it and skip the question when a
+// backend lacks it, rather than guessing - a wrong guess here misclassifies
+// generated output as committed, or the reverse.
+type TrackedFileReporter interface {
+	// TrackedFiles returns the subset of paths that the VCS tracks, as given.
+	// Paths are interpreted relative to dir, matching the backend CLI's own pathspec
+	// handling. An empty paths slice returns no results rather than every tracked
+	// file in the repository.
+	TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error)
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {

@@ -361,3 +361,40 @@ func TestRecoverMergeBaseUnusableBase(t *testing.T) {
 	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "deadbeef"))
 	assert.Empty(t, gitVCS{}.recoverMergeBase(t.Context(), clone, "refs/remotes/origin/main"))
 }
+
+// TestTrackedFiles covers the primitive MGS1019 rests on: telling a committed file from a
+// build product. Neither Dirty nor DirtyFiles can answer it, because an ignored file and a
+// clean tracked file both report nothing dirty.
+func TestTrackedFiles(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{
+		"tracked.html": "<small>built</small>\n",
+		".gitignore":   "gen/\n",
+	})
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "gen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "gen", "page.html"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "untracked.html"), []byte("x"), 0o644))
+
+	got, err := gitVCS{}.TrackedFiles(context.Background(), repo,
+		[]string{"tracked.html", "gen/page.html", "untracked.html", "absent.html"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"tracked.html"}, got,
+		"only the committed path; ignored, untracked, and missing are all absent")
+
+	t.Run("no paths asks nothing", func(t *testing.T) {
+		got, err := gitVCS{}.TrackedFiles(context.Background(), repo, nil)
+		require.NoError(t, err)
+		assert.Empty(t, got, "an empty request must not list the whole repository")
+	})
+
+	t.Run("batches beyond the argv cap", func(t *testing.T) {
+		paths := make([]string, 0, gitTrackedBatch*2+5)
+		for i := range cap(paths) {
+			paths = append(paths, fmt.Sprintf("filler-%d.txt", i))
+		}
+		paths = append(paths, "tracked.html")
+		got, err := gitVCS{}.TrackedFiles(context.Background(), repo, paths)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"tracked.html"}, got, "a path in the last batch is still found")
+	})
+}

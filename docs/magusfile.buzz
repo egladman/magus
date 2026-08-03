@@ -235,7 +235,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
-    // OUT is deliberately absent. gen/ is ignored now that pages.yaml renders at deploy
+    // OUT is deliberately absent. gen/ is ignored now that publish-site.yaml renders at deploy
     // time, and an ignored path is never "dirty", so listing it would assert a check that
     // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
     // the root CHANGELOG.md, src/gen, and the derived Markdown in CONTENT.

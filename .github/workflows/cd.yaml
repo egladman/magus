@@ -1,4 +1,14 @@
-name: CD
+name: Release
+
+# Releases the BINARIES: cross-compiled archives, container images, and their
+# signatures, on a v* tag. The docs site is published separately by
+# publish-site.yaml, on every push to main.
+#
+# The filename is load-bearing and must not change. cosign verification pins the
+# workflow PATH as the certificate identity (see docs/guides/download/docker.md), so
+# renaming this file would invalidate the documented verify command and break
+# signature checks for every image already published. The display name above is not
+# part of that identity, which is why it can say Release while the file stays cd.yaml.
 
 on:
   push:

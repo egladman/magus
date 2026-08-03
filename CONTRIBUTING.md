@@ -1,24 +1,36 @@
 # Contributing to magus
 
-magus is a one-person project. Issues and PRs are welcome; responses may be slow.
-Open an issue before a large change so neither of us wastes the effort.
+Thanks for being here. magus is a one-person project, and anyone who takes the time
+to try it, file an issue, or send a patch is doing me a favor.
+
+Issues and PRs are both welcome. Replies may be slow, which is about how much time
+I have rather than how interested I am. If you're planning something big, open an
+issue first so we can talk it through before you spend an evening on it.
 
 ## Using AI tools
 
-magus is built with AI assistance. Stating that seems more useful than leaving you
-to infer it, and you are welcome to use the same tools here.
+I use AI assistance to build magus, so it would be strange to tell you not to. Use
+whatever you like.
 
-One request, and it is about calibration rather than tooling: make your first few
-contributions small enough that you could have written them by hand. A doc fix, a
-test, a one-line behavior change. These tools are useful in proportion to the
-context of the person driving them, and the failure mode is a quiet one - a change
-that reads as correct to someone who does not yet know this codebase well enough to
-see that it is not. Starting small is how you build that judgment, and a small
-change is cheap to review either way.
+If you're new to the codebase, one suggestion rather than a rule: make your first
+couple of PRs without it, and keep them small. A docs fix, a test, a one-line
+change. Nothing controversial.
 
-After that, use whatever helps you. Review looks at the change rather than at how
-it was produced: you can explain what it does and why, it follows the conventions
-below, and `magus affected ci` passes. No disclosure required.
+That's less about the tools than about the size of the change. What I'd rather not
+get is a big multi-file PR rewriting how something works, from someone who hasn't
+had a chance to poke around yet. These tools are about as good as the context of
+the person steering them, and when they're wrong they're usually wrong in a way
+that still reads fine, which is hard to spot if you're new to a codebase. Doing a
+couple of small things by hand is the quickest way past that.
+
+After that, go for it. I'm looking at the change, not at how you made it: can you
+explain what it does and why, does it match the conventions below, does
+`magus affected ci` pass. You don't need to tell me either way.
+
+And if any of this is unclear, or the setup fights you, please open an issue. I'd
+much rather answer a question than have someone give up on it quietly. Friction is
+the thing this project exists to remove, so hitting some on the way in is worth
+telling me about.
 
 ## Build and test
 
@@ -77,7 +89,7 @@ fallback; never gate behavior on a fast path.
 ## Docs site
 
 The docs site under `docs/` renders into `docs/gen/`, which is **not** committed.
-`.github/workflows/pages.yaml` renders it on every push to `main` and publishes
+`.github/workflows/publish-site.yaml` renders it on every push to `main` and publishes
 that. Render locally to check your change:
 
 ```sh

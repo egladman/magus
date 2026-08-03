@@ -382,6 +382,35 @@ func splitStatusLines(out string) []string {
 	return strings.Split(out, "\n")
 }
 
+// gitTrackedBatch caps how many pathspecs go into one `git ls-files`. A workspace can
+// declare thousands of output files (docs/gen alone was ~700 when it was committed), and
+// every one becomes an argv entry; batching keeps the command clear of ARG_MAX instead of
+// failing on the one workspace big enough to hit it.
+const gitTrackedBatch = 256
+
+// TrackedFiles implements types.TrackedFileReporter. `git ls-files -- <paths>` prints the
+// subset of those pathspecs that are in the index, which is exactly "tracked": an ignored
+// path and an untracked-but-not-ignored path are both absent, and neither is distinguishable
+// through Dirty.
+//
+// core.quotePath=false for the same reason ChangesByCommit sets it: git otherwise renders a
+// non-ASCII path double-quoted with octal escapes, and the caller compares the result against
+// real paths, so a quoted name silently matches nothing.
+func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	var tracked []string
+	for start := 0; start < len(paths); start += gitTrackedBatch {
+		end := min(start+gitTrackedBatch, len(paths))
+		args := []string{"-c", "core.quotePath=false", "ls-files", "--"}
+		args = append(args, paths[start:end]...)
+		out, err := vcsOutput(ctx, dir, "git", args...)
+		if err != nil {
+			return nil, fmt.Errorf("git ls-files: %w", err)
+		}
+		tracked = append(tracked, splitLines([]byte(out))...)
+	}
+	return tracked, nil
+}
+
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
 // short hash when no tag is reachable), with a -dirty suffix for a modified tree.
 func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
