@@ -15,6 +15,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Added
+
+- A magusfile can read a credential through a declared provider.
+  `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
+  reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
+  or AWS Secrets Manager are an `os\exec` away and magus grows no per-provider code; with no
+  provider declared, the built-in one treats a reference as an environment variable name.
+  A value is a secret because it was read through the resolver, never because its name
+  looked credential-shaped, so magus can keep it out of what it persists: the captured
+  output, the raw log, the output store, the journal, and every log format are redacted at
+  their write boundary. See [docs/concepts/secrets.md](concepts/secrets.md), which is
+  also explicit that this reduces blast radius and dwell time versus a `.env` file and does
+  not make anything "secure".
+- Container images are published with an SBOM and provenance, to two registries in one
+  build. Each variant now carries an SPDX SBOM and max-mode SLSA provenance as in-toto
+  attestations, and a single buildx invocation per variant pushes to GHCR and Docker Hub
+  together - not one build per registry, which on a cold CI runner would rebuild every
+  layer. Merges to main publish a per-commit snapshot image. `image-registries` reports the
+  registry table the active charms resolve to, and `image-login` authenticates against it.
+- `magus.project` accepts `"no_language"`, a REASON string explaining why a project binds
+  no toolchain spell. It silences doctor's language-coverage check for a project that is
+  legitimately polyglot (the `evals` harness is the in-repo case) without inviting the
+  check to be switched off wholesale. A bare `true` is rejected: the reason is the point.
+- [MGS1020](reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
+  an output by more than one target, and documents the one-owner rule for generated files.
+
 ### Fixed
 
 - The container images build again. Both Dockerfiles copied only `go.mod` and `go.sum`
@@ -49,6 +75,23 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   it already had the equivalent guard.
 
 ### Changed
+
+- Breaking: `skip_cache` now requires a REASON string; the bare `true` form no longer
+  loads. `"skip_cache": true` was a flag that recorded a decision and threw away why it was
+  made, so a target opted out of caching in 2025 looked identical to one opted out by
+  accident, and six stale opt-outs survived in this repo alone because nobody could tell
+  which were still load-bearing. Write the reason instead:
+
+  ```buzz
+  "targets": {
+      "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
+  },
+  ```
+
+  A magusfile with the old form fails to load and names the target. This is a per-target
+  policy about a target that must never replay; it is NOT the way to skip the cache for one
+  run - `--no-cache` on the command line is a session-level judgment and stays where it is.
+  `docs/concepts/cache.md` covers the distinction and the mapping from Nx's `cache: false`.
 
 - Breaking: the release archives now name the static build WITHOUT a suffix, and the cgo
   build with `-cgo`. `magus_<version>_<os>_<arch>.tar.gz` used to be the cgo build, and the

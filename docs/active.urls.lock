@@ -333,6 +333,7 @@ reference/codes/sandbox/MGS2007/
 reference/codes/sandbox/MGS2008/
 reference/codes/sandbox/MGS2009/
 reference/codes/sandbox/MGS2010/
+reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
 reference/codes/services/
 reference/codes/services/MGS5001/
@@ -483,6 +484,7 @@ tags/landlock/
 tags/lint/
 tags/linux/
 tags/load/
+tags/logging/
 tags/logs/
 tags/magus-run/
 tags/magus-server/
@@ -526,6 +528,7 @@ tags/python/
 tags/query/
 tags/race/
 tags/readiness/
+tags/redaction/
 tags/reference/
 tags/registry/
 tags/release/
