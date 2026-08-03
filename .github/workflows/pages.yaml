@@ -86,9 +86,13 @@ jobs:
         with:
           git-ref: ${{ steps.resolve_magus.outputs.tag }}
 
-      # Renders gen/ from source: derived Markdown, the esbuild bundles, the site itself, and
-      # the integrity/orphan/abandoned-URL gates. TinyGo is NOT needed - the playground wasm
-      # and its glue are committed under docs/vendor/playground/ and copied in by the render,
+      # Three target names, no logic. Each project builds its OWN tree - a root target that
+      # wrote into docs/ trips MGS3001, because a parent writing into a descendant project
+      # breaks the boundary the cache and affected set are computed over.
+      #
+      # generate docs renders derived Markdown, the esbuild bundles, the site itself, and the
+      # integrity/orphan/abandoned-URL gates. TinyGo is NOT needed: the playground wasm and
+      # its glue are committed under docs/vendor/playground/ and copied in by the render,
       # because they are the only published bytes CI cannot reproduce.
       - name: Render the docs site
         run: magus run generate docs
@@ -96,27 +100,10 @@ jobs:
       - name: Build the console app
         run: magus run build console
 
-      # Assemble the artifact: the docs site at the root, then the console app at
-      # /console/. The console project OWNS /console/, so its subtree is cleared and
-      # replaced wholesale - this discards the docs render's /console/ redirect stub
-      # (which exists only to satisfy the docs asset-integrity gate) so the app wins.
-      # Both trees use only relative paths, so each serves correctly under its subpath
-      # of the project site (https://egladman.github.io/magus/ and .../console/).
-      #
-      # The two guards are new: with the trees committed, a missing file meant someone had
-      # deleted it. Now it means the render silently produced nothing, and publishing that
-      # would replace a working site with an empty one.
-      - name: Assemble the site (docs at root, console at /console/)
-        run: |
-          set -euo pipefail
-          test -s docs/gen/index.html || { echo "::error::pages: the docs render produced no docs/gen/index.html" >&2; exit 1; }
-          test -s console/gen/index.html || { echo "::error::pages: the console build produced no console/gen/index.html" >&2; exit 1; }
-          rm -rf _site
-          mkdir -p _site
-          cp -r docs/gen/. _site/
-          rm -rf _site/console
-          mkdir -p _site/console
-          cp -r console/gen/. _site/console/
+      # Assembles gen/site: docs at the root of it, console under /console/. Reproduce the exact
+      # published tree locally with the same three commands.
+      - name: Assemble the deploy tree
+        run: magus run deploy-generate .
 
       # enablement: true turns Pages on (with the Actions source) the first time this
       # runs, so no manual Settings -> Pages step is needed. If your org blocks
@@ -128,7 +115,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: _site
+          path: gen/site
 
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

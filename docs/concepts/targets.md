@@ -379,6 +379,8 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 ## See also
 
 - [dependencies.md](dependencies.md): `magus\needs` versus `depends_on`, and how a cross-project `needs` folds into the affected set and the cache key.
+- [dependencies.md, pattern forms](dependencies.md#pattern-forms): the `ctx.glob` grammar - suffix shorthand, globs, and `!` negation - with a worked example per form.
+- [The guided tour, step 7](../tour/index.html#step-7): those pattern forms runnable in the browser.
 - [operations.md](operations.md): the formal Operation definition and the work hierarchy (Spell → Operation → Target).
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [charms.md](charms.md): the execution modifiers attached after `:`.

@@ -369,6 +369,11 @@ export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
 
 // TestNeedsGlobMultiPattern guards multi-pattern glob: every pattern in a
 // single magus.glob call must be honored, not just the first.
+//
+// Sorted, not pattern order. The static extractor, the dry-run tracer, and the runtime
+// dispatch now share one matcher (types.MatchTargetPatterns), and runtime has always
+// sorted - it iterates a Go map, so anything else would vary between runs. Describing
+// edges in a different order than they dispatch is the drift this consolidation removes.
 func TestNeedsGlobMultiPattern(t *testing.T) {
 	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
     ctx.needs(ctx.glob("*-gen", "check-*"));
@@ -377,8 +382,22 @@ export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 export fun check_lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	all, _ := nodeByName(g, "all")
-	want := []string{"docs-gen", "check-lint"}
+	want := []string{"check-lint", "docs-gen"}
 	assert.Equal(t, want, all.Dependencies, "both glob patterns honored")
+}
+
+// TestNeedsGlobNegation proves the static graph honors "!" the same way dispatch does: an
+// excluded target must not appear as an edge, or `magus describe`/`magus graph` would show
+// a dependency that never runs.
+func TestNeedsGlobNegation(t *testing.T) {
+	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-gen", "!skip-gen"));
+}
+export fun docs_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun skip_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
+`)
+	all, _ := nodeByName(g, "all")
+	assert.Equal(t, []string{"docs-gen"}, all.Dependencies, "negated target is not an edge")
 }
 
 // TestNeedsHandles guards magus.needs / magus.glob edges: an identifier naming

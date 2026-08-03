@@ -30,6 +30,12 @@
 !/docs/gen/install
 console/gen/
 
+# The assembled deploy tree: `magus run deploy-generate .` writes it from the two gen/ trees
+# and the Pages workflow uploads it. Building it locally is how you see what publishes.
+# Under gen/ because that is what generated output is called in every project here; the
+# root's own gen/*.json (the graph exports) stays tracked beside it.
+/gen/site/
+
 # Go coverage profile — throwaway intermediate from `magus run coverage`. The
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out

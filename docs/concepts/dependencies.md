@@ -130,16 +130,164 @@ identifier is an undefined variable and fails at **load**, not at run time. For
 patterns, resolve them to handles with `magus\glob` and pass the result to
 `magus\needs`.
 
-`ctx.glob(pattern)` is **same-project only** (a cross-project edge is always a
+`ctx.glob(pattern...)` is **same-project only** (a cross-project edge is always a
 handle `alias.target`) and resolves to the **handles** of the matching registered
 targets, which you feed to `magus\needs` (`ctx.needs(ctx.glob("*-generate"))`).
-A pattern with no `*` is **suffix shorthand**, not a substring or exact match:
-`ctx.glob("build")` compiles to `^.*-build$` and resolves
-`go-build`/`docker-build`, but **not** a target literally named `build` - pass
-the `build` function to `magus\needs` for that. A pattern containing `*` matches
-as an ordinary anchored glob (`*-generate`). A pattern that matches nothing
-yields no handles, so needs of it is a no-op. Only exported-function targets
-carry a handle; depend on a spell-provided op directly.
+A pattern that matches nothing yields no handles, so needs of it is a no-op. Only
+exported-function targets carry a handle; depend on a spell-provided op directly.
+
+### Pattern forms
+
+Every form below is runnable: step 7 of the guided tour,
+[Globs: gather a target family, minus one](../tour/index.html#step-7), builds this exact family in
+the browser and lets you edit the patterns and re-run them.
+
+Three forms, and they compose in one call:
+
+| Form | Example | Compiles to | Matches |
+| --- | --- | --- | --- |
+| Suffix shorthand | `"build"` | `^.*-build$` | `go-build`, `docker-build` |
+| Glob | `"*-generate"` | `^.*-generate$` | `md-generate`, `site-generate` |
+| Negation | `"!site-generate"` | `^site-generate$`, subtracted | everything else the includes matched |
+
+Negation subtracts from the union of the includes, so order never matters:
+`("*-generate", "!site-generate")` and `("!site-generate", "*-generate")` select
+the same set. Results are deduplicated and sorted, so a name matched by two
+patterns runs once and the dispatch order does not vary run to run.
+
+### Every form, against one target set
+
+Paste this into a magusfile and run `magus ls` to see the family, then
+`magus run <umbrella> --dry-run` to watch each pattern resolve. Every example
+below assumes exactly these five targets:
+
+```buzz
+import "magus";
+magus\project({});
+
+export fun md_generate(ctx: magus\Context, args: [str]) > void {}
+export fun site_generate(ctx: magus\Context, args: [str]) > void {}
+export fun vendor_generate(ctx: magus\Context, args: [str]) > void {}
+export fun go_build(ctx: magus\Context, args: [str]) > void {}
+export fun generate(ctx: magus\Context, args: [str]) > void {}
+```
+
+Each umbrella below is a real target you can export alongside them. The comment
+on each is exactly what `ctx.glob` resolves to.
+
+```buzz
+// GLOB: the whole -generate family.
+//   -> md-generate, site-generate, vendor-generate
+export fun all_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate"));
+}
+
+// SUFFIX SHORTHAND: identical to the glob above. A bare word means "-word" at
+// the end of a name. Note what is NOT in the result: the target named
+// `generate`. That is what makes this safe to write inside `generate` itself.
+//   -> md-generate, site-generate, vendor-generate
+export fun all_generate_shorthand(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("generate"));
+}
+
+// NEGATION, one name: the family minus a single member.
+//   -> md-generate, vendor-generate
+export fun generate_fast(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate", "!site-generate"));
+}
+
+// NEGATION, a glob: the family minus a sub-family.
+//   -> md-generate, site-generate
+export fun generate_first_party(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate", "!vendor-*"));
+}
+
+// ORDER DOES NOT MATTER: the exclusion applies to the union of the includes,
+// so this is the same set as generate_fast above.
+//   -> md-generate, vendor-generate
+export fun generate_fast_reordered(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("!site-generate", "*-generate"));
+}
+
+// SEVERAL INCLUDES: unioned, then deduplicated and sorted.
+//   -> go-build, md-generate, site-generate, vendor-generate
+export fun everything(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate", "*-build"));
+}
+```
+
+Run these against a live workspace in the tour's
+[glob step](../tour/index.html#step-7); `magus run <umbrella> --dry-run` prints the resolved set
+without executing anything.
+
+And the four that surprise people, each one a no-op rather than an error:
+
+```buzz
+// ONLY A NEGATION: nothing. Subtracting from an empty set is empty - it does
+// NOT mean "everything else".
+//   -> (no handles)
+export fun nothing_at_all(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("!site-generate"));
+}
+
+// NEGATION IS EXACT, NOT SHORTHAND: "!generate" removes the target literally
+// named `generate`, which the include never selected anyway. Nothing is
+// subtracted. To drop the family, write "!*-generate".
+//   -> md-generate, site-generate, vendor-generate
+export fun negation_is_exact(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-generate", "!generate"));
+}
+
+// A REGEX IS LITERAL TEXT: patterns are escaped before "*" is translated, so
+// this matches a target whose name is that whole string. There is none.
+//   -> (no handles)
+export fun regex_does_nothing(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("^(?!site-).*-generate$"));
+}
+
+// A PATTERN THAT MATCHES NOTHING is not an error; needs of no handles is a
+// no-op, which is what lets an umbrella survive a family being renamed.
+//   -> (no handles)
+export fun future_family(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("*-lint"));
+}
+```
+
+### Three rules worth knowing before you need them
+
+**Suffix shorthand never matches the bare name.** `ctx.glob("build")` resolves
+`go-build` and `docker-build`, never a target literally named `build`. That is
+deliberate rather than incidental: it is what makes `ctx.needs(ctx.glob("generate"))`
+safe to write _inside_ the `generate` target. Widening the shorthand to also match
+bare names would turn every umbrella target into a self-dependency. To depend on
+`build` itself, pass the function: `ctx.needs(build)`.
+
+**A negation is a name or a glob, never suffix shorthand.** `"!md-generate"`
+excludes the target actually called `md-generate`. If negation used the include
+rule it would compile to `^.*-md-generate$` and quietly subtract nothing, which is
+the one outcome a subtraction must never produce. To exclude a family, spell it
+the way you would include one: `"!*-generate"`.
+
+**Patterns that are only negations select nothing.** `ctx.glob("!site-generate")`
+resolves to no handles. Subtracting from an empty set is empty, not "everything
+else" - a glob that silently grew to the whole workspace because someone deleted
+its one positive pattern is a worse failure than one that matches nothing.
+
+### Globs, not regexes
+
+The pattern surface is glob. Every pattern is `QuoteMeta`'d before `*` is
+translated, so an authored regex is matched as literal text: `"^(?!site-).*-generate$"`
+matches a target with that exact name, which is to say nothing. Two reasons it
+stays that way. A pattern that is sometimes glob and sometimes regex has no safe
+reading for `*`. And the engine underneath is Go's RE2, which has no lookaround at
+all, so the expression people reach for first - "everything ending in `-generate`
+except this one" - is not expressible as a single regex regardless. Negation exists
+because that is the actual use case, and it is expressible directly.
+
+One matcher serves all three readers of a pattern - the runtime dispatch, `magus
+run --dry-run`, and the static extractor behind `magus describe`/`magus graph`
+(`types.MatchTargetPatterns`). They agree by construction rather than by three
+implementations being kept in step.
 
 ## A service reached via `needs` is supervised, not foregrounded
 
@@ -160,3 +308,6 @@ blocking on the service process itself. See
 - [cache.md](cache.md): the cache key `dep:` lines and the granularity note
   this page's caching section builds on.
 - [affected.md](../guides/affected.md): the transitive closure these edges feed.
+- [The guided tour, step 7](../tour/index.html#step-7): the pattern forms above, runnable and
+  editable in the browser - including the negation that keeps one member of a family
+  out of its umbrella.

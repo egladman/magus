@@ -289,16 +289,16 @@
           "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
           "dependencies": [
             "mod-sync",
-            "man-generate",
-            "changelog-generate",
-            "types-generate",
             "bindings-generate",
-            "spells-generate",
+            "changelog-generate",
+            "config-generate",
+            "graph-generate",
+            "man-generate",
+            "md-generate",
             "mocks-generate",
             "skills-generate",
-            "config-generate",
-            "md-generate",
-            "graph-generate"
+            "spells-generate",
+            "types-generate"
           ],
           "charms": [
             "rw"
@@ -524,6 +524,11 @@
           "charms": [
             "gha"
           ]
+        },
+        {
+          "name": "deploy-generate",
+          "declared": "deploy_generate",
+          "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/."
         },
         {
           "name": "serve",

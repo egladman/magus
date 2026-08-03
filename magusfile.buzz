@@ -59,6 +59,10 @@ magus\project({
         "watch": {"skip_cache": true},
         // serve blocks (a long-running dev-loop server), so it must never cache.
         "serve": {"skip_cache": true},
+        // deploy-generate writes a gitignored tree and nothing else.
+        // No ctx.writesFiles for gen/site: declared output globs are what EnsureMergeDriver
+        // writes into .gitattributes, and an ignored path can never conflict.
+        "deploy-generate": {"skip_cache": true},
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
         "image-build": {"skip_cache": true},
@@ -404,7 +408,7 @@ export fun postflight(ctx: magus\Context, args: [str]) > void {
 export fun generate(ctx: magus\Context, args: [str]) > void {
     final clean_before = vcs\isDirty() == false;
     ctx.needs(mod_sync);
-    ctx.needs(ctx.glob("*-generate"));
+    ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty()) {
@@ -913,6 +917,72 @@ fun rerender_docs() > void {
     var bin = os\env("MAGUS");
     if (bin == null or ("" + bin) == "") { bin = "magus"; }
     os\exec("" + bin, ["run", "render", "docs"], ".", {});
+}
+
+// deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at
+// the root of it and the console app under /console/.
+//
+// It lives here rather than in the Pages workflow because that workflow is meant to be thin -
+// set up a toolchain, name targets, upload the artifact - and the layout below is portable
+// logic that would otherwise be GitHub-specific shell. It is also what makes the deploy
+// reproducible locally: run the same three commands, then serve gen/site, and what you see
+// is what publishes.
+//
+// It ASSEMBLES ONLY. It used to drive the two builds itself (magus\run of docs generate and
+// console build) so one command reproduced the deploy, and that tripped MGS3001: a root
+// target that writes into a descendant project's tree breaks the boundary the cache and the
+// affected set are computed over. The ward is right, and the fix is not to widen the parent's
+// footprint - it is for each project to write its own tree. So the caller runs the two
+// builds, then this. That is still three target names and no logic in the workflow, which is
+// what the thin-workflow rule actually asks for.
+//
+// Named -generate, and excluded from the umbrella by name. The root `generate` target above
+// is `ctx.needs(ctx.glob("*-generate", "!deploy-generate"))`: the suffix would otherwise
+// enrol a full tree copy in every `magus run generate`, to satisfy a drift gate over output
+// that is deliberately gitignored. Before negation existed the only remedy was to avoid the
+// name - which is what the `tapes` target above still records, and what this target was first
+// called (build-site). Renaming around a matcher hides the reason at both ends: the glob does
+// not say what it is missing, and the target does not say why it is called something else.
+// "!deploy-generate" says it once, where it applies.
+//
+// NOT site-generate: the docs project already exports a target by that name, and two targets
+// called the same thing in one workspace - one rendering docs/gen, one assembling the whole
+// deploy - is a coin flip every time someone types it. NOT website-generate either: this repo
+// renamed website/ to docs/ deliberately, so "website" is retired vocabulary. "site" itself is
+// the house term (the Site type, site_render, site_publish, docs/site/), which is exactly why
+// it needed a qualifier here rather than a replacement.
+export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
+    final DOCS_GEN = "docs/gen";
+    final CONSOLE_GEN = "console/gen";
+    // gen/site, not a new top-level name: gen/ is what every project in this workspace
+    // calls its generated output (docs/gen, console/gen, proto/gen, and this project's own
+    // gen/*.json). The root's gen/*.json output glob is file-level, so the two do not
+    // overlap. Inventing a second convention for "generated output" would only ever be a
+    // thing to explain.
+    final OUT = "gen/site";
+
+    // Both trees are generated now, not committed, so "missing" no longer means someone
+    // deleted a file - it means a build did not run, or silently produced nothing. Publishing
+    // that would replace a working site with an empty one, so say which command is missing.
+    if (!fs\exists(DOCS_GEN + "/index.html")) {
+        throw "deploy-generate: " + DOCS_GEN + "/index.html is missing - run `magus run generate docs` first";
+    }
+    if (!fs\exists(CONSOLE_GEN + "/index.html")) {
+        throw "deploy-generate: " + CONSOLE_GEN + "/index.html is missing - run `magus run build console` first";
+    }
+
+    // Rebuilt from empty every time: a stale page left behind by a previous assembly would
+    // publish as a live URL that no source produces any more.
+    if (fs\exists(OUT)) { fs\delete(OUT); }
+    fs\copyDir(DOCS_GEN, OUT);
+    // The console project OWNS /console/, so its subtree is replaced wholesale. This discards
+    // the docs render's /console/ redirect stub, which exists only to satisfy the docs
+    // asset-integrity gate, so the real app wins - the same precedence `serve` gets from
+    // longest-prefix mount routing.
+    if (fs\exists(OUT + "/console")) { fs\delete(OUT + "/console"); }
+    fs\copyDir(CONSOLE_GEN, OUT + "/console");
+
+    magus\info("assembled " + OUT + " - docs at /, console at /console/");
 }
 
 // serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the
