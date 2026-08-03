@@ -1,5 +1,14 @@
 package magus_test
 
+// Dogfooding checks: assertions that this repository actually uses what it publishes.
+//
+// This file deliberately has no dogfood.go beside it, and it is the one place in the tree
+// where that is the point rather than an oversight. Its subject is not a Go symbol but the
+// agreement between three artifacts - the repo's own config, the guide, and the templates a
+// reader downloads - so there is nothing for it to pair with, and naming it after any one of
+// them (it was hookdocs_test.go) advertised a hookdocs.go that never existed. Anything else
+// asserting "we use what we ship" belongs here too.
+//
 // The guard hook this repository dogfoods, the one its documentation teaches,
 // and the one a reader downloads must all be the SAME file. They drifted once
 // already: the docs kept advertising `command -v magus || exit 0` after the
@@ -14,6 +23,7 @@ package magus_test
 // careful reader would notice.
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,8 +66,17 @@ type hookSettings struct {
 
 // TestDogfoodedHookInvokesTheTemplate keeps this repository honest: its own
 // guard must run the same file a reader downloads, not a copy that can drift.
+//
+// The config it reads is per-developer and deliberately untracked - committing one
+// machine's settings.json shipped that machine's guard wiring to every clone - so this
+// runs for whoever wired their own hooks and skips in a fresh clone and in CI, where
+// there is no dogfooded config to check. The docs-versus-template drift this file exists
+// to prevent is still gated unconditionally by TestHookTemplatesAreEmbeddedInTheGuide.
 func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	raw, err := os.ReadFile(dogfoodedHookConfig)
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skipf("%s is untracked per-developer wiring; no dogfooded config to check", dogfoodedHookConfig)
+	}
 	require.NoError(t, err, "read %s", dogfoodedHookConfig)
 
 	var cfg hookSettings
