@@ -34,6 +34,10 @@ import "render" as renderer;
 // the dependency graph; informational) and does not run in this project's ci, which uses
 // the custom targets below; it just makes the project's TypeScript browsable as symbols.
 import "magus/spell/typescript";
+// Imported for its typos op only, NOT added to the project spells list below: binding
+// markdown here would also claim this tree's **/*.md for markdownlint, which the root
+// project already lints. The prose check is the part docs was missing.
+import "magus/spell/markdown";
 // go is imported for its go-run op only (content-generate/changelog-generate drive
 // repo-root Go tools through it), NOT added to the project spells list below: docs is
 // not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
@@ -264,7 +268,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 // lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
 // gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
-// assertions - see biome.json). Both TS tools need node_modules, so install first like
+// assertions - see biome.json). Both TS tools need node_modules, so it needs deps like
 // the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
@@ -274,7 +278,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // Same reasoning, one directory down: the guide embeds these templates, so their
     // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
-    if (!fs\isDir("node_modules")) { os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
+    ctx.needs(deps);
+    // The docs corpus is the largest prose surface in the workspace and had no spell
+    // check at all - the op was defined and never invoked from any target.
+    markdown.typos(ctx);
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
@@ -327,14 +334,34 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
 // diagrams and page styling work offline without any CDN. Bump the mermaid version in
 // package.json and the next generate picks it up; gen/ is not committed, so there is no
 // artifact to commit and generate runs this as one of its stages.
-export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
+// deps materializes node_modules, and exists as a TARGET rather than a guard inlined
+// into each consumer because the inlined form was a check-then-act race.
+//
+// generate fans out `ctx.needs(build_mermaid, build_hljs, build_playground_editor)`,
+// which runs those three CONCURRENTLY, and lint below wants node_modules too. Each
+// used to test `!fs\isDir("node_modules")` itself. On a cold tree all of them test at
+// once; whichever wins starts `pnpm install`, which creates the directory early and
+// fills it slowly, so the others saw it already there, skipped installing, and ran
+// esbuild against a half-populated tree - failing with "Could not resolve
+// @codemirror/language" while the install was still running. A fresh clone or a new
+// worktree is exactly where that lands, which is the worst audience for it.
+//
+// ctx.needs is the fix rather than a lock: magus runs a needed target once per run and
+// orders it before every dependent, so the install happens exactly once and nothing
+// starts bundling until it has finished. The isDir check stays as the cheap warm-tree
+// short-circuit it was always meant to be - it is now just never racing itself.
+export fun deps(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    // Declared so the snapshot records THIS artifact. Without it the target inherits the
-    // project baseline (the typescript spell's `dist/**`, which this project never writes).
-    ctx.writesFiles("gen/assets/mermaid.js");
     if (!fs\isDir("node_modules")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
+}
+
+export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(deps);
+    // Declared so the snapshot records THIS artifact. Without it the target inherits the
+    // project baseline (the typescript spell's `dist/**`, which this project never writes).
+    ctx.writesFiles("gen/assets/mermaid.js");
     os\exec("pnpm", ["run", "build-mermaid"], ".", {});
     magus\info("rebuilt gen/assets/mermaid.js");
 }
@@ -344,12 +371,9 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
 // works offline without any CDN. Bump the version in package.json and the next generate picks
 // it up; gen/ is not committed, so generate runs this as one of its stages.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
+    ctx.needs(deps);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-hljs"], ".", {});
     magus\info("rebuilt gen/assets/hljs.js");
 }
@@ -360,12 +384,9 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
 // every published byte needs a target CI can run - a script nothing invokes would have
 // shipped a playground with no editor.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(preflight);
+    ctx.needs(deps);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-editor"], ".", {});
 }
 

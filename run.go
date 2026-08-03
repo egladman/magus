@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
@@ -720,6 +721,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
+	ctx = secret.ContextWithResolver(ctx, m.resolver)
 	ctx = types.WithWorkspace(ctx, m)
 	// Seeded with the projects this run SELECTED, then marked further by the dispatcher
 	// as cross-project dependencies run. Selection alone was not enough: `magus run

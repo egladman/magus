@@ -96,7 +96,7 @@ type handlerFn func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.Ca
 
 // adapt converts a SpellDriver into the MCP server's handler signature.
 // Soft errors from Invoke are surfaced as IsError tool results, mirroring the
-// pre-refactor behaviour where validation failures returned via
+// pre-refactor behavior where validation failures returned via
 // NewToolResultError rather than transport errors.
 func adapt(t spells.Driver) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {

@@ -145,7 +145,7 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
 // much smaller the `--simple` permutation is, as a number and as a bar.
 //
 // The bar is a bare `<progress>`. Pico styles that element classlessly
-// (`progress{accent-color:var(--pico-primary)}` plus a themed track in both colour
+// (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color
 // schemes), so the ratio gets a graphic with no custom CSS and no new markup
 // vocabulary - which is the site's whole rule. It is also the semantically correct
 // element: a proportion of a known whole, readable by a screen reader from its own

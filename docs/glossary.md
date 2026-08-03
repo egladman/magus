@@ -230,7 +230,7 @@ ownership, trend). See [insight.md](guides/insight.md).
 ### Hotspot
 
 An insight lens: edit frequency times complexity, the prime refactoring targets.
-The project view heat-colours the dependency graph by churn; `--files` ranks
+The project view heat-colors the dependency graph by churn; `--files` ranks
 individual files. See [insight.md](guides/insight.md).
 
 ### Affinity

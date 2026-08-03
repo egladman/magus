@@ -52,9 +52,12 @@
         {
           "name": "image-build",
           "declared": "image_build",
-          "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",
+          "doc": "Three PUBLISH modes and one local mode, and which you get is a charm because the default must be the harmless one: a bare `magus run image-build` on a laptop loads an image into the local daemon and pushes nothing.",
           "charms": [
+            "amd64",
+            "arm64",
             "cd",
+            "snapshot",
             "static"
           ],
           "spells": [
@@ -73,6 +76,25 @@
           ],
           "exec_overrides": [
             "cwd:."
+          ]
+        },
+        {
+          "name": "image-registries",
+          "declared": "image_registries",
+          "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment.",
+          "charms": [
+            "cd",
+            "snapshot",
+            "verify"
+          ]
+        },
+        {
+          "name": "image-login",
+          "declared": "image_login",
+          "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.",
+          "charms": [
+            "cd",
+            "snapshot"
           ]
         },
         {
@@ -152,7 +174,7 @@
         {
           "name": "bindings-generate",
           "declared": "bindings_generate",
-          "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
+          "doc": "Regenerates the Go host bindings (std -\u003e internal/interp/bindings/gen) from std.Module declarations.",
           "dependencies": [
             "types-generate"
           ],
@@ -927,7 +949,16 @@
           "name": "lint",
           "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
-            "format"
+            "format",
+            "deps"
+          ],
+          "spells": [
+            {
+              "spell": "markdown",
+              "ops": [
+                "typos"
+              ]
+            }
           ],
           "cross_dependencies": [
             {
@@ -982,11 +1013,17 @@
           ]
         },
         {
-          "name": "build-mermaid",
-          "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
+          "name": "deps",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -\u003e mermaid@11) into gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
+          ]
+        },
+        {
+          "name": "build-mermaid",
+          "declared": "build_mermaid",
+          "dependencies": [
+            "deps"
           ],
           "writes_files": [
             {
@@ -997,9 +1034,9 @@
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -\u003e highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
-            "preflight"
+            "deps"
           ],
           "writes_files": [
             {
@@ -1012,7 +1049,7 @@
           "declared": "build_playground_editor",
           "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
           "dependencies": [
-            "preflight"
+            "deps"
           ],
           "writes_files": [
             {

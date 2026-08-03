@@ -8,7 +8,9 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -108,6 +110,95 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	return ns
 }
 
+// buildSecretNS assembles magus\secret for a magusfile. provider() wires an imported
+// spell as this workspace's secret backend; read() reads one credential through it:
+//
+//	import "spells/onepassword" as secrets
+//	magus\secret.provider(secrets)
+//	final token = magus\secret.read("DOCKERHUB_TOKEN")
+//
+// read(), NOT resolve(): `resolve` is a hard keyword in the Buzz lexer (the fiber
+// yield/resume/resolve family), so member access on it cannot parse. Do not "fix" this
+// back. See docs/concepts/secrets.md for the reference format and why there is no URI
+// scheme.
+//
+// read() is the ONLY way a value becomes known-secret; redaction keys off having been
+// read here, not off the reference looking credential-shaped. A magusfile that reads the
+// same variable with os\env gets a plain string magus has no reason to protect. That is
+// the documented seam, not a gap.
+func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
+	ns := vm.NewMap()
+	ns.MapSet("provider", directVal(obs, "magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		// Records onto the resolver captured at construction, the same way
+		// buildCacheNS records onto the registry it captured.
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
+		}
+		nv, ok := args[0].MapGet("name")
+		if !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
+		}
+		// Records onto the resolver captured at construction, the same way buildCacheNS
+		// records onto the registry it captured.
+		//
+		// ERRORS when there is no resolver rather than no-opping. A silently dropped
+		// selection means the run falls back to the built-in environment provider - the
+		// magusfile asked for 1Password and got whatever $VAR happened to hold. That is
+		// the wrong-credential failure memoKey is provider-keyed to prevent, arriving
+		// through a different door, and it would be invisible.
+		r := secret.ResolverFromContext(runCtx)
+		if r == nil {
+			return vm.Null, fmt.Errorf(`magus\secret.provider: no secret resolver on this run`)
+		}
+		r.SetProviderName(nv.AsString())
+		return vm.Null, nil
+	}))
+	ns.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
+		}
+		// Resolver from the RUN context captured at construction (runCtx); cancellation
+		// from the per-call one (ctx). The VM supplies its own ctx per call, carrying
+		// neither the run's resolver nor its provider selection.
+		//
+		// The per-call context holds the conventional name deliberately: a future edit
+		// that reaches for `ctx` gets the live, cancellable one, which is the safe
+		// default. Reaching for it to find the resolver fails loudly rather than
+		// resolving against nothing.
+		ref := args[0].AsString()
+		r := secret.ResolverFromContext(runCtx)
+		if r == nil {
+			return vm.Null, fmt.Errorf(`magus\secret.read: no secret resolver on this run`)
+		}
+		v, err := r.Read(ctx, ref)
+		if err != nil {
+			return vm.Null, err
+		}
+		// Audited HERE rather than inside secret.Read, for two reasons. The engine
+		// reason: internal/journal imports internal/secret for redaction, so emitting
+		// from there would be an import cycle. The better reason: this binding IS the
+		// boundary worth auditing - it is the one place a magusfile reaches for a
+		// credential, which is the act an audit trail exists to record.
+		//
+		// The reference and the provider, NEVER the value - and that is a discipline here,
+		// not a mechanism. journal.Emit redacts against the resolver on the context it is
+		// given, and this is the per-call context, which carries none. Do not add a value
+		// to this Text expecting something downstream to catch it.
+		if project, target, ok := journal.StepFromContext(ctx); ok {
+			via := r.ProviderName()
+			if via == "" {
+				via = "built-in environment provider"
+			}
+			journal.Emit(ctx, journal.Event{
+				Kind: journal.KindSecret, Project: project, Target: target,
+				Text: fmt.Sprintf("read secret %q via %s", ref, via),
+			})
+		}
+		return vm.StrValue(v), nil
+	}))
+	return ns
+}
+
 // dispatchBuzzExternal runs the cross-project target an external handle names,
 // through the run's CrossDispatch coordinator (run-once + cross-project cycle
 // detection). The project path is resolved with file.ResolveImport against the caller's
@@ -154,7 +245,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 // ctx.glob (ctx.needs(ctx.glob("*-generate"))). A string is never accepted:
 // a name pattern becomes handles through ctx.glob, so needs only ever sees target
 // functions and stays monomorphic. Same-project targets are awaited through the VM
-// pool / TargetMemo path (dispatchBuzzDeps); a cross-project handle dispatches via
+// pool / TargetMemo path (runBuzzDependencies); a cross-project handle dispatches via
 // CrossDispatch.
 func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -191,7 +282,7 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 				return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 			}
 		}
-		if err := dispatchBuzzDeps(callCtx, targets, names); err != nil {
+		if err := runBuzzDependencies(callCtx, targets, names); err != nil {
 			return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 		}
 		return vm.Null, nil
@@ -258,10 +349,10 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 	}
 }
 
-// dispatchBuzzDeps awaits the named same-project targets: via the Buzz VM pool
+// runBuzzDependencies awaits the named same-project targets: via the Buzz VM pool
 // when one is in ctx (parallel, TargetMemo-deduped), else inline sequential. It
 // returns unprefixed errors so each caller attaches its own verb name.
-func dispatchBuzzDeps(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
+func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}

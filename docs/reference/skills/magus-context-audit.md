@@ -2,8 +2,8 @@
 title: magus-context-audit
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5165
-skill_simple_bytes: 3681
+skill_full_bytes: 5164
+skill_simple_bytes: 3680
 ---
 
 # magus-context-audit
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `7a0d05f4f47b` |
+| `skill-content` | `0a72e9e76c60` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -125,7 +125,7 @@ A lens that cries wolf gets switched off, taking the real findings with it.
   happened, not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
   on a grep and is one rule with a carve-out.
-- **A labelled migration note** describing old behavior on purpose.
+- **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 
@@ -225,7 +225,7 @@ Report findings in this order.
   happened, not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
   on a grep and is one rule with a carve-out.
-- **A labelled migration note** describing old behavior on purpose.
+- **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 

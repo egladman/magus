@@ -2,8 +2,8 @@
 title: magus-changes
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-changes]
-skill_full_bytes: 5134
-skill_simple_bytes: 3864
+skill_full_bytes: 5133
+skill_simple_bytes: 3863
 ---
 
 # magus-changes
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `7a0d05f4f47b` |
+| `skill-content` | `0a72e9e76c60` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -134,7 +134,7 @@ Rules for an entry, all checkable:
   diagnostic code, the target. A reader upgrades by searching for those strings.
 - Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Do not invent one.
-- Write behaviour, not implementation. "The graph indexes the build I/O layer" is an
+- Write behavior, not implementation. "The graph indexes the build I/O layer" is an
   entry; "refactored the extractor" is not.
 - One entry per user-visible change, not per commit. Squash a fix-up into the entry
   for the thing it fixed up.
@@ -262,7 +262,7 @@ Rules for an entry, all checkable:
   diagnostic code, the target.
 - Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Do not invent one.
-- Write behaviour, not implementation.
+- Write behavior, not implementation.
 - One entry per user-visible change, not per commit.
 - `CHANGELOG.md` is a SOURCE file, not generated.
 

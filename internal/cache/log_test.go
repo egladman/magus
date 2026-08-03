@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -681,4 +682,39 @@ func TestRemoteSuffix(t *testing.T) {
 			require.Equal(t, tc.want, remoteSuffix(tc.remote, tc.total))
 		})
 	}
+}
+
+// TestPrettyHandlerRedactsSecrets pins the THIRD path a credential reached the user
+// through, found only by writing a real provider spell and watching a `-vv` run:
+//
+//	$ sh -c echo using token=<the actual token>
+//
+// That line is a slog record rendered by this handler, not a journal event, so neither
+// the output tap nor journal.Emit's redaction covered it. Redacting in printf covers
+// every record kind this handler will ever render rather than just run.exec.
+func TestPrettyHandlerRedactsSecrets(t *testing.T) {
+	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_echo_me")
+	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	require.NoError(t, err)
+
+	var sink bytes.Buffer
+	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	slog.New(h).DebugContext(ctx, "run.exec",
+		"cmd", "sh", "args", []string{"-c", "echo tok=ghp_never_echo_me"}, "dir", ".")
+
+	assert.NotContains(t, sink.String(), "ghp_never_echo_me")
+	assert.Contains(t, sink.String(), "***")
+}
+
+// TestPrettyHandlerIsUnchangedWithoutSecrets pins that the funnel is inert on the
+// common path: a run that reads no secret renders byte-for-byte as before.
+func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
+	var sink bytes.Buffer
+	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	slog.New(h).DebugContext(context.Background(), "run.exec",
+		"cmd", "go", "args", []string{"build", "./..."}, "dir", ".")
+
+	assert.Contains(t, sink.String(), "$ go build ./...")
+	assert.NotContains(t, sink.String(), "***")
 }

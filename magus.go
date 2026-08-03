@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
@@ -69,6 +70,10 @@ type Magus struct {
 	symbolStatus symbolStatusCache
 
 	wsReg *WorkspaceRegistry
+
+	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
+	// magus\secret.read costs one provider invocation rather than two.
+	resolver *secret.Resolver
 
 	tel            observability.Provider
 	injectedTel    observability.Provider // shared provider supplied via WithProvider; adopted verbatim in Open
@@ -276,6 +281,10 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	} else {
 		m.wsReg = NewWorkspaceRegistry()
 	}
+	m.resolver = secret.New(secret.WithTimeouts(secret.Timeouts{
+		Interactive: m.cfg.Secret.Interactive,
+		Unattended:  m.cfg.Secret.Unattended,
+	}))
 	return m, nil
 }
 
@@ -312,6 +321,9 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 		return customTargets, nil
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
+	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
+	// so a top-level read here must be the SAME read the run sees.
+	ctx = secret.ContextWithResolver(ctx, m.resolver)
 	for _, p := range m.All() {
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {

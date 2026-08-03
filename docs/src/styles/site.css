@@ -2170,7 +2170,7 @@ a code {
 
 /* Demo callout: injected after a concept page's intro when a tour step demonstrates it
    (page.buzz injectDemoCallout). A distinct component in its own teal accent - not a link,
-   not a button - signalling "there is a runnable demonstration of this concept." Structured
+   not a button - signaling "there is a runnable demonstration of this concept." Structured
    like an admonition (icon + left accent) but with the demo identity. */
 .demo-callout {
   display: flex;
@@ -2585,7 +2585,7 @@ a code {
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  /* Disable pull-to-refresh and bounce scroll - standard PWA behaviour. */
+  /* Disable pull-to-refresh and bounce scroll - standard PWA behavior. */
   body {
     overscroll-behavior-y: none;
   }

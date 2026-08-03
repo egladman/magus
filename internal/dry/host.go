@@ -122,6 +122,39 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	ci.MapSet("provider", fn("magus.ci.provider", retNull))
 	m.MapSet("ci", ci)
 
+	// magus.secret.<...>: selects the secret provider spell and reads a credential
+	// through it in the real module. provider() stubs to a no-op like the two above.
+	//
+	// read() returns a PLACEHOLDER rather than null or the real value. A dry run must
+	// not resolve credentials at all - it would shell out to a vault, prompt for an
+	// unlock, or fail the trace on a laptop that simply has no token exported, none of
+	// which a structure-only pass has any business doing. But a magusfile commonly
+	// feeds the result straight into a string, so null would make the trace die on a
+	// concat rather than on anything real. The placeholder is deliberately not
+	// credential-shaped, so a dry run that leaks it into output leaks nothing.
+	secretNS := vm.NewMap()
+	// Argument validation MATCHES the real namespace, unlike the cache/ci stubs above.
+	// A dry run exists to catch structural mistakes before they cost a build, so a stub
+	// that accepts what the real call rejects inverts its whole point: `read()` with no
+	// reference, or `provider("onepassword")` passing a string where a spell handle
+	// belongs, would pass the dry run and fail the real one.
+	secretNS.MapSet("provider", fn("magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsMap() {
+			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
+		}
+		if nv, ok := args[0].MapGet("name"); !ok || !nv.IsStr() || nv.AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
+		}
+		return vm.Null, nil
+	}))
+	secretNS.MapSet("read", fn("magus.secret.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
+			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
+		}
+		return vm.StrValue("<secret>"), nil
+	}))
+	m.MapSet("secret", secretNS)
+
 	// has_charm(name) reports whether name is in the active charm set (tr.charms), so
 	// a `run t:charm` dry-run takes charm-gated branches. The same closure backs
 	// ctx.has_charm (see buildCtx).

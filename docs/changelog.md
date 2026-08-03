@@ -133,7 +133,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `typescript["tsc"]`. Op names are untouched (`cargo-build`, `pytest`, `markdownlint`
   already named their real tool). An unknown import still suggests the right spell, and
   the alias table now holds only genuine synonyms - `javascript`, `js`, `node`,
-  `nodejs`, `cargo`, `python3` - rather than apologising for abbreviations.
+  `nodejs`, `cargo`, `python3` - rather than apologizing for abbreviations.
 - Breaking: spell op names are normalized when the spell is decoded. Op keys are
   validated against a charset that admits `_` and uppercase, but every request arriving
   at dispatch has already been kebab-normalized, and dispatch is a map lookup - so an op
@@ -173,9 +173,9 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   unrelated to anything.
 - Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
   fingerprints are now computed by streaming fields into SHA256 rather than by hashing
-  marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
+  marshaled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
   check treats a version mismatch as a full rebuild, which is the whole migration. The
-  old approach marshalled each shard purely to hash the bytes, putting an encode on the
+  old approach marshaled each shard purely to hash the bytes, putting an encode on the
   hot path of every magus command (fingerprinting all shards costs 757 ms at 50k
   projects) and coupling the fingerprint to the storage format, so a future format
   change would have silently invalidated every cached shard. Measured: -44% sec/op,
@@ -239,7 +239,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   imperative steps with the rationale withheld, for a capable model that infers the why and
   would rather spend the context on the task. Both permutations are hand-authored from ONE
   source body (an author brackets the withheld spans), so they cannot describe different
-  behaviour and they share one content digest - `magus graph verify` reports staleness the
+  behavior and they share one content digest - `magus graph verify` reports staleness the
   same way whichever is installed, and the file's stamp records `skill-variant`. Across the
   eight skills the short form is 14% smaller. The docs site now reproduces every skill in
   both forms with a size comparison (`reference/skills/`), generated from the embedded

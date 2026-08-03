@@ -30,7 +30,7 @@ the flags; this page is the intent.
 The first argument selects a lens:
 
 - **hotspots** - edit frequency times complexity, the prime refactoring targets.
-  The project view heat-colours the dependency graph by churn (with authors,
+  The project view heat-colors the dependency graph by churn (with authors,
   recency, blast radius, CI duration); `--files` ranks individual files and renders
   a churn-versus-complexity quadrant.
 - **affinity** - projects that change together (temporal coupling). A pair that
@@ -68,5 +68,5 @@ run.
 
 ## See also
 
-- [targets.md](../targets.md) - the dependency graph insight heat-colours.
+- [targets.md](../targets.md) - the dependency graph insight heat-colors.
 - [affected.md](../affected.md) - the other VCS-driven command, for building rather than analyzing.

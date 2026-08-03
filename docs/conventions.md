@@ -83,7 +83,7 @@ magus version
 # magus 0.4.2
 ```
 
-Windows examples are shown in PowerShell and labelled as such.
+Windows examples are shown in PowerShell and labeled as such.
 
 ## Reading Buzz: the backslash
 

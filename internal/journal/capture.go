@@ -3,6 +3,7 @@ package journal
 import (
 	"bufio"
 	"context"
+	"github.com/egladman/magus/internal/secret"
 	"io"
 	"log/slog"
 	"sync"
@@ -80,6 +81,15 @@ func Emit(ctx context.Context, e Event) {
 	if e.Inv == "" {
 		e.Inv = InvocationIDFromContext(ctx)
 	}
+	// Redacted HERE rather than at each emit site. The journal is persisted and the emit
+	// sites are spread across packages, so scrubbing per site is a rule someone eventually
+	// forgets, silently. No-op when the run has no resolver or has read no secrets.
+	//
+	// TEXT ONLY, and that limit is deliberate rather than an oversight: Text is the field
+	// that carries free-form content (a command line, an output line, a warning). The
+	// structured fields beside it - Status, Ref, Stream - are magus's own enumerations,
+	// and a credential reaching one would be a different bug than this guards against.
+	e.Text = secret.RedactString(ctx, e.Text)
 	LoggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
 }
 

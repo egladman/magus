@@ -246,7 +246,7 @@ type Lock struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Project           string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`                                                 // workspace-relative path; "." is the root
 	Pid               int32                  `protobuf:"varint,2,opt,name=pid,proto3" json:"pid,omitempty"`                                                        // holder's process id
-	Command           string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`                                                 // holder's argv, for recognising what it is
+	Command           string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`                                                 // holder's argv, for recognizing what it is
 	Dir               string                 `protobuf:"bytes,4,opt,name=dir,proto3" json:"dir,omitempty"`                                                         // holder's working directory; a path that no longer exists means abandoned
 	AcquireTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=acquire_time,json=acquireTime,proto3" json:"acquire_time,omitempty"`                      // when the holder took it; age is the signal a human reads
 	Waiters           []*LockWaiter          `protobuf:"bytes,6,rep,name=waiters,proto3" json:"waiters,omitempty"`                                                 // processes blocked on this lock right now

@@ -105,7 +105,7 @@ export type Lock = Message<"magus.status.v1.Lock"> & {
   pid: number;
 
   /**
-   * holder's argv, for recognising what it is
+   * holder's argv, for recognizing what it is
    *
    * @generated from field: string command = 3;
    */

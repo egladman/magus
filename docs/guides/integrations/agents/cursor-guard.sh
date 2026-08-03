@@ -18,7 +18,7 @@
 # magus-guard-command.sh, but Cursor would then need three files downloaded to
 # work, and a guard nobody finishes installing guards nothing.
 #
-# Two Cursor facts shape the behaviour:
+# Two Cursor facts shape the behavior:
 #
 #   - A denial carries BOTH user_message (shown to you) and agent_message (sent
 #     to the model); neither is delivered on an allow, so `advise` collapses to a
@@ -59,7 +59,7 @@ esac
 
 # beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
 # hook crash or malformed JSON unless the hook sets failClosed, so pretending
-# otherwise would give false assurance. For strict behaviour, set failClosed on
+# otherwise would give false assurance. For strict behavior, set failClosed on
 # the hook and change this to a deny.
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 	printf '%s' '{"permission":"allow"}'

@@ -1,0 +1,108 @@
+// The 1Password secret provider: resolves a reference by shelling out to the `op`
+// CLI. Selected with magus\secret.provider():
+//
+//   import "spells/onepassword" as secrets;
+//   magus\secret.provider(secrets);
+//
+//   final token = magus\secret.read("Private/Docker Hub/credential");
+//
+// This is the reference implementation of a spell-backed secret provider, and it is
+// deliberately thin: the whole contract is one exported op. If a backend has a CLI
+// that prints a secret to stdout - `op read`, `vault kv get -field`, `gcloud secrets
+// versions access` - it is this file with a different argv.
+//
+// Imported BY PATH rather than as `magus/spell/onepassword`, and that is not a style
+// choice: a spell importing any host module (`os`, here) cannot be bare-compiled into
+// the magus binary, so it ships as source and is imported relative to the workspace.
+// spells/github/actions is loaded the same way for the same reason.
+//
+// It claims no source globs and declares no mgs_listTargets: a provider contributes no
+// operation a target could compose, so it is imported and selected explicitly rather
+// than auto-bound to a project's files.
+
+import "magus/spell";
+
+import "os";
+
+// "onepassword", not "op": a spell's registered name has to stand alone - it is what
+// `magus describe spells` and every diagnostic show, with no directory around it to
+// supply the context. `op` is the binary, not the product.
+export fun mgs_getName() > str { return "onepassword"; }
+
+// Probed so a `op` upgrade invalidates cache entries that depended on it. The op is
+// not itself cached (secret reads never are), but the probe keeps the spell honest
+// alongside every other tool-driving spell.
+export fun mgs_getVersionCommand() > [str] { return ["op", "--version"]; }
+
+// has reports whether haystack contains needle.
+//
+// Buzz's str.indexOf returns NULL when the substring is absent, not -1, so comparing the
+// result to a number raises "cannot compare null and int" rather than answering false.
+// That is why this is a named helper instead of an inline comparison at four call sites.
+fun has(haystack: str, needle: str) > bool {
+    return haystack.indexOf(needle) != null;
+}
+
+// SCHEME is 1Password's own URI scheme. magus does not parse references - that is the
+// provider's job - so accepting both the bare vault path and the full URI is this
+// spell's decision, not a magus convention.
+final SCHEME = "op://";
+
+// resolve_secret is the secret-provider contract, detected by name and invoked by
+// magus\secret.read(). It receives the reference as payload.ref and returns the value.
+//
+// The reference may be written either way, because both read naturally at a call site:
+//
+//   magus\secret.read("Private/Docker Hub/credential")
+//   magus\secret.read("op://Private/Docker Hub/credential")
+//
+// `op read` prints the secret to stdout with a trailing newline; magus trims captured
+// output, so nothing here has to. os\exec raises on a non-zero exit, which is the
+// behavior wanted: a locked vault, an expired session, or a typo'd path all fail the
+// read rather than returning a blank that fails later at whatever consumes it.
+export fun resolve_secret(target: Target, cb: fun(any)) > str {
+    var io = {};
+    cb(io);
+    final ref = "" + io["ref"];
+    if (ref == "") {
+        throw "onepassword: no reference given";
+    }
+
+    var uri = ref;
+    if (!ref.startsWith(SCHEME)) {
+        uri = SCHEME + ref;
+    }
+
+    if (os\which("op") == "") {
+        throw "onepassword: the `op` CLI is not on PATH.\n"
+            + "  mise:     mise use -g op\n"
+            + "  homebrew: brew install 1password-cli\n"
+            + "  other:    https://developer.1password.com/docs/cli/get-started/";
+    }
+
+    // allow_failure so the exit can be CLASSIFIED instead of raising a bare exit status.
+    // This is the whole friction budget for this spell: someone wiring a secret provider
+    // for the first time hits "not installed", "not signed in", or "wrong path", and a
+    // message that names which one and what to type is the difference between a
+    // five-second fix and an afternoon.
+    final res = os\exec("op", args: ["read", uri], dir: ".",
+        opts: {"allow_failure": true});
+    if (res["code"] != 0) {
+        final err = "" + res["stderr"];
+        if (has(err, "not signed in") or has(err, "no active session")) {
+            throw "onepassword: not signed in. Run `op signin`, or for an unattended run "
+                + "set OP_SERVICE_ACCOUNT_TOKEN.\n  reference: " + uri;
+        }
+        if (has(err, "isn't an item") or has(err, "not found")) {
+            throw "onepassword: " + uri + " does not resolve to an item field. Check the "
+                + "vault, item and field names - `op item list --vault <vault>` lists them.";
+        }
+        throw "onepassword: `op read " + uri + "` failed: " + err.trim();
+    }
+
+    final value = "" + res["stdout"];
+    if (value == "") {
+        throw "onepassword: " + uri + " resolved to an empty value; check the item and field names";
+    }
+    return value;
+}

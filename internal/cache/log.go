@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/secret"
 )
 
 // levelTrace mirrors config.LevelTrace (slog.LevelDebug-4); duplicated here
@@ -29,9 +30,9 @@ const levelTrace slog.Level = slog.LevelDebug - 4
 func newLogger(format string, level slog.Level) *slog.Logger {
 	switch strings.ToLower(format) {
 	case "text":
-		return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+		return slog.New(secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 	case "json":
-		return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+		return slog.New(secret.NewRedactingHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 	default:
 		return slog.New(NewPrettyHandler(os.Stderr, level))
 	}
@@ -56,9 +57,13 @@ type PrettyHandler struct {
 	// call so the many print helpers can stay linear instead of each
 	// growing an error branch. Reset at the top of Handle, returned at
 	// the bottom; guarded by mu like every other field.
-	err    error
-	region *tty.Region // sticky error region; disabled when the writer is not a TTY
-	status statusLine  // live counters painted into the region's first row
+	err error
+	// recordCtx is the context of the record currently being handled, held so printf
+	// can reach the run's secret resolver without every print helper taking a ctx.
+	// Set and cleared in Handle; guarded by mu like every other field.
+	recordCtx context.Context
+	region    *tty.Region // sticky error region; disabled when the writer is not a TTY
+	status    statusLine  // live counters painted into the region's first row
 	// onCI suppresses hints whose command cannot work where it is printed.
 	// Resolved once at construction: the environment does not change
 	// mid-run, and this is consulted per failure.
@@ -215,7 +220,16 @@ func (h *PrettyHandler) printf(format string, args ...any) {
 	if h.err != nil {
 		return
 	}
-	_, err := fmt.Fprintf(h.w, format, args...)
+	// Redacted at the funnel, not per record type. This handler renders a dozen kinds
+	// (run.exec, cache.stage, charms, ...) and any of them can carry a value a magusfile
+	// read through magus\secret.read - run.exec does, because it echoes the argv of a
+	// command a target may have passed a token to. Redacting each kind separately is the
+	// rule that gets forgotten when the thirteenth is added; this is every line the
+	// handler will ever print, in one place.
+	//
+	// The resolver comes from the record context captured in Handle rather than a
+	// parameter, so nothing that calls printf has to know secrets exist.
+	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(h.recordCtx, fmt.Sprintf(format, args...)))
 	h.fail(err)
 }
 
@@ -229,6 +243,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	// Held for the duration of this record so printf can reach the run's secret
+	// resolver. Guarded by the same mutex as every other field here.
+	h.recordCtx = ctx
+	defer func() { h.recordCtx = nil }()
 
 	// One record, one error: clear the latch on entry so a failure on an
 	// earlier record does not suppress this one's output.

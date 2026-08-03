@@ -124,7 +124,17 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	regFn := registerName(m.Name)
 	fmt.Fprintf(&body, "// %s builds the %q module map and returns it.\n", regFn, m.Name)
 	if m.Doc != "" {
-		fmt.Fprintf(&body, "// %s\n", m.Doc)
+		// Every line prefixed, not just the first: a module Doc may be several
+		// paragraphs (the magus module's names the provider namespaces it cannot
+		// declare), and emitting an embedded newline raw put prose outside the comment
+		// and failed gofmt with "expected declaration, found <first word of line 2>".
+		for _, line := range strings.Split(m.Doc, "\n") {
+			if line == "" {
+				fmt.Fprintln(&body, "//")
+				continue
+			}
+			fmt.Fprintf(&body, "// %s\n", line)
+		}
 	}
 	fmt.Fprintf(&body, "func %s(ctx context.Context, sess *buzz.Session) vm.Value {\n", regFn)
 	fmt.Fprintln(&body, "\t_ = ctx")

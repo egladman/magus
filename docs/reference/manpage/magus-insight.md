@@ -24,7 +24,7 @@ active VCS adapter must report per-commit files (git can).
 VCS-history lenses (the first argument):
 
 hotspots   Edit frequency x complexity - the prime refactoring targets. The
-             project view is the dependency graph heat-coloured by churn (with
+             project view is the dependency graph heat-colored by churn (with
              authors, recency, blast radius, and CI duration); --files ranks
              individual files by churn x complexity.
   affinity   Projects that change together (temporal coupling). A hidden pair

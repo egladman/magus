@@ -82,7 +82,7 @@ Only two things today, both on failure:
   anyone opening the log.
 
 Sections request **expanded** for a failure. That is a request, not a guarantee -
-see the capability table below - and a provider that cannot honour it leaves the
+see the capability table below - and a provider that cannot honor it leaves the
 output inline rather than folding it. A collapsed failure is a failure nobody
 sees, which is worse than no fold at all.
 
@@ -129,7 +129,7 @@ new section closes the previous one. Annotations carry a source location and a
 output is a stream, because Buildkite raises annotations by running a binary.
 
 `id` is opaque. magus passes something readable, such as a project path, and does
-**not** normalise the character set - what is legal differs per system, and
+**not** normalize the character set - what is legal differs per system, and
 encoding one system's rule into the shared contract would put that system back
 into the layer that is supposed to name nobody. GitLab's spell folds the id with
 `strings\kebabCase` because GitLab rejects slashes; that rule lives in the spell
@@ -174,7 +174,7 @@ output can contain secrets, a hostile provider spell could exfiltrate them.
 magus captures a failing process's output and replays it into the job log. Left
 alone, a test printing `::error::` would have the runner execute it - forging
 annotations, or closing a section magus opened. Providers declare their command
-prefixes via `quote_prefixes`, and magus neutralises matching lines before replay
+prefixes via `quote_prefixes`, and magus neutralizes matching lines before replay
 by dropping the prefix's first character, leaving text a reader can still read.
 
 ## One exception: concurrency
@@ -189,6 +189,9 @@ the magusfile is evaluated, so no provider spell is loaded in time to answer.
 Anything a spell *can* answer, a spell does.
 
 ## Writing a provider
+
+> The shared spell contract, and the cache and secret provider variants alongside this
+> one, are in [Writing a spell](../guides/authoring-spells.md).
 
 Start from `spells/gitlab/ci/spell.buzz` - it is the shorter of the two and
 exercises the parts of the contract GitHub does not (an id distinct from the

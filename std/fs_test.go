@@ -94,7 +94,7 @@ func TestFsRemoveAll(t *testing.T) {
 }
 
 // TestFsListDir covers entry listing and the documented "empty (nil) if the path
-// does not exist" behaviour.
+// does not exist" behavior.
 func TestFsListDir(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -130,7 +130,7 @@ func TestFsAppendFile(t *testing.T) {
 }
 
 // TestFsChmod verifies the permission bits are changed. POSIX-only: Windows does
-// not honour Unix mode bits, so the assertion is skipped there.
+// not honor Unix mode bits, so the assertion is skipped there.
 func TestFsChmod(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod permission bits are not meaningful on Windows")

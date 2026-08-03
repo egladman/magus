@@ -69,6 +69,8 @@ var ConfigFlags = []ConfigFlag{
 	{"knowledge-symbol-indexing-disabled", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED", "bool"},
 	{"knowledge-symbol-indexing-quiet-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS", "int"},
 	{"knowledge-symbol-indexing-min-interval-seconds", "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS", "int"},
+	{"secret-interactive-timeout", "MAGUS_SECRET_INTERACTIVE_TIMEOUT", "duration"},
+	{"secret-unattended-timeout", "MAGUS_SECRET_UNATTENDED_TIMEOUT", "duration"},
 	{"concurrency", "MAGUS_CONCURRENCY", "int"},
 	{"target-timeout", "MAGUS_TARGET_TIMEOUT", "duration"},
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
@@ -127,6 +129,8 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.Knowledge.SymbolIndexing.Disabled, "knowledge-symbol-indexing-disabled", cfg.Knowledge.SymbolIndexing.Disabled, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing. Auto-indexing is on by default")
 	fs.IntVar(&cfg.Knowledge.SymbolIndexing.QuietSeconds, "knowledge-symbol-indexing-quiet-seconds", cfg.Knowledge.SymbolIndexing.QuietSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change")
 	fs.IntVar(&cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "knowledge-symbol-indexing-min-interval-seconds", cfg.Knowledge.SymbolIndexing.MinIntervalSeconds, "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a")
+	fs.DurationVar(&cfg.Secret.Interactive, "secret-interactive-timeout", cfg.Secret.Interactive, "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal. Default 60s.")
+	fs.DurationVar(&cfg.Secret.Unattended, "secret-unattended-timeout", cfg.Secret.Unattended, "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).")
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")

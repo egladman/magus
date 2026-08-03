@@ -66,6 +66,10 @@ magus\project({
         "generate": {"skip_cache": true, "exclusive": true},
         "ci-shard": {"skip_cache": true},
         "image-build": {"skip_cache": true},
+        // Both read the environment and report or act on it per invocation; a replay
+        // would report the charms and credentials of whatever ran last.
+        "image-registries": {"skip_cache": true},
+        "image-login": {"skip_cache": true},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
@@ -155,47 +159,386 @@ export fun dogfood(ctx: magus\Context, args: [str]) > void {
     });
 }
 
-final IMAGE = "ghcr.io/egladman/magus";
+// One registry this project publishes to. The field names follow OCI distribution
+// vocabulary deliberately, because the loose usage is what makes this area painful:
+//
+//   registry    the server, host[:port]. `docker login` authenticates against THIS.
+//               ghcr.io, docker.io, 123456789012.dkr.ecr.us-east-1.amazonaws.com
+//   repository  the namespaced path within a registry holding one set of related
+//               manifests: egladman/magus, team-a/app, library/nginx
+//   tag         a MUTABLE pointer to one manifest inside a repository: latest, v1.2.3
+//   digest      the immutable content address: sha256:...
+//   reference   the whole addressable string, [registry/]repository[:tag][@digest]
+//   image       strictly the ARTIFACT (manifest + config + layers), not its name.
+//               "image" is used for the reference constantly, including by Docker's
+//               own docs; this file does not, which is why no field is called one.
+//
+// `host` is the registry and `repository` is a repository reference (registry plus
+// repository path, never a tag - tags are appended per build). They are SEPARATE
+// fields rather than one string with the tag glued on because the thing you
+// authenticate against and the thing you push to are not the same, and how they
+// differ is per-provider:
+//
+//   GHCR / Docker Hub   login ghcr.io            push ghcr.io/egladman/magus
+//   Harbor              login harbor.example.com push harbor.example.com/team-a/app
+//                       (the first path segment is a Harbor project, and a robot
+//                       account is often scoped to exactly one of them)
+//   ECR                 login <acct>.dkr.ecr.<region>.amazonaws.com
+//                       push  <acct>.dkr.ecr.<region>.amazonaws.com/myapp
+//   Artifact Registry   login us-central1-docker.pkg.dev
+//                       push  us-central1-docker.pkg.dev/proj/repo/app
+//
+// Deriving one from the other is a per-provider transformation, which is precisely
+// why it belongs in Buzz rather than in a magus feature: see the "auth realm" section
+// in docs/guides/tips.md for how to compute `host` from `repository` when a provider
+// makes you.
+//
+// `user_ref` and `token_ref` are SECRET REFERENCES resolved through this workspace's
+// secret provider - environment variable names under the built-in provider, which is
+// what CI needs because a workflow env block is the only thing that can read a
+// repository secret. They live here rather than in a workflow so that adding a
+// registry stays a one-line change in one file.
+object Registry {
+    host: str = "",
+    repository: str = "",
+    user_ref: str = "",
+    token_ref: str = "",
+}
+
+final GHCR = Registry{
+    host = "ghcr.io",
+    repository = "ghcr.io/egladman/magus",
+    user_ref = "GHCR_USERNAME",
+    token_ref = "GHCR_TOKEN",
+};
+
+final DOCKERHUB = Registry{
+    host = "docker.io",
+    repository = "docker.io/egladman/magus",
+    user_ref = "DOCKERHUB_USERNAME",
+    token_ref = "DOCKERHUB_TOKEN",
+};
+
+// A release publishes to BOTH. Every tag across both goes into a SINGLE buildx
+// invocation, so a variant is built exactly once and both registries receive the
+// identical digest. A second `docker buildx build` aimed at Docker Hub would rebuild
+// every layer rather than reuse them: a fresh CD runner starts with an empty
+// BuildKit cache, so what makes the second registry free is that there is no second
+// build, not a cache that survives between two.
+final REGISTRIES = [GHCR, DOCKERHUB];
 
 fun image_tag() > str { return "magus:" + commit(); }
 
-// Builds one image variant; publish => multi-arch --push + cosign-sign, else single-arch --load.
-fun build_variant(ctx: magus\Context, dockerfile: str, platforms: str, tags: [str], meta: str, publish: bool) > void {
-    var args = mut ["-f", dockerfile,
-        "--build-arg", "VERSION=" + version(),
+// The build-args every variant stamps into the binary through the Dockerfiles' ldflags.
+fun image_stamps() > [str] {
+    return ["--build-arg", "VERSION=" + version(),
         "--build-arg", "COMMIT=" + commit(),
         "--build-arg", "DATE=" + build_date()];
-    foreach (t in tags) { args.append("-t"); args.append(t); }
-    if (publish) {
-        args.append("--platform"); args.append(platforms);
-        args.append("--metadata-file"); args.append(meta);
-        args.append("--push");
-    } else {
-        args.append("--load");
+}
+
+// Builds one variant, pushes it to every registry, and signs it in each.
+//
+// `tags` are bare tag names, expanded across `registries` into -t flags on one
+// buildx invocation: the variant is built once no matter how many registries or
+// tags it lands under.
+//
+// --sbom attaches a per-platform SPDX document and --provenance a max-detail SLSA
+// statement, both as in-toto attestation manifests inside the pushed index, and
+// both produced by the build that was already running - BuildKit scans the
+// filesystem it just assembled rather than pulling the image back to inspect it.
+// They also force the result to be an index even for a single platform, which is
+// why containerimage.digest below is always an index digest.
+//
+// cosign then runs once per REGISTRY, not once per digest. The push is
+// content-addressed and shared, but a signature is a separate object stored in the
+// repository beside the image it covers, so GHCR's copy does not vouch for Docker
+// Hub's - the digest being signed is the same one both times.
+fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registries: [Registry], tags: [str], meta: str) > [str] {
+    var args = mut ["-f", dockerfile];
+    foreach (a in image_stamps()) { args.append(a); }
+    foreach (reg in registries) {
+        foreach (t in tags) { args.append("-t"); args.append(reg.repository + ":" + t); }
     }
+    args.append("--platform"); args.append(platforms);
+    args.append("--sbom=true");
+    args.append("--provenance=mode=max");
+    args.append("--metadata-file"); args.append(meta);
+    args.append("--push");
     args.append(".");
     docker["docker-buildx"](ctx.withCwd("."), {"args": args});
 
-    if (publish) {
-        final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
-        cosign["cosign-sign"](ctx, {"args": [IMAGE + "@" + digest]});
+    final digest = serialize\jsonDecode(fs\readFile(meta)).q("containerimage.digest").stringValue();
+    var pushed = mut [<str>];
+    foreach (reg in registries) {
+        cosign["cosign-sign"](ctx, {"args": [reg.repository + "@" + digest]});
+        foreach (t in tags) { pushed.append(reg.repository + ":" + t); }
+    }
+    return pushed;
+}
+
+// Appends a runnable summary of what was pushed to the GitHub Actions job summary.
+//
+// This lives HERE, not in a workflow `run:` block, for the same reason image-login
+// does: the target already knows the references it pushed, so a workflow step that
+// re-derives them (`jq -r '."image.name"' snapshot-meta.json`) is parsing magus's own
+// output back out of a file magus wrote. That is the shell-parsing shape this
+// magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.
+//
+// Self-gating on $GITHUB_STEP_SUMMARY rather than a charm, matching the second half
+// of ci_shard below: outside Actions the variable is unset and this is a no-op, so a
+// local `magus run image-build:snapshot` needs no extra flag to stay quiet.
+fun write_image_summary(refs: [str]) > void {
+    final summaryPath = os\env("GITHUB_STEP_SUMMARY");
+    if (summaryPath == null or ("" + summaryPath) == "") { return; }
+    if (refs.len() == 0) { return; }
+
+    var md = "## Container images\n\n| Reference | Pull |\n| --- | --- |\n";
+    foreach (r in refs) {
+        md = md + "| `" + r + "` | `docker pull " + r + "` |\n";
+    }
+    md = md + "\nRun one against this workspace:\n\n```sh\ndocker run --rm -v \"$PWD\":/workspace "
+        + refs[0] + " ls\n```\n";
+
+    final sp = "" + summaryPath;
+    var existing = "";
+    if (fs\exists(sp)) { existing = fs\readFile(sp); }
+    fs\writeFile(sp, existing + md);
+}
+
+// The platform a local --load build targets, named EXPLICITLY rather than left to
+// buildx's default.
+//
+// Single-arch is not a preference here, it is a constraint: `docker buildx build
+// --load` cannot load a multi-platform result into the docker image store, so a local
+// build has exactly one architecture whatever anyone wants. Passing it explicitly
+// means the build log says which one, instead of the reader having to know what the
+// builder's default happens to be on this machine.
+//
+// The default is the HOST's architecture, so an M-series Mac builds arm64 and runs it
+// natively. `linux/` is hard-coded against the host OS on purpose - the artifact is a
+// container image, so darwin/windows are never the target even when they are the host.
+//
+// The `amd64` / `arm64` charms override it, for reproducing a failure that only
+// happens on the other architecture. That path goes through QEMU emulation, so expect
+// it to be slow; it is a debugging tool, not a second default.
+fun load_platform(ctx: magus\Context) > str {
+    if (ctx.has_charm("amd64")) { return "linux/amd64"; }
+    if (ctx.has_charm("arm64")) { return "linux/arm64"; }
+    return "linux/" + os\platform()[1];
+}
+
+// Builds one variant single-arch into the local daemon under image_tag(): no
+// registry, no signature. What `magus run image-build` does outside CI, and what
+// image_scan hands to trivy.
+fun load_variant(ctx: magus\Context, dockerfile: str) > void {
+    var args = mut ["-f", dockerfile];
+    foreach (a in image_stamps()) { args.append(a); }
+    args.append("-t"); args.append(image_tag());
+    args.append("--platform"); args.append(load_platform(ctx));
+    args.append("--load");
+    args.append(".");
+    docker["docker-buildx"](ctx.withCwd("."), {"args": args});
+}
+
+// Three PUBLISH modes and one local mode, and which you get is a charm because the
+// default must be the harmless one: a bare `magus run image-build` on a laptop loads
+// an image into the local daemon and pushes nothing.
+//
+//   :cd        a v* tag. Both variants, both registries, release tags.
+//   :snapshot  a merge to main. Static only, GHCR only, tagged with the short commit.
+//   :static    local build of the static variant instead of the cgo default.
+//   (none)     local build of the cgo variant.
+//
+// A local build is single-architecture and says so - see load_platform(). Stack
+// `:amd64` or `:arm64` on either local mode to cross-build through emulation
+// (`magus run image-build:static,arm64`).
+//
+// `snapshot`, not `dev`: this pushes and cosign-signs a real artifact to a real
+// registry, so naming it after the audience rather than the act was misleading -
+// the actual development path is the no-charm default. Snapshot is the established
+// term (Maven, Gradle, Debian) for a build published from a moving branch rather
+// than a release, which is exactly what this is.
+//
+// A snapshot signature carries ci.yaml's certificate identity rather than cd.yaml's,
+// which is what makes the documented release verify command reject one.
+//
+// Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default,
+// or the static/no-libc variant (Dockerfile.static) under the `static` charm - the
+// same default-cgo/opt-in-static convention as release_build() in this file.
+export fun image_build(ctx: magus\Context, args: [str]) > void {
+    final registries = publish_registries(ctx);
+    var pushed = mut [<str>];
+    if (ctx.has_charm("cd")) {
+        foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
+            registries, [version(), "latest"], "static-meta.json")) { pushed.append(r); }
+        foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
+            registries, [version() + "-cgo", "latest-cgo"], "cgo-meta.json")) { pushed.append(r); }
+        write_image_summary(pushed);
+    } else if (ctx.has_charm("snapshot")) {
+        foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
+            registries, [commit()], "snapshot-meta.json")) { pushed.append(r); }
+        write_image_summary(pushed);
+    } else if (ctx.has_charm("static")) {
+        load_variant(ctx, "Dockerfile.static");
+    } else {
+        load_variant(ctx, "Dockerfile");
     }
 }
 
-// Under the cd charm, build+push+sign both static and CGO images unconditionally.
-// Otherwise loads one single-arch image locally: CGO/glibc (Dockerfile) by default, or
-// the static/no-libc variant (Dockerfile.static) under the `static` charm — the same
-// default-cgo/opt-in-static convention as release_build() in this file.
-export fun image_build(ctx: magus\Context, args: [str]) > void {
-    if (ctx.has_charm("cd")) {
-        build_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-            [IMAGE + ":" + version(), IMAGE + ":latest"], "static-meta.json", true);
-        build_variant(ctx, "Dockerfile", "linux/amd64",
-            [IMAGE + ":" + version() + "-cgo", IMAGE + ":latest-cgo"], "cgo-meta.json", true);
-    } else if (ctx.has_charm("static")) {
-        build_variant(ctx, "Dockerfile.static", "linux/amd64", [image_tag()], "", false);
-    } else {
-        build_variant(ctx, "Dockerfile", "linux/amd64", [image_tag()], "", false);
+// Which registries the active mode pushes to. image_build and image_registries both
+// read it, so the build and the login step it depends on cannot disagree about
+// which credentials a run needs.
+fun publish_registries(ctx: magus\Context) > [Registry] {
+    if (ctx.has_charm("cd")) { return REGISTRIES; }
+    if (ctx.has_charm("snapshot")) { return [GHCR]; }
+    return [];
+}
+
+// Narrows a registry list to one host, for the `magus run image-login:cd docker.io`
+// form. Selection is BY HOST, deliberately not by position: an index silently
+// selects a different registry the moment REGISTRIES is reordered or the charm
+// changes how many there are (`:snapshot` has one, `:cd` has two, so "index 1" is a valid
+// registry under one and out of range under the other), and it is unreadable in a
+// workflow besides. A host that is not in the list is an error naming the ones that
+// are, rather than a silent no-op.
+fun select_registries(registries: [Registry], host: str) > [Registry] {
+    if (host == "") { return registries; }
+    var hosts = "";
+    foreach (reg in registries) {
+        if (reg.host == host) { return [reg]; }
+        if (hosts != "") { hosts = hosts + ", "; }
+        hosts = hosts + reg.host;
+    }
+    throw "no registry \"" + host + "\" for these charms; this mode publishes to: " + hosts;
+}
+
+// Reports the registries `magus run image-build` under the SAME charms will push to,
+// and whether the credentials each one needs are actually present in the environment.
+// The diagnostic half of the pair image_login() completes: this one answers "where
+// does this go and am I set up for it", touches nothing, and needs no credentials to
+// be useful.
+//
+//     magus run image-registries:cd              # both, for a release
+//     magus run image-registries:snapshot             # GHCR only, for a per-commit image
+//     magus run image-registries:cd docker.io    # just that one
+//     magus run image-registries:cd,verify       # ...and FAIL if any are missing
+//
+// The `verify` charm turns the report into a gate. CI runs it that way as a preflight,
+// so a missing secret fails on a named variable before checkout, QEMU, buildx and a
+// multi-arch compile have burned runner time - and so the step's own log states the
+// contract the workflow's env block is there to satisfy. Without the charm it only
+// reports, which is what you want locally where a missing token is not an error yet.
+//
+// A bare `magus run image-registries` reports nothing to do: the local --load build
+// pushes nowhere and needs no credentials.
+export fun image_registries(ctx: magus\Context, args: [str]) > void {
+    var host = "";
+    if (args.len() > 0) { host = args[0]; }
+    final registries = select_registries(publish_registries(ctx), host);
+    if (registries.len() == 0) {
+        magus\info("image-registries: this build pushes nowhere; add the cd or dev charm to see a release or dev target");
+        return;
+    }
+    // The CREDENTIALS column costs a provider round trip - and a prompt, on a provider
+    // that has one - so it is only filled when `verify` asked for it. Without the charm
+    // this target reads nothing and can never surprise anyone with an unlock dialog.
+    final checking = ctx.has_charm("verify");
+    var table = pad("REGISTRY", 12) + pad("REPOSITORY", 28) + pad("USERNAME REF", 20) + pad("TOKEN REF", 20) + "CREDENTIALS";
+    foreach (reg in registries) {
+        var state = "not checked (add the verify charm)";
+        if (checking) { state = credential_state(reg); }
+        table = table + "\n" + pad(reg.host, 12) + pad(reg.repository, 28)
+            + pad(reg.user_ref, 20) + pad(reg.token_ref, 20)
+            + state;
+    }
+    // Lead line, then the table: magus\info prefixes only its FIRST line with a level
+    // marker, which would otherwise shift the header out of line with its columns.
+    magus\info("image-build under these charms publishes to:\n" + table);
+
+    if (!checking) { return; }
+    var unready = mut [<str>];
+    foreach (reg in registries) {
+        if (credential_state(reg) != "ready") { unready.append(reg.host); }
+    }
+    if (unready.len() > 0) {
+        throw "image-registries: no usable credentials for " + unready.join(", ")
+            + "; set the variables named above (in CI they come from repository secrets)";
+    }
+}
+
+// Whether both of a registry's credentials can be resolved.
+//
+// ONLY called under the `verify` charm, and that gating is the point rather than a
+// detail. Checking resolvability means actually RESOLVING, and resolving means asking
+// the provider - which for 1Password or a vault is a biometric or password prompt. A
+// status table that pops an unlock dialog just to print "ready" is the single most
+// infuriating thing this feature could do, and it is exactly what an ungated probe
+// would cause: `magus run image-registries` is a look-around command, not a request
+// for credentials.
+//
+// So the plain report lists references without touching them, and `:verify` - a user
+// explicitly asking "am I set up" - is the only path that resolves.
+//
+// try/catch rather than testing a return value, because a provider signals "not
+// available" by THROWING: $VAR unset for the built-in, a locked vault or expired
+// session for a spell. Presence is not testable without asking.
+fun credential_state(reg: Registry) > str {
+    var missing = mut [<str>];
+    if (!resolvable(reg.user_ref)) { missing.append(reg.user_ref); }
+    if (!resolvable(reg.token_ref)) { missing.append(reg.token_ref); }
+    if (missing.len() == 0) { return "ready"; }
+    return "missing " + missing.join(", ");
+}
+
+fun resolvable(ref: str) > bool {
+    try {
+        magus\secret.read(ref);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+fun pad(s: str, width: int) > str {
+    var padded = s;
+    while (padded.len() < width) { padded = padded + " "; }
+    return padded + " ";
+}
+
+// Logs in to every registry the active mode publishes to, resolving each one's
+// credentials through the workspace's secret provider.
+//
+//     magus run image-login:cd                   # both, before image-build:cd
+//     magus run image-login:snapshot                  # GHCR only
+//     magus run image-login:cd docker.io         # just that one
+//
+// This is the whole reason the references are a field on Registry. A CI step is then
+// one line with no shell parsing a list, the same line that works on a laptop, and it
+// cannot disagree with `image-build` about which registries need credentials because
+// both read publish_registries().
+//
+// TWO separate protections keep the token out of what magus persists, and neither one
+// makes the other redundant:
+//
+//   - It reaches docker on STDIN, never argv. magus captures a command's arguments
+//     into the run log and the output store, so `-p <token>` would write the secret to
+//     both. opts.stdin is not captured.
+//   - It was resolved through magus\secret.read, so magus recognises the value and
+//     redacts it from captured output. That covers what this file does not control:
+//     docker itself, or any later tool, echoing the token back.
+export fun image_login(ctx: magus\Context, args: [str]) > void {
+    var host = "";
+    if (args.len() > 0) { host = args[0]; }
+    final registries = select_registries(publish_registries(ctx), host);
+    if (registries.len() == 0) {
+        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd or dev charm (`magus run image-login:cd`)";
+    }
+    foreach (reg in registries) {
+        final user = magus\secret.read(reg.user_ref);
+        final token = magus\secret.read(reg.token_ref);
+        os\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
+            dir: ".", opts: {"stdin": token});
+        magus\info("image-login: " + reg.host + " authenticated as " + user);
     }
 }
 
@@ -812,6 +1155,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"](ctx);
     go["govulncheck"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}));
     markdown.markdownlint(ctx);
+    // NOT markdown.typos here, deliberately. The op walks the whole project directory,
+    // and this project is the Go tree - 487 of its hits are code comments using British
+    // spellings, which is a separate decision from gating prose. The docs project runs
+    // it (see docs/magusfile.buzz lint), because that is where the prose actually is.
     bash["shellcheck"](ctx);
 }
 // Regenerates, then formats Go and tidies `go.mod`. Markdown is linted (not formatted):

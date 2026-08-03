@@ -25,13 +25,21 @@ import (
 func init() { Register(Magus) }
 
 // Magus declares the host-declarable subset of the magus module. The remaining
-// methods (target, dispatch, deps, pry, register) are VM-infrastructure:
+// methods (target, dispatch, deps, pry, register) and the PROVIDER NAMESPACES
+// (magus\cache, magus\ci, magus\secret) are VM-infrastructure:
 // they manipulate the per-VM target registry and store/invoke VM-side
 // function values, so they cannot share a Go Impl across backends and remain
 // as hand-written trampolines in bindings/magus.go.
 var Magus = Module{
 	Name: "magus",
-	Doc:  "Magus core primitives.",
+	Doc: "Magus core primitives.\n\n" +
+		"Three provider namespaces are wired by the runtime rather than declared here, so " +
+		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
+		"a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and " +
+		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
+		"the credentials read through it. Each takes an imported spell handle. See " +
+		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
+		"and [CI integration](../../guides/integrations/ci.md).",
 	Methods: []Method{
 		{
 			Name: "cmd",

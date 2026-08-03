@@ -17,6 +17,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/types"
 )
 
@@ -67,6 +68,9 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		return ExecResult{Started: true, Code: 0}, nil
 	}
 	if project, target, ok := journal.StepFromContext(ctx); ok {
+		// The argv can contain a credential when a magusfile passes one as an argument
+		// (`-p <token>`) instead of on stdin. journal.Emit redacts Text for every event
+		// kind, so this site does not repeat it - that centralization is the point.
 		journal.Emit(ctx, journal.Event{
 			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
 		})
@@ -126,8 +130,20 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		res.Code = -1 // process never started (binary not found, permission denied, etc.)
 	}
 	if opts.Capture {
-		res.Stdout = outBuf.String()
-		res.Stderr = errBuf.String()
+		// Redacted on the WHOLE buffer, which is both simpler and strictly more accurate
+		// than a streaming wrapper: it sees the complete output at once, so a secret split
+		// across two writes is still caught.
+		//
+		// A hold-back writer used to sit on c.Stdout/c.Stderr as well. It was removed
+		// because it broke two things a redaction feature has no business breaking. It
+		// truncated this value - the flush ran at function return, after these lines read
+		// the buffer, so anything after the last newline vanished and `printf abcdef` came
+		// back empty. And on the live path it swallowed unterminated output, so a child
+		// prompting `Password: ` displayed nothing until it exited. The live stream is
+		// redacted per write by the tap in internal/cache/capture.go instead; a secret
+		// split across two writes to the TERMINAL is a documented limit.
+		res.Stdout = secret.RedactString(ctx, outBuf.String())
+		res.Stderr = secret.RedactString(ctx, errBuf.String())
 	}
 	// Surface ctx.Err() whenever cancelled, even if the process won the race and
 	// exited 0, so callers can distinguish cancel from a clean finish. errors.Join

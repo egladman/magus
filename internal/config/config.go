@@ -27,6 +27,7 @@ type Config struct {
 	Log        Log        `json:"log" yaml:"log"`
 	Hints      Hints      `json:"hints" yaml:"hints"`
 	Knowledge  Knowledge  `json:"knowledge" yaml:"knowledge"`
+	Secret     Secret     `json:"secret" yaml:"secret"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -181,7 +182,7 @@ type CacheRemote struct {
 	Insecure bool `json:"insecure" yaml:"insecure"`
 }
 
-// CI controls CI fan-out behaviour.
+// CI controls CI fan-out behavior.
 type CI struct {
 	MaxShards        int `json:"max_shards" yaml:"max_shards" validate:"shard_count"`           // max parallel shards; -1 = unlimited
 	RunnerPoolBudget int `json:"runner_pool_budget" yaml:"runner_pool_budget" validate:"gte=0"` // GHA matrix-level concurrency cap; 0 = no cap
@@ -200,6 +201,21 @@ type Volatility struct {
 type Watch struct {
 	// Ignore adds patterns (glob or {type,pattern}) beyond workspace builtins and --ignore flags.
 	Ignore []types.IgnorePattern `json:"ignore" yaml:"ignore" validate:"dive"`
+}
+
+// Secret bounds how long magus waits on a secret provider.
+//
+// Two budgets rather than one, because they answer different questions. Interactive is
+// "how long will you hold the build open for a person to complete an unlock" - long
+// enough to find your phone. Unattended is "how long before concluding nobody is coming",
+// and it is short on purpose: with no terminal a provider that would prompt cannot, so
+// waiting past the point where a cached session would have answered only delays a failure
+// that is already certain. Ten seconds of a CI job beats forty-five minutes of one.
+type Secret struct {
+	// Interactive bounds a provider read when stdin is a terminal. Default 60s.
+	Interactive time.Duration `json:"interactive_timeout" yaml:"interactive_timeout"`
+	// Unattended bounds a provider read with no terminal to prompt on. Default 10s.
+	Unattended time.Duration `json:"unattended_timeout" yaml:"unattended_timeout"`
 }
 
 // MCP controls the Model Context Protocol server.
@@ -225,7 +241,7 @@ type Console struct {
 	URL string `json:"url" yaml:"url"`
 }
 
-// Daemon controls the proc server's listen address and multi-workspace behaviour.
+// Daemon controls the proc server's listen address and multi-workspace behavior.
 type Daemon struct {
 	// Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.
 	// The shared daemon is the one from `magus server start`; with Enabled false an
@@ -439,6 +455,12 @@ func Defaults() Config {
 			},
 		},
 		HistoryPath: DefaultHistoryPath(),
+		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
+		// without options (tests, and any caller outside the run path).
+		Secret: Secret{
+			Interactive: 60 * time.Second, // long enough to find your phone for a biometric
+			Unattended:  10 * time.Second, // no terminal: a cached session answers fast or never
+		},
 		Volatility: Volatility{
 			Enabled:          true,
 			BootstrapSamples: 20,

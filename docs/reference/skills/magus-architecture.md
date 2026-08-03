@@ -2,8 +2,8 @@
 title: magus-architecture
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture]
-skill_full_bytes: 6278
-skill_simple_bytes: 5031
+skill_full_bytes: 6277
+skill_simple_bytes: 5030
 ---
 
 # magus-architecture
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `7a0d05f4f47b` |
+| `skill-content` | `0a72e9e76c60` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -133,7 +133,7 @@ for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
   printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
 done                                  # population per abstraction
-magus explain "<node>"               # compare a kind's edges against a neighbour's
+magus explain "<node>"               # compare a kind's edges against a neighbor's
 ```
 
 Confirm each smell against the source before acting on it:
@@ -256,7 +256,7 @@ for k in project target spell op tool charm module method diagnostic doc file \
          function symbol import owner; do
   printf "%-11s %s\n" "$k" "$(magus query "kind:$k" -o json | jq length)"
 done                                  # population per abstraction
-magus explain "<node>"               # compare a kind's edges against a neighbour's
+magus explain "<node>"               # compare a kind's edges against a neighbor's
 ```
 
 Confirm each smell against the source before acting on it:

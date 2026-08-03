@@ -235,6 +235,16 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.SymbolIndexing.MinIntervalSeconds = n
 		}
 	}
+	if v := getenv("MAGUS_SECRET_INTERACTIVE_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Secret.Interactive = d
+		}
+	}
+	if v := getenv("MAGUS_SECRET_UNATTENDED_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Secret.Unattended = d
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

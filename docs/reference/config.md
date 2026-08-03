@@ -112,6 +112,13 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `sandbox.enabled` | `MAGUS_SANDBOX_ENABLED` | `--sandbox-enabled` | bool |
 | `sandbox.env.passthrough` | `MAGUS_SANDBOX_ENV_PASSTHROUGH` | _(env only)_ | list _(comma-separated, env only)_ |
 
+## secret
+
+| Config key | Environment variable | Flag | Type |
+|------------|----------------------|------|------|
+| `secret.interactive_timeout` | `MAGUS_SECRET_INTERACTIVE_TIMEOUT` | `--secret-interactive-timeout` | duration |
+| `secret.unattended_timeout` | `MAGUS_SECRET_UNATTENDED_TIMEOUT` | `--secret-unattended-timeout` | duration |
+
 ## telemetry
 
 | Config key | Environment variable | Flag | Type |

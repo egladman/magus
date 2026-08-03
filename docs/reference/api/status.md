@@ -83,7 +83,7 @@ Lock is one held per-project workspace lock and the process holding it.  A held 
 |-------|------|---|-------------|
 | `project` | string | 1 | workspace-relative path; "." is the root |
 | `pid` | int32 | 2 | holder's process id |
-| `command` | string | 3 | holder's argv, for recognising what it is |
+| `command` | string | 3 | holder's argv, for recognizing what it is |
 | `dir` | string | 4 | holder's working directory; a path that no longer exists means abandoned |
 | `acquire_time` | Timestamp | 5 | when the holder took it; age is the signal a human reads |
 | `waiters` | repeated LockWaiter | 6 | processes blocked on this lock right now |

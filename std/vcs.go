@@ -134,7 +134,7 @@ var Vcs = Module{
 // vcsState caches the resolved VCS for the current cwd. Re-resolves when cwd
 // changes, mirroring the per-registration resolution the hand-written
 // binding did before. Package-level state is acceptable here because cwd is
-// already process-global (chdirMu in runtime.go serialises mutations).
+// already process-global (chdirMu in runtime.go serializes mutations).
 var (
 	vcsMu     sync.Mutex
 	vcsCwdKey string

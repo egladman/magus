@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/std"
 )
 
@@ -175,9 +176,9 @@ func applyDisplay() {
 	var h slog.Handler
 	switch globalCfg.Log.Format {
 	case "json":
-		h = slog.NewJSONHandler(os.Stderr, opts)
+		h = secret.NewRedactingHandler(slog.NewJSONHandler(os.Stderr, opts))
 	case "text":
-		h = slog.NewTextHandler(os.Stderr, opts)
+		h = secret.NewRedactingHandler(slog.NewTextHandler(os.Stderr, opts))
 	default: // pretty, plain
 		// Render general diagnostics through the same compact handler as cache
 		// events so they share one style and stop interleaving as raw

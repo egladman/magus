@@ -508,7 +508,7 @@ not change the commit that page records. That is why repositories in this state
 grow a trail of "refresh generated metadata" commits after every real one. Those
 commits are not sloppiness; they are the fixed point of the loop.
 
-### How to recognise it
+### How to recognize it
 
 The tell is a drift gate that passes before you commit and fails immediately
 after, with a diff containing only timestamps, hashes, or "last updated" lines.

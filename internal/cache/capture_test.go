@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,4 +74,32 @@ func TestLineTapSplitsLinesAcrossWrites(t *testing.T) {
 
 	// dest sees the verbatim bytes regardless of line framing.
 	assert.Equal(t, "half-line\nnext\n", sink.String())
+}
+
+// TestLineTapRedactsResolvedSecrets pins the guarantee the secret provider exists to
+// make: a value resolved through magus\secret.read never reaches dest. dest here
+// stands in for the terminal AND the raw log file, which captureRun feeds from this
+// one writer, so covering it covers the durable output store too.
+//
+// The resolver rides on the emitter ctx, so this needs no global cleanup.
+func TestLineTapRedactsSecrets(t *testing.T) {
+	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	t.Setenv("MAGUS_TEST_CAPTURE_TOKEN", "ghp_do_not_log_me")
+	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_CAPTURE_TOKEN")
+	require.NoError(t, err)
+
+	var sink strings.Builder
+	tap := newLineEmitter(ctx, "proj", "publish").
+		newLineTap(&sink, "stdout")
+
+	// A child that echoes the credential it was handed - a debug dump, a curl trace.
+	n, err := tap.Write([]byte("auth: password=ghp_do_not_log_me ok\n"))
+	require.NoError(t, err)
+	tap.flush()
+
+	assert.Equal(t, "auth: password=*** ok\n", sink.String())
+	assert.NotContains(t, sink.String(), "ghp_do_not_log_me")
+	// The count reported is what was ACCEPTED, not what was emitted: os/exec is
+	// copying a pipe and treats a short write as a failure to drain it.
+	assert.Equal(t, len("auth: password=ghp_do_not_log_me ok\n"), n)
 }
