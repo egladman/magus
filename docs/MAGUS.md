@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2398 nodes** and **5410 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2429 nodes** and **5504 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,24 +45,24 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 88 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
-| spell | 12 | `magus query kind:spell` | `go`, `rust`, `markdown` |
+| target | 90 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| spell | 12 | `magus query kind:spell` | `go`, `markdown`, `rust` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
-| charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
+| charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
 | diagnostic | 51 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 287 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 169 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 225 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1167 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| doc | 289 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 170 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 227 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1187 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 123 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 32 | `magus query project:.` | `skills-generate`, `generate`, `lint` |
+| . | 34 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
 | docs | 16 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |

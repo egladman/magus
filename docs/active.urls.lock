@@ -94,6 +94,7 @@ concepts/operations/
 concepts/output-refs/
 concepts/remote-cache/
 concepts/sandbox/
+concepts/secrets/
 concepts/services/
 concepts/spells/
 concepts/spells/bash/
@@ -160,6 +161,7 @@ glossary/
 guides/
 guides/affected/
 guides/agents/
+guides/authoring-spells/
 guides/daemon/
 guides/debugging/
 guides/download/
@@ -409,6 +411,7 @@ tags/changed-files/
 tags/changelog/
 tags/charm/
 tags/charms/
+tags/ci-provider/
 tags/ci/
 tags/claude/
 tags/cli/
@@ -423,6 +426,7 @@ tags/container/
 tags/conventions/
 tags/cosign/
 tags/coupling/
+tags/credentials/
 tags/cross-project/
 tags/cycle/
 tags/daemon/
@@ -498,6 +502,7 @@ tags/monitoring/
 tags/monorepo/
 tags/needs/
 tags/node/
+tags/oci/
 tags/onboarding/
 tags/operations/
 tags/os/
@@ -515,12 +520,14 @@ tags/project/
 tags/projects/
 tags/proto/
 tags/protobuf/
+tags/provider/
 tags/pytest/
 tags/python/
 tags/query/
 tags/race/
 tags/readiness/
 tags/reference/
+tags/registry/
 tags/release/
 tags/remote-cache/
 tags/repl/
@@ -530,6 +537,7 @@ tags/ruff/
 tags/run/
 tags/rust/
 tags/sandbox/
+tags/secrets/
 tags/security/
 tags/self-update/
 tags/service-op/
