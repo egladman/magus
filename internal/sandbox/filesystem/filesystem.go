@@ -91,6 +91,18 @@ func normalizePath(path string) (string, error) {
 	// The path does not exist yet (a write target). Walk up to the nearest ancestor
 	// that DOES exist, resolve that, and re-attach the missing tail.
 	//
+	// COST: this branch is roughly 3x the resolved one - 150 allocs/op and ~23us against
+	// 47 allocs/op and ~8.3us (BenchmarkCheckReadCtx/missing vs /existing in
+	// internal/sandbox, Apple M5 darwin/arm64, 6 runs). Treat the ratio as the durable
+	// figure; the absolute numbers track TMPDIR depth, because the dominant cost in BOTH
+	// branches is EvalSymlinks lstat-ing every path component, and this branch calls it
+	// once per ancestor instead of once.
+	//
+	// It matters because callers hit it in loops: fs.glob consults CheckReadCtx once per
+	// match (std/fs.go), so a check over paths that are not on disk pays the multiplier per
+	// path. Anything walking a large candidate set should filter to paths that exist before
+	// checking them, or memoize per run - the resolution is pure for a given tree.
+	//
 	// Resolving only the immediate parent was not enough: when the parent is also
 	// missing - creating a file inside a directory this run has yet to make - the
 	// old fallback kept the whole path lexical, so a symlink anywhere above it went
