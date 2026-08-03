@@ -278,6 +278,11 @@ let liveFlavor: string | null = null; // null (knowledge) or "targets"
 let stageResizeObserver: ResizeObserver | null = null;
 let themeObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
+// installKeybindings' teardown. It adds its own document keydown listener rather than taking
+// the lifecycle signal, so aborting the controller does not reach it: dropping this handle
+// leaves one live matcher per activation, and the console caches surface modules, so every
+// close/reopen adds a generation and each chord fires its command one more time.
+let uninstallKeys: (() => void) | null = null;
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
 // keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
@@ -4231,7 +4236,8 @@ function bootWireEvents() {
     group: "Graph",
     run: () => cycleLayout(),
   });
-  installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
+  uninstallKeys?.();
+  uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
@@ -4597,6 +4603,8 @@ export function deactivate(): void {
     lifecycleAbort.abort();
     lifecycleAbort = null;
   }
+  uninstallKeys?.();
+  uninstallKeys = null;
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the

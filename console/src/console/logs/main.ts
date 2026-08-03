@@ -48,6 +48,14 @@ import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 import { attachHelpPopover } from "../../ui/help-popover";
 
+// Per-activation teardown. The console caches surface modules and re-runs activate() on every
+// reopen, so anything init() binds to the DOCUMENT has to be droppable: without these, each
+// open/close cycle leaves another live generation behind. The keybinding matcher owns its own
+// listener (it predates the signal convention) so it needs a separate handle; everything else
+// takes lifecycleAbort's signal. Null while the surface is not active.
+let lifecycleAbort: AbortController | null = null;
+let uninstallKeys: (() => void) | null = null;
+
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
 // field has initialized. The order matters: loadFromURL()'s setFilter() applies the #q= deep link,
 // which must survive - the shared state.filterParsed is seeded once in state.ts, so nothing later
@@ -296,7 +304,8 @@ function wireCommands(): void {
     group: "Log Viewer",
     run: () => clickControl("fold-all-btn"),
   });
-  installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
+  uninstallKeys?.();
+  uninstallKeys = installKeybindings(() => mergeKeymap(LOGS_KEYMAP, keymapCell.get()));
 }
 
 async function loadFromURL(): Promise<void> {
@@ -602,11 +611,15 @@ function wireFullscreen(): void {
     if (document.fullscreenElement) document.exitFullscreen();
     else panel.requestFullscreen();
   });
-  document.addEventListener("fullscreenchange", () => {
-    const on = document.fullscreenElement === panel;
-    btn.textContent = on ? "Exit fullscreen" : "Fullscreen";
-    btn.setAttribute("aria-pressed", on ? "true" : "false");
-  });
+  document.addEventListener(
+    "fullscreenchange",
+    () => {
+      const on = document.fullscreenElement === panel;
+      btn.textContent = on ? "Exit fullscreen" : "Fullscreen";
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    },
+    { signal: lifecycleAbort?.signal },
+  );
 }
 
 // --- Input: drag-and-drop -----------------------------------------------------
@@ -635,17 +648,29 @@ function wireInput(): void {
 // state field is initialized before it runs, so loadFromURL()'s #q= setFilter is not clobbered.
 export function activate(): void {
   resolveDom();
+  // A fresh controller per activation. The console caches this module (standalone.ts), so
+  // activate() runs again on every reopen and anything bound to `document` in init() would
+  // otherwise stack up one live copy per open - the keybinding matcher most visibly, where
+  // two generations means every chord runs its command twice.
+  lifecycleAbort?.abort();
+  lifecycleAbort = new AbortController();
   if (bodyEl && scrollEl) init();
 }
 
-// deactivate aborts a live stream if one is running, so closing the logs tab or pane leaves no SSE
-// connection open. Static logs (the common case) never open a stream, so this is a no-op then. The
-// console's logs PageModule calls it on deactivate; the standalone page does not.
+// deactivate aborts a live stream if one is running, drops the keybinding matcher, and cuts every
+// document-level listener init() registered against the lifecycle signal - so closing the logs tab
+// or pane leaves no SSE connection open and nothing bound to the document. Static logs (the common
+// case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
+// the standalone page does not (the surface lives as long as the page).
 export function deactivate(): void {
   if (state.liveAbort) {
     state.liveAbort.abort();
     state.liveAbort = null;
   }
+  uninstallKeys?.();
+  uninstallKeys = null;
+  lifecycleAbort?.abort();
+  lifecycleAbort = null;
 }
 
 // Standalone auto-boot: only when the scaffold is already in the document at load. In the console the
