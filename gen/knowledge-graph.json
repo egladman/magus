@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2401,
-  "edge_count": 5415,
+  "node_count": 2402,
+  "edge_count": 5417,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -10464,7 +10464,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/diagnostics/magusfile.buzz:82",
+      "source": "libs/diagnostics/magusfile.buzz:87",
       "attrs": {
         "exported": "true"
       }
@@ -10474,7 +10474,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/diagnostics/magusfile.buzz:86",
+      "source": "libs/diagnostics/magusfile.buzz:91",
       "attrs": {
         "exported": "true"
       }
@@ -10483,7 +10483,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/diagnostics/magusfile.buzz:80",
+      "source": "libs/diagnostics/magusfile.buzz:85",
       "attrs": {
         "exported": "true"
       }
@@ -10502,7 +10502,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/diagnostics/magusfile.buzz:81",
+      "source": "libs/diagnostics/magusfile.buzz:86",
       "attrs": {
         "exported": "true"
       }
@@ -10539,7 +10539,7 @@
       "id": "function:libs/diagnostics/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/diagnostics/magusfile.buzz:83",
+      "source": "libs/diagnostics/magusfile.buzz:88",
       "attrs": {
         "exported": "true"
       }
@@ -15288,7 +15288,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/gopherbuzz/magusfile.buzz:88",
+      "source": "libs/gopherbuzz/magusfile.buzz:93",
       "attrs": {
         "exported": "true"
       }
@@ -15298,7 +15298,7 @@
       "kind": "function",
       "label": "buzz_build",
       "doc": "Compiles the standalone buzz CLI with the version of this nested module, rather than the root magus module's version.",
-      "source": "libs/gopherbuzz/magusfile.buzz:113",
+      "source": "libs/gopherbuzz/magusfile.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -15307,14 +15307,14 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:buzz_ld_flags",
       "kind": "function",
       "label": "buzz_ld_flags",
-      "source": "libs/gopherbuzz/magusfile.buzz:101"
+      "source": "libs/gopherbuzz/magusfile.buzz:106"
     },
     {
       "id": "function:libs/gopherbuzz/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/gopherbuzz/magusfile.buzz:119",
+      "source": "libs/gopherbuzz/magusfile.buzz:124",
       "attrs": {
         "exported": "true"
       }
@@ -15324,7 +15324,7 @@
       "kind": "function",
       "label": "conformance",
       "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go). Opt-in (not part of `ci`): it needs network access and a foreign clone, which `magus affected ci` should never require. Never vendors upstream's test files into this repo - it fetches a pinned commit into a cache directory outside the tree instead, so a later re-run reuses (fetches, not re-clones) rather than re-downloading whole history.",
-      "source": "libs/gopherbuzz/magusfile.buzz:143",
+      "source": "libs/gopherbuzz/magusfile.buzz:148",
       "attrs": {
         "exported": "true"
       }
@@ -15333,7 +15333,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/gopherbuzz/magusfile.buzz:86",
+      "source": "libs/gopherbuzz/magusfile.buzz:91",
       "attrs": {
         "exported": "true"
       }
@@ -15352,7 +15352,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "libs/gopherbuzz/magusfile.buzz:87",
+      "source": "libs/gopherbuzz/magusfile.buzz:92",
       "attrs": {
         "exported": "true"
       }
@@ -15381,7 +15381,7 @@
       "kind": "function",
       "label": "module_version",
       "doc": "The CLI is independently versioned from the gopherbuzz module tag namespace. A local checkout before its first nested tag stays explicitly \"dev\"; it must never inherit the root magus tag just because both modules share one Git repo.",
-      "source": "libs/gopherbuzz/magusfile.buzz:94"
+      "source": "libs/gopherbuzz/magusfile.buzz:99"
     },
     {
       "id": "function:libs/gopherbuzz/magusfile.buzz:preflight",
@@ -15396,7 +15396,7 @@
       "id": "function:libs/gopherbuzz/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/gopherbuzz/magusfile.buzz:89",
+      "source": "libs/gopherbuzz/magusfile.buzz:94",
       "attrs": {
         "exported": "true"
       }
@@ -15406,7 +15406,7 @@
       "kind": "function",
       "label": "upstream_pinned_sha",
       "doc": "upstream_pinned_sha extracts the exact commit gopherbuzz was last synced and validated against from version.go's UpstreamRef git-describe string (\"0.5.0-251-ged42f47\" -> \"ed42f47\") - the sha `conformance` checks the upstream clone out to before running the Go test.",
-      "source": "libs/gopherbuzz/magusfile.buzz:127"
+      "source": "libs/gopherbuzz/magusfile.buzz:132"
     },
     {
       "id": "function:libs/gopherbuzz/magusfile.buzz:workspace_go_mods",
@@ -15828,7 +15828,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:982",
+      "source": "magusfile.buzz:1009",
       "attrs": {
         "exported": "true"
       }
@@ -15946,6 +15946,13 @@
       }
     },
     {
+      "id": "function:magusfile.buzz:missing_input",
+      "kind": "function",
+      "label": "missing_input",
+      "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
+      "source": "magusfile.buzz:970"
+    },
+    {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
@@ -16040,7 +16047,7 @@
       "kind": "function",
       "label": "serve",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:1031",
+      "source": "magusfile.buzz:1058",
       "attrs": {
         "exported": "true"
       }
@@ -50175,6 +50182,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:missing_input",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:mocks_generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -58144,6 +58159,14 @@
     {
       "source": "function:magusfile.buzz:build_variant",
       "target": "function:magusfile.buzz:version",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:deploy_generate",
+      "target": "function:magusfile.buzz:missing_input",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,

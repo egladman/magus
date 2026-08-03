@@ -1054,7 +1054,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
@@ -1169,7 +1169,7 @@
               ]
             }
           ],
-          "writes_files": [
+          "modifies_existing_files": [
             {
               "glob": "go.mod"
             }
