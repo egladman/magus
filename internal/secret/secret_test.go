@@ -3,6 +3,7 @@ package secret
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"strings"
@@ -250,10 +251,40 @@ func TestRedactingHandlerCoversNonPrettyFormats(t *testing.T) {
 
 	var sink bytes.Buffer
 	h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	// Attr shapes mirror exec.go's run.exec line exactly: argv arrives as a []string, and an
+	// earlier version of this test passed it as a plain string - which the string-only filter
+	// did redact, so the test passed while the real call site leaked.
 	slog.New(h).DebugContext(ctx, "run.exec tok=ghp_never_json_me",
-		"cmd", "sh", "arg", "-p ghp_never_json_me")
+		"cmd", "sh", "args", []string{"-p", "ghp_never_json_me"}, "dir", ".")
 
 	assert.NotContains(t, sink.String(), "ghp_never_json_me", "neither message nor attrs may carry it")
+	assert.Contains(t, sink.String(), mask)
+	// Pins the SHAPE, not just the absence: argv must stay a JSON array. Redacting it by
+	// rendering the value would collapse it to a string and break anything parsing the
+	// stream, so the []string arm exists for this and only this test proves it.
+	assert.Contains(t, sink.String(), `"args":["-p","`+mask+`"]`, "argv must survive as an array")
+}
+
+// TestRedactingHandlerCoversNestedAndWrappedValues guards the carriers that are not a
+// KindString: a group, an error, and a []byte. The []byte case is the sharp one - fmt
+// renders it as decimal bytes while encoding/json base64s it, so a redactor comparing
+// against the fmt rendering sees no match and ships a recoverable token.
+func TestRedactingHandlerCoversNestedAndWrappedValues(t *testing.T) {
+	ctx, _ := withResolver(t)
+	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_nested_me")
+	_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	require.NoError(t, err)
+
+	var sink bytes.Buffer
+	h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	slog.New(h).DebugContext(ctx, "wrapped",
+		slog.Group("cmd", slog.String("argv", "-p ghp_never_nested_me")),
+		slog.Any("err", errors.New("login failed: ghp_never_nested_me")),
+		slog.Any("raw", []byte("ghp_never_nested_me")))
+
+	assert.NotContains(t, sink.String(), "ghp_never_nested_me", "group, error and []byte attrs must be redacted too")
+	assert.NotContains(t, sink.String(), base64.StdEncoding.EncodeToString([]byte("ghp_never_nested_me")),
+		"a []byte attr must not survive as recoverable base64")
 	assert.Contains(t, sink.String(), mask)
 }
 

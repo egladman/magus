@@ -386,6 +386,18 @@ func (r *Resolver) Redact(p []byte) []byte {
 	return []byte(out)
 }
 
+// hasSecrets reports whether anything has been registered to redact. It lets a caller skip
+// an expensive walk (rendering every attr of a log record) on the overwhelmingly common run
+// that read no secret at all, where every comparison would provably find nothing.
+func (r *Resolver) hasSecrets() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.redactable) > 0
+}
+
 // RedactString is [Resolver.Redact] for text already in string form. Same convention as
 // the stdlib's regexp.Match / regexp.MatchString pair.
 func (r *Resolver) RedactString(s string) string {
@@ -409,8 +421,9 @@ func RedactString(ctx context.Context, s string) string {
 	return ResolverFromContext(ctx).RedactString(s)
 }
 
-// RedactingHandler wraps a slog.Handler so every record's message and string attributes
-// are redacted before the underlying handler formats them.
+// RedactingHandler wraps a slog.Handler so every record's message and attributes are
+// redacted before the underlying handler formats them. See redactValue for which attr
+// shapes are covered by construction and which are only best-effort.
 //
 // This exists because redaction that lives in ONE handler's print path is the same
 // per-call-site mistake it was meant to end: magus picks a handler by `log.format`, and
@@ -435,8 +448,9 @@ type handlerOp struct {
 	group string
 }
 
-// NewRedactingHandler wraps inner. Wrapping is unconditional and cheap: with no resolver
-// on the record's context, or none registered, redaction is a no-op comparison.
+// NewRedactingHandler wraps inner. Wrapping is unconditional and cheap: a run that read no
+// secret - which is nearly all of them, and every run before the first read - short-circuits
+// on hasSecrets before any attr is walked, so it costs one atomic-free length check.
 func NewRedactingHandler(inner slog.Handler) slog.Handler { return redactingHandler{inner: inner} }
 
 func (h redactingHandler) Enabled(ctx context.Context, l slog.Level) bool {
@@ -459,23 +473,75 @@ func (h redactingHandler) WithGroup(n string) slog.Handler {
 	return h
 }
 
-// redactAttrs returns as with every string value redacted.
+// redactValue returns v with any secret occurrence masked, preserving the value's kind
+// wherever it can.
+//
+// A string attr is not the only carrier: run.exec logs its argv as `"args", args` with a
+// []string, which slog classifies as KindAny, and the earlier string-only filter walked
+// straight past it - so `--log-format=json` printed a subprocess command line verbatim to
+// stdout. []string and []byte are handled by type so the redacted attr keeps its JSON shape
+// (an argv stays an array) rather than collapsing to a rendered string.
+//
+// KNOWN LIMIT, do not read this as full coverage: the final arm compares against what fmt
+// renders, but the handler emits what its encoder produces. A type whose serialized form
+// differs from its fmt form - a json.Marshaler, or any struct holding a credential in a
+// field String() hides - passes this untouched. Closing that needs the secret value to
+// redact ITSELF at every formatting entry point, which is what a secret.Value type is for;
+// a handler cannot guess an arbitrary encoder's output. This arm is best-effort on top of
+// the shapes above, not a guarantee.
+func redactValue(r *Resolver, v slog.Value) slog.Value {
+	switch v.Kind() {
+	case slog.KindString:
+		return slog.StringValue(r.RedactString(v.String()))
+	case slog.KindGroup:
+		as := v.Group()
+		out := make([]slog.Attr, len(as))
+		for i, a := range as {
+			a.Value = redactValue(r, a.Value)
+			out[i] = a
+		}
+		return slog.GroupValue(out...)
+	case slog.KindLogValuer:
+		return redactValue(r, v.Resolve())
+	case slog.KindAny:
+		switch t := v.Any().(type) {
+		case []string:
+			out := make([]string, len(t))
+			for i, s := range t {
+				out[i] = r.RedactString(s)
+			}
+			return slog.AnyValue(out)
+		case []byte:
+			// Rendered by fmt as decimal bytes but base64'd by encoding/json, so the
+			// fallback below cannot see the secret in either form the reader gets.
+			return slog.AnyValue(r.Redact(t))
+		case error:
+			if red := r.RedactString(t.Error()); red != t.Error() {
+				return slog.StringValue(red)
+			}
+			return v
+		}
+		rendered := v.String()
+		if red := r.RedactString(rendered); red != rendered {
+			return slog.StringValue(red)
+		}
+		return v
+	default:
+		return v
+	}
+}
+
+// redactAttrs returns as with every value redacted.
 func redactAttrs(r *Resolver, as []slog.Attr) []slog.Attr {
 	out := make([]slog.Attr, len(as))
 	for i, a := range as {
-		if a.Value.Kind() == slog.KindString {
-			a.Value = slog.StringValue(r.RedactString(a.Value.String()))
-		}
+		a.Value = redactValue(r, a.Value)
 		out[i] = a
 	}
 	return out
 }
 
-// Handle redacts the message and every string-valued attribute, then delegates.
-//
-// String attributes only. A credential reaches a log as text - an argv element, a URL, an
-// error string - and walking arbitrary values through reflection to catch a hypothetical
-// non-string carrier would cost more on this path than it protects.
+// Handle redacts the message and every attribute, then delegates.
 func (h redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 	res := ResolverFromContext(ctx)
 
@@ -487,20 +553,21 @@ func (h redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 			continue
 		}
 		attrs := op.attrs
-		if res != nil {
+		if res.hasSecrets() {
 			attrs = redactAttrs(res, attrs)
 		}
 		inner = inner.WithAttrs(attrs)
 	}
-	if res == nil {
+	// A Resolver is installed for every workspace Open, so `res != nil` is the common case
+	// and would put a full render of every attr on the log path of runs that never read a
+	// secret. hasSecrets is what keeps the wrapper as cheap as its doc claims.
+	if !res.hasSecrets() {
 		return inner.Handle(ctx, r)
 	}
 
 	out := slog.NewRecord(r.Time, r.Level, res.RedactString(r.Message), r.PC)
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Value.Kind() == slog.KindString {
-			a.Value = slog.StringValue(res.RedactString(a.Value.String()))
-		}
+		a.Value = redactValue(res, a.Value)
 		out.AddAttrs(a)
 		return true
 	})

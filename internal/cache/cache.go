@@ -561,7 +561,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	var ref string
 	if c.outputs != nil {
-		r, err := c.outputs.Persist(hash, output, d)
+		r, err := c.outputs.Persist(ctx, hash, output, d)
 		if err != nil {
 			c.log.Warn("cache.warn", slog.String("msg",
 				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
