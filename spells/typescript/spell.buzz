@@ -33,9 +33,18 @@ export fun mgs_listClaimedGlobs() > [Path] {
 
 export fun mgs_isOpaque() > bool { return true; }
 
-// Generated output tsc --build writes. Adjust to match your tsconfig's outDir;
-// "dist/**" is the TS convention.
-export fun mgs_listProvidedGlobs() > [Path] { return [Path{value = "dist/**"}]; }
+// Empty on purpose. Where tsc writes is decided by the project's tsconfig outDir, which this
+// spell cannot read - so any glob here is a guess, and "dist/**" was the TS convention rather
+// than a fact about your project.
+//
+// A guess is not free. Provided globs are contributed to EVERY target on a project, so a target
+// that declares no ctx.writesFiles of its own inherits them; on a cache miss its snapshot then
+// has to satisfy a glob it never writes. That failure only appears on a cold cache, so it hid
+// for a long time across four projects here, none of which emit to dist/ (see MGS1017).
+//
+// Declare the real output location on the project instead - `"outputs": ["gen/**"]` - or on the
+// target with ctx.writesFiles. A spell should claim what it can verify; this it cannot.
+export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 

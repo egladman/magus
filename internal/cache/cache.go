@@ -103,6 +103,17 @@ type Step struct {
 	// not own. Ordinary outputs stay lenient - a glob that legitimately matches nothing
 	// is common, and only a total miss is suspicious.
 	RequiredOutputs []string
+
+	// OutputsDeclared reports that Outputs came from the TARGET (ctx.writesFiles) rather than
+	// being inherited from the project or a bound spell. Only then does producing nothing mean
+	// the target broke its promise.
+	//
+	// Inherited globs routinely match nothing: binding the typescript spell contributes
+	// `dist/**` to every target on the project, so a check-only target like a test - which
+	// produces no files at all - would otherwise fail its snapshot for a glob it never claimed.
+	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
+	// targets always replayed.
+	OutputsDeclared bool
 	Deps            []string // upstream project hashes folded into the key
 	DependsOn       []string // upstream project paths for scheduling (not hashed)
 	WorkspaceRoot   string

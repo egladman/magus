@@ -251,9 +251,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"golangci-lint": {"golangci-lint", "--version"},
 			"govulncheck":   {"govulncheck", "-version"},
 		},
-		Language:    "go",
-		IgnoreDirs:  []string{"vendor"},
-		Manifests:   []string{"go.mod"},
+		Language:   "go",
+		IgnoreDirs: []string{"vendor"},
+		Manifests:  []string{"go.mod"},
 		Ops: map[string]spells.Op{
 			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}}},
 			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -350,7 +350,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "typescript",
 		Needs:      []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
 		Claims:     []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
-		Provides:   []string{"dist/**"},
+		// No Provides: tsc's output location is the project's tsconfig outDir, which the spell
+		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1017).
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
 		Language:   "typescript",

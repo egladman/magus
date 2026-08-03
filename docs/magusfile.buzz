@@ -300,6 +300,9 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void {
 // bumping the mermaid version in package.json; commit the regenerated artifact.
 export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    // Declared so the snapshot records THIS artifact. Without it the target inherits the
+    // project baseline (the typescript spell's `dist/**`, which this project never writes).
+    ctx.writesFiles("gen/assets/mermaid.js");
     if (!fs\isDir("node_modules")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }
@@ -313,6 +316,8 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
 // package.json; commit the regenerated artifact.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
+    // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
+    ctx.writesFiles("gen/assets/hljs.js");
     if (!fs\isDir("node_modules")) {
         os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     }

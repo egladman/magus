@@ -99,6 +99,7 @@ const (
 	CrossDepOwnerUnknown      DiagnosticCode = "MGS1015"
 	GoModReplaceDrift         DiagnosticCode = "MGS1016"
 	MagusfileIsNotASpell      DiagnosticCode = "MGS1017"
+	DeadOutputGlob            DiagnosticCode = "MGS1018"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -141,7 +142,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	UnreachedFootprintDecl, RedundantFootprintGlob, UnknownTarget, TargetDependencyCycle,
 	TargetMissingContext, TargetNeverReplays, AffectedSetUncomputable,
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
-	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell,
+	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch,
