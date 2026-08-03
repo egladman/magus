@@ -29,37 +29,12 @@
           ]
         },
         {
-          "name": "dogfood",
-          "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at.",
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "go-build"
-              ]
-            }
-          ],
-          "cross_dependencies": [
-            {
-              "project": "libs/gopherbuzz",
-              "target": "build"
-            }
-          ],
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
-          ]
-        },
-        {
           "name": "image-build",
           "declared": "image_build",
-          "doc": "Two axes, one charm each.",
+          "doc": "Under the cd charm, build+push+sign both static and CGO images unconditionally.",
           "charms": [
-            "amd64",
-            "arm64",
             "cd",
-            "stable",
-            "static",
-            "unstable"
+            "static"
           ],
           "spells": [
             {
@@ -77,27 +52,6 @@
           ],
           "exec_overrides": [
             "cwd:."
-          ]
-        },
-        {
-          "name": "image-registries",
-          "declared": "image_registries",
-          "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment.",
-          "charms": [
-            "cd",
-            "stable",
-            "unstable",
-            "verify"
-          ]
-        },
-        {
-          "name": "image-login",
-          "declared": "image_login",
-          "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.",
-          "charms": [
-            "cd",
-            "stable",
-            "unstable"
           ]
         },
         {
@@ -190,7 +144,7 @@
         {
           "name": "spells-generate",
           "declared": "spells_generate",
-          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
+          "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen) and the Buzz value-type mirrors (internal/spellruntime/gen/types), both driven by the go:generate directives in internal/spellruntime.",
           "dependencies": [
             "types-generate"
           ],
@@ -200,9 +154,6 @@
             },
             {
               "glob": "internal/spellruntime/gen/types/*.buzz"
-            },
-            {
-              "glob": "internal/spellruntime/gen/decls/*.buzz"
             }
           ]
         },
@@ -258,8 +209,8 @@
           ]
         },
         {
-          "name": "index-generate",
-          "declared": "index_generate",
+          "name": "md-generate",
+          "declared": "md_generate",
           "doc": "Renders MAGUS.md via `magus describe graph`.",
           "writes_files": [
             {
@@ -278,34 +229,58 @@
           ]
         },
         {
-          "name": "postflight",
-          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout."
-        },
-        {
-          "name": "generate",
-          "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
-          "dependencies": [
-            "bindings-generate",
-            "changelog-generate",
-            "config-generate",
-            "graph-generate",
-            "index-generate",
-            "man-generate",
-            "mocks-generate",
-            "skills-generate",
-            "spells-generate",
-            "types-generate"
-          ],
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "doc": "The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod.",
           "charms": [
             "rw"
           ],
           "spells": [
             {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            },
+            {
               "spell": "gomod",
               "ops": [
-                "replaceWorkspaceModules"
+                "replaceArgs"
               ]
             }
+          ],
+          "writes_files": [
+            {
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
+          "name": "postflight",
+          "doc": "Renders the insight report (hotspots, affinity, ownership, trend) and, with the `gha` charm, appends it to a host output path supplied via env.",
+          "charms": [
+            "gha"
+          ]
+        },
+        {
+          "name": "generate",
+          "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).",
+          "dependencies": [
+            "mod-sync",
+            "man-generate",
+            "changelog-generate",
+            "types-generate",
+            "bindings-generate",
+            "spells-generate",
+            "mocks-generate",
+            "skills-generate",
+            "config-generate",
+            "md-generate",
+            "graph-generate"
+          ],
+          "charms": [
+            "rw"
           ]
         },
         {
@@ -358,7 +333,7 @@
           "charms": [
             "cd"
           ],
-          "modifies_existing_files": [
+          "writes_files": [
             {
               "glob": "go.mod"
             }
@@ -386,25 +361,9 @@
           ]
         },
         {
-          "name": "advice-test",
-          "declared": "advice_test",
-          "doc": "Runs the PR advisors' `test \"...\" {}` blocks.",
-          "reads_files": [
-            {
-              "project": ".",
-              "glob": ".github/actions/advice/*.buzz"
-            },
-            {
-              "project": ".",
-              "glob": ".github/actions/magus/*.buzz"
-            }
-          ]
-        },
-        {
           "name": "test",
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
-            "advice-test",
             "format"
           ],
           "charms": [
@@ -428,8 +387,40 @@
           ]
         },
         {
+          "name": "buzz-check",
+          "declared": "buzz_check",
+          "doc": "Type-checks the standalone Buzz with the upstream `buzz` toolchain (--check).",
+          "spells": [
+            {
+              "spell": "buzz",
+              "ops": [
+                "buzz-check"
+              ]
+            }
+          ],
+          "exec_overrides": [
+            "cwd:cmd/magus/starter/spells"
+          ]
+        },
+        {
+          "name": "buzz-run",
+          "declared": "buzz_run",
+          "doc": "Type-checks the standalone Buzz with magus's own embedded engine ($MAGUS buzz).",
+          "spells": [
+            {
+              "spell": "buzz",
+              "ops": [
+                "magus-buzz"
+              ]
+            }
+          ],
+          "exec_overrides": [
+            "cwd:cmd/magus/starter/spells"
+          ]
+        },
+        {
           "name": "preflight",
-          "doc": "No gate of its own: doctor USED to run here and fail the build on a finding, which made workspace conventions a blocker for everyone downstream."
+          "doc": "Gates the build on workspace health by running `magus doctor`."
         },
         {
           "name": "build",
@@ -445,7 +436,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
+          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -453,9 +444,7 @@
             {
               "spell": "go",
               "ops": [
-                "golangci-lint",
-                "go-vet",
-                "govulncheck"
+                "go-vet"
               ]
             },
             {
@@ -470,9 +459,6 @@
                 "shellcheck"
               ]
             }
-          ],
-          "exec_overrides": [
-            "env:GOEXPERIMENT=jsonv2"
           ]
         },
         {
@@ -497,32 +483,13 @@
           "dependencies": [
             "lint",
             "build",
-            "test",
-            "completion-test"
+            "test"
           ]
         },
         {
           "name": "completion-test",
           "declared": "completion_test",
-          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell.",
-          "spells": [
-            {
-              "spell": "docker",
-              "ops": [
-                "docker-run"
-              ]
-            }
-          ],
-          "reads_files": [
-            {
-              "project": ".",
-              "glob": "hack/completion-checks/*"
-            },
-            {
-              "project": ".",
-              "glob": "cmd/magus/completions/*"
-            }
-          ]
+          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell."
         },
         {
           "name": "ci-shard",
@@ -533,17 +500,62 @@
           ]
         },
         {
-          "name": "deploy-generate",
-          "declared": "deploy_generate",
-          "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/."
-        },
-        {
           "name": "serve",
           "doc": "serve is the workspace-root dev loop for BOTH deployables."
         }
       ],
       "depends_on": [
-        "libs/gopherbuzz"
+        "libs/gopherbuzz",
+        "libs/textsearch"
+      ]
+    },
+    {
+      "path": "cmd/magus/starter",
+      "name": "cmd/magus/starter",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "preflight"
+        },
+        {
+          "name": "generate",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "format",
+          "dependencies": [
+            "generate"
+          ]
+        },
+        {
+          "name": "lint",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "build",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "test",
+          "dependencies": [
+            "format"
+          ]
+        },
+        {
+          "name": "ci",
+          "doc": "'ci' is the conventional anchor that `magus affected ci` keys off.",
+          "dependencies": [
+            "lint",
+            "build",
+            "test"
+          ]
+        }
       ]
     },
     {
@@ -591,21 +603,13 @@
           ]
         },
         {
-          "name": "security",
-          "doc": "security audits the dependency tree against the npm advisory database.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
           "name": "ci",
-          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
+          "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the build-plus-drift-gate, all first-class ci steps.",
           "dependencies": [
             "preflight",
             "lint",
             "test",
-            "build",
-            "security"
+            "build"
           ]
         }
       ],
@@ -623,9 +627,9 @@
           "name": "preflight"
         },
         {
-          "name": "index-generate",
-          "declared": "index_generate",
-          "doc": "index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
+          "name": "md-generate",
+          "declared": "md_generate",
+          "doc": "md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.",
           "reads_files": [
             {
               "project": "docs",
@@ -714,18 +718,6 @@
             {
               "project": ".",
               "glob": "cmd/magus/skills/**/*.md"
-            },
-            {
-              "project": ".",
-              "glob": "cmd/magus-protodocs/**/*.go"
-            },
-            {
-              "project": ".",
-              "glob": "proto/gen/descriptor.binpb"
-            },
-            {
-              "project": ".",
-              "glob": "CHANGELOG.md"
             }
           ],
           "writes_files": [
@@ -743,12 +735,6 @@
             },
             {
               "glob": "reference/skills/*.md"
-            },
-            {
-              "glob": "reference/api/*.md"
-            },
-            {
-              "glob": "changelog.md"
             }
           ],
           "modifies_existing_files": [
@@ -867,10 +853,7 @@
           "dependencies": [
             "preflight",
             "content-generate",
-            "index-generate",
-            "build-mermaid",
-            "build-hljs",
-            "build-playground-editor",
+            "md-generate",
             "site-generate"
           ],
           "charms": [
@@ -890,45 +873,10 @@
           ]
         },
         {
-          "name": "conventions",
-          "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
-          "reads_files": [
-            {
-              "project": "docs",
-              "glob": "**/*.md"
-            },
-            {
-              "project": "docs",
-              "glob": "lib/conventions.buzz"
-            },
-            {
-              "project": "docs",
-              "glob": "engine/gates.buzz"
-            },
-            {
-              "project": ".",
-              "glob": "README.md"
-            },
-            {
-              "project": ".",
-              "glob": "CONTRIBUTING.md"
-            }
-          ]
-        },
-        {
           "name": "lint",
           "doc": "lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).",
           "dependencies": [
-            "format",
-            "conventions"
-          ],
-          "spells": [
-            {
-              "spell": "markdown",
-              "ops": [
-                "typos"
-              ]
-            }
+            "format"
           ],
           "cross_dependencies": [
             {
@@ -960,13 +908,6 @@
           ]
         },
         {
-          "name": "security",
-          "doc": "security audits what actually ships against the npm advisory database.",
-          "dependencies": [
-            "preflight"
-          ]
-        },
-        {
           "name": "ci",
           "dependencies": [
             "generate",
@@ -978,7 +919,7 @@
         {
           "name": "build-playground",
           "declared": "build_playground",
-          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
+          "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it.",
           "dependencies": [
             "preflight"
           ],
@@ -992,40 +933,17 @@
         {
           "name": "build-mermaid",
           "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
+          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into the committed gen/assets/mermaid.js.",
           "dependencies": [
             "preflight"
-          ],
-          "writes_files": [
-            {
-              "glob": "gen/assets/mermaid.js"
-            }
           ]
         },
         {
           "name": "build-hljs",
           "declared": "build_hljs",
-          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
+          "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into the committed gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
-          ],
-          "writes_files": [
-            {
-              "glob": "gen/assets/hljs.js"
-            }
-          ]
-        },
-        {
-          "name": "build-playground-editor",
-          "declared": "build_playground_editor",
-          "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
-          "dependencies": [
-            "preflight"
-          ],
-          "writes_files": [
-            {
-              "glob": "gen/playground/editor.js"
-            }
           ]
         },
         {
@@ -1037,8 +955,7 @@
         ".",
         "docs/guides/integrations/agents",
         "libs/gopherbuzz",
-        "libs/textsearch",
-        "proto"
+        "libs/textsearch"
       ]
     },
     {
@@ -1081,8 +998,15 @@
           ]
         },
         {
-          "name": "security",
-          "doc": "security audits what actually ships against the npm advisory database.",
+          "name": "smoke",
+          "doc": "smoke is the PR gate: one trial, a subset of tasks, one model.",
+          "dependencies": [
+            "preflight"
+          ]
+        },
+        {
+          "name": "grid",
+          "doc": "grid is the full run: every skill, both permutations, every model, 5 trials.",
           "dependencies": [
             "preflight"
           ]
@@ -1109,21 +1033,44 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "index-generate"
+            "mod-sync",
+            "md-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "index-generate",
-          "declared": "index_generate",
+          "name": "md-generate",
+          "declared": "md_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "go.mod"
+            }
+          ]
         },
         {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {
@@ -1201,21 +1148,44 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "index-generate"
+            "mod-sync",
+            "md-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "index-generate",
-          "declared": "index_generate",
+          "name": "md-generate",
+          "declared": "md_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
+        },
+        {
+          "name": "mod-sync",
+          "declared": "mod_sync",
+          "charms": [
+            "rw"
+          ],
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-mod-json",
+                "go-mod-edit"
+              ]
+            }
+          ],
+          "writes_files": [
+            {
+              "glob": "go.mod"
+            }
+          ]
         },
         {
           "name": "format",
           "dependencies": [
-            "generate"
+            "generate",
+            "mod-sync"
           ],
           "spells": [
             {
@@ -1316,15 +1286,15 @@
           "doc": "Regenerates MAGUS.md and fails on drift.",
           "dependencies": [
             "preflight",
-            "index-generate"
+            "md-generate"
           ],
           "charms": [
             "rw"
           ]
         },
         {
-          "name": "index-generate",
-          "declared": "index_generate",
+          "name": "md-generate",
+          "declared": "md_generate",
           "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile."
         },
         {
@@ -1345,7 +1315,8 @@
           ],
           "writes_files": [
             {
-              "glob": "coverage.svg"
+              "project": "../..",
+              "glob": "assets/textsearch-coverage.svg"
             }
           ]
         },
@@ -1371,8 +1342,7 @@
             {
               "spell": "buf",
               "ops": [
-                "buf-generate",
-                "buf-build"
+                "buf-generate"
               ]
             }
           ]
