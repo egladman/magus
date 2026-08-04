@@ -1,0 +1,8 @@
+// maxInt/minDouble are two-argument max/min (upstream's math), not constants.
+// @expect: [180, 7, 1.5]
+import "math";
+final __r = [
+    math.deg(math.pi),
+    math.maxInt(3, 7),
+    math.minDouble(1.5, 2.5),
+];

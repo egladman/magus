@@ -158,3 +158,109 @@ func TestLexer_DocComments(t *testing.T) {
 		assert.Equal(t, "", docFor(t, "x // trailing\nbuild", "build"))
 	})
 }
+
+// TestKindStringExhaustive drives Kind.String across every declared kind, Ident
+// through EOF. An unnamed kind surfaces in parse errors as a bare integer, which
+// is exactly the message quality regression this guards against - and iterating
+// the full range means a kind added without a String case fails here instead of
+// in a user's error message.
+func TestKindStringExhaustive(t *testing.T) {
+	for k := Ident; k <= EOF; k++ {
+		name := k.String()
+		require.NotEmptyf(t, name, "Kind(%d) has no String name", int(k))
+		require.NotContainsf(t, name, "Kind(", "Kind(%d) fell through to a raw integer rendering: %q", int(k), name)
+	}
+}
+
+// TestKeywordsRoundTrip pins the keyword table's two views against each other:
+// every word Keywords() lists must satisfy IsKeyword, and must tokenize to
+// something other than a plain identifier.
+func TestKeywordsRoundTrip(t *testing.T) {
+	words := Keywords()
+	require.NotEmpty(t, words)
+	for _, w := range words {
+		require.Truef(t, IsKeyword(w), "Keywords() lists %q but IsKeyword(%q) is false", w, w)
+		toks, err := Tokenize(w)
+		require.NoErrorf(t, err, "Tokenize(%q)", w)
+		require.NotEmptyf(t, toks, "Tokenize(%q) produced no tokens", w)
+		require.NotEqualf(t, Ident, toks[0].Kind, "keyword %q tokenized as a plain identifier", w)
+	}
+	require.False(t, IsKeyword("definitelyNotAKeyword"))
+}
+
+// TestTokenizeOperators sweeps every operator and punctuation spelling to its
+// kind, asserting the whole Token per case. Operator tokens carry an EMPTY Val
+// (the kind is the spelling; only literals and identifiers carry text), so a
+// lexer that recognized `<<=` as `<<` + `=` fails on the token count and on the
+// second token's kind.
+func TestTokenizeOperators(t *testing.T) {
+	cases := []struct {
+		src  string
+		want Kind
+	}{
+		{"(", LParen}, {")", RParen}, {"{", LBrace}, {"}", RBrace},
+		{"[", LBracket}, {"]", RBracket}, {",", Comma}, {";", Semicolon},
+		{":", Colon}, {".", Dot}, {"=", Assign}, {"?", Question},
+		{"??", Coalesce}, {"!", Bang}, {"+", Plus}, {"-", Minus},
+		{"*", Star}, {"/", Slash}, {"%", Percent}, {"==", Eq},
+		{"!=", Neq}, {"<", Lt}, {">", Gt}, {"<=", Le}, {">=", Ge},
+		{"..", DotDot}, {"!>", ErrArrow}, {"*>", YieldArrow}, {"=>", FatArrow},
+		{"->", Arrow}, {"\\", Backslash}, {"&", Amp}, {"|", Pipe},
+		{"^", Caret}, {"~", Tilde}, {"<<", Shl}, {">>", Shr},
+		{"+=", PlusAssign}, {"-=", MinusAssign}, {"*=", StarAssign},
+		{"/=", SlashAssign}, {"%=", PercentAssign}, {"&=", AmpAssign},
+		{"|=", PipeAssign}, {"^=", CaretAssign}, {"<<=", ShlAssign}, {">>=", ShrAssign},
+	}
+	for _, c := range cases {
+		t.Run(c.src, func(t *testing.T) {
+			toks, err := Tokenize(c.src)
+			require.NoError(t, err)
+			require.Len(t, toks, 2, "want exactly the operator token plus EOF")
+			require.Equal(t, Token{Kind: c.want, Line: 1, Col: 1}, toks[0])
+			require.Equal(t, EOF, toks[1].Kind)
+		})
+	}
+}
+
+// TestTokenizeStringEscapes pins the escape table inside string literals.
+func TestTokenizeStringEscapes(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"newline", `"a\nb"`, "a\nb"},
+		{"tab", `"a\tb"`, "a\tb"},
+		{"quote", `"a\"b"`, `a"b`},
+		{"backslash", `"a\\b"`, `a\b`},
+		{"carriage return", `"a\rb"`, "a\rb"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			toks, err := Tokenize(c.src)
+			require.NoError(t, err)
+			require.Len(t, toks, 2)
+			require.Equal(t, String, toks[0].Kind)
+			require.Equal(t, c.want, toks[0].Val)
+		})
+	}
+}
+
+// TestTokenizeErrors pins the lexer's rejection of malformed input: each must
+// return an error rather than a silent partial token stream.
+func TestTokenizeErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"unterminated string", `"abc`},
+		{"unterminated pattern", `$"abc`},
+		{"lone dollar", `$x`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Tokenize(c.src)
+			require.Errorf(t, err, "Tokenize(%q) accepted malformed input", c.src)
+		})
+	}
+}

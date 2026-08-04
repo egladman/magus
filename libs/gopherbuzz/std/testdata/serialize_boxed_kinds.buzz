@@ -1,0 +1,8 @@
+// @expect: [42, true, hi, 2.5]
+import "serialize";
+final __r = [
+    serialize.Boxed.init(42).integerValue(),
+    serialize.Boxed.init(true).booleanValue(),
+    serialize.Boxed.init("hi").stringValue(),
+    serialize.Boxed.init(2.5).floatingValue(),
+];

@@ -1,0 +1,8 @@
+// @expect: [1, s, true]
+import "serialize";
+final boxed = serialize.jsonDecode(`{"n": 1, "s": "s", "l": [true]}`);
+final __r = [
+    boxed.q(["n"]).integerValue(),
+    boxed.q(["s"]).stringValue(),
+    boxed.q(["l", 0]).booleanValue(),
+];

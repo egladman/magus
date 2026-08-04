@@ -1,0 +1,6 @@
+// random(min: int?, max: int?) must stay within its bounds; the value itself is
+// nondeterministic, so assert the property.
+// @expect: true
+import "std";
+final r = std.random(min: 0, max: 10);
+final __r = r >= 0 and r <= 10;
