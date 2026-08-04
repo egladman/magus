@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
@@ -45,6 +47,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		open        bool
 		printURL    bool
 		viewerBase  string
+		attempts    bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
@@ -54,9 +57,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&open, "open", false, "with `output <ref>`, open the captured output in the browser log viewer (delivered privately; never uploaded)")
 		fs.BoolVar(&printURL, "print", false, "with --open, print the viewer URL instead of launching a browser")
 		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
+		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -69,6 +73,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s print the exact bytes (pipe anywhere)\n", clihint.QueryOutput.With("out1a2b3c"))
 			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
+			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored executions\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -98,12 +103,16 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if oerr != nil {
 			return oerr
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, out: outOpts})
+		if attempts && (open || printURL) {
+			fmt.Fprintf(os.Stderr, "magus query output: --attempts lists executions and cannot combine with --open/--print\n")
+			return errSilent{exitCode: 2}
+		}
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, out: outOpts})
 	}
-	if open || printURL {
-		// --open/--print only apply to `query output <ref>`. Set on a graph search, they were a
-		// mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
+	if open || printURL || attempts {
+		// --open/--print/--attempts only apply to `query output <ref>`. Set on a graph search,
+		// they were a mistake; stop rather than silently ignore them.
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -159,6 +168,7 @@ type outputRefOpts struct {
 	open       bool          // open the browser log viewer instead of printing
 	printURL   bool          // with open, print the URL instead of launching a browser
 	viewerBase string        // log viewer base URL
+	attempts   bool          // list the ref's stored executions instead of printing output
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
@@ -179,6 +189,9 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return err
+	}
+	if o.attempts {
+		return listOutputAttempts(m, ref, o.out)
 	}
 	if o.open {
 		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
@@ -203,6 +216,46 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	return err
+}
+
+// listOutputAttempts renders the keep-last-K executions behind one portable ref, newest
+// first. Every attempt of a step shares the step's ref; the attempt id is the
+// execution-unique handle, and passing a full attempt id to `magus query output`
+// retrieves that exact execution's bytes.
+func listOutputAttempts(m *magus.Magus, ref string, out OutputOptions) error {
+	list, err := m.OutputAttempts(ref)
+	if err != nil {
+		return reportRefLookupError(ref, err)
+	}
+	if out.Format == FormatJSON || out.Format == FormatYAML {
+		return emitFormatted(out, list)
+	}
+	// Head the listing with the STEP's identity: the portable ref when a v2
+	// descriptor carries the key, else the ref as the user typed it. list[0].Ref
+	// would name one arbitrary execution for a pre-portable directory.
+	stepRef := ref
+	for _, d := range list {
+		if d.Key != "" {
+			stepRef = d.Ref
+			break
+		}
+	}
+	fmt.Printf("attempts for %s (newest first):\n", stepRef)
+	for _, d := range list {
+		status := "pass"
+		if d.Failed {
+			status = "fail"
+		}
+		when := time.UnixMilli(d.TimestampMs).Format("2006-01-02 15:04:05")
+		dur := (time.Duration(d.DurationMs) * time.Millisecond).Round(time.Millisecond)
+		fmt.Printf("  %s  %s  %8s  %s  %s\n", d.Attempt, status, dur, when, d.Inv)
+	}
+	// The bare ref already answers with the newest attempt; the hint earns its keep
+	// for reaching an OLDER one.
+	if len(list) > 1 {
+		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", clihint.QueryOutput.With(list[len(list)-1].Attempt))
+	}
+	return nil
 }
 
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,

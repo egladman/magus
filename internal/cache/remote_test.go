@@ -33,7 +33,7 @@ func TestRemoteBackendFSBuiltOnce(t *testing.T) {
 	openWithRemote := func(t *testing.T) (root string, c *Cache) {
 		t.Helper()
 		root = t.TempDir()
-		c, err = Open(t.Context(), 
+		c, err = Open(t.Context(),
 			filepath.Join(t.TempDir(), ".magus"),
 			WithMutable(true),
 			WithRemoteBackend(remote),

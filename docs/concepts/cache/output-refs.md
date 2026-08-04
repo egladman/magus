@@ -56,9 +56,35 @@ refactor` always searches the graph.
 - `magus query output ref1a2b3c -o json` - the descriptor (ref, project, target,
   status, duration) plus the output as one record; `-o yaml` too.
 - `magus query output ref1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
+- `magus query output out1a2b3c --attempts` - list the ref's stored executions.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.
+
+## Refs are portable: same inputs, same ref
+
+The ref is a truncation of the step's [cache key](../cache.md), which is computed
+from workspace-relative paths, content hashes, and sorted components - nothing
+machine-local. So the SAME inputs produce the SAME ref on every machine: an inspect
+line pasted from CI or a teammate's terminal resolves in your checkout, provided
+your cache holds a run of that step.
+
+The corollary is the debugging story: ref equality is input equality. If CI prints
+`outa1b2c3d4e5f6` and your laptop prints a different ref for the same target, your
+inputs differ - a source file, a tool version, an env var, or a charm disagrees.
+
+### Attempts: one ref, every execution
+
+The ref names the step, not one execution. Retention keeps the last few executions
+per step - a volatile target's recent failures each stay addressable:
+
+```sh
+magus query output outa1b2c3d4e5f6 --attempts
+```
+
+lists them newest first (attempt id, pass/fail, duration, time, invocation id). The
+bare ref always answers with the newest execution; pass a full attempt id to
+`magus query output` to retrieve an older one's exact bytes.
 
 For the LATEST log of a project or target (rather than a specific past execution),
 [`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
@@ -125,16 +151,20 @@ collides with a ref id.
 
 ## How refs are stored
 
-- The ref is derived from the step's cache key plus a per-execution nonce, so it is
-  cache-key-flavored but unique to each run.
-- Output is persisted verbatim as a per-ref blob under the cache directory
-  (`outputs/`), alongside a small descriptor sidecar (project, target, status,
-  timestamp, duration), on success and on failure. Retrieval is a straight byte read,
-  so `magus query output` returns exactly the bytes the target wrote.
+- The ref is the step's cache key, truncated: same inputs, same key, same ref,
+  on any machine. Each execution additionally gets a nonce-derived **attempt id**,
+  so repeated runs of one step never overwrite each other.
+- Output is persisted verbatim as a per-attempt blob under the cache directory
+  (`outputs/<key>/`), alongside a small descriptor sidecar (ref, project, target,
+  status, timestamp, duration, key, attempt, magus version), on success and on
+  failure. Retrieval is a straight byte read, so `magus query output` returns
+  exactly the bytes the target wrote.
 - Retention keeps the last few executions per cache key, so a nondeterministic
   target's recent failures stay independently addressable, and is garbage-collected
   along with the rest of the [cache](../cache.md). Refs are run artifacts, not
   [knowledge-graph](../knowledge.md) nodes; the graph schema is untouched.
+- Stores written before portable refs keep resolving: the old per-execution ids
+  still address their bytes, and the same step resolves under its new portable ref.
 
 ## Diagnostics
 

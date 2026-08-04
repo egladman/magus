@@ -17,6 +17,15 @@ import (
 	"time"
 )
 
+// mustPersist stores one execution and returns its step ref, failing the test on error.
+// Most tests only need the ref; the stamped descriptor is re-read via ByRef/Attempts.
+func mustPersist(t *testing.T, s *OutputStore, cacheKey string, output []byte, d OutputDescriptor) string {
+	t.Helper()
+	stored, err := s.Persist(context.Background(), cacheKey, output, d)
+	require.NoError(t, err)
+	return stored.Ref
+}
+
 // TestOutputStorePersistLookupRoundTrip persists one execution's records and reads its
 // reconstructed text and derived metadata back by ref.
 func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
@@ -24,18 +33,20 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	s := NewOutputStore(dir)
 
 	desc0 := OutputDescriptor{Project: "svc/api", Target: "test", Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200}
-	ref, err := s.Persist(context.Background(), "deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
-	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(ref, RefPrefix))
-	assert.Len(t, ref, len(RefPrefix)+refHexLen)
+	ref := mustPersist(t, s, "deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
+	assert.Equal(t, RefPrefix+"deadbeefcafe", ref, "the ref is the key's first refHexLen hex digits - portable by construction")
 
 	data, desc, err := s.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "lint: undefined symbol foo\n", string(data), "output is returned verbatim from the blob")
 
+	require.True(t, strings.HasPrefix(desc.Attempt, RefPrefix))
+	require.Len(t, desc.Attempt, len(RefPrefix)+attemptHexLen)
 	assert.Equal(t, OutputDescriptor{
 		Ref: ref, Project: "svc/api", Target: "test",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
+		Schema: descriptorSchema, Key: "deadbeefcafef00d", KeyVersion: keyVersion,
+		Attempt: desc.Attempt,
 	}, desc)
 }
 
@@ -112,33 +123,158 @@ func TestRunsStatCountsJournals(t *testing.T) {
 func TestOutputStoreVerbatimFidelity(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
-	for _, raw := range []string{
+	for i, raw := range []string{
 		"done",             // no trailing newline
 		"a\nb\nc\n",        // trailing newline preserved
 		"with\ttabs\r\nCR", // control chars + CRLF, no final newline
 		"",                 // empty output
 	} {
-		ref, err := s.Persist(context.Background(), "k", []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
-		require.NoError(t, err)
+		// One key per case: a shared key would resolve the STEP (newest attempt),
+		// and this test is about byte fidelity, not attempt selection.
+		ref := mustPersist(t, s, fmt.Sprintf("k%d", i), []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
 		got, _, err := s.ByRef(ref)
 		require.NoError(t, err)
 		assert.Equal(t, raw, string(got), "output must round-trip byte-for-byte")
 	}
 }
 
-// TestOutputStorePerExecutionRefsAreDistinct verifies repeated executions of ONE cache
-// key each get their own addressable ref (keep-last-K history).
-func TestOutputStorePerExecutionRefsAreDistinct(t *testing.T) {
-	s := NewOutputStore(t.TempDir())
-	const key = "samekey00"
+// TestOutputStoreAttemptsShareOnePortableRef verifies repeated executions of ONE cache
+// key share the step's portable ref while staying independently addressable as attempts
+// (keep-last-K history): the bare ref answers with the newest bytes, --attempts lists
+// every execution newest first, and a full attempt id retrieves that exact execution.
+func TestOutputStoreAttemptsShareOnePortableRef(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const key = "aabbccddeeff0011"
 
-	ref1, err := s.Persist(context.Background(), key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, err)
-	ref2, err := s.Persist(context.Background(), key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, err)
+	ref1 := mustPersist(t, s, key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: 100})
+	ref2 := mustPersist(t, s, key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build", TimestampMs: 200})
 
-	assert.NotEqual(t, ref1, ref2, "two executions of one cache key must mint distinct refs")
-	assert.Equal(t, ref2, s.LatestRef(key), "latestRef returns the newest execution's ref")
+	assert.Equal(t, ref1, ref2, "every execution of one cache key shares the portable ref")
+	assert.Equal(t, ref1, s.StepRef(key))
+
+	attempts, err := s.Attempts(ref1)
+	require.NoError(t, err)
+	require.Len(t, attempts, 2, "both executions stay addressable")
+	assert.True(t, newerDescriptor(attempts[0], attempts[1]), "attempts list newest first")
+	assert.NotEqual(t, attempts[0].Attempt, attempts[1].Attempt, "attempt ids are execution-unique")
+
+	// The newest attempt answers for the bare step ref; stagger mtimes so "newest"
+	// is unambiguous on coarse-granularity filesystems.
+	older := filepath.Join(dir, "outputs", key, attempts[1].Attempt+outExt)
+	past := time.Now().Add(-time.Minute)
+	require.NoError(t, os.Chtimes(older, past, past))
+	data, desc, err := s.ByRef(ref1)
+	require.NoError(t, err)
+	assert.Equal(t, "run 2\n", string(data))
+	assert.Equal(t, int64(200), desc.TimestampMs)
+
+	// A full attempt id retrieves that exact execution, even when it is not the newest.
+	data, desc, err = s.ByRef(attempts[1].Attempt)
+	require.NoError(t, err)
+	assert.Equal(t, "run 1\n", string(data))
+	assert.Equal(t, int64(100), desc.TimestampMs)
+}
+
+// TestPortableRefDeterministicAcrossCaches is the point of portable refs: two machines
+// (modeled as two fresh cache dirs) running the same step over the same workspace
+// content print the SAME ref, so an inspect line pasted from CI resolves anywhere and
+// differing refs prove differing inputs.
+func TestPortableRefDeterministicAcrossCaches(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "test", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "test", "pkg", "main.go"), []byte("package main"), 0o644))
+
+	runOnce := func(t *testing.T) string {
+		t.Helper()
+		c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithMutable(true))
+		require.NoError(t, err)
+		r, err := c.Run(context.Background(), makeStep(root), func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, "built")
+			return nil
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, r.Ref)
+		return r.Ref
+	}
+
+	refA := runOnce(t)
+	refB := runOnce(t)
+	assert.Equal(t, refA, refB, "same inputs must mint the same ref in two independent caches")
+	assert.Len(t, refA, len(RefPrefix)+refHexLen)
+}
+
+// TestVolatileFailuresAccumulateAttemptsUnderOneRef drives the real Run path with a
+// target that fails on every execution: all three failures share one portable ref,
+// stay independently retrievable as attempts, and the bare ref answers with the
+// newest. This is the property the old per-execution nonce protected, relocated a
+// level down.
+func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "flaky"
+
+	boom := errors.New("exit status 1")
+	var refs []string
+	for i := 0; i < 3; i++ {
+		_, err := c.Run(context.Background(), step, func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintf(stdout, "attempt %d failed\n", i)
+			return boom
+		})
+		require.ErrorIs(t, err, boom)
+		hash, herr := c.hashStep(context.Background(), &step)
+		require.NoError(t, herr)
+		refs = append(refs, c.outputs.StepRef(hash))
+	}
+	assert.Equal(t, refs[0], refs[1])
+	assert.Equal(t, refs[1], refs[2], "every failing execution shares the step's portable ref")
+
+	attempts, err := c.outputs.Attempts(refs[0])
+	require.NoError(t, err)
+	require.Len(t, attempts, 3, "each failure stays independently addressable")
+	for _, a := range attempts {
+		assert.True(t, a.Failed)
+		data, _, err := c.outputs.ByRef(a.Attempt)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "failed")
+	}
+}
+
+// TestPrePortableStoreResolves pins backward compatibility: a store written before
+// portable refs (execution-unique 8-hex file stems, v1 descriptors with no schema/key
+// fields) keeps resolving - by its old ref exactly, and at the step level once the key
+// directory is addressed - and Attempts backfills the attempt id from the file stem.
+func TestPrePortableStoreResolves(t *testing.T) {
+	dir := t.TempDir()
+	const key = "0123456789abcdef0123456789abcdef"
+	keyDir := filepath.Join(dir, "outputs", key)
+	require.NoError(t, os.MkdirAll(keyDir, 0o755))
+	const oldRef = "out1a2b3c4d" // v1 shape: RefPrefix + 8 hex, minted per execution
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+outExt), []byte("legacy bytes\n"), 0o644))
+	v1 := []byte(`{"ref":"` + oldRef + `","project":"pkg/a","target":"build","failed":false,"timestamp_ms":100,"duration_ms":5}`)
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+descExt), v1, 0o644))
+
+	s := NewOutputStore(dir)
+
+	data, desc, err := s.ByRef(oldRef) // the exact ref a v1 run printed
+	require.NoError(t, err)
+	assert.Equal(t, "legacy bytes\n", string(data))
+	assert.Equal(t, oldRef, desc.Ref)
+	assert.Zero(t, desc.Schema)
+
+	data, _, err = s.ByRef(portableRef(key)) // the step-level ref the same key mints today
+	require.NoError(t, err)
+	assert.Equal(t, "legacy bytes\n", string(data))
+
+	assert.Equal(t, portableRef(key), s.StepRef(key), "a pre-portable dir already answers with the portable ref")
+
+	attempts, err := s.Attempts(oldRef)
+	require.NoError(t, err)
+	require.Len(t, attempts, 1)
+	assert.Equal(t, oldRef, attempts[0].Attempt, "the v1 file stem backfills the attempt id")
 }
 
 // TestLatestRefsByTarget: the newest execution per (project, target) is returned, keyed
@@ -151,15 +287,11 @@ func TestLatestRefsByTarget(t *testing.T) {
 
 	// pkg/a:build ran twice under different charms; the later timestamp wins even though
 	// the two carry distinct repro targets ("build:ro" then "build:rw").
-	older, err := s.Persist(context.Background(), "ka1", []byte("old\n"), OutputDescriptor{Project: "pkg/a", Target: "build:ro", TimestampMs: 100, Failed: true})
-	require.NoError(t, err)
-	newer, err := s.Persist(context.Background(), "ka2", []byte("new\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 200, Failed: false})
-	require.NoError(t, err)
+	older := mustPersist(t, s, "ka1", []byte("old\n"), OutputDescriptor{Project: "pkg/a", Target: "build:ro", TimestampMs: 100, Failed: true})
+	newer := mustPersist(t, s, "ka2", []byte("new\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 200, Failed: false})
 	// A different target, and a project-scoped output that must be skipped.
-	testRef, err := s.Persist(context.Background(), "kb", []byte("t\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 150})
-	require.NoError(t, err)
-	_, err = s.Persist(context.Background(), "kc", []byte("proj\n"), OutputDescriptor{Project: "pkg/a", TimestampMs: 999}) // no target -> skipped
-	require.NoError(t, err)
+	testRef := mustPersist(t, s, "kb", []byte("t\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 150})
+	mustPersist(t, s, "kc", []byte("proj\n"), OutputDescriptor{Project: "pkg/a", TimestampMs: 999}) // no target -> skipped
 
 	got := s.LatestRefsByTarget()
 	require.Len(t, got, 2, "one entry per (project, bare target); charm variants collapse, the target-less run is skipped")
@@ -186,14 +318,10 @@ func TestListDescriptors(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	// Two executions of the same target under one cache key (both retained by keep-last-K), a second
 	// target, and a target-less project-scoped run - all four must appear.
-	r1, err := s.Persist(context.Background(), "k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
-	require.NoError(t, err)
-	r2, err := s.Persist(context.Background(), "k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
-	require.NoError(t, err)
-	r3, err := s.Persist(context.Background(), "k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
-	require.NoError(t, err)
-	r4, err := s.Persist(context.Background(), "k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
-	require.NoError(t, err)
+	r1 := mustPersist(t, s, "k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
+	r2 := mustPersist(t, s, "k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
+	r3 := mustPersist(t, s, "k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
+	r4 := mustPersist(t, s, "k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
 
 	got := s.ListDescriptors()
 	require.Len(t, got, 4, "every retained execution is listed, including the target-less project-scoped run")
@@ -217,8 +345,7 @@ func TestOutputStoreKeepLastK(t *testing.T) {
 
 	var last string
 	for i := 0; i < defaultOutputKeepLast+3; i++ {
-		ref, err := s.Persist(context.Background(), key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
-		require.NoError(t, err)
+		ref := mustPersist(t, s, key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
 		last = ref
 	}
 
@@ -240,14 +367,12 @@ func TestOutputStorePrefixAndAmbiguity(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
 
-	ref, err := s.Persist(context.Background(), "k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, err)
+	ref := mustPersist(t, s, "k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
 	data, _, err := s.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "body\n", string(data))
 
-	_, err = s.Persist(context.Background(), "k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
-	require.NoError(t, err)
+	mustPersist(t, s, "k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
 	_, _, err = s.ByRef(RefPrefix) // the bare prefix matches both
 	var amb *AmbiguousRefError
 	require.True(t, errors.As(err, &amb), "a shared prefix should return *AmbiguousRefError, got %v", err)
@@ -303,7 +428,7 @@ func TestRunOutputNoTrailingNewline(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	ref := c.outputs.LatestRef(r.Hash)
+	ref := c.outputs.StepRef(r.Hash)
 	require.NotEmpty(t, ref)
 	data, _, err := c.outputs.ByRef(ref)
 	require.NoError(t, err)
@@ -320,10 +445,11 @@ func TestLooksLikeRef(t *testing.T) {
 	}
 }
 
-// TestIsMintedRef pins the exact-length ref shape used to scan free text: only ref + exactly
-// refHexLen hex is accepted, so prefixes and coincidentally-hex words are rejected.
+// TestIsMintedRef pins the exact-length ref shapes used to scan free text: ref + exactly
+// refHexLen hex (a portable step ref) or attemptHexLen hex (an attempt id / pre-portable
+// ref) is accepted, so prefixes and coincidentally-hex words are rejected.
 func TestIsMintedRef(t *testing.T) {
-	for _, s := range []string{"out1a2b3c4d", "outdeadbeef"} {
+	for _, s := range []string{"out1a2b3c4d", "outdeadbeef", "out1a2b3c4d5e6f", "outdeadbeefcafe"} {
 		assert.True(t, IsMintedRef(s), "%q should be a minted ref", s)
 	}
 	for _, s := range []string{"outace", "outed", "out1a2b3c", "outa", "out", "output", "out1a2b3c4d5", ""} {
@@ -346,7 +472,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, rPass.Hit)
 
-	passRef := c.outputs.LatestRef(rPass.Hash)
+	passRef := c.outputs.StepRef(rPass.Hash)
 	require.NotEmpty(t, passRef, "a passing miss should persist a ref")
 	data, meta, err := c.outputs.ByRef(passRef)
 	require.NoError(t, err)
@@ -366,7 +492,7 @@ func TestRunPersistsOutputRef(t *testing.T) {
 
 	failHash, herr := c.hashStep(context.Background(), &fail)
 	require.NoError(t, herr)
-	failRef := c.outputs.LatestRef(failHash)
+	failRef := c.outputs.StepRef(failHash)
 	require.NotEmpty(t, failRef, "a failing run should persist a ref")
 	fdata, fmeta, err := c.outputs.ByRef(failRef)
 	require.NoError(t, err)
@@ -380,14 +506,12 @@ func TestOutputStoreRemoveForProject(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
 
-	keep, err := s.Persist(context.Background(), "ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
-	require.NoError(t, err)
-	gone, err := s.Persist(context.Background(), "kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
-	require.NoError(t, err)
+	keep := mustPersist(t, s, "ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
+	gone := mustPersist(t, s, "kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
 
 	s.removeForProject("drop/me")
 
-	_, _, err = s.ByRef(gone)
+	_, _, err := s.ByRef(gone)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "dropped project's execution should be gone")
 	_, _, err = s.ByRef(keep)
 	assert.NoError(t, err, "other project's execution should remain")
@@ -436,14 +560,14 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 	raw := benchRaw(benchLines)
 	dir := b.TempDir()
 	s := NewOutputStore(dir)
-	ref, err := s.Persist(context.Background(), "deadbeefcafef00d", raw, benchMeta())
+	stored, err := s.Persist(context.Background(), "deadbeefcafef00d", raw, benchMeta())
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
 	for range b.N {
-		if _, _, err := s.ByRef(ref); err != nil {
+		if _, _, err := s.ByRef(stored.Ref); err != nil {
 			b.Fatal(err)
 		}
 	}

@@ -404,7 +404,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// event via recordOutput).
 				ref := ""
 				if c.outputs != nil {
-					ref = c.outputs.LatestRef(hash)
+					ref = c.outputs.StepRef(hash)
 				}
 				if ref == "" {
 					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)
@@ -561,12 +561,12 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	var ref string
 	if c.outputs != nil {
-		r, err := c.outputs.Persist(ctx, hash, output, d)
+		stored, err := c.outputs.Persist(ctx, hash, output, d)
 		if err != nil {
 			c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 				fmt.Sprintf("persist output for %s (%s): %v", s.ProjectPath, shortHash(hash), err)))
 		} else {
-			ref = r
+			ref = stored.Ref
 		}
 	}
 

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 )
 
 // RefPrefix begins every target-output reference id ("out1a2b3c"). It is the provenance tag in
@@ -43,10 +44,19 @@ const runExt = ".jsonl"
 // one file per invocation, kept newest-first by modtime. The RotateLogs job trims to this.
 const DefaultMaxRuns = 500
 
-// refHexLen is the hex-digit count after the prefix. 8 hex = 32 bits, matched to
-// shortHash; ample for a local, keep-last-K, age-bounded store, and prefix-matchable
-// like a git short hash.
-const refHexLen = 8
+// refHexLen is the hex-digit count of a portable ref after the prefix. The ref is a
+// truncation of the step's cache key, so the SAME inputs yield the SAME ref on every
+// machine: an inspect line pasted from CI resolves locally, and ref equality is input
+// equality. 12 hex = 48 bits; at a million distinct step keys the birthday-collision
+// odds are ~1e-3, acceptable for a per-workspace namespace, and the full key (any
+// longer prefix, up to all 64 hex) still resolves git-style.
+const refHexLen = 12
+
+// attemptHexLen is the hex-digit count of an attempt id after the prefix. Attempts are
+// execution-unique (nonce-derived) file stems under the step's key directory, so the
+// keep-last-K executions of ONE step stay independently addressable; a full attempt id
+// from `--attempts` resolves directly.
+const attemptHexLen = 8
 
 // defaultOutputKeepLast bounds how many executions per cache key the store retains,
 // so a nondeterministic target's recent failures stay independently addressable
@@ -65,11 +75,27 @@ type OutputDescriptor struct {
 	ErrMsg      string `json:"error,omitempty"` // failure message; empty on success
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
+
+	// Schema v2 (portable refs): Ref is the key-derived portable id shared by every
+	// attempt of the step, and the fields below carry the identity it derives from.
+	// A v1 descriptor (Schema zero) predates portable refs: its Ref is the
+	// execution-unique file stem and these fields are empty.
+	Schema       int    `json:"schema,omitempty"`
+	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
+	KeyVersion   int    `json:"key_version,omitempty"` // hashStep keyVersion that produced Key
+	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
+	MagusVersion string `json:"magus_version,omitempty"`
 }
 
-// AmbiguousRefError is returned by output lookup when a ref prefix matches more than
-// one stored execution. Candidates are the full ref ids, sorted, so the CLI can list
-// them for the user to disambiguate (git-style).
+// descriptorSchema is the OutputDescriptor schema this store writes. v2 introduced
+// portable (key-derived) refs; v1 descriptors carry no schema field.
+const descriptorSchema = 2
+
+// AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more
+// than one stored identity. Candidates are pasteable-back refs, sorted: a step
+// candidate renders as its portable ref (lengthened past refHexLen if two keys
+// collide), an attempt candidate as its full file stem - so the CLI can list them for
+// the user to disambiguate (git-style).
 type AmbiguousRefError struct {
 	Prefix     string
 	Candidates []string
@@ -81,18 +107,20 @@ func (e *AmbiguousRefError) Error() string {
 }
 
 // OutputStore is the cache's output-retrieval repository: it persists each execution's captured
-// output VERBATIM under <cacheDir>/outputs, keyed by a short reference id, and resolves refs back
-// to bytes/metadata. One execution is two sibling files:
+// output VERBATIM under <cacheDir>/outputs and resolves refs back to bytes/metadata. The
+// user-facing ref is PORTABLE: a truncation of the step's cache key, so equal inputs mint the
+// same ref on every machine. One execution is two sibling files named by an execution-unique
+// attempt id:
 //
-//	outputs/<cacheKey>/<ref>.out    the exact bytes the process wrote
-//	outputs/<cacheKey>/<ref>.json   its OutputDescriptor (identity + outcome)
+//	outputs/<cacheKey>/<attempt>.out    the exact bytes the process wrote
+//	outputs/<cacheKey>/<attempt>.json   its OutputDescriptor (identity + outcome)
 //
 // The .out blob is the source of truth: ByRef reads it straight through - no reconstruction,
 // byte-for-byte what ran. Per-line structured events are NOT kept here; they live once in the
 // invocation journal (runs/<inv>.jsonl) for the viewer/filter/live paths, so output is never
 // stored twice. Grouping by cache key keeps a nondeterministic target's recent runs together, so
 // keep-last-K retention is a per-directory prune (by blob modtime) and a ref lookup scans a
-// shallow tree. Safe for concurrent Persist calls (each mints a distinct ref).
+// shallow tree. Safe for concurrent Persist calls (each mints a distinct attempt).
 type OutputStore struct {
 	cacheDir string // cache ROOT; outputsDir/RunsDir are joined off this
 	seq      atomic.Uint64
@@ -107,14 +135,30 @@ func NewOutputStore(cacheDir string) *OutputStore {
 // outputsDir is where the per-execution blobs live: <cacheDir>/outputs.
 func (s *OutputStore) outputsDir() string { return filepath.Join(s.cacheDir, "outputs") }
 
-// mintRef derives a per-execution reference id from the cache key and a process-
-// unique nonce, so the keep-last-K executions of ONE cache key each get a distinct,
-// addressable ref while staying cache-key-flavored. Deriving from the bare key would
-// collapse those K executions to a single id and lose nondeterministic-failure history.
-func (s *OutputStore) mintRef(cacheKey string) string {
+// portableRef derives the user-facing reference id from the cache key alone:
+// RefPrefix + the key's first refHexLen hex digits. Same inputs -> same key -> same
+// ref on every machine, so an inspect line from CI or a teammate's terminal resolves
+// locally, and two machines printing DIFFERENT refs for one target proves their
+// inputs differ. The ref names the STEP (the outputs/<cacheKey>/ directory);
+// execution-level identity lives a level down in attempt ids.
+func portableRef(cacheKey string) string {
+	if len(cacheKey) < refHexLen {
+		return RefPrefix + cacheKey
+	}
+	return RefPrefix + cacheKey[:refHexLen]
+}
+
+// mintAttempt derives an execution-unique attempt id from the cache key and a process-
+// unique nonce. Attempts name the files under the step's key directory, so the
+// keep-last-K executions of ONE cache key each stay independently addressable (K
+// failing attempts of a volatile target must not collapse to one record). The id
+// keeps the ref prefix and hex shape so a full attempt id from `--attempts` routes
+// and resolves exactly like a ref - and so pre-portable stores, whose file stems
+// were minted the same way, resolve unchanged.
+func (s *OutputStore) mintAttempt(cacheKey string) string {
 	nonce := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(s.seq.Add(1), 10)
 	sum := sha256.Sum256([]byte(cacheKey + "\x00" + nonce))
-	return RefPrefix + hex.EncodeToString(sum[:])[:refHexLen]
+	return RefPrefix + hex.EncodeToString(sum[:])[:attemptHexLen]
 }
 
 // outExt is the verbatim output blob; descExt is its descriptor sidecar.
@@ -123,35 +167,41 @@ const (
 	descExt = ".json"
 )
 
-// Persist writes the execution's captured output VERBATIM as outputs/<cacheKey>/<ref>.out
+// Persist writes the execution's captured output VERBATIM as outputs/<cacheKey>/<attempt>.out
 // (byte-for-byte what the process wrote, so `magus query output <ref>` is a straight read - never
-// a reconstruction) plus a <ref>.json descriptor, then prunes the cache key's directory to
+// a reconstruction) plus an <attempt>.json descriptor, then prunes the cache key's directory to
 // keep-last-K. Per-line structured events are NOT stored here - they live in the invocation
-// journal, so no output is stored twice. Returns the minted ref. Best-effort: on error it
-// returns an empty ref and the caller keeps the run's own outcome.
-func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (string, error) {
-	ref := s.mintRef(cacheKey)
-	d.Ref = ref
+// journal, so no output is stored twice. Returns the descriptor as stamped and stored: Ref is
+// the step's portable ref (shared by every attempt of this key), Attempt the execution-unique
+// id that names the files just written. Best-effort at the call site: on error the caller keeps
+// the run's own outcome.
+func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (OutputDescriptor, error) {
+	d.Ref = portableRef(cacheKey)
+	d.Schema = descriptorSchema
+	d.Key = cacheKey
+	d.KeyVersion = keyVersion
+	d.Attempt = s.mintAttempt(cacheKey)
+	d.MagusVersion = types.MagusVersionFromContext(ctx)
 	dir := filepath.Join(s.outputsDir(), cacheKey)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return OutputDescriptor{}, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, ref+outExt), output, 0o644); err != nil {
-		return "", err
+	if err := os.WriteFile(filepath.Join(dir, d.Attempt+outExt), output, 0o644); err != nil {
+		return OutputDescriptor{}, err
 	}
 	descriptor, err := json.Marshal(d)
 	if err != nil {
-		return "", err
+		return OutputDescriptor{}, err
 	}
 	// The descriptor's free-form fields (ErrMsg today) are Go-side strings that never pass
 	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
 	// rather than each field keeps a field added later covered by construction.
 	descriptor = secret.Redact(ctx, descriptor)
-	if err := os.WriteFile(filepath.Join(dir, ref+descExt), descriptor, 0o644); err != nil {
-		return "", err
+	if err := os.WriteFile(filepath.Join(dir, d.Attempt+descExt), descriptor, 0o644); err != nil {
+		return OutputDescriptor{}, err
 	}
 	s.pruneKey(dir, defaultOutputKeepLast)
-	return ref, nil
+	return d, nil
 }
 
 // descriptorPath maps a resolved <ref>.out path to its sibling <ref>.json descriptor.
@@ -172,37 +222,77 @@ func readDescriptor(path string) (OutputDescriptor, error) {
 	return m, nil
 }
 
-// LatestRef returns the ref of the newest execution stored for cacheKey (by file
-// modtime), or "" if none. A cache HIT reuses it instead of re-persisting identical
-// output under a fresh ref - so hits point at the existing events, not bloat the store.
-func (s *OutputStore) LatestRef(cacheKey string) string {
-	dir := filepath.Join(s.outputsDir(), cacheKey)
+// StepRef returns the step's portable ref when at least one execution is stored for
+// cacheKey, or "" if none. A cache HIT reuses it instead of re-persisting identical
+// output under a fresh attempt - so hits point at the existing events, not bloat the
+// store. Pre-portable directories qualify too: the ref derives from the key, not from
+// what any stored descriptor says.
+func (s *OutputStore) StepRef(cacheKey string) string {
+	files, err := os.ReadDir(filepath.Join(s.outputsDir(), cacheKey))
+	if err != nil {
+		return ""
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), outExt) {
+			return portableRef(cacheKey)
+		}
+	}
+	return ""
+}
+
+// newestAttemptBlob returns the path of the newest attempt's .out blob in a cache-key
+// directory, or "" when the directory holds none. It is how a step-level ref resolves
+// to bytes: the ref names the directory, the newest attempt answers for it. "Newest"
+// is the descriptor comparator (newerDescriptor) - the SAME ordering `--attempts`
+// lists by, so the bare ref and the top row never disagree; a blob whose descriptor is
+// missing or unreadable (a Persist that died between its two writes) falls back to
+// file modtime, ranked beneath every descriptor-backed attempt.
+func newestAttemptBlob(dir string) string {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return ""
 	}
-	var bestID string
-	var bestMod time.Time
+	var best string
+	var bestDesc OutputDescriptor
+	var haveDesc bool
+	var bestOrphan, bestOrphanName string
+	var bestOrphanMod time.Time
 	for _, f := range files {
-		id, ok := strings.CutSuffix(f.Name(), outExt)
+		stem, ok := strings.CutSuffix(f.Name(), outExt)
 		if !ok {
 			continue
 		}
-		info, err := f.Info()
-		if err != nil {
+		path := filepath.Join(dir, f.Name())
+		d, derr := readDescriptor(filepath.Join(dir, stem+descExt))
+		if derr == nil {
+			if d.Attempt == "" {
+				d.Attempt = stem
+			}
+			if !haveDesc || newerDescriptor(d, bestDesc) {
+				haveDesc, bestDesc, best = true, d, path
+			}
 			continue
 		}
-		if info.ModTime().After(bestMod) {
-			bestMod = info.ModTime()
-			bestID = id
+		info, ierr := f.Info()
+		if ierr != nil {
+			continue
+		}
+		// Equal modtimes (a coarse-granularity filesystem) break by the higher name
+		// so the pick is deterministic.
+		if info.ModTime().After(bestOrphanMod) || (info.ModTime().Equal(bestOrphanMod) && f.Name() > bestOrphanName) {
+			bestOrphanMod = info.ModTime()
+			bestOrphan, bestOrphanName = path, f.Name()
 		}
 	}
-	return bestID
+	if haveDesc {
+		return best
+	}
+	return bestOrphan
 }
 
 // LatestRefsByTarget returns the newest stored execution per (project, target): one
-// OutputDescriptor each, the most recent by TimestampMs (ties broken by ref id so the
-// choice is stable regardless of directory iteration order). It scans every cache-key
+// OutputDescriptor each, the most recent by TimestampMs (ties broken by attempt id,
+// then ref, so the choice is stable regardless of directory iteration order). It scans every cache-key
 // directory's descriptor sidecars. This is what folds each target's last output ref onto
 // its knowledge-graph node without the graph builder parsing the store's on-disk layout.
 //
@@ -291,8 +381,9 @@ func (s *OutputStore) ListDescriptors() []OutputDescriptor {
 			out = append(out, d)
 		}
 	}
-	// Newest run first (ties broken by ref id, via newerDescriptor, so the order is stable regardless
-	// of directory-iteration order), so the browser's default top-of-list is the most recent output.
+	// Newest run first (ties broken by attempt id then ref, via newerDescriptor, so the order is
+	// stable regardless of directory-iteration order), so the browser's default top-of-list is the
+	// most recent output.
 	sort.Slice(out, func(i, j int) bool { return newerDescriptor(out[i], out[j]) })
 	return out
 }
@@ -307,18 +398,32 @@ func bareTarget(reproTarget string) string {
 }
 
 // newerDescriptor reports whether a is the more recent execution than b: a later
-// timestamp wins, and an equal timestamp is broken by the higher ref id so the pick is
-// deterministic (two runs minted in the same millisecond still resolve the same way).
+// timestamp wins, and an equal timestamp is broken by the higher attempt id, then the
+// higher ref, so the pick is deterministic (two runs minted in the same millisecond
+// still resolve the same way - the ref alone no longer discriminates attempts of one
+// step, which share it).
 func newerDescriptor(a, b OutputDescriptor) bool {
 	if a.TimestampMs != b.TimestampMs {
 		return a.TimestampMs > b.TimestampMs
+	}
+	if a.Attempt != b.Attempt {
+		return a.Attempt > b.Attempt
 	}
 	return a.Ref > b.Ref
 }
 
 // resolveRef resolves a ref - or a unique ref prefix, git-style - to the path of its .out
-// blob. Exact id wins; else a unique prefix resolves; an ambiguous prefix returns
-// *AmbiguousRefError; no match returns fs.ErrNotExist.
+// blob. Two namespaces answer, reflecting the two identity levels:
+//
+//   - STEP refs (portable, key-derived): the hex tail prefix-matches a cache-key
+//     directory name; the step resolves to its newest attempt's blob.
+//   - ATTEMPT ids (execution-unique file stems, and every pre-portable ref): the whole
+//     ref prefix-matches a file stem.
+//
+// An exact attempt-id match wins outright (a full id copied from `--attempts` must never
+// be hijacked by a colliding directory prefix). Otherwise one total match across both
+// namespaces resolves; several return *AmbiguousRefError naming each candidate (the
+// portable ref for a step, the stem for an attempt); none returns fs.ErrNotExist.
 func (s *OutputStore) resolveRef(ref string) (string, error) {
 	ref = strings.ToLower(strings.TrimSpace(ref))
 	if ref == "" {
@@ -328,45 +433,145 @@ func (s *OutputStore) resolveRef(ref string) (string, error) {
 	if err != nil {
 		return "", err // fs.ErrNotExist bubbles when outputs/ is absent
 	}
-	var exact string
-	var prefixes []string
+	hexTail, hasPrefix := strings.CutPrefix(ref, RefPrefix)
+	var exacts []string      // .out paths whose stem IS ref (attempt ids collide only by birthday accident)
+	var exactDirs []string   // their parent key dirs, for disambiguation if several
+	var dirMatches []string  // cache-key dirs the ref names as a step (holding at least one blob)
+	var fileMatches []string // .out paths the ref names as an attempt (outside matched dirs)
 	for _, k := range keys {
 		if !k.IsDir() {
 			continue
 		}
+		matchedDir := hasPrefix && hexTail != "" && strings.HasPrefix(k.Name(), hexTail)
 		files, err := os.ReadDir(filepath.Join(s.outputsDir(), k.Name()))
 		if err != nil {
 			continue
 		}
+		hasBlob := false
 		for _, f := range files {
 			id, ok := strings.CutSuffix(f.Name(), outExt)
 			if !ok {
 				continue
 			}
+			hasBlob = true
 			switch {
 			case id == ref:
-				exact = filepath.Join(s.outputsDir(), k.Name(), f.Name())
-			case strings.HasPrefix(id, ref):
-				prefixes = append(prefixes, filepath.Join(s.outputsDir(), k.Name(), f.Name()))
+				exacts = append(exacts, filepath.Join(s.outputsDir(), k.Name(), f.Name()))
+				exactDirs = append(exactDirs, k.Name())
+			// Inside a matched dir every stem belongs to the already-counted step,
+			// so collecting it would double-report one identity as two candidates.
+			case !matchedDir && strings.HasPrefix(id, ref):
+				fileMatches = append(fileMatches, filepath.Join(s.outputsDir(), k.Name(), f.Name()))
 			}
 		}
+		// A blob-less dir (interrupted Persist, half-finished removal) names no
+		// retrievable step; counting it would fabricate ambiguity or a phantom hit.
+		if matchedDir && hasBlob {
+			dirMatches = append(dirMatches, k.Name())
+		}
 	}
-	if exact != "" {
-		return exact, nil
+	if len(exacts) == 1 {
+		return exacts[0], nil
 	}
-	switch len(prefixes) {
-	case 0:
+	if len(exacts) > 1 {
+		// The same full stem exists under several keys (32-bit birthday accident).
+		// Neither answer is safely "the one the user meant"; name each stem's STEP
+		// so the next query is unambiguous.
+		return "", &AmbiguousRefError{Prefix: ref, Candidates: uniqueDirRefs(exactDirs)}
+	}
+	switch {
+	case len(dirMatches) == 1 && len(fileMatches) == 0:
+		if p := newestAttemptBlob(filepath.Join(s.outputsDir(), dirMatches[0])); p != "" {
+			return p, nil
+		}
 		return "", fs.ErrNotExist
-	case 1:
-		return prefixes[0], nil
+	case len(dirMatches) == 0 && len(fileMatches) == 1:
+		return fileMatches[0], nil
+	case len(dirMatches)+len(fileMatches) == 0:
+		return "", fs.ErrNotExist
 	default:
-		ids := make([]string, len(prefixes))
-		for i, p := range prefixes {
-			ids[i] = strings.TrimSuffix(filepath.Base(p), outExt)
+		ids := uniqueDirRefs(dirMatches)
+		for _, p := range fileMatches {
+			ids = append(ids, strings.TrimSuffix(filepath.Base(p), outExt))
 		}
 		sort.Strings(ids)
 		return "", &AmbiguousRefError{Prefix: ref, Candidates: ids}
 	}
+}
+
+// uniqueDirRefs renders cache-key dir names as refs a user can paste back
+// unambiguously: the standard truncation, lengthened (git-style) until the listed
+// candidates are mutually distinct. Without this, two keys colliding in their first
+// refHexLen digits - the one case that MAKES a step ref ambiguous - would list as
+// identical strings, a dead end at exactly the moment disambiguation is needed.
+func uniqueDirRefs(dirs []string) []string {
+	n := refHexLen
+	for ; n < 64; n++ {
+		seen := make(map[string]struct{}, len(dirs))
+		distinct := true
+		for _, d := range dirs {
+			p := d
+			if len(p) > n {
+				p = p[:n]
+			}
+			if _, dup := seen[p]; dup {
+				distinct = false
+				break
+			}
+			seen[p] = struct{}{}
+		}
+		if distinct {
+			break
+		}
+	}
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if len(d) > n {
+			d = d[:n]
+		}
+		out = append(out, RefPrefix+d)
+	}
+	return out
+}
+
+// Attempts lists every stored execution of the step ref names, newest first - the
+// keep-last-K history behind one portable ref (`magus query output <ref> --attempts`).
+// ref may be the step ref, a unique prefix, or any attempt id within the step; the
+// whole directory answers either way. Pre-portable descriptors carry no Attempt field;
+// their file stem (which was the v1 ref) fills it so every row is addressable. A blob
+// whose descriptor is missing or unreadable (a Persist that died between its two
+// writes) still rows up - minimally, from the blob itself - because a listing that
+// silently omits a retrievable execution reads as "it does not exist".
+func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
+	path, err := s.resolveRef(ref)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(path)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []OutputDescriptor
+	for _, f := range files {
+		stem, ok := strings.CutSuffix(f.Name(), outExt)
+		if !ok {
+			continue
+		}
+		d, derr := readDescriptor(filepath.Join(dir, stem+descExt))
+		if derr != nil {
+			d = OutputDescriptor{Ref: portableRef(filepath.Base(dir))}
+			if info, ierr := f.Info(); ierr == nil {
+				d.TimestampMs = info.ModTime().UnixMilli()
+			}
+		}
+		if d.Attempt == "" {
+			d.Attempt = stem
+		}
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return newerDescriptor(out[i], out[j]) })
+	return out, nil
 }
 
 // readEvents parses every JSONL line of path into events.
@@ -571,10 +776,12 @@ func LooksLikeRef(s string) bool {
 }
 
 // IsMintedRef reports whether s is a fully-minted reference id: the "out" prefix followed
-// by exactly refHexLen hex digits. Unlike LooksLikeRef, which accepts any-length hex prefix
+// by exactly refHexLen hex digits (a portable step ref) or attemptHexLen digits (an attempt
+// id, and every pre-portable ref). Unlike LooksLikeRef, which accepts any-length hex prefix
 // so `magus query output` can take a git-style short ref, this rejects prefixes. Use it when
 // scanning free text for a chainable ref, so short English words whose tail is coincidentally
 // hex ("outed", "outface") are not mistaken for a ref.
 func IsMintedRef(s string) bool {
-	return len(s) == len(RefPrefix)+refHexLen && refPattern.MatchString(s)
+	n := len(s) - len(RefPrefix)
+	return (n == refHexLen || n == attemptHexLen) && refPattern.MatchString(s)
 }

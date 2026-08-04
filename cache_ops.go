@@ -147,6 +147,15 @@ func (m *Magus) OutputByRef(ref string) ([]byte, cache.OutputDescriptor, error) 
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).ByRef(ref)
 }
 
+// OutputAttempts lists every stored execution of the step ref names, newest first - the
+// keep-last-K history behind one portable ref, for `magus query output <ref> --attempts`.
+// Like OutputByRef it reads the store straight off the resolved cache dir, so Inspect
+// workspaces work too. Returns fs.ErrNotExist when no ref matches, or
+// *cache.AmbiguousRefError when a prefix matches several.
+func (m *Magus) OutputAttempts(ref string) ([]cache.OutputDescriptor, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).Attempts(ref)
+}
+
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
 // lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
