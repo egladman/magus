@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2470,
-  "edge_count": 5596,
+  "edge_count": 5597,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -32034,6 +32034,14 @@
     {
       "source": "doc:docs/guides/debugging.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/debugging.md"
+    },
+    {
+      "source": "doc:docs/guides/debugging.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

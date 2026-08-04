@@ -187,6 +187,37 @@ func TestMagusSurfacesExposeSameMembers(t *testing.T) {
 	assert.ElementsMatch(t, MagusModuleKeys(), script.MapKeys())
 }
 
+// TestReplAutoloadsMagusfile covers what a bare `magus buzz` gives you: the REPL
+// executes the magusfile at cwd on start, so its locals and targets are there to
+// poke at. It lives here rather than in a cmd/magus testscript because driving the
+// REPL there needed a non-terminal stdin, which is now unambiguously "run this
+// piped script" - and because the wiring worth testing (session + autoload +
+// driver) is all below the CLI anyway.
+func TestReplAutoloadsMagusfile(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+
+final greeting = "from the magusfile";
+
+export fun noop(ctx: magus\Context, _a: [str]) > void {}
+`)
+	sess, err := interp.NewBuzzReplSession(ctx, dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sess.Close() })
+
+	var stdout, stderr strings.Builder
+	require.NoError(t, interp.Repl(ctx, sess, interp.ReplOptions{
+		Stdin:   strings.NewReader("greeting\n"),
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+		WorkDir: dir,
+	}))
+	assert.Contains(t, stdout.String(), "from the magusfile")
+	assert.Empty(t, stderr.String())
+}
+
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with generated bindings

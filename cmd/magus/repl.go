@@ -9,14 +9,23 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-// workspaceBuzzRepl opens the magusfile-aware REPL behind `magus buzz --workspace`.
-func workspaceBuzzRepl(ctx context.Context, workDir string, noAutoload bool) error {
+// buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile surface
+// (host modules, the magus.* namespace, spell and project imports), with the
+// magusfile at cwd executed on start so its targets and locals are there to poke
+// at. There is no second, magusfile-less REPL and no flag to ask for this one -
+// magus reads its context everywhere else, and a REPL opened inside a workspace is
+// a REPL on that workspace. Outside one there is simply nothing to autoload, which
+// NewBuzzReplSession already treats as ordinary rather than an error.
+//
+// --no-autoload skips executing the magusfile; -C aims the import resolution
+// somewhere other than cwd.
+func buzzRepl(ctx context.Context, workDir string, noAutoload bool) error {
 	cwd := workDir
 	if cwd == "" {
 		var err error
 		cwd, err = os.Getwd()
 		if err != nil {
-			return fmt.Errorf("buzz --workspace: getwd: %w", err)
+			return fmt.Errorf("buzz repl: getwd: %w", err)
 		}
 	}
 
@@ -26,7 +35,7 @@ func workspaceBuzzRepl(ctx context.Context, workDir string, noAutoload bool) err
 	}
 	sess, err := interp.NewBuzzReplSession(ctx, autoloadDir)
 	if err != nil {
-		return fmt.Errorf("buzz --workspace: %w", err)
+		return fmt.Errorf("buzz repl: %w", err)
 	}
 	defer func() { _ = sess.Close() }()
 
@@ -35,7 +44,7 @@ func workspaceBuzzRepl(ctx context.Context, workDir string, noAutoload bool) err
 		Stdin:      os.Stdin,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
-		Banner:     "magus buzz --workspace (.help for commands)",
+		Banner:     "magus buzz - Buzz REPL (.help for commands)",
 		Candidates: workspaceReplCandidates(ctx, cwd),
 	})
 }

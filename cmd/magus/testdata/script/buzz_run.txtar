@@ -19,6 +19,12 @@ stdin hello.buzz
 exec magus buzz -
 stdout 'hello from file'
 
+# and with no argument at all: a non-terminal stdin is a script to run, never the
+# REPL, so `cat x | magus buzz` and heredocs keep working
+stdin hello.buzz
+exec magus buzz
+stdout 'hello from file'
+
 # -t runs the file's test blocks and reports a pass
 exec magus buzz -t --embedded pass_tests.buzz
 stdout 'ok\s+test "add adds"'
@@ -48,7 +54,7 @@ stderr '\[MGS1022\] magus.project: only callable from a magusfile'
 stderr 'see: https://.*MGS1022'
 
 # magus\Context is the target-declaration TYPE, which only the magusfile engine
-# declares; use `magus buzz --workspace` for that surface
+# declares; the REPL (`magus buzz` with no arguments) is where it exists
 ! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
 stderr '\[BZZ1002\] buzz: line 1:40: undefined type "Context"'
 

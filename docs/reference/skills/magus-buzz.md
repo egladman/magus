@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 7082
-skill_simple_bytes: 6075
+skill_full_bytes: 7031
+skill_simple_bytes: 6024
 ---
 
 # magus-buzz
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `d8c8251eafcf` |
+| `skill-content` | `552905bbfe98` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -75,8 +75,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
-| `magus buzz` (a terminal, no args) | REPL |
-| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
+| `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask
 
@@ -279,8 +278,7 @@ magus buzz hello.buzz
 | `magus buzz -e '<code>'` | run a snippet inline |
 | `echo '<code>' \| magus buzz -` | run from stdin (a pipe or heredoc also works with no `-`) |
 | `magus buzz -t <file>` | run the file's `test "..." {}` blocks and report pass/fail |
-| `magus buzz` (a terminal, no args) | REPL |
-| `magus buzz --workspace` | REPL with the magusfile's targets and bindings loaded |
+| `magus buzz` (a terminal, no args) | REPL, with the magusfile at cwd loaded |
 
 ## Never guess an API: ask
 
