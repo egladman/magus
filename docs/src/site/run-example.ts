@@ -7,101 +7,15 @@
 // (right) - runnable blocks skip code-copy.js's floating corner button (see there) and
 // get this inline one instead. Bottom bar: the Run button (right-aligned), directly
 // above where its output panel will land on click, which LAZY-LOADS the playground WASM
-// (never on page load - the ~1.9 MB artifact would regress the perf work). Subsequent
-// runs on the page reuse the cached module.
+// through lib/buzz-runtime (never on page load - the ~1.9 MB artifact would regress the
+// perf work). Subsequent runs on the page reuse the cached module, as does the hidden
+// console in buzz-console.ts: one artifact, one fetch, whichever asks first.
+import { type BuzzResult, ensureBuzz, SITE_ROOT } from "../lib/buzz-runtime.js";
 import { copyFeedback } from "../lib/clipboard.js";
-
-// The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
-// defines window.Go; declare just the surface this module touches.
-interface BuzzOp {
-  target?: string;
-  name: string;
-  detail?: string;
-  kind: string;
-}
-interface BuzzResult {
-  ok: boolean;
-  output?: string;
-  trace?: BuzzOp[];
-}
-interface BuzzRuntime {
-  evalBuzz(src: string): BuzzResult;
-  evalBuzzWithRecorder(src: string): BuzzResult;
-}
-interface GoInstance {
-  run(instance: WebAssembly.Instance): void;
-  importObject: WebAssembly.Imports;
-}
-declare global {
-  interface Window {
-    buzz?: BuzzRuntime;
-    Go: { new (): GoInstance };
-  }
-}
 
 export function initRunExample(): void {
   const blocks = document.querySelectorAll("pre[data-magus-run]");
   if (!blocks.length) return;
-
-  // Resolve the playground/ folder relative to this bundle so links work under
-  // the /magus/ subpath and local preview alike.
-  const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
-
-  // Lazy WASM loader. Returns a Promise that resolves once window.buzz is ready.
-  let wasmPromise: Promise<void> | null = null;
-  function ensureBuzz(): Promise<void> {
-    if (window.buzz && typeof window.buzz.evalBuzz === "function") return Promise.resolve();
-    if (wasmPromise) return wasmPromise;
-    wasmPromise = new Promise<void>(function (resolve, reject) {
-      // wasm_exec.js is a classic script that defines globalThis.Go; append it,
-      // wait for load, then instantiate buzz.wasm exactly like playground.html.
-      const s = document.createElement("script");
-      s.src = ROOT + "playground/wasm_exec.js";
-      s.onload = function () {
-        try {
-          const go = new window.Go();
-          const loader = fetch(ROOT + "playground/buzz.wasm");
-          const startWith = function (mod: WebAssembly.WebAssemblyInstantiatedSource): void {
-            go.run(mod.instance);
-            // The playground exposes window.buzz.evalBuzz inside main(); poll
-            // briefly for it to appear before resolving (Go's main is async under
-            // asyncify).
-            const deadline = Date.now() + 5000;
-            (function wait() {
-              if (window.buzz && typeof window.buzz.evalBuzz === "function") return resolve();
-              if (Date.now() > deadline) return reject(new Error("buzz.evalBuzz not ready"));
-              setTimeout(wait, 30);
-            })();
-          };
-          if (WebAssembly.instantiateStreaming) {
-            WebAssembly.instantiateStreaming(loader, go.importObject).then(startWith).catch(reject);
-          } else {
-            loader
-              .then(function (r) {
-                return r.arrayBuffer();
-              })
-              .then(function (bs) {
-                return WebAssembly.instantiate(bs, go.importObject);
-              })
-              .then(startWith)
-              .catch(reject);
-          }
-        } catch (e) {
-          reject(e);
-        }
-      };
-      s.onerror = function () {
-        reject(new Error("wasm_exec.js failed to load"));
-      };
-      document.head.appendChild(s);
-    });
-    // A transient load failure must not poison every later Run; drop the cache so the
-    // next click retries. The caller still sees this attempt's rejection.
-    wasmPromise.catch(() => {
-      wasmPromise = null;
-    });
-    return wasmPromise;
-  }
 
   const PLAY =
     '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -173,7 +87,9 @@ export function initRunExample(): void {
 
     const openLink = document.createElement("a");
     openLink.className = "open-in-playground";
-    openLink.href = ROOT + "playground/#source=" + base64url(code.textContent ?? "");
+    // SITE_ROOT resolves playground/ from the bundle's own URL, so the link works
+    // under the /magus/ subpath and a local preview alike.
+    openLink.href = SITE_ROOT + "playground/#source=" + base64url(code.textContent ?? "");
     openLink.target = "_blank";
     openLink.rel = "noopener";
     openLink.setAttribute("title", "Open this snippet in the playground (new tab)");
@@ -246,9 +162,7 @@ export function initRunExample(): void {
       // examples stay on the plain evalBuzz path (print output).
       const recorder = pre.hasAttribute("data-magus-recorder");
       ensureBuzz()
-        .then(() => {
-          const buzz = window.buzz;
-          if (!buzz) throw new Error("buzz.evalBuzz not ready");
+        .then((buzz) => {
           const pnl = panel();
           const src = code.textContent ?? "";
           if (recorder) {

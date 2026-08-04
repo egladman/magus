@@ -26,6 +26,7 @@ import { initPrefetch } from "./prefetch.js";
 import { initRunExample } from "./run-example.js";
 import { initGlossaryTerms } from "./glossary-terms.js";
 import { initKeyboardHelp } from "./keyboard-help.js";
+import { initBuzzConsole } from "./buzz-console.js";
 import { initAnnouncement } from "./announcement.js";
 import { initRelativeTime } from "./relative-time.js";
 import { initOfflineBadge } from "./offline-badge.js";
@@ -48,6 +49,9 @@ initPrefetch();
 initRunExample();
 initGlossaryTerms();
 initKeyboardHelp();
+// Deliberately absent from initKeyboardHelp's shortcut list: the console is found, not
+// documented. Only a keydown listener until someone types the word.
+initBuzzConsole();
 initAnnouncement();
 initRelativeTime();
 initOfflineBadge();

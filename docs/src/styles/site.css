@@ -2594,6 +2594,81 @@ a code {
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
 
+/* The hidden Buzz console (buzz-console.ts, opened by typing "buzz"). Same native
+   <dialog> chrome as the shortcut overlay above - it borrows that header and its
+   .shortcut-close button verbatim - and only the log and prompt below are its own.
+   Wider than the shortcut card because its content is code, not key names. */
+.buzz-console[open] {
+  max-width: 38rem;
+  width: calc(100vw - 2rem);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0;
+}
+.buzz-console header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+}
+.buzz-console header h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: var(--pico-font-family-monospace);
+}
+.buzz-console-log {
+  /* Tall enough to hold a few exchanges, capped so a chatty session scrolls inside the
+     dialog instead of growing it past the viewport. */
+  max-height: 40vh;
+  min-height: 6rem;
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem;
+  background: var(--pico-code-background-color);
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.buzz-console-note { color: var(--pico-muted-color); }
+.buzz-console-echo { color: var(--pico-muted-color); }
+/* The trailing value, distinct from anything the program printed: a REPL's answer is
+   the line you look for, so it carries the site's accent while print output stays
+   body-colored. */
+.buzz-console-value { color: var(--pico-primary); }
+.buzz-console-fail { color: var(--pico-del-color, #b3261e); }
+.buzz-console-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.9rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.buzz-console-prompt {
+  margin: 0;
+  font-family: var(--pico-font-family-monospace);
+  color: var(--pico-muted-color);
+}
+.buzz-console-form input {
+  /* Pico gives form fields a card look and a bottom margin; inside a one-line prompt
+     both read as chrome, so the field is stripped back to bare text on the log's
+     background and the caret becomes the only affordance. */
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.85rem;
+}
+.buzz-console-form input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.buzz-console::backdrop { background: rgba(0, 0, 0, 0.35); }
+
 /* Broader reduced-motion pass: kill every animation/transition sitewide when
    the OS asks for reduced motion. Specific rules that already respect it
    (back-to-top, TOC sheet) stay intact; this covers everything else. */
