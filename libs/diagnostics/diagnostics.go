@@ -35,6 +35,29 @@ type Error struct {
 	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
 }
 
+// BuzzError exposes this diagnostic to a Buzz `catch` as structured fields, satisfying
+// gopherbuzz's vm.StructuredError.
+//
+// Without it a caught error is just its rendered sentence, so a magusfile deciding what to
+// do about a failure has to substring-match prose that exists for humans and is free to be
+// reworded. The code is the stable identifier - it is already the thing docs, the knowledge
+// graph and `magus explain` key off - so it is what a caller should branch on:
+//
+//	catch (e) { if (e.code == "MGS2001") { ... } }
+//
+// url is included when the domain captured one, so a magusfile can surface the same link
+// the CLI prints rather than reconstructing it.
+func (e *Error) BuzzError() map[string]string {
+	f := map[string]string{
+		"code":    string(e.Code),
+		"message": e.Msg,
+	}
+	if e.url != "" {
+		f["url"] = e.url
+	}
+	return f
+}
+
 // ErrSentinel matches any *Error via errors.Is, so a caller can test "is this a diagnostic error at all"
 // without naming a specific code.
 var ErrSentinel = errors.New("diag")
