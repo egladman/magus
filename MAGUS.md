@@ -69,8 +69,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | evals | 7 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
+| libs/proto | 3 | `magus query project:libs/proto` | `generate`, `lint`, `ci` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
-| proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: magus
 
@@ -195,6 +195,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
 | `mod-sync` |  |
 
+## Project: libs/proto
+
+| Target | What it does |
+|---|---|
+| `ci` |  |
+| `generate` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
+| `lint` |  |
+
 ## Project: libs/textsearch
 
 | Target | What it does |
@@ -205,11 +213,3 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests. |
 | `preflight` |  |
 | `md-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
-
-## Project: proto
-
-| Target | What it does |
-|---|---|
-| `ci` |  |
-| `generate` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
-| `lint` |  |

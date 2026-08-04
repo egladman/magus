@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
+	statusv1 "github.com/egladman/magus/libs/proto/gen/go/magus/status/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/types"
 )
 

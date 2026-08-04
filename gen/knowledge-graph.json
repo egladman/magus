@@ -6352,6 +6352,15 @@
       }
     },
     {
+      "id": "file:libs/proto/magusfile.buzz",
+      "kind": "file",
+      "label": "libs/proto/magusfile.buzz",
+      "source": "libs/proto/magusfile.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:libs/textsearch/magusfile.buzz",
       "kind": "file",
       "label": "libs/textsearch/magusfile.buzz",
@@ -6365,15 +6374,6 @@
       "kind": "file",
       "label": "magusfile.buzz",
       "source": "magusfile.buzz",
-      "attrs": {
-        "language": "buzz"
-      }
-    },
-    {
-      "id": "file:proto/magusfile.buzz",
-      "kind": "file",
-      "label": "proto/magusfile.buzz",
-      "source": "proto/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -16081,6 +16081,34 @@
       "source": "libs/gopherbuzz/std/testing.buzz:41"
     },
     {
+      "id": "function:libs/proto/magusfile.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "source": "libs/proto/magusfile.buzz:61",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/proto/magusfile.buzz:generate",
+      "kind": "function",
+      "label": "generate",
+      "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. lint checks the schema's shape; ci regenerates first so committed gen/ can never drift from the .proto.  buf-breaking (the backward-compat gate) is DEFERRED until it can be wired correctly. Requirements, all load-bearing: 1. NO hardcoded \"main\" - resolve the default branch dynamically via the existing types.DefaultBranchReporter (vcs/git.go DefaultBranch, from origin/HEAD). 2. GRAC",
+      "source": "libs/proto/magusfile.buzz:55",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:libs/proto/magusfile.buzz:lint",
+      "kind": "function",
+      "label": "lint",
+      "source": "libs/proto/magusfile.buzz:60",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:libs/textsearch/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
@@ -16643,34 +16671,6 @@
       "label": "write_image_summary",
       "doc": "Appends a runnable summary of what was pushed to the GitHub Actions job summary.  This lives HERE, not in a workflow `run:` block, for the same reason image-login does: the target already knows the references it pushed, so a workflow step that re-derives them (`jq -r '.\"image.name\"' snapshot-meta.json`) is parsing magus's own output back out of a file magus wrote. That is the shell-parsing shape this magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.  Self-gating on $GITHUB_S",
       "source": "magusfile.buzz:308"
-    },
-    {
-      "id": "function:proto/magusfile.buzz:ci",
-      "kind": "function",
-      "label": "ci",
-      "source": "proto/magusfile.buzz:62",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:proto/magusfile.buzz:generate",
-      "kind": "function",
-      "label": "generate",
-      "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. lint checks the schema's shape; ci regenerates first so committed gen/ can never drift from the .proto.  buf-breaking (the backward-compat gate) is DEFERRED until it can be wired correctly. Requirements, all load-bearing: 1. NO hardcoded \"main\" - resolve the default branch dynamically via the existing types.DefaultBranchReporter (vcs/git.go DefaultBranch, from origin/HEAD). 2. GRAC",
-      "source": "proto/magusfile.buzz:57",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:proto/magusfile.buzz:lint",
-      "kind": "function",
-      "label": "lint",
-      "source": "proto/magusfile.buzz:61",
-      "attrs": {
-        "exported": "true"
-      }
     },
     {
       "id": "function:releaser.buzz:currentVersion",
@@ -22334,6 +22334,16 @@
       }
     },
     {
+      "id": "project:libs/proto",
+      "kind": "project",
+      "label": "libs/proto",
+      "source": "libs/proto",
+      "attrs": {
+        "engine": "buzz",
+        "target_count": "3"
+      }
+    },
+    {
       "id": "project:libs/textsearch",
       "kind": "project",
       "label": "libs/textsearch",
@@ -22341,16 +22351,6 @@
       "attrs": {
         "engine": "buzz",
         "target_count": "6"
-      }
-    },
-    {
-      "id": "project:proto",
-      "kind": "project",
-      "label": "proto",
-      "source": "proto",
-      "attrs": {
-        "engine": "buzz",
-        "target_count": "3"
       }
     },
     {
@@ -23376,6 +23376,34 @@
       }
     },
     {
+      "id": "target:libs/proto:ci",
+      "kind": "target",
+      "label": "ci",
+      "source": "libs/proto",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/proto:generate",
+      "kind": "target",
+      "label": "generate",
+      "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
+      "source": "libs/proto",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:libs/proto:lint",
+      "kind": "target",
+      "label": "lint",
+      "source": "libs/proto",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:libs/textsearch:ci",
       "kind": "target",
       "label": "ci",
@@ -23431,34 +23459,6 @@
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts and renders a line- coverage badge from the run.",
       "source": "libs/textsearch",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:proto:ci",
-      "kind": "target",
-      "label": "ci",
-      "source": "proto",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:proto:generate",
-      "kind": "target",
-      "label": "generate",
-      "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
-      "source": "proto",
-      "attrs": {
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:proto:lint",
-      "kind": "target",
-      "label": "lint",
-      "source": "proto",
       "attrs": {
         "engine": "buzz"
       }
@@ -53034,6 +53034,38 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
+      "source": "file:libs/proto/magusfile.buzz",
+      "target": "function:libs/proto/magusfile.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/proto/magusfile.buzz",
+      "target": "function:libs/proto/magusfile.buzz:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/proto/magusfile.buzz",
+      "target": "function:libs/proto/magusfile.buzz:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto/magusfile.buzz"
+    },
+    {
+      "source": "file:libs/proto/magusfile.buzz",
+      "target": "import:magus/spell/buf",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "libs/proto/magusfile.buzz"
+    },
+    {
       "source": "file:libs/textsearch/magusfile.buzz",
       "target": "function:libs/textsearch/magusfile.buzz:ci",
       "relation": "contains",
@@ -53784,38 +53816,6 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:proto/magusfile.buzz",
-      "target": "function:proto/magusfile.buzz:ci",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto/magusfile.buzz"
-    },
-    {
-      "source": "file:proto/magusfile.buzz",
-      "target": "function:proto/magusfile.buzz:generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto/magusfile.buzz"
-    },
-    {
-      "source": "file:proto/magusfile.buzz",
-      "target": "function:proto/magusfile.buzz:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto/magusfile.buzz"
-    },
-    {
-      "source": "file:proto/magusfile.buzz",
-      "target": "import:magus/spell/buf",
-      "relation": "imports",
-      "confidence": "inferred",
-      "score": 0.7,
-      "provenance": "proto/magusfile.buzz"
     },
     {
       "source": "file:releaser.buzz",
@@ -65854,7 +65854,7 @@
     },
     {
       "source": "project:docs",
-      "target": "project:libs/textsearch",
+      "target": "project:libs/proto",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -65862,7 +65862,7 @@
     },
     {
       "source": "project:docs",
-      "target": "project:proto",
+      "target": "project:libs/textsearch",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66333,6 +66333,38 @@
       "provenance": "libs/gopherbuzz"
     },
     {
+      "source": "project:libs/proto",
+      "target": "file:libs/proto/magusfile.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto/magusfile.buzz"
+    },
+    {
+      "source": "project:libs/proto",
+      "target": "target:libs/proto:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "project:libs/proto",
+      "target": "target:libs/proto:generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "project:libs/proto",
+      "target": "target:libs/proto:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
       "source": "project:libs/textsearch",
       "target": "file:libs/textsearch/magusfile.buzz",
       "relation": "contains",
@@ -66387,38 +66419,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/textsearch"
-    },
-    {
-      "source": "project:proto",
-      "target": "file:proto/magusfile.buzz",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto/magusfile.buzz"
-    },
-    {
-      "source": "project:proto",
-      "target": "target:proto:ci",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "project:proto",
-      "target": "target:proto:generate",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "project:proto",
-      "target": "target:proto:lint",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
     },
     {
       "source": "rationale:magusfile.buzz:1236:TODO",
@@ -69345,6 +69345,14 @@
     },
     {
       "source": "target:docs:md-generate",
+      "target": "file:libs/proto/magusfile.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:md-generate",
       "target": "file:libs/textsearch/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -69354,14 +69362,6 @@
     {
       "source": "target:docs:md-generate",
       "target": "file:magusfile.buzz",
-      "relation": "consumes",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:md-generate",
-      "target": "file:proto/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -70256,6 +70256,62 @@
       "provenance": "libs/gopherbuzz"
     },
     {
+      "source": "target:libs/proto:ci",
+      "target": "target:libs/proto:generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:ci",
+      "target": "target:libs/proto:lint",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:generate",
+      "target": "op:buf:buf-build",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:generate",
+      "target": "op:buf:buf-generate",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:generate",
+      "target": "spell:buf",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:lint",
+      "target": "op:buf:buf-lint",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
+      "source": "target:libs/proto:lint",
+      "target": "spell:buf",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/proto"
+    },
+    {
       "source": "target:libs/textsearch:ci",
       "target": "target:libs/textsearch:lint",
       "relation": "depends_on",
@@ -70302,62 +70358,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/textsearch"
-    },
-    {
-      "source": "target:proto:ci",
-      "target": "target:proto:generate",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:ci",
-      "target": "target:proto:lint",
-      "relation": "depends_on",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:generate",
-      "target": "op:buf:buf-build",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:generate",
-      "target": "op:buf:buf-generate",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:generate",
-      "target": "spell:buf",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:lint",
-      "target": "op:buf:buf-lint",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
-    },
-    {
-      "source": "target:proto:lint",
-      "target": "spell:buf",
-      "relation": "uses",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "proto"
     }
   ]
 }

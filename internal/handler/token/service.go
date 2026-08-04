@@ -33,8 +33,8 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/share"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/libs/proto/gen/go/magus/token/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/token/v1/tokenv1connect"
 )
 
 // shareView is the narrow slice of *share.Manager the handler needs: read the active

@@ -15,18 +15,18 @@ import (
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
 	// for TestKnownVerbs to enumerate. This is the whole point of the ratchet: a new service/method
 	// linked into the daemon is visible here, so an unclassified verb cannot ship unnoticed.
-	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/query/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/activity/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/graph/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/job/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/memory/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/query/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/status/v1"
+	_ "github.com/egladman/magus/libs/proto/gen/go/magus/viewer/v1"
 
 	"github.com/egladman/magus/internal/trail"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/libs/proto/gen/go/magus/token/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/token/v1/tokenv1connect"
 )
 
 func TestClassify(t *testing.T) {

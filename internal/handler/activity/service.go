@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/trail"
-	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
+	activityv1 "github.com/egladman/magus/libs/proto/gen/go/magus/activity/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/activity/v1/activityv1connect"
 )
 
 const (

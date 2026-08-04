@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
+	statusv1 "github.com/egladman/magus/libs/proto/gen/go/magus/status/v1"
 	"github.com/egladman/magus/types"
 	"google.golang.org/protobuf/proto"
 )

@@ -1,0 +1,57 @@
+version: v2
+# Managed mode sets the Go import prefix centrally (so every .proto need not carry an
+# `option go_package`) - the generated packages live under the magus module prefix,
+# consistent with the rest of the Go code.
+managed:
+  enabled: true
+  # Don't rewrite protovalidate's Go package under our prefix - it is an external
+  # dependency; its generated Go comes from the published module, not our tree.
+  disable:
+    - module: buf.build/bufbuild/protovalidate
+  override:
+    - file_option: go_package_prefix
+      value: github.com/egladman/magus/libs/proto/gen/go
+plugins:
+  # Go only: a pinned, local protoc-gen-go run through the `go tool` directive (its version
+  # is pinned in the root go.mod, so codegen is reproducible with no separate install). The
+  # JS/TS client is generated below, from these same .proto.
+  - local: [go, tool, protoc-gen-go]
+    out: gen/go
+    opt: paths=source_relative
+  # The JS/TS client, generated HERE rather than in the consumer. It used to live in
+  # docs/buf.gen.yaml, which meant `buf generate` shared a cache footprint with 335
+  # Markdown files: editing prose changed the docs project's key and re-ran a
+  # NETWORK-bound codegen step, which is how a day's doc edits exhausted the BSR rate
+  # limit. This project's sources are the schema alone, so it reruns when the schema
+  # moves and not otherwise.
+  #
+  # Output lands in the consumer's tree (out is relative to this file) because esbuild
+  # must resolve @bufbuild/protobuf from docs/node_modules when it bundles the client,
+  # which only works with the generated code inside that project. docs keys on
+  # src/**/*.ts, so a regenerated client still marks docs affected - via the generated
+  # FILES, not via the .proto.
+  #
+  # A remote plugin, so no local protoc-gen-es install is needed here.
+  - remote: buf.build/bufbuild/es:v2.9.0
+    out: ../../docs/src/gen
+    opt: target=ts
+    include_imports: true
+  # The console is a separate project that consumes the same client, and for the same
+  # esbuild reason its copy must live inside its own tree. It is GENERATED here rather
+  # than copied from docs: an unowned copy is invisible to magus, which classifies it as
+  # hand-written source, so nothing gates its drift. That is exactly how console/src/gen
+  # silently went stale against a viewer.proto field rename and only surfaced when the
+  # tree was finally resynced by hand.
+  #
+  # The cost is a second invocation of the same remote plugin per run. The rate-limit
+  # problem this file warns about above was one of FREQUENCY - codegen re-running on
+  # every prose edit - and that fix (keying on the schema alone) still holds.
+  - remote: buf.build/bufbuild/es:v2.9.0
+    out: ../../console/src/gen
+    opt: target=ts
+    include_imports: true
+  # ConnectRPC Go handlers/clients: one endpoint speaks Connect (browser-native HTTP), gRPC,
+  # and gRPC-Web. Pinned through `go tool` like protoc-gen-go so codegen needs no install.
+  - local: [go, tool, protoc-gen-connect-go]
+    out: gen/go
+    opt: paths=source_relative

@@ -18,7 +18,7 @@ trivially correlated:
 | `internal/handler/status` | `magus.status.v1` | status-report -> proto mapping + encoder, the GET /api/v1/status and /api/v1/events handlers |
 | `internal/handler/graph`  | `magus.graph.v1`  | knowledge-graph -> proto mapping, the GET /api/v1/graph handler                              |
 
-When you add a new wire contract `proto/magus/foo/v1`, its mapping goes in a new
+When you add a new wire contract `libs/proto/magus/foo/v1`, its mapping goes in a new
 `internal/handler/foo` package - same name, no exceptions for the wire packages.
 
 Each console handler is an `http.Handler` receiver type holding a NARROW

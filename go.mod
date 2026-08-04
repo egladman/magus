@@ -3,7 +3,7 @@ module github.com/egladman/magus
 go 1.25.0
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260415201107-50325440f8f2.1
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260709200747-435963d16310.1 // indirect
 	connectrpc.com/connect v1.20.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -86,6 +86,7 @@ require (
 	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/egladman/magus/libs/diagnostics v0.0.0
 	github.com/egladman/magus/libs/gopherbuzz v0.0.0
+	github.com/egladman/magus/libs/proto v0.0.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -118,11 +119,7 @@ require (
 	google.golang.org/grpc v1.82.1 // indirect
 )
 
-tool (
-	connectrpc.com/connect/cmd/protoc-gen-connect-go
-	github.com/vektra/mockery/v3
-	google.golang.org/protobuf/cmd/protoc-gen-go
-)
+tool github.com/vektra/mockery/v3
 
 // These replace directives are LOCAL-DEV ONLY: replace is never transitive, so a
 // downstream consumer of this module never sees them - it resolves the two
@@ -133,3 +130,5 @@ tool (
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz
+
+replace github.com/egladman/magus/libs/proto => ./libs/proto

@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1/insightv1connect"
+	insightv1 "github.com/egladman/magus/libs/proto/gen/go/magus/insight/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/insight/v1/insightv1connect"
 	"github.com/egladman/magus/types"
 )
 

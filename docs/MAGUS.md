@@ -69,8 +69,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | evals | 7 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
+| libs/proto | 3 | `magus query project:libs/proto` | `generate`, `lint`, `ci` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
-| proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: docs
 

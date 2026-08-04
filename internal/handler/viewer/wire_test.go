@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/egladman/magus/internal/journal"
-	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	viewerv1 "github.com/egladman/magus/libs/proto/gen/go/magus/viewer/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

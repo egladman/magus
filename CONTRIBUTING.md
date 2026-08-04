@@ -255,12 +255,12 @@ subpackage `internal/handler/<name>` owns the over-the-wire concerns of the
 protobuf package `magus.<name>.v1`:
 
 ```text
-proto/magus/graph/v1     <->  internal/handler/graph
-proto/magus/status/v1    <->  internal/handler/status
-proto/magus/viewer/v1    <->  internal/handler/viewer
+libs/proto/magus/graph/v1     <->  internal/handler/graph
+libs/proto/magus/status/v1    <->  internal/handler/status
+libs/proto/magus/viewer/v1    <->  internal/handler/viewer
 ```
 
-Adding `proto/magus/foo/v1` means adding `internal/handler/foo` - same name, no
+Adding `libs/proto/magus/foo/v1` means adding `internal/handler/foo` - same name, no
 exceptions for the wire packages. Two subpackages there are deliberately not
 proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
 `trailrpc` is a transport concern.

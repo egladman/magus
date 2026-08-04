@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
+	memoryv1 "github.com/egladman/magus/libs/proto/gen/go/magus/memory/v1"
 )
 
 // fakeWorkspace reports a fixed root; the handler only reads Root().

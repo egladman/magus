@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/share"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/libs/proto/gen/go/magus/token/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/token/v1/tokenv1connect"
 )
 
 // fakeShare is a stand-in for *share.Manager: it reports a fixed active share (or

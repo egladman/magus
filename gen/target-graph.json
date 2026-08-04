@@ -716,7 +716,7 @@
             },
             {
               "project": ".",
-              "glob": "proto/gen/descriptor.binpb"
+              "glob": "libs/proto/gen/descriptor.binpb"
             },
             {
               "project": ".",
@@ -1005,8 +1005,8 @@
         ".",
         "docs/guides/integrations/agents",
         "libs/gopherbuzz",
-        "libs/textsearch",
-        "proto"
+        "libs/proto",
+        "libs/textsearch"
       ]
     },
     {
@@ -1331,6 +1331,50 @@
       ]
     },
     {
+      "path": "libs/proto",
+      "name": "libs/proto",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "generate",
+          "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
+          "spells": [
+            {
+              "spell": "buf",
+              "ops": [
+                "buf-generate",
+                "buf-build"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": "libs/proto",
+              "glob": "go.mod"
+            }
+          ]
+        },
+        {
+          "name": "lint",
+          "spells": [
+            {
+              "spell": "buf",
+              "ops": [
+                "buf-lint"
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ci",
+          "dependencies": [
+            "generate",
+            "lint"
+          ]
+        }
+      ]
+    },
+    {
       "path": "libs/textsearch",
       "name": "libs/textsearch",
       "engine": "buzz",
@@ -1382,44 +1426,6 @@
           "dependencies": [
             "lint",
             "test"
-          ]
-        }
-      ]
-    },
-    {
-      "path": "proto",
-      "name": "proto",
-      "engine": "buzz",
-      "nodes": [
-        {
-          "name": "generate",
-          "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
-          "spells": [
-            {
-              "spell": "buf",
-              "ops": [
-                "buf-generate",
-                "buf-build"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "lint",
-          "spells": [
-            {
-              "spell": "buf",
-              "ops": [
-                "buf-lint"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "ci",
-          "dependencies": [
-            "generate",
-            "lint"
           ]
         }
       ]

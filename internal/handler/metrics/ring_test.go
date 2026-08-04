@@ -3,7 +3,7 @@ package metrics
 import (
 	"testing"
 
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	metricsv1 "github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1"
 )
 
 func sample(runs int64) *metricsv1.Sample {

@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
-	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
+	jobv1 "github.com/egladman/magus/libs/proto/gen/go/magus/job/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/job/v1/jobv1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives and how

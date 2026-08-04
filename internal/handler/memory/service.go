@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	store "github.com/egladman/magus/internal/memory"
-	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
+	memoryv1 "github.com/egladman/magus/libs/proto/gen/go/magus/memory/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/memory/v1/memoryv1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: the workspace root,

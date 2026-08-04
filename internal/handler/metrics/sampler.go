@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	metricsv1 "github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1"
 	"github.com/egladman/magus/types"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/types/known/timestamppb"

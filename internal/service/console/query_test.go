@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1"
-	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	queryv1 "github.com/egladman/magus/libs/proto/gen/go/magus/query/v1"
+	viewerv1 "github.com/egladman/magus/libs/proto/gen/go/magus/viewer/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"

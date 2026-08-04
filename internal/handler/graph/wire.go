@@ -6,7 +6,7 @@
 package graph
 
 import (
-	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1"
+	graphv1 "github.com/egladman/magus/libs/proto/gen/go/magus/graph/v1"
 	"github.com/egladman/magus/types"
 )
 

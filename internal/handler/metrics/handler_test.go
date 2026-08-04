@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	metricsv1 "github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1"
+	"github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1/metricsv1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"

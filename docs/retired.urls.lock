@@ -201,3 +201,10 @@ tags/ruff/
 tags/typescript/
 tags/uv/
 tags/vitest/
+
+# retired when the proto project moved to libs/proto to sit with the other
+# independently versioned modules. Retired rather than redirected for the same reason
+# as libs-diag above: a project page under /development/ is derived from the project's
+# directory name, so the old slug has no page to alias to once the directory has moved.
+# The successor is development/libs-proto/.
+development/proto/

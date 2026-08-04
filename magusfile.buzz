@@ -1395,7 +1395,7 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void {
     final DOCS_GEN = "docs/gen";
     final CONSOLE_GEN = "console/gen";
     // gen/site, not a new top-level name: gen/ is what every project in this workspace
-    // calls its generated output (docs/gen, console/gen, proto/gen, and this project's own
+    // calls its generated output (docs/gen, console/gen, libs/proto/gen, and this project's own
     // gen/*.json). The root's gen/*.json output glob is file-level, so the two do not
     // overlap. Inventing a second convention for "generated output" would only ever be a
     // thing to explain.

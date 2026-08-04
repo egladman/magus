@@ -3,7 +3,7 @@ package metrics
 import (
 	"sync"
 
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	metricsv1 "github.com/egladman/magus/libs/proto/gen/go/magus/metrics/v1"
 )
 
 // ringCapacity bounds the utilization/activity history the daemon keeps for backfill:
