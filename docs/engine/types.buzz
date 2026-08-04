@@ -857,11 +857,21 @@ export object Site {
     }
 
     // glossaryBacklinkFragments builds, per glossary anchor, the "referenced on" HTML that
-    // injectBacklinks appends under the term on the glossary page: a comma-separated list of
-    // links to the pages that use the term, relative to /glossary/. Called after the walk,
-    // when glossaryRefs holds the complete cross-reference set. This is why the backlinks
-    // live on the glossary page (one place, no duplication) rather than inline on every
-    // page: a term's reference set is a whole-corpus aggregate, unknown until the walk ends.
+    // injectBacklinks appends under the term on the glossary page: the pages that use the
+    // term, linked relative to /glossary/. Called after the walk, when glossaryRefs holds
+    // the complete cross-reference set. This is why the backlinks live on the glossary page
+    // (one place, no duplication) rather than inline on every page: a term's reference set
+    // is a whole-corpus aggregate, unknown until the walk ends.
+    //
+    // Shape, in order of what it fixes. A <details>, NOT a <nav>: classless Pico styles
+    // every <nav> as a space-between flexbox and pads every <nav> <li> by the nav element
+    // spacing, so the heading was pinned to its own narrow column and each chip row carried
+    // ~34px of dead vertical space. Collapsed by default: the corpus links these terms 927
+    // times, and expanding all forty sets inline buried every one-line definition on the
+    // page under its own metadata. The count goes in the summary because it is the part a
+    // reader wants without opening anything - how central the term is. Grouped by docs
+    // section because the busiest term is referenced on 85 pages, and a reader scanning
+    // that many is asking "concept page or CLI page", not hunting one title in a flat run.
     fun glossaryBacklinkFragments() > {str: str} {
         final byAnchor = mut {<str: str>};
         foreach (anchor in this.glossaryRefs.keys()) {
@@ -875,23 +885,46 @@ export object Site {
             // Dropping the untitled spelling both fixes that and de-duplicates the
             // home page, which would otherwise be listed twice under one term.
             var seen: {str: bool} = mut {};
-            var items = "";
+            final bySection = mut {<str: [{str: str}]>};
             var count = 0;
             foreach (u in urls!) {
                 final title = this.lookupTitle(u);
                 if (title == "") { continue; }
                 if (seen[u] != null) { continue; }
                 seen[u] = true;
-                items = items + "<li><a href=\"" + relativePath("glossary", u) + "\">" + title + "</a></li>";
+                // The group label is the capitalized first URL segment, so "concepts/cache/"
+                // files under "Concepts". Deliberately the segment and not the section
+                // landing page's title: the label has to stay short enough to sit beside a
+                // wrapping row of chips ("Documentation", not "magus Documentation"), and
+                // every docs URL has a first segment while not every section has a landing.
+                final section = capitalizeFirst(firstPathSegment(u));
+                if (bySection[section] == null) { bySection[section] = mut [<{str: str}>]; }
+                bySection[section]!.append(mut {"title": title, "href": relativePath("glossary", u)});
                 count = count + 1;
             }
             if (count == 0) { continue; }
-            // A list, marked up as one. The busiest terms are referenced on ~70 pages,
-            // and comma-joining those into a <p> produced a wall of prose where the
-            // reader wanted a scannable index - so this is a <nav> landmark with a real
-            // heading, matching how every other set-of-page-links on the site is built.
-            byAnchor[anchor] = "<nav class=\"glossary-backlinks\" aria-label=\"Pages referencing this term\">"
-                + "<h4>Referenced on</h4><ul>" + items + "</ul></nav>\n";
+
+            // Sections alphabetically, pages by title within a section: the order has to be
+            // stable across builds (the walk order is not) and predictable to a reader.
+            // keys() hands back an immutable list and sort mutates in place, so copy first.
+            final sections = mut [<str>];
+            foreach (s in bySection.keys()) { sections.append(s); }
+            var groups = "";
+            foreach (section in sections.sort(fun (a: str, b: str) > bool { return strLess(a, b); })) {
+                final pages = bySection[section]!.sort(fun (a: {str: str}, b: {str: str}) > bool {
+                    return strLess(a["title"], b["title"]);
+                });
+                var items = "";
+                foreach (p in pages) {
+                    items = items + "<li><a href=\"" + p["href"] + "\">" + p["title"] + "</a></li>";
+                }
+                groups = groups + "<div><b>" + section + "</b><ul>" + items + "</ul></div>";
+            }
+            var noun = " pages";
+            if (count == 1) { noun = " page"; }
+            byAnchor[anchor] = "<details class=\"glossary-backlinks\">"
+                + "<summary>Referenced on {count}" + noun + "</summary>"
+                + groups + "</details>\n";
         }
         return byAnchor;
     }
