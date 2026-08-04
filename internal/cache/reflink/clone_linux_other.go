@@ -16,7 +16,7 @@ import (
 // probe always returns false on 32-bit Linux; no CoW fast path is available.
 func probe(_ string) bool { return false }
 
-func clone(src, dst string) error {
+func clone(src, dst string) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -27,7 +27,16 @@ func clone(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	// Propagate Close: ENOSPC on writeback flush is otherwise invisible, and a
+	// truncated copy would be recorded as a successful clone and cached as valid.
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+		if err != nil {
+			_ = os.Remove(dst)
+		}
+	}()
 
 	_, err = io.Copy(out, in)
 	return err

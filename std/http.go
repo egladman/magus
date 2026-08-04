@@ -138,14 +138,28 @@ func HTTPServe(ctx context.Context, opts map[string]any) (int, error) {
 		return 0, err
 	}
 
+	// Every served root is checked against the read policy before the listener opens.
+	// http.FileServer reads on behalf of an anonymous network client, so serving a
+	// directory is a broader disclosure than fs\readFile of one file inside it - and
+	// without this, http\serve(.{dir = "/"}) published the whole host filesystem over
+	// a TCP socket from a magusfile the sandbox was otherwise confining.
 	var handler http.Handler
 	if mounts != nil {
+		for _, d := range mounts {
+			if err := checkRead(ctx, resolvePath(ctx, d)); err != nil {
+				return 0, err
+			}
+		}
 		handler = mountsHandler(ctx, mounts)
 	} else {
 		// Resolve dir against the run's working directory (the project dir), the same
 		// way fs/io/os do, since the magusfile runner sets a context cwd instead of
 		// chdir-ing the process.
-		handler = http.FileServer(http.Dir(resolvePath(ctx, dir)))
+		root := resolvePath(ctx, dir)
+		if err := checkRead(ctx, root); err != nil {
+			return 0, err
+		}
+		handler = http.FileServer(http.Dir(root))
 	}
 
 	ln, err := httpListen(port)

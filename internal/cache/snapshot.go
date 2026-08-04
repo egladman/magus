@@ -186,6 +186,61 @@ func expandOutputGlobs(globs []string, root string) ([]relAbs, error) {
 	return out, nil
 }
 
+// safeReplayPath joins a manifest record's path onto root and rejects any result
+// that escapes it. expandOutputGlobs applies the same rule when a manifest is
+// written, but a manifest read back from a shared remote cache or from
+// `magus config cache import` never passed through it, and replay writes with the
+// mode the record names - so an unchecked path is an arbitrary-write primitive.
+func safeReplayPath(root, rel string) (string, error) {
+	if rel == "" || filepath.IsAbs(rel) || strings.Contains(rel, "..") {
+		return "", fmt.Errorf("magus/cache: unsafe output path %q", rel)
+	}
+	dst := filepath.Clean(filepath.Join(root, filepath.FromSlash(rel)))
+	if !strings.HasPrefix(dst, root+string(filepath.Separator)) {
+		return "", fmt.Errorf("magus/cache: unsafe output path %q", rel)
+	}
+	return dst, nil
+}
+
+// checkReplayParent verifies dst's parent directory still resolves inside root
+// after symlink evaluation. Rejecting ".." is not sufficient on its own: an
+// earlier record in the same manifest can plant a symlinked directory that a
+// later record then writes through, and MkdirAll/os.Create both follow it.
+func checkReplayParent(root, dst, rel string) error {
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	if parent != realRoot && !strings.HasPrefix(parent, realRoot+string(filepath.Separator)) {
+		return fmt.Errorf("magus/cache: output path %q escapes the workspace through a symlinked parent", rel)
+	}
+	return nil
+}
+
+// safeSymlinkTarget rejects a restored symlink whose target resolves outside
+// root. The link itself writes nothing, but it is a pivot: a later record, or
+// the next build, writes through it.
+func safeSymlinkTarget(root, dst, target, rel string) error {
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(dst), resolved)
+	}
+	resolved = filepath.Clean(resolved)
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	if resolved != realRoot && !strings.HasPrefix(resolved, realRoot+string(filepath.Separator)) &&
+		!strings.HasPrefix(resolved, root+string(filepath.Separator)) {
+		return fmt.Errorf("magus/cache: output %q is a symlink to %q, outside the workspace", rel, target)
+	}
+	return nil
+}
+
 // replay restores a manifest's outputs: reflink → hard link → byte copy.
 func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string, error) {
 	var paths []string
@@ -193,14 +248,23 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		dst := filepath.Join(root, filepath.FromSlash(rec.Path))
+		dst, err := safeReplayPath(root, rec.Path)
+		if err != nil {
+			return nil, err
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return nil, err
+		}
+		if err := checkReplayParent(root, dst, rec.Path); err != nil {
 			return nil, err
 		}
 		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("replay %s: remove existing: %w", rec.Path, err)
 		}
 		if rec.Symlink != "" {
+			if err := safeSymlinkTarget(root, dst, rec.Symlink, rec.Path); err != nil {
+				return nil, err
+			}
 			if err := os.Symlink(rec.Symlink, dst); err != nil {
 				return nil, err
 			}

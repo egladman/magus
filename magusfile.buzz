@@ -865,7 +865,12 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     archive\compress(stage, asset, {});
     fs\delete(stage);
 
-    final digest = crypto\hash(crypto\HashAlgorithm.Sha256, fs\readFile(asset));
+    // crypto\sha256File, not crypto\hash: the Buzz-stdlib crypto\hash returns the RAW
+    // digest bytes (upstream leaves rendering to .hex() so hash(...).hex() does not
+    // double-encode), so it emitted 32 raw bytes where a SHA256SUMS line needs 64 hex
+    // characters and `shasum -c` failed on every published asset. sha256File also
+    // streams, rather than reading a whole release tarball into memory.
+    final digest = crypto\sha256File(asset);
     fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
 }
 

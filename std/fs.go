@@ -488,34 +488,6 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-// checkRead returns a MGS2001 diag error when ctx carries a sandbox policy
-// that denies path. nil otherwise (sandbox off or path allowed).
-func checkRead(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
-	if p == nil {
-		return nil
-	}
-	if err := p.CheckReadCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint("ro", path)
-		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
-	}
-	return nil
-}
-
-// checkWrite returns a MGS2002 diag error when ctx carries a sandbox policy
-// that denies path for writing.
-func checkWrite(ctx context.Context, path string) error {
-	p := sandbox.FromContext(ctx)
-	if p == nil {
-		return nil
-	}
-	if err := p.CheckWriteCtx(ctx, path); err != nil {
-		sandbox.EmitDenyHint("rw", path)
-		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
-	}
-	return nil
-}
-
 // FsWatch is BLOCKING: it watches paths (directories, recursively) and invokes
 // cb with each debounced batch of changed paths (relative to the current
 // directory) until cb returns true or the run is cancelled (Ctrl-C). Editor/VCS

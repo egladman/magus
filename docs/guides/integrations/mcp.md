@@ -213,8 +213,8 @@ logs and history). How you connect depends on the client:
   `magus status --probe=liveness,mcp` confirms the endpoint is live. If you
   change `mcp.address`, update the URL in `~/.codex/config.toml` too. In the
   desktop app, `/mcp` shows connected servers. Install matching guidance with
-  `magus agent install .agents/skills --agents-md`; see [Agents](agents.md#codex)
-  for why Codex needs both locations.
+  `magus agent install .agents/skills` and `magus agent install-agents-md`; see
+  [Agents](agents.md#codex) for why Codex needs both locations.
 
 - **Claude Desktop / other IDE plugins** that take a Streamable-HTTP URL plus
   headers use the same shape:

@@ -164,10 +164,16 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
         + signedHeaders + "\n"
         + payloadHash;
 
+    // StringToSign ends with the LOWERCASE HEX SHA-256 of the canonical request.
+    // Use crypto\sha256Hex, not crypto\hash: the Buzz-stdlib crypto\hash returns the
+    // RAW digest bytes (upstream leaves rendering to .hex(), so hash(...) alone
+    // double-encodes when hex is what's wanted), and splicing those raw bytes in here
+    // signed a string 32 bytes long where AWS signs 64 hex characters - every request
+    // came out SignatureDoesNotMatch.
     final stringToSign = "AWS4-HMAC-SHA256\n"
         + amzdate + "\n"
         + scope + "\n"
-        + crypto\hash(crypto\HashAlgorithm.Sha256, canonicalRequest);
+        + crypto\sha256Hex(canonicalRequest);
 
     // Signing-key chain: each HMAC's byte-list output keys the next (crypto.hmacSha256
     // keeps it as raw bytes, never a string), and the final HMAC is hex-encoded.

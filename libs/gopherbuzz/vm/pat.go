@@ -3,11 +3,31 @@ package vm
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/dlclark/regexp2"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 )
+
+// patMatchTimeout bounds one match or replace call.
+//
+// regexp2 is a BACKTRACKING engine, not RE2: on a pattern like $"(a+)+$" against
+// a subject that fails to match, it explores exponentially many paths. Its only
+// brake is Regexp.MatchTimeout, whose default (DefaultMatchTimeout) is
+// effectively forever, and it takes no context, so nothing else in the process
+// can interrupt a match in flight -- not the VM's cancellation poll, not a magus
+// target timeout. Pattern SOURCES are untrusted (a $"..." literal in a cloned
+// repo's magusfile is attacker-controlled), so an unbounded match is a hang the
+// host cannot recover from.
+//
+// Three seconds is orders of magnitude more than any honest pattern needs on the
+// string sizes buzz handles, and short enough that the pathological case gets
+// reported instead of endured. The bound is per call, so a loop over many
+// subjects is still bounded only by the loop -- cancellation between calls is
+// what covers that, and it works because each call now returns.
+const patMatchTimeout = 3 * time.Second
 
 // patObj is a compiled Buzz pattern (the `pat` type) — a PCRE-style regular
 // expression written as a $"..." literal. src is the original pattern source
@@ -29,7 +49,25 @@ func PatValue(src string) (Value, error) {
 	if err != nil {
 		return Null, fmt.Errorf("buzz: invalid pattern %q: %w", src, err)
 	}
+	re.MatchTimeout = patMatchTimeout
 	return heapValue(tagPat, &patObj{src: src, re: re}), nil
+}
+
+// runErr wraps a regexp2 match or replace failure as a buzz error.
+//
+// A timeout is reported on its own terms rather than passed through: regexp2
+// builds its timeout message by interpolating the ENTIRE subject, which for a
+// matcher fed a file's contents produces a megabyte-long error. The prefix test
+// is the only handle regexp2 v1.12.0 gives -- it returns a plain fmt.Errorf with
+// no sentinel to compare against -- and a message it stops producing simply
+// falls through to the generic wrap below, so the check degrades rather than
+// breaking.
+func (p *patObj) runErr(method string, err error) error {
+	if strings.HasPrefix(err.Error(), "match timeout") {
+		return fmt.Errorf("%s: pattern %q gave up after %v; it backtracks catastrophically on this subject",
+			method, p.src, patMatchTimeout)
+	}
+	return fmt.Errorf("%s: %w", method, err)
 }
 
 // patMatchDef is the object type behind upstream's match records. At UpstreamRef
@@ -99,7 +137,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			}
 			m, err := po.re.FindStringMatch(args[0].AsString())
 			if err != nil {
-				return Null, fmt.Errorf("pat.match: %w", err)
+				return Null, po.runErr("pat.match", err)
 			}
 			if m == nil {
 				return Null, nil // no match → null (the result type is [str]?)
@@ -113,7 +151,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			}
 			m, err := po.re.FindStringMatch(args[0].AsString())
 			if err != nil {
-				return Null, fmt.Errorf("pat.matchAll: %w", err)
+				return Null, po.runErr("pat.matchAll", err)
 			}
 			if m == nil {
 				return Null, nil // no matches → null (the result type is [[str]]?)
@@ -122,7 +160,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			for m != nil {
 				all = append(all, matchToList(m))
 				if m, err = po.re.FindNextMatch(m); err != nil {
-					return Null, fmt.Errorf("pat.matchAll: %w", err)
+					return Null, po.runErr("pat.matchAll", err)
 				}
 			}
 			return ListValue(all), nil
@@ -140,7 +178,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			subject := args[0].AsString()
 			m, err := po.re.FindStringMatch(subject)
 			if err != nil {
-				return Null, fmt.Errorf("pat.matchAgainst: %w", err)
+				return Null, po.runErr("pat.matchAgainst", err)
 			}
 			if m == nil {
 				return Null, nil // no match -> null (the result type is optional)
@@ -155,7 +193,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			subject := args[0].AsString()
 			m, err := po.re.FindStringMatch(subject)
 			if err != nil {
-				return Null, fmt.Errorf("pat.matchAllAgainst: %w", err)
+				return Null, po.runErr("pat.matchAllAgainst", err)
 			}
 			if m == nil {
 				return Null, nil // no matches -> null (the result type is optional)
@@ -164,7 +202,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			for m != nil {
 				all = append(all, vm.matchToRecords(subject, m))
 				if m, err = po.re.FindNextMatch(m); err != nil {
-					return Null, fmt.Errorf("pat.matchAllAgainst: %w", err)
+					return Null, po.runErr("pat.matchAllAgainst", err)
 				}
 			}
 			return ListValue(all), nil
@@ -177,7 +215,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			// count=1: replace only the first occurrence.
 			out, err := po.re.Replace(args[0].AsString(), args[1].AsString(), -1, 1)
 			if err != nil {
-				return Null, fmt.Errorf("pat.replace: %w", err)
+				return Null, po.runErr("pat.replace", err)
 			}
 			return StrValue(out), nil
 		})
@@ -189,7 +227,7 @@ func patMethod(vm *VM, p Value, name string) Value {
 			// count=-1: replace every occurrence.
 			out, err := po.re.Replace(args[0].AsString(), args[1].AsString(), -1, -1)
 			if err != nil {
-				return Null, fmt.Errorf("pat.replaceAll: %w", err)
+				return Null, po.runErr("pat.replaceAll", err)
 			}
 			return StrValue(out), nil
 		})

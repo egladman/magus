@@ -411,6 +411,26 @@ func EnumDefValue(name string, cases []string, values []Value) Value {
 // NullValue returns the Buzz null value (convenience alias for Null).
 func NullValue() Value { return Null }
 
+// MinInt and MaxInt bound the buzz `int` type. Buzz's integer is a 48-bit signed
+// value BY LANGUAGE DEFINITION, not as a gopherbuzz implementation limit:
+// upstream declares `pub const Integer = i48` and its scanner rejects a literal
+// that does not fit with "int overflow". The nanbox build stores an int in the
+// 48-bit NaN-box payload for the same reason.
+//
+// These are exported because IntValue cannot report a violation: it returns a
+// bare Value, so an int64 outside this range is TRUNCATED to its low 48 bits and
+// can come back out negative. Anything converting an outside-world int64 into a
+// buzz value (a host binding returning a UnixNano timestamp, a string parse) has
+// to range-check against these first and raise or return null itself; there is
+// no runtime check to fall back on.
+//
+// Arithmetic deliberately does NOT check: upstream's OP_ADD_I/OP_MULTIPLY_I use
+// Zig's wrapping operators (+% and *%), so `+`, `-` and `*` wrap here to match.
+const (
+	MaxInt = int64(1)<<47 - 1
+	MinInt = -(int64(1) << 47)
+)
+
 // --- exported scalar accessors ---
 
 // AsInt returns the int64 payload. Only valid when IsInt() is true.
@@ -510,7 +530,22 @@ func (v Value) buzzKind() string {
 }
 
 // String returns the Buzz string representation of v.
-func (v Value) String() string {
+// maxStringDepth bounds the container recursion in [Value.String].
+//
+// A self-referential value - `final l = mut [<any>, 1]; l.append(l);` - otherwise
+// recurses until Go's 1GB stack limit, which is a FATAL error, not a panic: the
+// VM's recover cannot catch it and the whole process dies. String also sits on the
+// error-formatting path, so a cyclic value reaching ANY diagnostic takes magus down
+// with it. Bounding the depth fixes the cyclic and the merely-very-deep cases with
+// one mechanism; nothing legitimate nests this far.
+const maxStringDepth = 64
+
+func (v Value) String() string { return v.stringAt(0) }
+
+func (v Value) stringAt(depth int) string {
+	if depth > maxStringDepth {
+		return "..."
+	}
 	switch v.tag() {
 	case tagNull:
 		return "null"
@@ -533,7 +568,7 @@ func (v Value) String() string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(item.String())
+			sb.WriteString(item.stringAt(depth + 1))
 		}
 		sb.WriteByte(']')
 		return sb.String()
@@ -547,7 +582,7 @@ func (v Value) String() string {
 			}
 			sb.WriteString(strconv.Quote(k))
 			sb.WriteString(": ")
-			sb.WriteString(m.Vals[i].String())
+			sb.WriteString(m.Vals[i].stringAt(depth + 1))
 		}
 		sb.WriteByte('}')
 		return sb.String()
@@ -566,7 +601,7 @@ func (v Value) String() string {
 			}
 			sb.WriteString(strconv.Quote(df.Name))
 			sb.WriteString(": ")
-			sb.WriteString(inst.Fields[i].String())
+			sb.WriteString(inst.Fields[i].stringAt(depth + 1))
 		}
 		sb.WriteByte('}')
 		return sb.String()

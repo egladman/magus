@@ -295,8 +295,8 @@ or `snake_case` op, it now works instead of silently never running.
   `Go` and one named `go` are two different spells, not one; the registry will
   hold both.
 - **Lookups by literal key.** Normalization canonicalizes what gets _stored_, not
-  how a literal subscript is spelled. `ts["tsc"]` is an ordinary map-key lookup
-  into the value `import "magus/spell/ts"` binds, so it must name the canonical
+  how a literal subscript is spelled. `typescript["tsc"]` is an ordinary map-key
+  lookup into the value `import "magus/spell/typescript"` binds, so it must name the canonical
   (kebab) key. Likewise `go::lint` is still a graceful no-op - the go spell's
   linter op is `golangci-lint`, and that is a different word, not a different
   casing. See [spell-qualified targets](#cli-extension-spell-qualified-targets).

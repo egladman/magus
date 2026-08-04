@@ -230,10 +230,13 @@ func Append(base string, e Event) {
 		return
 	}
 	d := filepath.Join(base, dir)
-	if err := os.MkdirAll(d, 0o755); err != nil {
+	if err := os.MkdirAll(d, 0o700); err != nil {
 		return
 	}
-	f, err := os.OpenFile(filepath.Join(d, eventsFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// 0600: an event carries Action, Workspace paths, and Preview - the opening
+	// runes of every MCP tool response - and this package applies no redaction. The
+	// blobs beside it are already 0600 (CreateTemp+Rename); the index was the outlier.
+	f, err := os.OpenFile(filepath.Join(d, eventsFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return
 	}

@@ -2369,13 +2369,24 @@ func (vm *VM) matchTest(subject, cond Value) (bool, error) {
 		}
 		return n >= lo && n < hi, nil
 
+	// Both pattern arms route their failure through runErr for the same reason
+	// pat.match does: the only failure regexp2 reports here is the backtracking
+	// deadline, and its own message inlines the whole subject.
 	case cond.tag() == tagPat && subject.tag() == tagStr:
-		m, err := vm.asPat(cond).re.FindStringMatch(subject.AsString())
-		return m != nil, err
+		po := vm.asPat(cond)
+		m, err := po.re.FindStringMatch(subject.AsString())
+		if err != nil {
+			return false, po.runErr("buzz: pattern match", err)
+		}
+		return m != nil, nil
 
 	case cond.tag() == tagStr && subject.tag() == tagPat:
-		m, err := vm.asPat(subject).re.FindStringMatch(cond.AsString())
-		return m != nil, err
+		po := vm.asPat(subject)
+		m, err := po.re.FindStringMatch(cond.AsString())
+		if err != nil {
+			return false, po.runErr("buzz: pattern match", err)
+		}
+		return m != nil, nil
 
 	case cond.tag() == tagType && subject.tag() != tagType:
 		// TypeShape first: a type value carries the CANONICAL spelling ("[str]",
@@ -2411,8 +2422,11 @@ func (vm *VM) buzzCast(v Value, typeName string) (Value, error) {
 			}
 			return IntValue(0), nil
 		case tagStr:
+			// Out of range fails the cast rather than silently truncating: buzz's int
+			// is 48-bit (MinInt/MaxInt) and IntValue keeps only the low bits, which
+			// turns a wide value into a small or even negative one.
 			n, err := strconv.ParseInt(vm.asStr(v).V, 10, 64)
-			if err != nil {
+			if err != nil || n < MinInt || n > MaxInt {
 				return Null, fmt.Errorf("buzz: cannot cast %q to int", vm.asStr(v).V)
 			}
 			return IntValue(n), nil

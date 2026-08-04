@@ -98,7 +98,7 @@ var Registry = []ToolDescriptor{
 	},
 	{
 		Name:        string(ToolConfigGet),
-		Description: "Return the resolved workspace configuration as JSON. Read-only — use the magus CLI to edit config.",
+		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
 	{
 		Name:        string(ToolTailLog),

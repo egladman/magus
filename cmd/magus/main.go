@@ -87,7 +87,11 @@ func runCLI() int {
 
 	res, exitCode := startup(rootCtx, args)
 
-	cleanup := func() {
+	// Deferred once, rather than called on each exit path: a panic in dispatch
+	// unwinds past every explicit call site, and the scroll margins it skipped
+	// leave the user's shell pinned inside a region long after magus is gone.
+	// Keep this the ONLY call - a second one would tear the pool down twice.
+	defer func() {
 		if res.cleanup != nil {
 			res.cleanup()
 		}
@@ -96,10 +100,9 @@ func runCLI() int {
 		// error region's scroll margins still set.
 		restoreTerminal()
 		stopSignals()
-	}
+	}()
 
 	if exitCode >= 0 {
-		cleanup()
 		return exitCode
 	}
 
@@ -112,12 +115,12 @@ func runCLI() int {
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
-	cleanup()
 	return code
 }
 
 // startupResult carries everything main needs to dispatch a subcommand.
-// cleanup MUST be called on every exit path (os.Exit skips deferred functions).
+// cleanup MUST run on every exit path; runCLI defers it (and never calls
+// os.Exit itself, which would skip the deferred function).
 type startupResult struct {
 	rootCtx context.Context
 	root    string
@@ -880,7 +883,12 @@ func applyPreSubDisplayFlags(args, subArgs []string, sub string) error {
 	return nil
 }
 
+// extractRootFlag peeks --root before the main flag parse. It stops at `--` for the
+// same reason the display peeks do, and with more at stake: without the terminator,
+// `magus run test -- --root /elsewhere` forwarded --root to the child AND re-rooted
+// magus itself at a directory the child merely named.
 func extractRootFlag(args []string) string {
+	args = argsBeforePassthrough(args)
 	for i, a := range args {
 		switch {
 		case a == "-root" || a == "--root":
@@ -896,13 +904,27 @@ func extractRootFlag(args []string) string {
 	return ""
 }
 
+// argsBeforePassthrough returns the leading arguments magus owns: everything up
+// to the first bare "--", which hands the rest to the child command. Every
+// pre-parse peek below must scan through this, or a child's flag is read as
+// magus's own AND still forwarded - `magus run show -- --silent` silenced magus
+// itself. partitionFlags applies the same rule during the real parse.
+func argsBeforePassthrough(args []string) []string {
+	for i, a := range args {
+		if a == "--" {
+			return args[:i]
+		}
+	}
+	return args
+}
+
 // extractQuietFlag peeks --quiet/--silent before the main flag parse, because
 // applyDisplay runs during early startup and decides progress suppression from
 // global.quiet. --silent counts here: it is documented as "like --quiet, but
 // ...", and reading only --quiet made -s byte-identical to no flag on a passing
 // run - the flag parse set global.silent long after the display was configured.
 func extractQuietFlag(args []string) bool {
-	for _, a := range args {
+	for _, a := range argsBeforePassthrough(args) {
 		switch a {
 		case "-q", "--quiet", "-quiet", "-s", "--silent", "-silent":
 			return true
@@ -914,7 +936,7 @@ func extractQuietFlag(args []string) bool {
 // extractSilentFlag peeks --silent for the same reason, so the bounded-dump and
 // notice-bubbling behavior is configured in the same early pass.
 func extractSilentFlag(args []string) bool {
-	for _, a := range args {
+	for _, a := range argsBeforePassthrough(args) {
 		switch a {
 		case "-s", "--silent", "-silent":
 			return true
@@ -928,7 +950,7 @@ func extractSilentFlag(args []string) bool {
 // (mirrors extractRootFlag/extractQuietFlag). Returns the parsed value and whether the
 // flag was present; a bare --daemon-enabled means true (Go bool-flag convention).
 func extractDaemonEnabledFlag(args []string) (val, set bool) {
-	for _, a := range args {
+	for _, a := range argsBeforePassthrough(args) {
 		switch {
 		case a == "-daemon-enabled" || a == "--daemon-enabled":
 			return true, true
@@ -945,7 +967,7 @@ func extractDaemonEnabledFlag(args []string) (val, set bool) {
 
 func extractVerbosityCount(args []string) int {
 	n := 0
-	for _, a := range expandVerbosityArgs(args) {
+	for _, a := range expandVerbosityArgs(argsBeforePassthrough(args)) {
 		if a == "-v" {
 			n++
 		}

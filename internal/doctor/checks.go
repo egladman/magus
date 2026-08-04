@@ -127,7 +127,7 @@ func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 func (*runner) checkCITarget(projects []*types.Project) Check {
 	const name = "ci target"
 	if len(projects) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no projects; skipped"}
+		return Check{Name: name, Status: StatusSkip, Message: "no projects; nothing to scan for a ci target"}
 	}
 	norm := types.Normalize
 	for _, p := range projects {
@@ -180,11 +180,35 @@ func (*runner) checkSpellDocs(spells []*spells.Spell) Check {
 	}
 }
 
+// checkGraphCycles builds the project dependency graph; the build itself is what
+// performs the cycle detection (dependency.Build fails with ErrCycle), so a nil
+// error is the answer rather than a proxy for one.
+//
+// The message names what was examined because the old fixed string read the same
+// over a real graph as over an empty one, and an empty graph passes trivially -
+// there is nothing there to form a cycle.
 func (r *runner) checkGraphCycles() Check {
-	if _, err := r.ws.Graph(); err != nil {
-		return Check{Name: "dependency graph", Status: StatusFail, Message: err.Error()}
+	const name = "dependency graph"
+	g, err := r.ws.Graph()
+	if err != nil {
+		return Check{Name: name, Status: StatusFail, Message: err.Error()}
 	}
-	return Check{Name: "dependency graph", Status: StatusOK, Message: "no cycles detected"}
+	var nodes []string
+	if g != nil {
+		nodes = g.Nodes()
+	}
+	if len(nodes) == 0 {
+		return Check{Name: name, Status: StatusSkip, Message: "no projects in the graph; nothing to check"}
+	}
+	edges := 0
+	for _, n := range nodes {
+		edges += len(g.Successors(n))
+	}
+	return Check{
+		Name:    name,
+		Status:  StatusOK,
+		Message: fmt.Sprintf("no cycles among %d project(s) and %d dependency edge(s)", len(nodes), edges),
+	}
 }
 
 func (r *runner) checkSymlinks() Check {
@@ -218,7 +242,7 @@ func checkGraphBounds(root string) Check {
 	path := filepath.Join(root, "gen", "knowledge-graph.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Check{Name: name, Status: StatusOK, Message: "no committed knowledge graph to check"}
+		return Check{Name: name, Status: StatusSkip, Message: "no committed knowledge graph to check"}
 	}
 	var g struct {
 		Nodes []struct {
@@ -534,7 +558,7 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	}
 	switch res.Source {
 	case types.VCSSourceDisabled:
-		return Check{Name: "vcs base ref", Status: StatusOK, Message: "vcs disabled; skipped"}
+		return Check{Name: "vcs base ref", Status: StatusSkip, Message: "vcs disabled"}
 	default:
 		// explicit/auto/default sources: proceed to the live probe below
 	}
@@ -551,7 +575,7 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	case "jj":
 		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-n", "1", "--no-graph", "-T", "commit_id"}
 	default:
-		return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
+		return Check{Name: "vcs base ref", Status: StatusSkip, Message: fmt.Sprintf("%s: no probe available", res.Name)}
 	}
 
 	cmd := exec.CommandContext(ctx, res.Name, probeArgs...)
@@ -1568,15 +1592,15 @@ func (r *runner) checkSelfStalingOutputs(projects []*types.Project) Check {
 
 	res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions())
 	if err != nil || res.VCS == nil {
-		return Check{Name: name, Status: StatusOK, Message: "no VCS resolved; nothing to check"}
+		return Check{Name: name, Status: StatusSkip, Message: "no VCS resolved; nothing to check"}
 	}
 	reporter, ok := res.VCS.(types.TrackedFileReporter)
 	if !ok {
-		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%s cannot report tracked paths; skipped", res.VCS.Name())}
+		return Check{Name: name, Status: StatusSkip, Message: fmt.Sprintf("%s cannot report tracked paths", res.VCS.Name())}
 	}
 	meta, err := res.VCS.Metadata(context.Background(), r.root)
 	if err != nil || meta.Hash == "" {
-		return Check{Name: name, Status: StatusOK, Message: "no commit yet; nothing to check"}
+		return Check{Name: name, Status: StatusSkip, Message: "no commit yet; nothing to check"}
 	}
 
 	var details []string

@@ -38,6 +38,12 @@ func graphVerify(_ context.Context, root string, args []string) error {
 	statuses := agentSkills.CheckStatuses(*dir)
 	if len(statuses) == 0 {
 		fmt.Println("agent skills: not installed (run: magus agent install <dir>, e.g. .claude/skills)")
+		// Absence is drift under --strict. A gate that passes because the artifact
+		// it checks is missing only ever fires for people who already installed it,
+		// so a repo that drops or never lands the install goes green forever.
+		if *strict {
+			return errSilent{exitCode: 1}
+		}
 		return nil
 	}
 	anyStale := false

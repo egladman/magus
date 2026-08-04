@@ -45,6 +45,40 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	}
 }
 
+// TestDisplayFlagPeeksStopAtPassthrough pins the "--" terminator on the pre-parse
+// peeks. Everything after a bare "--" is the child's argv: `magus run show --
+// --silent` silenced magus itself AND still forwarded the flag, so one token was
+// consumed twice and the user lost the output they asked for.
+func TestDisplayFlagPeeksStopAtPassthrough(t *testing.T) {
+	cases := []struct {
+		name      string
+		args      []string
+		quiet     bool
+		silent    bool
+		verbosity int
+	}{
+		{"own flags before the marker", []string{"run", "show", "-s", "-vv"}, true, true, 2},
+		{"silent after the marker is the child's", []string{"run", "show", "--", "--silent"}, false, false, 0},
+		{"quiet after the marker is the child's", []string{"run", "show", "--", "-q"}, false, false, 0},
+		{"verbosity after the marker is the child's", []string{"run", "t", "--", "-vv"}, false, false, 0},
+		{"marker does not hide flags before it", []string{"run", "t", "-q", "--", "-s"}, true, false, 0},
+		{"bare marker with no tail", []string{"run", "t", "--"}, false, false, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := extractQuietFlag(tc.args); got != tc.quiet {
+				t.Errorf("extractQuietFlag(%v) = %v, want %v", tc.args, got, tc.quiet)
+			}
+			if got := extractSilentFlag(tc.args); got != tc.silent {
+				t.Errorf("extractSilentFlag(%v) = %v, want %v", tc.args, got, tc.silent)
+			}
+			if got := extractVerbosityCount(tc.args); got != tc.verbosity {
+				t.Errorf("extractVerbosityCount(%v) = %v, want %v", tc.args, got, tc.verbosity)
+			}
+		})
+	}
+}
+
 func TestIsUsageOnlyInvocation(t *testing.T) {
 	cases := []struct {
 		name    string

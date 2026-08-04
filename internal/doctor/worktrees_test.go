@@ -22,9 +22,10 @@ func mkWorktree(t *testing.T, root, name string, live bool) {
 }
 
 func TestCheckStaleWorktrees(t *testing.T) {
-	t.Run("no worktrees dir is fine", func(t *testing.T) {
+	t.Run("no worktrees dir is a skip, not a pass", func(t *testing.T) {
+		// Nothing was examined, so the check must not add to the ok count.
 		c := checkStaleWorktrees(t.TempDir())
-		assert.Equal(t, StatusOK, c.Status)
+		assert.Equal(t, StatusSkip, c.Status)
 	})
 
 	t.Run("live worktrees pass", func(t *testing.T) {

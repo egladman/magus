@@ -62,7 +62,7 @@ func (t *whereTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.
 	return spells.InvokeResponse{Data: whereResult{
 		Matched:    len(scored),
 		Candidates: candidates,
-		Error:      "ambiguous filter — multiple projects match; narrow your filter",
+		Error:      "ambiguous filter - multiple projects match; narrow your filter",
 	}}, nil
 }
 

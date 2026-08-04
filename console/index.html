@@ -2,6 +2,28 @@
 <html lang="en" class="no-js">
 <head>
   <meta charset="utf-8">
+  <!-- The console's Content-Security-Policy, carried IN THE DOCUMENT because the published copy has
+       no server to set a header. The daemon stamps consoleCSP (internal/service/console/static.go)
+       onto every HTML response it serves, but deploy-generate copies this directory verbatim to
+       GitHub Pages, which cannot set response headers - so without this meta the internet-facing
+       copy, the one an attacker can send a link to, ran with no script-src at all. Where both apply
+       (the daemon origin) the browser enforces BOTH policies and the stricter wins, so this must stay
+       compatible with the header rather than merely equal to it; it is the header's directives, with
+       the one difference below.
+         - connect-src adds the loopback wildcards. The header says 'self' because on the daemon
+           origin 'self' IS the loopback daemon; the hosted copy has to reach a daemon at
+           127.0.0.1/[::1] from a different origin, and this is the browser-enforced form of the
+           loopback-only rule the client already checks (src/lib/daemon.ts). Intersected with the
+           header on the daemon origin it collapses back to 'self'.
+         - frame-ancestors is absent because a meta-delivered policy IGNORES it (as it does report-uri
+           and sandbox). Clickjacking protection for the console therefore exists only on the daemon
+           origin, where the header supplies it; the static host must supply its own if it can.
+       script-src is 'self' with no 'unsafe-inline' and no hash list, which holds only while this
+       shell carries no inline script block - both script tags here are external src files, and
+       adding an inline one would need a sha256- source added to both this meta and consoleCSP.
+       style-src keeps 'unsafe-inline' because PatternFly and the shell set element styles inline.
+       See the long rationale on consoleCSP; keep the two in step. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">

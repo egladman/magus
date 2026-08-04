@@ -1,0 +1,5 @@
+// @error: cannot cast "1786000000000000000" to int
+// buzz's int is 48-bit, so `as int` on a wider decimal string fails the cast the
+// same way an unparseable one does. It used to succeed and hand back the low 48
+// bits: this UnixNano timestamp became 41272770887680.
+final __r = "1786000000000000000" as int;

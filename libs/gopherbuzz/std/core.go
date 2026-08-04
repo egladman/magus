@@ -73,7 +73,11 @@ func stdParseInt(_ context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("std.parseInt: requires a str argument")
 	}
 	n, err := strconv.ParseInt(args[0].AsString(), 10, 64)
-	if err != nil {
+	// Out of range counts as a parse failure, not a value: buzz's int is 48-bit and
+	// vm.IntValue would truncate a wider one to its low bits, so "1786000000000000000"
+	// would come back as a plausible-looking small number instead of null. Upstream
+	// parses straight into its i48 and returns null on the same input.
+	if err != nil || n < vm.MinInt || n > vm.MaxInt {
 		return vm.Null, nil // return null on parse failure (Buzz returns int?)
 	}
 	return vm.IntValue(n), nil

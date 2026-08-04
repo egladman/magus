@@ -77,7 +77,10 @@ func (v gitVCS) Diff(ctx context.Context, dir, base string) ([]string, error) {
 		}
 		mergeBase = recovered
 	}
-	out, err := vcsOutput(ctx, dir, "git", "diff", "--name-only", mergeBase)
+	// --no-renames: with rename detection on (the default) git reports a moved file
+	// as its destination path only, so the project the file moved OUT of never enters
+	// the affected set and CI skips a project whose source just disappeared.
+	out, err := vcsOutput(ctx, dir, "git", "diff", "--no-renames", "--name-only", mergeBase)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}

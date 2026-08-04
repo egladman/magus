@@ -3,6 +3,7 @@ package vm_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
@@ -173,4 +174,29 @@ func TestValueEqualFunctionIdentity(t *testing.T) {
 	// underlying Go func: identity, not structure, for heap kinds.
 	fnB := vm.DirectValue("a", noop)
 	assert.False(t, fnA.Equal(fnB), "distinct function values are not equal")
+}
+
+// TestStringTerminatesOnSelfReferentialValue pins the depth bound in Value.String.
+//
+// Without it a cyclic value recurses to Go's 1GB stack limit, which is a FATAL
+// error rather than a panic - the VM's recover cannot catch it and the process
+// dies. `final l = mut [<any>, 1]; l.append(l); std.print("{l}")` is three lines
+// of Buzz, and String is also on the error-formatting path, so any cyclic value
+// reaching a diagnostic took the whole build down.
+func TestStringTerminatesOnSelfReferentialValue(t *testing.T) {
+	// ListValue keeps the slice it is handed, so writing through the original
+	// backing array makes the list contain itself.
+	items := make([]vm.Value, 1)
+	self := vm.ListValue(items)
+	items[0] = self
+
+	done := make(chan string, 1)
+	go func() { done <- self.String() }()
+
+	select {
+	case got := <-done:
+		assert.Contains(t, got, "...", "deep recursion must be elided, not followed")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Value.String did not terminate on a self-referential value")
+	}
 }

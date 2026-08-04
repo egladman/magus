@@ -8,7 +8,31 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/std"
+	"github.com/stretchr/testify/assert"
 )
+
+// TestExpandVerbosityArgs pins the clustered -vv rewrite and its "--" terminator:
+// a child's own -vv must reach the child spelled the way it was typed, not split
+// into two -v by magus on the way through.
+func TestExpandVerbosityArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"cluster expands", []string{"-vv", "build"}, []string{"-v", "-v", "build"}},
+		{"single -v untouched", []string{"-v"}, []string{"-v"}},
+		{"long flag untouched", []string{"--verbose"}, []string{"--verbose"}},
+		{"non-v cluster untouched", []string{"-abc"}, []string{"-abc"}},
+		{"passthrough tail untouched", []string{"run", "t", "--", "-vv"}, []string{"run", "t", "--", "-vv"}},
+		{"expands before the marker only", []string{"-vv", "run", "t", "--", "-vvv"}, []string{"-v", "-v", "run", "t", "--", "-vvv"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, expandVerbosityArgs(tc.in))
+		})
+	}
+}
 
 // TestCtxAttrHandlerInjectsDir verifies the working directory carried on the
 // context is attached to records, an explicit "dir" is not clobbered, and a

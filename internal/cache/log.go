@@ -229,8 +229,46 @@ func (h *PrettyHandler) printf(format string, args ...any) {
 	//
 	// The resolver comes from the record context captured in Handle rather than a
 	// parameter, so nothing that calls printf has to know secrets exist.
-	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(h.recordCtx, fmt.Sprintf(format, args...)))
+	_, err := fmt.Fprintf(h.w, "%s", secret.RedactString(h.recordCtx, fmt.Sprintf(format, sanitizeArgs(args)...)))
 	h.fail(err)
+}
+
+// sanitizeArgs strips terminal control characters from the values interpolated into
+// a log line, for the same reason redaction happens at this funnel rather than per
+// record kind: it is every line the handler will ever print, in one place.
+//
+// Project names, paths, branch names and captured error excerpts are all
+// workspace-controlled, and this handler writes straight to a TTY. A project
+// directory named with an ESC repaints the user's screen, and a CR plus a crafted
+// string forges a magus status line - a hostile repo can print its own
+// "[pass] security-check (cached, 3ms)" that is byte-indistinguishable from a real
+// one. Only the ARGUMENTS are sanitized: the format strings are magus's own and
+// legitimately carry SGR colour codes.
+func sanitizeArgs(args []any) []any {
+	for i, a := range args {
+		if s, ok := a.(string); ok {
+			args[i] = stripControl(s)
+		}
+	}
+	return args
+}
+
+// stripControl removes C0, DEL and C1 control characters. It returns s unchanged
+// when there is nothing to strip, which is the overwhelmingly common case.
+func stripControl(s string) string {
+	if !strings.ContainsFunc(s, isControlRune) {
+		return s
+	}
+	return strings.Map(func(r rune) rune {
+		if isControlRune(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+func isControlRune(r rune) bool {
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f)
 }
 
 func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool { return lvl >= h.level }

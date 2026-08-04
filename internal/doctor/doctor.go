@@ -15,9 +15,17 @@ import (
 type CheckStatus string
 
 // The CheckStatus constants enumerate the possible doctor-check outcomes.
+//
+// StatusSkip exists because a check whose precondition is unmet verified nothing,
+// and reporting that as ok made "0 fail" mean two different things: everything was
+// examined and was healthy, or half of it was never looked at. A skip is not a
+// failure - the workspace is not broken for having no daemon running - so it does
+// not affect the exit code; it only stops a vacuous check from being counted as
+// evidence.
 const (
 	StatusOK   CheckStatus = "ok"
 	StatusFail CheckStatus = "fail"
+	StatusSkip CheckStatus = "skip"
 )
 
 // Check is one doctor check result.
@@ -32,6 +40,7 @@ type Check struct {
 type Summary struct {
 	OK   int `json:"ok" yaml:"ok"`
 	Fail int `json:"fail" yaml:"fail"`
+	Skip int `json:"skip" yaml:"skip"`
 }
 
 // Report is the full doctor output.
@@ -134,8 +143,7 @@ func (r *runner) run(wsErr error) Report {
 			Status:  StatusFail,
 			Message: wsErr.Error(),
 		})
-		out.Summary.Fail++
-		return out
+		return summarize(out)
 	}
 
 	projects := r.ws.All()
@@ -180,12 +188,25 @@ func (r *runner) run(wsErr error) Report {
 		r.checkBridgeReachability(),
 	)
 
+	return summarize(out)
+}
+
+// summarize counts every appended check into out.Summary. Both of run's exits go
+// through it because the early return for a workspace that failed to load used to
+// count only its own failure: the three pre-workspace checks were rendered but
+// never summed, so a genuinely failing one (stale sockets) vanished from the
+// totals and anything reading report.summary rather than report.checks got a
+// count that did not match what it was shown.
+func summarize(out Report) Report {
+	out.Summary = Summary{}
 	for _, c := range out.Checks {
 		switch c.Status {
 		case StatusOK:
 			out.Summary.OK++
 		case StatusFail:
 			out.Summary.Fail++
+		case StatusSkip:
+			out.Summary.Skip++
 		}
 	}
 	return out

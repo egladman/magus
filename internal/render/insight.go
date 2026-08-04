@@ -406,7 +406,7 @@ func checkbox(b bool) string {
 
 func mdAuthor(a string) string {
 	if a == "" {
-		return "—"
+		return "-"
 	}
 	return a
 }

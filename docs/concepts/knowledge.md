@@ -528,8 +528,9 @@ cursor is stateless and self-validating - it carries the query and a graph
 fingerprint, so a cursor reused against a different query or a graph that changed
 between pages is rejected rather than returning an incoherent slice.
 
-`magus agent install .agents/skills --agents-md` equips Codex with Agent Skills
-and a managed always-on `AGENTS.md` section. Claude Code uses
+`magus agent install .agents/skills` followed by `magus agent install-agents-md`
+equips Codex with Agent Skills and a managed always-on `AGENTS.md` section (two
+subcommands, one per destination). Claude Code uses
 `magus agent install .claude/skills`. The skills teach HOW to use magus (the
 repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.

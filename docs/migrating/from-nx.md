@@ -162,21 +162,21 @@ import (see [Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-
 ```buzz
 import "magus";
 import "project/../shared-lib" as shared;
-import "magus/spell/ts";
+import "magus/spell/typescript";
 
-magus\project({ "spells": [ts] });
+magus\project({ "spells": [typescript] });
 
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(shared.build);   // folds into depends_on automatically
-    ts["tsc-build"](ctx);
+    typescript["tsc-build"](ctx);
 }
 
-export fun test(ctx: magus\Context, args: [str]) > void { ts["vitest"](ctx); }
+export fun test(ctx: magus\Context, args: [str]) > void { typescript["vitest"](ctx); }
 
 // tsc composes into lint alongside eslint - not a bespoke `typecheck` target.
 export fun lint(ctx: magus\Context, args: [str]) > void {
-    ts["tsc"](ctx);
-    ts["eslint"](ctx);
+    typescript["tsc"](ctx);
+    typescript["eslint"](ctx);
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -184,7 +184,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 }
 ```
 
-`ts["tsc-build"]`'s `needs`/`provides` globs and `ts["eslint"]`'s claimed
+`typescript["tsc-build"]`'s `needs`/`provides` globs and `typescript["eslint"]`'s claimed
 files are already declared by the spell - see the [`typescript` spell reference](../concepts/spells/typescript.md)
 for the full op list, and [Getting started](../guides/getting-started.md) for a
 from-scratch walkthrough.

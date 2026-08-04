@@ -238,8 +238,18 @@ func EnvParseDotenv(_ context.Context, content string) (map[string]string, error
 	return parseDotenv(content), nil
 }
 
-// EnvReadDotenv reads a .env file and parses it.
-func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
+// EnvReadDotenv reads a .env file and parses it, subject to the sandbox read
+// policy. It goes through the same resolvePath + checkRead gate as fs.read_file
+// rather than reading the raw path: a dotenv reader that skipped the policy
+// would be a read primitive that answers for any path on the host, and the
+// parser turning the bytes into a name->value map makes the result more
+// convenient to exfiltrate than the file contents fs.read_file refuses to hand
+// over.
+func EnvReadDotenv(ctx context.Context, path string) (map[string]string, error) {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("env.read_dotenv: %w", err)
@@ -248,9 +258,15 @@ func EnvReadDotenv(_ context.Context, path string) (map[string]string, error) {
 }
 
 // EnvLoadDotenv reads a .env file and sets each variable into the process
-// environment. Existing names win (the dotenv convention), sandbox-stripped names
+// environment. The read is gated by the sandbox read policy (see EnvReadDotenv;
+// injecting the parsed names into the environment makes an ungated read worse
+// still). Existing names win (the dotenv convention), sandbox-stripped names
 // are skipped (matching EnvSet), and a recording/dry-run is a no-op.
 func EnvLoadDotenv(ctx context.Context, path string) error {
+	path = resolvePath(ctx, path)
+	if err := checkRead(ctx, path); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("env.load_dotenv: %w", err)

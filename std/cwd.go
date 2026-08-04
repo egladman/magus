@@ -1,18 +1,22 @@
 package std
 
-// Working-directory helpers shared across the host modules. These live in their
-// own file (rather than in os.go) because the pure-compute modules need them too:
-// crypto.sha256File resolves its path through resolvePath, so the helper must stay
-// in the wasm build even though os.go (and the other IO modules) are excluded
-// there. Keeping the cwd plumbing IO-free is what lets the browser playground
-// register the pure modules without dragging in the process/filesystem leaves.
+// Working-directory and sandbox-gate helpers shared across the host modules.
+// These live in their own file (rather than in os.go or fs.go) because the
+// modules built for wasm need them too: crypto.sha256File resolves its path
+// through resolvePath and env.read_dotenv gates its read through checkRead, so
+// both helpers must stay in the wasm build even though os.go and fs.go (and the
+// other IO modules) are excluded there. Keeping this plumbing IO-free is what
+// lets the browser playground register the pure modules without dragging in the
+// process/filesystem leaves.
 
 import (
 	"context"
 	"os"
 	"path/filepath"
 
+	"github.com/egladman/magus/internal/sandbox"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/types"
 )
 
 // cwdKey carries the default working directory for the exec primitives.
@@ -65,6 +69,34 @@ func resolvePath(ctx context.Context, path string) string {
 		return path
 	}
 	return filepath.Join(base, path)
+}
+
+// checkRead returns a MGS2001 diag error when ctx carries a sandbox policy
+// that denies path. nil otherwise (sandbox off or path allowed).
+func checkRead(ctx context.Context, path string) error {
+	p := sandbox.FromContext(ctx)
+	if p == nil {
+		return nil
+	}
+	if err := p.CheckReadCtx(ctx, path); err != nil {
+		sandbox.EmitDenyHint("ro", path)
+		return types.DiagnosticErrorf(types.PathReadDenied, "fs read denied: %s", path)
+	}
+	return nil
+}
+
+// checkWrite returns a MGS2002 diag error when ctx carries a sandbox policy
+// that denies path for writing.
+func checkWrite(ctx context.Context, path string) error {
+	p := sandbox.FromContext(ctx)
+	if p == nil {
+		return nil
+	}
+	if err := p.CheckWriteCtx(ctx, path); err != nil {
+		sandbox.EmitDenyHint("rw", path)
+		return types.DiagnosticErrorf(types.PathWriteDenied, "fs write denied: %s", path)
+	}
+	return nil
 }
 
 // EffectiveCwd reports the working directory a host module should treat as "."

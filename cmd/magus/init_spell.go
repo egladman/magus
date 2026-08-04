@@ -88,7 +88,7 @@ const spellScaffoldTemplate = `// spells/SPELLNAME/spell.buzz - a magus spell fo
 //
 // then compose an op into a target:
 //
-//     export fun build(args: [str]) > void { SPELLNAME.build(); }
+//     export fun build(ctx: magus\Context, args: [str]) > void { SPELLNAME.build(ctx); }
 //
 // Test this file:  magus buzz -t --embedded spells/SPELLNAME/spell.buzz
 

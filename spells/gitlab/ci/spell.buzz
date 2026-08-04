@@ -52,6 +52,18 @@ final ESC = std\char(27);
 // out of the rendered log.
 final HIDE = ESC + "[0K";
 
+// sanitizeTitle strips the bytes that are structural in a GitLab section marker.
+// A marker is "section_start:<ts>:<id>\r<ESC>[0K<title>", so a title carrying CR, LF
+// or ESC can close the section magus opened and forge another - and the title is the
+// project path, which a cloned repo controls. id is already safe: it goes through
+// strings\kebabCase above. split().join() and not .replace(), because Buzz's
+// str.replace substitutes only the first occurrence.
+fun sanitizeTitle(s: str) > str {
+    var acc = s.split("\r").join("");
+    acc = acc.split("\n").join("");
+    return acc.split(ESC).join("");
+}
+
 // getenv reads one environment variable, returning "" when unset (os.env returns
 // null for an unset var; callers test against "").
 fun getenv(name: str) > str {
@@ -97,7 +109,7 @@ export fun group_start(target: Target, cb: fun(any)) > bool {
     var collapsed = "";
     if (io["collapsed"] == true) { collapsed = "[collapsed=true]"; }
     std\print(HIDE + "section_start:" + nowSeconds() + ":" + id + collapsed
-        + "\r" + HIDE + ("" + io["title"]));
+        + "\r" + HIDE + sanitizeTitle("" + io["title"]));
     return true;
 }
 

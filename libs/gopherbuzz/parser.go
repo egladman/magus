@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
+	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
 // maxParseDepth limits expression nesting to prevent stack overflow on
@@ -1662,7 +1663,24 @@ func (p *parser) parseBlock() (*ast.BlockStmt, error) {
 
 // ---- expression precedence climbing ----
 
-func (p *parser) parseExpr() (ast.Node, error) { return p.parseOr() }
+// parseExpr is where the nesting limit is enforced, because it is the single
+// choke point every recursive descent goes through: a parenthesised group, a list
+// element, a map value, and a call argument all reach their sub-expression here.
+// The limit used to sit on the `(` case of parsePrimary alone, so `[[[[...]]]]`,
+// `{"a":{"a":...}}` and `f(f(f(...)))` were unguarded - roughly 40 000 levels of
+// any of them overflowed Go's stack, which is a FATAL error the caller cannot
+// recover, from nothing more than a magusfile in a cloned repo.
+func (p *parser) parseExpr() (ast.Node, error) {
+	p.depth++
+	if p.depth > maxParseDepth {
+		p.depth--
+		t := p.peek()
+		return nil, fmt.Errorf("buzz: line %d:%d: expression nested too deeply (limit %d)", t.Line, t.Col, maxParseDepth)
+	}
+	n, err := p.parseOr()
+	p.depth--
+	return n, err
+}
 
 // parseRange sits between comparison and additive, so `..` binds TIGHTER than
 // `==`: upstream writes `range == 0..10`, which at a looser precedence would
@@ -2315,6 +2333,15 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("buzz: line %d:%d: invalid int %q", t.Line, t.Col, t.Val)
 		}
+		// buzz's int is 48-bit (vm.MinInt/vm.MaxInt), so a literal that parses as an
+		// int64 can still be unrepresentable. Reject it here rather than letting
+		// vm.IntValue truncate it to its low 48 bits: an unchecked UnixNano timestamp
+		// silently became a small positive number, and a slightly larger one a
+		// NEGATIVE one. Upstream's scanner does the same, reporting "int overflow".
+		if n < vmpackage.MinInt || n > vmpackage.MaxInt {
+			return nil, fmt.Errorf("buzz: line %d:%d: int overflow: %q does not fit in buzz's 48-bit int (%d to %d)",
+				t.Line, t.Col, t.Val, vmpackage.MinInt, vmpackage.MaxInt)
+		}
 		return &ast.IntLit{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Val: n}, nil
 	case token.Float:
 		p.advance()
@@ -2337,13 +2364,8 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		p.advance()
 		return &ast.IdentExpr{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: t.Val}, nil
 	case token.LParen:
-		p.depth++
-		if p.depth > maxParseDepth {
-			return nil, fmt.Errorf("buzz: line %d:%d: expression nested too deeply (limit %d)", t.Line, t.Col, maxParseDepth)
-		}
 		p.advance()
 		expr, err := p.parseExpr()
-		p.depth--
 		if err != nil {
 			return nil, err
 		}

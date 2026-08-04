@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/types"
 )
 
@@ -129,7 +130,7 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
-	assert.Equal(t, StatusOK, got.Status)
+	assert.Equal(t, StatusSkip, got.Status)
 	assert.True(t,
 		strings.Contains(got.Message, "skipped") ||
 			strings.Contains(got.Message, "no VCS") ||
@@ -137,6 +138,35 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 		"expected a skip, got %q", got.Message)
 }
 
-type stubWorkspace struct{ types.WorkspaceReader }
+// stubWorkspace is the minimum WorkspaceReader the checks need: a root, a project
+// list, and the dependency graph built from it. The embedded interface panics on
+// anything else, so a check that grows a new dependency fails loudly here.
+type stubWorkspace struct {
+	types.WorkspaceReader
+	root     string
+	projects []*types.Project
+}
 
+func (s stubWorkspace) Root() string               { return s.root }
+func (s stubWorkspace) All() []*types.Project      { return s.projects }
 func (stubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (stubWorkspace) Where(string) (*types.Project, bool) {
+	return nil, false
+}
+
+func (s stubWorkspace) Get(path string) *types.Project {
+	for _, p := range s.projects {
+		if p.Path == path {
+			return p
+		}
+	}
+	return nil
+}
+
+func (s stubWorkspace) Graph() (*types.Graph, error) {
+	ws := &types.Workspace{Projects: map[string]*types.Project{}}
+	for _, p := range s.projects {
+		ws.Projects[p.Path] = p
+	}
+	return dependency.Build(ws)
+}

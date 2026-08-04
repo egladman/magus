@@ -98,3 +98,59 @@ func TestFindRoot(t *testing.T) {
 		}
 	})
 }
+
+// TestFindRootStopsAtRepositoryBoundary pins the boundary on the magus.yaml search.
+//
+// The contiguity rule already refused to let a stray magusfile in an unrelated
+// ancestor adopt everything beneath it, but workspaceMarker was checked first and
+// unconditionally, so it skipped that defence entirely. A planted /tmp/magus.yaml or
+// $HOME/magus.yaml captured every repo below it and outranked that repo's own go.mod
+// and magusfile.buzz - handing its sandbox allowlist, default charms and daemon
+// address to builds inside someone else's project.
+func TestFindRootStopsAtRepositoryBoundary(t *testing.T) {
+	t.Run("planted ancestor magus.yaml does not capture a repo", func(t *testing.T) {
+		tmp := t.TempDir()
+		mkTree(t, tmp,
+			"magus.yaml",  // the attacker's plant, above the repo
+			"repo/.git/",  // the victim's repository boundary
+			"repo/go.mod", // and its own project marker
+			"repo/magusfile.buzz",
+			"repo/sub/",
+		)
+		got, err := FindRoot(filepath.Join(tmp, "repo", "sub"))
+		if err != nil {
+			t.Fatalf("FindRoot: %v", err)
+		}
+		if want := filepath.Join(tmp, "repo"); got != want {
+			t.Fatalf("root escaped the repository boundary:\n got  %s\n want %s", got, want)
+		}
+	})
+
+	t.Run("magus.yaml inside the repo still wins", func(t *testing.T) {
+		tmp := t.TempDir()
+		mkTree(t, tmp,
+			"repo/.git/",
+			"repo/magus.yaml",
+			"repo/libs/thing/go.mod",
+		)
+		got, err := FindRoot(filepath.Join(tmp, "repo", "libs", "thing"))
+		if err != nil {
+			t.Fatalf("FindRoot: %v", err)
+		}
+		if want := filepath.Join(tmp, "repo"); got != want {
+			t.Fatalf("got %s, want %s", got, want)
+		}
+	})
+
+	t.Run("a workspace that is not a repository is unaffected", func(t *testing.T) {
+		tmp := t.TempDir()
+		mkTree(t, tmp, "ws/magus.yaml", "ws/sub/")
+		got, err := FindRoot(filepath.Join(tmp, "ws", "sub"))
+		if err != nil {
+			t.Fatalf("FindRoot: %v", err)
+		}
+		if want := filepath.Join(tmp, "ws"); got != want {
+			t.Fatalf("got %s, want %s", got, want)
+		}
+	})
+}

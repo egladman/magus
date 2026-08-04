@@ -138,7 +138,7 @@ type CharmDeclaration struct {
 const TargetDefinition = "A target is a named operation (e.g. build, test, lint) declared as an " +
 	"exported function in a project's magusfile, which may compose a spell's " +
 	"tool-native operations. 'ci' is the conventional anchor that the affected set " +
-	"keys off — magus runs it read-only but does not hardcode its steps; the magusfile " +
+	"keys off - magus runs it read-only but does not hardcode its steps; the magusfile " +
 	"composes them with ctx.needs."
 
 // TargetEntry describes a single target available in the workspace.
@@ -153,7 +153,7 @@ type TargetEntry struct {
 const TargetGraphDefinition = "The target dependency graph is the ctx.needs " +
 	"DAG of a project's magusfile: each node is a target (an exported function), each " +
 	"edge a dependency it composes. It is extracted statically from the magusfile " +
-	"source, so it shows every edge — including both arms of a runtime branch — and " +
+	"source, so it shows every edge - including both arms of a runtime branch - and " +
 	"flags any dependency cycle (which the run path rejects during dispatch)."
 
 // TargetGraphNode is one target in the graph: its run name, doc comment, the
@@ -404,7 +404,7 @@ type ProjectsOutput struct {
 
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
 const ModuleDefinition = "A module is a magus standard-library namespace a magusfile imports for " +
-	"host capabilities — filesystem, exec, vcs, crypto, http, and more. Import " +
+	"host capabilities - filesystem, exec, vcs, crypto, http, and more. Import " +
 	"each under its bare name (import \"fs\", then fs.glob(...)); magus layers these " +
 	"methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods " +
 	"also exist in Buzz's own stdlib."

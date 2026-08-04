@@ -65,7 +65,7 @@ const wildcardTermScore = 1
 
 // knownFields are the recognized field:value prefixes. kind/project/id/language
 // constrain which nodes match; relation constrains which edges a neighborhood traverses.
-var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true}
+var knownFields = map[string]bool{"kind": true, "project": true, "id": true, "relation": true, "language": true, "role": true, "section": true}
 
 type parsedQuery struct {
 	terms     []string            // positive free-text tokens (AND)

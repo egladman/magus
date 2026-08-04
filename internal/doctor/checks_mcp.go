@@ -76,29 +76,30 @@ func (*runner) checkMCPTokens() Check {
 func probeBridgeReachability(d *DaemonInfo) Check {
 	const name = "console"
 	if d == nil {
-		return Check{Name: name, Status: StatusOK, Message: "daemon info unavailable; bridge check skipped"}
+		return Check{Name: name, Status: StatusSkip, Message: "daemon info unavailable"}
 	}
 	if !d.BridgeEnabled {
-		return Check{Name: name, Status: StatusOK, Message: "bridge disabled via console.enabled: false"}
+		return Check{Name: name, Status: StatusSkip, Message: "bridge disabled via console.enabled: false"}
 	}
 	// No daemon means no bridge, necessarily. Reporting that as a FAILURE made
 	// `magus doctor` red on every machine with the daemon stopped - which is the
 	// normal state for a CLI-first tool - and a check that is red by default is a
 	// check people learn to ignore, taking the real failures with it. The daemon
 	// check immediately above already says the daemon is down; saying it twice,
-	// once as a failure, is noise rather than information.
+	// once as a failure, is noise rather than information. It is not a pass either:
+	// nothing was probed, so it reports as skipped.
 	if !d.Reachable {
 		return Check{
 			Name:    name,
-			Status:  StatusOK,
-			Message: "daemon not running, so the bridge is not expected; skipped",
+			Status:  StatusSkip,
+			Message: "daemon not running, so the bridge is not expected",
 			Details: []string{"start it to serve the console: magus server start"},
 		}
 	}
 	if d.MCPAddr == "" {
 		// Belt-and-suspenders: mcpAddrString normally falls back to the default
 		// address, so this only trips if daemonInfo was built without one.
-		return Check{Name: name, Status: StatusOK, Message: "MCP address unknown; bridge check skipped"}
+		return Check{Name: name, Status: StatusSkip, Message: "MCP address unknown"}
 	}
 
 	url := fmt.Sprintf("http://%s/api/v1/graph", d.MCPAddr)

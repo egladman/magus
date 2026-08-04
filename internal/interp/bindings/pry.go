@@ -66,7 +66,7 @@ func buzzPryContext(esess engine.Session) interp.PryContext {
 func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume interp.PryResume, opts interp.ReplOptions) {
 	stepper, ok := esess.(engine.Stepper)
 	if !ok {
-		fmt.Fprintln(os.Stdout, "(stepping not supported on this engine — resuming)")
+		fmt.Fprintln(os.Stdout, "(stepping not supported on this engine - resuming)")
 		return
 	}
 	dbg, _ := esess.(engine.DebugReader)

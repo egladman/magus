@@ -1,0 +1,8 @@
+// @expect: 140737488355327
+import "std";
+// buzz's int is 48-bit, so a decimal string wider than that has no int value:
+// parseInt reports it as a parse failure (null) rather than handing back the low
+// 48 bits. "1786000000000000000" is a UnixNano timestamp; it used to parse
+// "successfully" as 41272770887680. The `??` therefore falls through to the
+// boundary value, which does fit and parses as itself.
+final __r = std\parseInt("1786000000000000000") ?? std\parseInt("140737488355327")!;

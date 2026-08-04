@@ -209,7 +209,7 @@ func repoRoot(t *testing.T) string {
 
 func ghaBackend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "github", "actions", "spell.buzz")
+	path := filepath.Join(repoRoot(t), "spells", "github", "actions", "spell.buzz")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("github spell not found at %s: %v", path, err)
 	}
@@ -574,7 +574,7 @@ func TestDedupStrings(t *testing.T) {
 
 func s3Backend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
-	path := filepath.Join(repoRoot(t), "magus", "spells", "aws", "aws-s3", "spell.buzz")
+	path := filepath.Join(repoRoot(t), "spells", "aws", "s3-cache", "spell.buzz")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("s3 spell not found at %s: %v", path, err)
 	}

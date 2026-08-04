@@ -128,6 +128,10 @@ var projectMarkers = []string{"magusfiles", "magusfile.buzz", "go.mod"}
 // other than "not found" is reported as PRESENT: refusing to walk past a directory we
 // cannot read is safer than silently continuing into whatever is above it and
 // adopting an unrelated tree as the workspace.
+// vcsMarkers bound the upward workspace search. os.Stat matches both a .git
+// directory and the .git FILE a linked worktree carries, so both stop the walk.
+var vcsMarkers = []string{".git", ".hg", ".jj"}
+
 func dirHasMarker(dir string, markers []string) bool {
 	for _, m := range markers {
 		if _, err := os.Stat(filepath.Join(dir, m)); err == nil || !errors.Is(err, fs.ErrNotExist) {
@@ -173,6 +177,17 @@ func FindRoot(dir string) (string, error) {
 			} else if contiguous != "" {
 				runBroken = true
 			}
+		}
+		// Stop at the repository boundary, AFTER examining it. The contiguity rule
+		// above already refuses to let a stray magusfile in an unrelated ancestor adopt
+		// everything beneath it, but workspaceMarker skipped that check entirely: a
+		// planted /tmp/magus.yaml or $HOME/magus.yaml captured every repo below it and
+		// outranked that repo's own go.mod and magusfile.buzz, supplying its sandbox
+		// allowlist, default charms and daemon address to builds inside someone else's
+		// project. Crossing out of a repository is the line between "my workspace" and
+		// "whatever happens to sit above it".
+		if dirHasMarker(cur, vcsMarkers) {
+			break
 		}
 		parent := filepath.Dir(cur)
 		if parent == cur {
@@ -432,12 +447,19 @@ const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 // validation.
 func remoteCacheSigningOpts(trustedB64 []string, insecure bool) ([]cache.Option, error) {
 	if insecure {
+		// Warn, because this is the one setting that turns a documented supply-chain
+		// control into a no-op with no other user-visible signal. It also short-circuits
+		// before trustedB64 is read, so a config declaring BOTH (as this repo's CI did)
+		// silently verifies nothing while looking like it verifies everything.
+		slog.Warn("remote cache signature verification is DISABLED (cache.remote.insecure); " +
+			"artifacts are accepted and produced unsigned, so anyone who can write to the " +
+			"shared cache can inject build output into every consumer")
 		return []cache.Option{cache.WithInsecureRemote()}, nil
 	}
 	if len(trustedB64) == 0 {
 		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared; " +
 			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts (or set " +
-			"cache.remote.insecure / MAGUS_CACHE_REMOTE_INSECURE to accept unsigned artifacts) — " +
+			"cache.remote.insecure / MAGUS_CACHE_REMOTE_INSECURE to accept unsigned artifacts) - " +
 			"a shared cache with no signature verification is a supply-chain hazard and is not allowed by default")
 	}
 	pubkeys := make([][]byte, 0, len(trustedB64))

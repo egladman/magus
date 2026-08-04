@@ -965,12 +965,36 @@ func guardCommandPrefix(args []string) []string {
 // trade at all, because a quoted word structurally cannot be a command. The
 // safety property that mattered - `cd /repo && git stash` matching however it is
 // reached - is strictly better served by parsing, which sees both commands.
+// gitGlobalFlagsWithValue are git's global flags whose value is a SEPARATE
+// argument. The `--flag=value` spelling needs no entry: it is one token.
+var gitGlobalFlagsWithValue = []string{"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path"}
+
+// skipGitGlobalFlags drops git's leading global flags so the caller reads the
+// real subcommand. Without it `git -C /repo stash` is read as subcommand "-C"
+// and every rule below silently misses - and `git -C <dir>` is not obfuscation,
+// it is exactly how an agent operates on a directory other than its cwd, which
+// is the case these whole-tree denials exist to catch.
+func skipGitGlobalFlags(args []string) []string {
+	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		if slices.Contains(gitGlobalFlagsWithValue, args[0]) && len(args) > 1 {
+			args = args[2:]
+			continue
+		}
+		args = args[1:]
+	}
+	return args
+}
+
 func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 	for _, c := range cmds {
 		if c.Name != "git" || len(c.Args) == 0 {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		args := skipGitGlobalFlags(c.Args)
+		if len(args) == 0 {
+			continue
+		}
+		sub, rest := args[0], args[1:]
 		switch sub {
 		case "stash":
 			// Reading and restoring a stash is safe; creating one moves the tree.
@@ -1005,7 +1029,11 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 		if c.Name != "git" || len(c.Args) == 0 {
 			continue
 		}
-		sub, rest := c.Args[0], c.Args[1:]
+		args := skipGitGlobalFlags(c.Args)
+		if len(args) == 0 {
+			continue
+		}
+		sub, rest := args[0], args[1:]
 		switch sub {
 		case "push":
 			return bashGuardVerdict{Context: pushGuardContext}, true

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -163,7 +164,7 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 	dottedExists := dottedErr == nil
 
 	if plainExists && dottedExists {
-		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml — pick one", dir)
+		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml - pick one", dir)
 	}
 	if !plainExists && !dottedExists {
 		return cfg, nil
@@ -302,6 +303,11 @@ func findWorkspaceRoot() string {
 // ExtractFlag pre-scans args for -config/--config so the config file can
 // be loaded before each subcommand registers its real flag set.
 func ExtractFlag(args []string) string {
+	// Stop at `--`: without it, `magus run test -- --config /elsewhere.yaml` forwards
+	// --config to the child AND repoints magus's own config at a file the child named.
+	if i := slices.Index(args, "--"); i >= 0 {
+		args = args[:i]
+	}
 	for i, a := range args {
 		switch {
 		case a == "-config" || a == "--config":

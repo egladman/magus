@@ -14,6 +14,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
@@ -105,15 +107,35 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 }
 
 // newVersionProbe runs argv in the project dir and returns trimmed stdout.
+//
+// The sandbox exec allowlist is enforced here explicitly rather than inherited,
+// because this is a raw exec.CommandContext and not a run.Exec: a spell declaring
+// mgs_getVersionCommand would otherwise get an unchecked subprocess, and the probe
+// runs automatically during cache-key computation on any run that touches a project
+// bound to the spell. A one-line change in a spell turned a denied exec into an
+// allowed one - `mgs_getVersionCommand() { return ["sh", "-c", "..."]; }` was
+// arbitrary shell, run by `magus run <anything>`.
 func newVersionProbe(argv []string) func(context.Context, string) (string, error) {
 	return func(ctx context.Context, dir string) (string, error) {
+		if policy := sandbox.FromContext(ctx); policy != nil {
+			resolved, err := exec.LookPath(argv[0])
+			if err != nil {
+				resolved = argv[0] // let exec.Cmd surface the real lookup error
+			}
+			if err := policy.CheckExecCtx(ctx, resolved); err != nil {
+				sandbox.EmitDenyHint("ro", resolved)
+				return "", types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
+			}
+		}
 		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 		cmd.Dir = dir
 		out, err := cmd.Output()
 		if err != nil {
 			return "", fmt.Errorf("version probe %v in %s: %w", argv, dir, err)
 		}
-		return strings.TrimSpace(string(out)), nil
+		// Redacted for the same reason run.Exec redacts its captured output: the value
+		// flows into the cache key's tool-version field and into describe output.
+		return secret.RedactString(ctx, strings.TrimSpace(string(out))), nil
 	}
 }
 

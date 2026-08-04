@@ -1610,3 +1610,23 @@ fun probe() > bool {
 }`)
 	assert.True(t, v.AsBool(), "hash returns the digest itself; .hex() renders it as 32 characters")
 }
+
+// TestParity_IntArithmeticWrapsAtTheI48Boundary pins that +, - and * WRAP at
+// buzz's 48-bit int boundary instead of raising, so a positive product can come
+// back negative.
+//
+// This reads like a bug and is not one to fix here: upstream declares
+// `pub const Integer = i48` and its OP_ADD_I / OP_MULTIPLY_I use Zig's WRAPPING
+// operators (+% and *%), so the wrap is the defined semantics of the language.
+// Raising on overflow would diverge from upstream, so the silent-truncation
+// problem is addressed where a value ENTERS buzz -- an int literal (parser.go),
+// std\parseInt, `as int` -- all of which now reject an unrepresentable value
+// instead of keeping its low 48 bits. Change this test only alongside upstream.
+func TestParity_IntArithmeticWrapsAtTheI48Boundary(t *testing.T) {
+	v := evalParity(t, `
+fun probe() > int {
+    // 1073741824 * 1000000 is 1073741824000000, about 7.6x past 2^47.
+    return 1073741824 * 1000000;
+}`)
+	assert.Equal(t, int64(-52158082842624), v.AsInt(), "the product wraps into the negatives, as upstream defines")
+}

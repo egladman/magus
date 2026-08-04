@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,7 +51,7 @@ func TestCheckCITarget(t *testing.T) {
 
 	t.Run("no projects skipped", func(t *testing.T) {
 		got := (&runner{}).checkCITarget(nil)
-		assert.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Equal(t, StatusSkip, got.Status, got.Message)
 	})
 	t.Run("ci declared", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
@@ -584,7 +585,7 @@ func TestCheckVCSBaseRef(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		f := false
 		got := checkVCSBaseRef(t.TempDir(), types.VCSOptions{Enabled: &f})
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, StatusSkip, got.Status)
 	})
 
 	t.Run("valid HEAD ref", func(t *testing.T) {
@@ -607,6 +608,96 @@ func TestCheckVCSBaseRef(t *testing.T) {
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
 		got := checkVCSBaseRef(root, types.VCSOptions{})
 		assert.Equal(t, StatusOK, got.Status)
+	})
+}
+
+// tally recounts a report's checks independently of Summary, so a test can assert
+// the summary against what was actually appended rather than against itself.
+func tally(checks []Check) Summary {
+	var s Summary
+	for _, c := range checks {
+		switch c.Status {
+		case StatusOK:
+			s.OK++
+		case StatusFail:
+			s.Fail++
+		case StatusSkip:
+			s.Skip++
+		}
+	}
+	return s
+}
+
+// TestRunSummaryCountsEveryCheckOnWorkspaceError is the regression test for a
+// summary that disagreed with the checks printed above it. The counting loop sat
+// after the early return taken when the workspace fails to load, so the three
+// pre-workspace checks were rendered and never summed: a run showing two passes
+// and two failures reported "0 ok, 1 fail", silently dropping a real failure from
+// anything reading report.summary instead of report.checks.
+func TestRunSummaryCountsEveryCheckOnWorkspaceError(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	got := Run(t.TempDir(), nil, errors.New(`workspace://evals: unknown option "no_language"`))
+
+	require.Greater(t, len(got.Checks), 1,
+		"the pre-workspace checks should be present alongside the workspace failure")
+	assert.Equal(t, tally(got.Checks), got.Summary, "the summary must match the checks it was built from")
+	assert.Equal(t, len(got.Checks), got.Summary.OK+got.Summary.Fail+got.Summary.Skip,
+		"every appended check must land in exactly one bucket")
+	assert.GreaterOrEqual(t, got.Summary.Fail, 1, "the workspace failure itself must be counted")
+}
+
+// TestRunSummaryCountsEveryCheckOnFullRun pins the same invariant on the normal
+// path, so the two exits cannot drift apart again.
+func TestRunSummaryCountsEveryCheckOnFullRun(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	got := Run(root, stubWorkspace{root: root}, nil)
+
+	assert.Equal(t, tally(got.Checks), got.Summary)
+	assert.Equal(t, len(got.Checks), got.Summary.OK+got.Summary.Fail+got.Summary.Skip)
+}
+
+// TestBridgeReachabilitySkipsWithoutADaemon pins that the unmet-precondition
+// branches of the console check report as skipped. Reporting them ok made a
+// stopped daemon - the normal state for a CLI-first tool - look like a verified
+// bridge.
+func TestBridgeReachabilitySkipsWithoutADaemon(t *testing.T) {
+	t.Run("no daemon info", func(t *testing.T) {
+		assert.Equal(t, StatusSkip, probeBridgeReachability(nil).Status)
+	})
+	t.Run("bridge disabled", func(t *testing.T) {
+		got := probeBridgeReachability(&DaemonInfo{BridgeEnabled: false})
+		assert.Equal(t, StatusSkip, got.Status, got.Message)
+	})
+	t.Run("daemon not reachable", func(t *testing.T) {
+		got := probeBridgeReachability(&DaemonInfo{BridgeEnabled: true, Reachable: false})
+		assert.Equal(t, StatusSkip, got.Status, got.Message)
+		assert.NotEmpty(t, got.Details, "a skip should still say how to make the check run")
+	})
+	t.Run("mcp address unknown", func(t *testing.T) {
+		got := probeBridgeReachability(&DaemonInfo{BridgeEnabled: true, Reachable: true})
+		assert.Equal(t, StatusSkip, got.Status, got.Message)
+	})
+}
+
+// TestCheckGraphCyclesReportsWhatItChecked: an empty graph passes trivially, so it
+// skips; a real one reports its size rather than a fixed string that reads the same
+// either way.
+func TestCheckGraphCyclesReportsWhatItChecked(t *testing.T) {
+	t.Run("empty graph skips", func(t *testing.T) {
+		got := (&runner{ws: stubWorkspace{root: t.TempDir()}}).checkGraphCycles()
+		assert.Equal(t, StatusSkip, got.Status, got.Message)
+	})
+
+	t.Run("real graph names what it examined", func(t *testing.T) {
+		ws := stubWorkspace{root: t.TempDir(), projects: []*types.Project{
+			{Path: "api", DependsOn: []string{"lib"}},
+			{Path: "lib"},
+		}}
+		got := (&runner{ws: ws}).checkGraphCycles()
+		require.Equal(t, StatusOK, got.Status, got.Message)
+		assert.Contains(t, got.Message, "2 project(s)")
+		assert.Contains(t, got.Message, "1 dependency edge(s)")
 	})
 }
 
@@ -744,9 +835,9 @@ func TestCheckGraphBounds(t *testing.T) {
 		return root
 	}
 
-	t.Run("no committed graph passes", func(t *testing.T) {
+	t.Run("no committed graph is a skip, not a pass", func(t *testing.T) {
 		got := checkGraphBounds(t.TempDir())
-		assert.Equal(t, StatusOK, got.Status)
+		assert.Equal(t, StatusSkip, got.Status)
 	})
 
 	t.Run("in-workspace nodes pass", func(t *testing.T) {

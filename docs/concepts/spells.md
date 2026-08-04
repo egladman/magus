@@ -4,7 +4,22 @@ order: 4
 page_type: overview
 description: A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.
 tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]
+aliases:
+  - concepts/spells/ts
+  - concepts/spells/py
+  - concepts/spells/rs
+  - concepts/spells/md
 ---
+
+<!-- The four aliases above keep the pre-83f0a941 spell URLs (/concepts/spells/ts|py|rs|md/) resolving.
+     Those pages were duplicates of typescript/python/rust/markdown, left behind when the spells were
+     renamed for what they adapt, and every Buzz block in them imported a spell name that does not
+     exist (`no spell "ts" to import`). They are deleted now. The redirects live HERE, on this
+     hand-written page, and not on the pages they belong to, because concepts/spells/*.md is GENERATED
+     by cmd/magus-spelldocs (a declared output of docs' content-generate) and its frontmatter has no
+     aliases field - an alias added there would be erased on the next regeneration and fail the drift
+     gate. Retiring the URLs instead would 404 them; the index they land on lists every spell, which is
+     what a reader following an old /spells/ts/ link actually wants. -->
 
 # Spells
 

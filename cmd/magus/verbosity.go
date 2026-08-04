@@ -59,9 +59,16 @@ func (v *verbosity) String() string   { return strconv.Itoa(int(*v)) }
 func (v *verbosity) Set(string) error { *v++; return nil }
 func (*verbosity) IsBoolFlag() bool   { return true }
 
+// expandVerbosityArgs rewrites a clustered -vv into repeated -v so the counted
+// flag sees one Set per level. It stops at a bare "--" (like partitionFlags):
+// everything after belongs to the child command, and rewriting a child's own
+// -vv into -v -v silently changed the argv magus forwarded.
 func expandVerbosityArgs(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, a := range args {
+	for i, a := range args {
+		if a == "--" {
+			return append(out, args[i:]...)
+		}
 		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
 			allV := true
 			for _, c := range a[1:] {

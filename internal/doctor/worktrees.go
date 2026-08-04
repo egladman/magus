@@ -35,7 +35,7 @@ func checkStaleWorktrees(root string) Check {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Check{Name: name, Status: StatusOK, Message: "no " + worktreesDirRel + " directory"}
+			return Check{Name: name, Status: StatusSkip, Message: "no " + worktreesDirRel + " directory"}
 		}
 		return Check{Name: name, Status: StatusFail, Message: fmt.Sprintf("scan %s: %v", worktreesDirRel, err)}
 	}

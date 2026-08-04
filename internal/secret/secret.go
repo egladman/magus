@@ -26,6 +26,7 @@ package secret
 
 import (
 	"context"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -388,15 +389,67 @@ func (r *Resolver) record(key memoKey, v string) {
 // (addRedactable dedupes) and expected: a value with no special characters percent-escapes
 // to itself.
 func encodedForms(v string) []string {
-	return []string{
+	forms := []string{
 		v,
 		base64.StdEncoding.EncodeToString([]byte(v)),
 		base64.RawStdEncoding.EncodeToString([]byte(v)),
 		base64.URLEncoding.EncodeToString([]byte(v)),
+		base64.RawURLEncoding.EncodeToString([]byte(v)), // the JWT segment encoding
+		base32.StdEncoding.EncodeToString([]byte(v)),    // the TOTP/otpauth encoding
 		hex.EncodeToString([]byte(v)),
+		strings.ToUpper(hex.EncodeToString([]byte(v))), // xxd -u, openssl, most JVM/.NET tooling
 		url.QueryEscape(v),
 		url.PathEscape(v),
 	}
+	return append(forms, jsonStringForms(v)...)
+}
+
+// jsonStringForms returns v spelled as it appears INSIDE a JSON string literal.
+//
+// Redaction is literal substring matching, and several call sites redact bytes that
+// have already been through an encoder (the output descriptor, the exported remote
+// manifest). There the raw form is simply not present: a quote, a backslash, or the
+// newline in every PEM key has been escaped, so the secret survives in fully
+// recoverable form. Both spellings are registered because the escaping differs by
+// encoder - encoding/json v1 escapes &, < and > as \u00XX, while jsonv2 and
+// slog.JSONHandler (SetEscapeHTML(false)) do not.
+// htmlEscapedTrio are the only bytes the two JSON encoders disagree about.
+var htmlEscapedTrio = []byte{'&', '<', '>'}
+
+// jsonUnicodeEscape renders b the way a JSON encoder with HTML escaping on does,
+// e.g. '&' becomes the six characters &. Built rather than written literally
+// so the backslash cannot be mangled by an editor or a copy-paste.
+func jsonUnicodeEscape(b byte) string { return "\\u" + fmt.Sprintf("%04x", b) }
+
+func jsonStringForms(v string) []string {
+	b, err := json.Marshal(v)
+	if err != nil || len(b) < 2 {
+		return nil
+	}
+	s := string(b[1 : len(b)-1]) // drop the surrounding quotes
+
+	// The two encoders in play differ ONLY in whether they \u-escape the HTML trio,
+	// so derive the sibling spelling from this one rather than reaching for a second
+	// encoder: internal/json follows the build's GOEXPERIMENT (v1 escapes them, v2
+	// does not) while slog.JSONHandler always marshals with SetEscapeHTML(false).
+	// Normalising to the literal form first makes the result independent of whichever
+	// encoder produced s.
+	lit := s
+	for _, c := range htmlEscapedTrio {
+		lit = strings.ReplaceAll(lit, jsonUnicodeEscape(c), string(c))
+	}
+	escaped := lit
+	for _, c := range htmlEscapedTrio {
+		escaped = strings.ReplaceAll(escaped, string(c), jsonUnicodeEscape(c))
+	}
+
+	var out []string
+	for _, form := range []string{lit, escaped} {
+		if form != v {
+			out = append(out, form)
+		}
+	}
+	return out
 }
 
 // addRedactable inserts one value into the redaction set, keeping it ordered longest

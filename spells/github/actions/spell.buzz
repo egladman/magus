@@ -169,18 +169,25 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
 // message. A raw newline would end the command early and spill the rest into the
 // log as loose text, and a failure's cause is usually the part after line one.
 // Percent goes first, or it would corrupt the escapes introduced after it.
+// split().join() and NOT .replace(): Buzz's str.replace substitutes only the FIRST
+// occurrence (it maps to strings.Replace(s, old, new, 1)), so a message with two
+// newlines had its second one emitted raw. That is a workflow-command injection: any
+// failing test, compiler, or transitive dependency whose output contains
+// "\n::error title=x::forged" or "\n::add-mask::<value>" had those lines executed by
+// the runner as commands. Every character class here can repeat, so all three
+// substitutions must be global.
 fun escapeData(s: str) > str {
-    var acc = s.replace("%", "%25");
-    acc = acc.replace("\r", "%0D");
-    return acc.replace("\n", "%0A");
+    var acc = s.split("%").join("%25");
+    acc = acc.split("\r").join("%0D");
+    return acc.split("\n").join("%0A");
 }
 
 // escapeProp additionally encodes the separators between properties, so a title
 // containing a comma or colon cannot be read as the start of another property.
 fun escapeProp(s: str) > str {
     var acc = escapeData(s);
-    acc = acc.replace(":", "%3A");
-    return acc.replace(",", "%2C");
+    acc = acc.split(":").join("%3A");
+    return acc.split(",").join("%2C");
 }
 
 // groupOpen tracks whether group_start actually printed ::group::. Actions
@@ -248,7 +255,9 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
     addNum("endColumn", io["end_col"]);
     addProp("title", title);
 
-    var line = "::" + ("" + io["level"]);
+    // The command name is the one slot that reached the line unescaped. level is
+    // host-supplied today, so this is closing the gap rather than a live hole.
+    var line = "::" + escapeProp("" + io["level"]);
     if (props != "") { line = line + " " + props; }
     std\print(line + "::" + escapeData("" + io["message"]));
     return true;

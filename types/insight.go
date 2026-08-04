@@ -23,10 +23,10 @@ type InsightOptions struct {
 // Per-lens descriptions, shown by each lens and reused in the combined report.
 const (
 	HotspotDefinition = "Hotspots are files (or projects) where edit frequency meets " +
-		"complexity — the prime refactoring targets: code both churned often and hard to understand."
+		"complexity - the prime refactoring targets: code both churned often and hard to understand."
 	AffinityDefinition = "Affinity is how often projects change in the same commit (temporal " +
 		"coupling). A hidden pair has affinity without either declaring a dependency on the other " +
-		"— a candidate architectural smell."
+		"- a candidate architectural smell."
 	OwnershipDefinition = "Ownership shows author concentration: who touches each project most, " +
 		"how many distinct authors it has (bus factor), and whether it has gone quiet (abandonment risk)."
 	TrendDefinition = "Trend compares the recent and earlier halves of the window: a positive " +

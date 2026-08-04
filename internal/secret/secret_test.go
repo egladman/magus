@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -342,6 +343,40 @@ func TestRedactCoversCommonEncodings(t *testing.T) {
 	_, err = ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_URL_TOKEN")
 	require.NoError(t, err)
 	assert.Equal(t, mask, r.RedactString(url.QueryEscape(urly)), "percent-escaped form must be masked")
+}
+
+// TestRedactSurvivesJSONEscaping guards the class every other fixture in this file
+// misses: the existing tokens are all [A-Za-z0-9_], so they marshal to themselves and
+// the raw form keeps matching. A real credential is not. The cache's output descriptor
+// and the exported remote manifest both redact bytes that have ALREADY been marshaled,
+// so a secret containing a quote, a backslash, or - most importantly - the newline in
+// every PEM key was shipped in fully recoverable form.
+func TestRedactSurvivesJSONEscaping(t *testing.T) {
+	for name, tok := range map[string]string{
+		"quote":     `pa55"word"here`,
+		"backslash": `back\slash\secret`,
+		"newline":   "-----BEGIN KEY-----\nMIIBOgIBAAJBAK\n-----END KEY-----",
+		"ampersand": "p@ss&word&12345",
+		"angle":     "abc<def>ghi12345",
+		"tab":       "tok\tsep\tvalue",
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, r := withResolver(t)
+			t.Setenv("MAGUS_TEST_JSON_TOKEN", tok)
+			_, err := ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_JSON_TOKEN")
+			require.NoError(t, err)
+
+			// Marshal the way a descriptor or manifest does, then redact the bytes.
+			marshaled, err := json.Marshal(map[string]string{"err_msg": tok})
+			require.NoError(t, err)
+			redacted := r.Redact(marshaled)
+
+			// The decisive assertion: the value must not survive a JSON round-trip.
+			var out map[string]string
+			require.NoError(t, json.Unmarshal(redacted, &out))
+			assert.NotContains(t, out["err_msg"], tok, "secret recoverable by decoding the redacted bytes")
+		})
+	}
 }
 
 // TestRedactingHandlerCoversNestedAndWrappedValues guards the carriers that are not a

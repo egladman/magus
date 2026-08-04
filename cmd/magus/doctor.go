@@ -62,8 +62,10 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		// Only failures. A skip is not something to act on, and -o name feeds scripts
+		// that treat every emitted line as a problem.
 		for _, c := range out.Checks {
-			if c.Status != "ok" {
+			if c.Status == doctor.StatusFail {
 				fmt.Println(c.Name)
 			}
 		}
@@ -88,7 +90,11 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 			fmt.Printf("    %s\n", d)
 		}
 	}
-	fmt.Printf("\nsummary: %d ok, %d fail\n", out.Summary.OK, out.Summary.Fail)
+	if out.Summary.Skip > 0 {
+		fmt.Printf("\nsummary: %d ok, %d fail, %d skip\n", out.Summary.OK, out.Summary.Fail, out.Summary.Skip)
+	} else {
+		fmt.Printf("\nsummary: %d ok, %d fail\n", out.Summary.OK, out.Summary.Fail)
+	}
 	return nil
 }
 
@@ -102,6 +108,8 @@ func statusGlyph(status doctor.CheckStatus, color bool) string {
 		label, code = "[pass]", "32" // green
 	case doctor.StatusFail:
 		label, code = "[fail]", "31" // red
+	case doctor.StatusSkip:
+		label, code = "[skip]", "33" // yellow: a precondition was unmet, nothing was examined
 	}
 	if color {
 		return "\x1b[" + code + "m" + label + "\x1b[0m"
