@@ -169,6 +169,7 @@ guides/download/linux/
 guides/download/macos/
 guides/download/package-managers/
 guides/download/shell-setup/
+guides/download/uninstall/
 guides/download/verify/
 guides/download/windows/
 guides/editor/
@@ -414,6 +415,7 @@ tags/cli/
 tags/codex/
 tags/completion/
 tags/concurrency/
+tags/config/
 tags/configuration/
 tags/connect/
 tags/connector/
