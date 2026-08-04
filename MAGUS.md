@@ -209,5 +209,3 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` |  |
 | `generate` | Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. |
 | `lint` |  |
-
-

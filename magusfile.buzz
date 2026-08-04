@@ -775,8 +775,17 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty()) {
+        // Name the files. Without them this reads "something drifted, go find it",
+        // which on a CI runner means reproducing the whole run locally to learn what
+        // a `git status` already knew - and a generate gate fires precisely when the
+        // person reading it does NOT have the tree in front of them. Diffed against
+        // HEAD rather than the base ref: the question is what THIS regeneration
+        // changed, not what the branch changed.
+        final changed = vcs\diff("HEAD");
+        var detail = "";
+        if (changed.len() > 0) { detail = ": " + changed.join(", "); }
         throw "generate: regeneration changed generated files; re-run "
-            + "`magus run generate:rw` and commit";
+            + "`magus run generate:rw` and commit" + detail;
     }
 }
 
