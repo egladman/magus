@@ -187,24 +187,26 @@ a real page or is claimed twice.
 
 ## Dogfooding: how magus builds magus
 
-The CI never uses HEAD to build the workspace. The binary that compiles
-this repo is the latest released version; any feature the `magusfile.buzz`
-uses must ship in a release first. This is the only stance that keeps the
-dogfooding contract deterministic - a CI run that compiled magus with a
-newer magus would be testing its own next release, not the one users have.
+CI runs the pipeline twice, in series, because there are two questions.
 
-In practice the workflow uses the `setup-magus` action with
-`installation-strategy: source` and `git-ref: ${{ github.sha }}` for the
-*rare* case where no prebuilt artifact exists for the SHA (right after a
-push to main before a release). For the common case, the prebuilt artifact
-from the previous release is the binary every step uses. The source-build
-fallback carries a supply-chain gate - the commit must be reachable from
-`main` - because the build is unverified otherwise.
+**From source, and it gates.** `preflight` and the `ci` shards build magus from the
+commit under test and run the workspace with it. Only this pass can answer "does this
+change work" - a magusfile needing a new host binding has no released binary able to
+load it. A failure blocks the PR.
 
-If your change adds a flag, a target, or a host-binding shape the
-magusfile uses, that change ships in a release *before* the magusfile
-change merges. The other way around is a breaking-change signal, not
-something to paper over.
+**From the previous release, and it informs.** The `compat` job runs the newest
+published magus against the same workspace: can the binary users already have still
+drive it? `continue-on-error`, deliberately. A failure means the magusfile now depends
+on something unreleased, so the remedy is to cut a release, not patch the PR. Gating on
+it would redden every such change until an unrelated release happened.
+
+Expect `compat` to fail when you add a flag, target, or host-binding shape the
+magusfile uses. That is the release-first signal working. Do not move a job off the
+released binary to clear it - that deletes the check instead of answering it.
+
+A source build resolving a `git-ref` must be reachable from `main`; an unverified build
+would otherwise run with the job's permissions. `source-path` skips that gate by
+construction, since the caller checked the tree out itself.
 
 ### Point your worktree's merge driver at your own build
 

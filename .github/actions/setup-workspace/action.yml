@@ -1,0 +1,93 @@
+name: Setup workspace
+description: >
+  Check out the repo, install the mise-pinned toolchain, install magus, and put
+  mise's Go back in front of the one setup-magus's source build provisions.
+
+  The five-step preamble every magus CI job needs, in one step. A composite action
+  rather than a setup JOB because each GitHub Actions job gets a fresh runner:
+  `needs:` sequences jobs, it does not share a filesystem, so nothing a setup job
+  installed would still be there.
+
+  setup-magus stays its own action underneath - it has its own supply-chain gate and
+  outputs, and callers outside this repo use it directly.
+
+inputs:
+  installation-strategy:
+    description: Passed through to setup-magus (automatic | prebuilt | source).
+    required: false
+    default: automatic
+  git-ref:
+    description: Passed through to setup-magus; the release tag for a prebuilt install.
+    required: false
+    default: ''
+  source-path:
+    description: Passed through to setup-magus; the caller's own checkout for a source build.
+    required: false
+    default: ''
+  fetch-depth:
+    description: >
+      Checkout depth. 0 (the default) because affected needs a merge base and the docs
+      footers walk the commit graph; blob:none keeps that affordable either way.
+    required: false
+    default: '0'
+  mise:
+    description: >
+      Install the mise-pinned toolchain. Set false for a job that only drives magus and
+      needs no Go/Node/pnpm of its own.
+    required: false
+    default: 'true'
+  codec-deps:
+    description: >
+      Install liblzma-dev/libzstd-dev. Needed by any job whose targets shell out to
+      `go run`, which links internal/codec's cgo path.
+    required: false
+    default: 'false'
+
+outputs:
+  version:
+    description: The magus version installed, from setup-magus.
+    value: ${{ steps.magus.outputs.version }}
+  install-source:
+    description: prebuilt or source, from setup-magus.
+    value: ${{ steps.magus.outputs.install-source }}
+  commit:
+    description: The commit the installed magus was built from, from setup-magus.
+    value: ${{ steps.magus.outputs.commit }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      with:
+        fetch-depth: ${{ inputs.fetch-depth }}
+        filter: blob:none
+
+    - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+      if: inputs.mise == 'true'
+      with:
+        version: '2026.4.8'
+        install: false
+
+    - name: Install pinned toolchain
+      if: inputs.mise == 'true'
+      shell: bash
+      run: mise install
+
+    - name: Install codec build dependencies
+      if: inputs.codec-deps == 'true'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
+    - uses: ./.github/actions/setup-magus
+      id: magus
+      with:
+        installation-strategy: ${{ inputs.installation-strategy }}
+        git-ref: ${{ inputs.git-ref }}
+        source-path: ${{ inputs.source-path }}
+
+    # setup-magus's source build provisions its own Go via actions/setup-go, which
+    # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+    - name: Restore the mise-pinned Go toolchain
+      if: inputs.mise == 'true'
+      shell: bash
+      run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
