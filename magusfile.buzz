@@ -797,7 +797,11 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
     // editing a tape invalidated nothing and told a reader it affected no target.
     ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh");
     ctx.writesFiles("assets/gen/*.gif");
-    if (os\which("vhs") == "") {
+    // try/catch, not a sentinel: os.which RAISES when the tool is absent, so the check
+    // cannot be forgotten and the helpful message stays where it was.
+    try {
+        os\which("vhs");
+    } catch (e) {
         throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
             + "(see tapes/README.md)";
     }
@@ -1215,7 +1219,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
 export fun completion_test(ctx: magus\Context, args: [str]) > void {
-    if (os\which("docker") == "") {
+    try {
+        os\which("docker");
+    } catch (e) {
         throw "completion-test needs a docker daemon: it runs each shell's official image";
     }
     // dotnet/sdk, not mcr.microsoft.com/powershell: the PowerShell team's own images are

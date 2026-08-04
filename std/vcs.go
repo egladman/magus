@@ -306,8 +306,14 @@ func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string
 		dir = ""
 	}
 	outDirty, err := v.Dirty(ctx, dir, outputs)
-	if err != nil || !outDirty {
-		return clean, nil //nolint:nilerr // VCS unavailable or no output drift: nothing to classify
+	if err != nil {
+		// Split from the !outDirty case below on purpose: they were one branch, so a
+		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
+		// drift diagnosis that cannot read the tree has no verdict to give.
+		return nil, fmt.Errorf("read %s status: %w", v.Name(), err)
+	}
+	if !outDirty {
+		return clean, nil
 	}
 	inDirty := false
 	if len(inputs) > 0 {
@@ -354,7 +360,13 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 	}
 	dirty, err := v.Dirty(ctx, dir, paths)
 	if err != nil {
-		return false, nil //nolint:nilerr // VCS status unavailable: report not-dirty rather than erroring
+		// RAISE. This is the drift-gate primitive: `is_dirty(["MAGUS.md"])` is how a
+		// generate target asks "did my output change?". Reporting false when the probe
+		// FAILED answers "clean" to a question that was never actually asked, so the gate
+		// passes having checked nothing - the one outcome a gate must never produce
+		// silently. No VCS at all is still false above; that is a known state, not a
+		// failed probe.
+		return false, fmt.Errorf("read %s status: %w", v.Name(), err)
 	}
 	return dirty, nil
 }
@@ -413,7 +425,7 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	}
 	commits, err := v.History(ctx, "", limit)
 	if err != nil {
-		return nil, nil //nolint:nilerr // unavailable: empty list, matching metadata accessors
+		return nil, fmt.Errorf("read %s history: %w", v.Name(), err)
 	}
 	return commits, nil
 }
@@ -429,7 +441,7 @@ func VcsDescribe(ctx context.Context) (string, error) {
 	}
 	out, err := v.Describe(ctx, "") // host bindings run in the project cwd
 	if err != nil {
-		return "", nil //nolint:nilerr // describe unavailable: empty, matching the metadata accessors
+		return "", fmt.Errorf("describe %s revision: %w", v.Name(), err)
 	}
 	return out, nil
 }
@@ -460,7 +472,7 @@ func VcsExe(ctx context.Context) (string, error) {
 	}
 	path, err := exec.LookPath(v.Name())
 	if err != nil {
-		return "", nil //nolint:nilerr // not on PATH: empty path, caller checks for ""
+		return "", fmt.Errorf("%s is the resolved VCS but is not on PATH: %w", v.Name(), err)
 	}
 	return path, nil
 }

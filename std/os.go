@@ -133,7 +133,7 @@ var Os = Module{
 		},
 		{
 			Name:    "which",
-			Doc:     "Resolve cmd against PATH and return its absolute path, or \"\" if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).",
+			Doc:     "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
 			Args:    []Arg{{Name: "cmd", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    OsWhich,
@@ -222,10 +222,21 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 	return tty.StdinIsTerminal(), nil
 }
 
-// OsWhich resolves cmd against PATH. A missing command is reported as "" (not an
-// error) so a magusfile can branch on `os.which(cmd) == ""`.
+// OsWhich resolves cmd against PATH, RAISING when it is not there.
+//
+// It used to return "" so a magusfile could branch on `os.which(cmd) == ""`. That is the
+// same sentinel the vcs accessors carried, with the same two problems: the check is
+// optional, so forgetting it hands the empty string on to an exec or a path join; and it
+// is untyped, so nothing tells a reader the value needs testing at all. Raising makes the
+// missing tool a case the author has to answer, in the same shape as every other failure
+// in these modules:
+//
+//	try { final vhs = os\which("vhs"); ... } catch (e) { magus\info("vhs not installed"); }
 func OsWhich(_ context.Context, cmd string) (string, error) {
-	path, _ := exec.LookPath(cmd) // missing command reported as "", per the doc above
+	path, err := exec.LookPath(cmd)
+	if err != nil {
+		return "", fmt.Errorf("%q is not on PATH: %w", cmd, err)
+	}
 	return path, nil
 }
 

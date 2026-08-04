@@ -73,7 +73,9 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
         uri = SCHEME + ref;
     }
 
-    if (os\which("op") == "") {
+    try {
+        os\which("op");
+    } catch (e) {
         throw "onepassword: the `op` CLI is not on PATH.\n"
             + "  mise:     mise use -g op\n"
             + "  homebrew: brew install 1password-cli\n"

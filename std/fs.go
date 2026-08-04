@@ -258,10 +258,17 @@ func FsBasename(_ context.Context, path string) (string, error) {
 func FsExists(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
-		// Report a sandbox-denied path as "does not exist" rather than raising:
-		// fs.exists is often a probe, and a hard error would break unrelated
-		// checks for paths the spell is allowed to touch.
-		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
+		// RAISE the policy error rather than answering "does not exist".
+		//
+		// Reporting false conflated two different facts: "the sandbox will not let me
+		// look" and "there is nothing there". A caller acts on those in opposite ways -
+		// `if (!fs\exists(p)) { write(p); }` then attempts a write that is ALSO denied,
+		// and the failure surfaces far from the policy that caused it.
+		//
+		// Raising leaks nothing extra: checkRead's diagnostic names the RULE that denied
+		// the path, which the workspace author configured, and says nothing about whether
+		// the file is there.
+		return false, err
 	}
 	_, err := os.Stat(path)
 	return err == nil, nil
@@ -355,24 +362,23 @@ func FsExt(_ context.Context, path string) (string, error) {
 	return filepath.Ext(path), nil
 }
 
-// FsIsDir reports whether path exists and is a directory. Like FsExists, a
-// sandbox-denied path is reported as false rather than raising, so the predicate
-// is safe to use as a probe.
+// FsIsDir reports whether path exists and is a directory. A sandbox-denied path RAISES
+// (see FsExists): "not allowed to look" is not the same answer as "not a directory".
 func FsIsDir(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
-		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
+		return false, err
 	}
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir(), nil
 }
 
-// FsIsFile reports whether path exists and is a regular file. A sandbox-denied
-// path is reported as false (see FsIsDir).
+// FsIsFile reports whether path exists and is a regular file. A sandbox-denied path RAISES
+// (see FsExists).
 func FsIsFile(ctx context.Context, path string) (bool, error) {
 	path = resolvePath(ctx, path)
 	if err := checkRead(ctx, path); err != nil {
-		return false, nil //nolint:nilerr // sandbox-denied path is reported as non-existent by design
+		return false, err
 	}
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular(), nil
