@@ -1,8 +1,12 @@
 // sw.js - the console app's own service worker. A conservative offline shell: it precaches the app
 // entry + its bundles + styles so a cold reload works offline, and serves everything else same-origin
 // cache-first-then-network. The console talks to the daemon over loopback at runtime (never cached).
-// The cache version is bumped by the build (see BUILD_ID) so a new deploy replaces the old shell.
-const BUILD_ID = "w4-patternfly";
+// BUILD_ID names the cache, and the build REWRITES the line below with a digest of the bytes in
+// PRECACHE (scripts/stamp-build.mjs, run by copy-static). It is derived, never edited: a new worker
+// only installs when sw.js differs from the copy the browser holds, so a hand-maintained id that
+// nobody remembers to bump leaves every client pinned to the shell it first cached. The value here
+// is only what an unstamped source tree carries.
+const BUILD_ID = "unstamped";
 const CACHE = "magus-console-" + BUILD_ID;
 const BASE = new URL("./", self.location).pathname;
 

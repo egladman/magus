@@ -500,9 +500,30 @@ function registerServiceWorker(): void {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register(new URL("../sw.js", import.meta.url))
-      .then(watchForNewVersion)
+      .then((reg) => {
+        watchForNewVersion(reg);
+        pollForNewVersion(reg);
+      })
       .catch(() => {});
   });
+}
+
+// How often a tab re-checks the server for a new worker. Registration alone does not: the browser
+// revalidates sw.js on navigation, and the surface this matters most for is the one that never
+// navigates. A wall display opened on Monday would sit on Monday's bundle until someone walked over
+// and reloaded it, which is precisely what the display exists to avoid.
+//
+// Cheap enough to be uninteresting - one conditional request for a file of a few kB, and a 304 when
+// nothing moved. update() resolves without installing anything when the bytes match, so the
+// downstream announcement only ever fires on a real change.
+const UPDATE_POLL_MS = 15 * 60 * 1000;
+
+function pollForNewVersion(reg: ServiceWorkerRegistration): void {
+  const check = () => {
+    reg.update().catch(() => {});
+  };
+  check(); // on boot, so a tab restored from the bfcache is current straight away
+  setInterval(check, UPDATE_POLL_MS);
 }
 
 // How long the board announces a pending refresh before taking it. Long enough that someone walking
