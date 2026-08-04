@@ -15,6 +15,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Changed
+
+- An output reference is now derived from the step's cache key, so the same inputs mint
+  the same ref on every machine: an inspect line pasted from CI or a teammate's terminal
+  resolves in your checkout. Ref equality becomes input equality, which is what makes the
+  works-on-my-machine question answerable at all - if CI prints one ref and your laptop
+  prints another for the same target, your inputs differ, and magus can now say which
+  ones. **A ref is `out` plus 12 hex (`out9c92fef96e60`) where it was `out` plus 8**, so a
+  script, fixture, or pattern that pinned the old width needs updating. Execution identity
+  moved down a level to per-run ATTEMPT ids, which keep the 8-hex shape - a volatile
+  target's recent failures each stay independently addressable, and an id printed by an
+  older magus still resolves.
+
+### Added
+
+- `magus query output <ref> --attempts` lists the executions stored behind one ref, newest
+  first, and `--meta` shows that run's identity rather than its output: descriptor,
+  invocation lineage, cache key, and one digest per key component class.
+- `magus describe target <target> --cache` computes the key a run would mint right now,
+  without running anything, and `--against <ref>` diffs it against a stored run's key to
+  name the exact source file, environment variable, or tool version that drifted. The
+  verdict is key equality rather than the line list, and a mismatch exits non-zero so a
+  script can gate on it; pass `--no-default-charms` when comparing against a CI ref, since
+  CI runs that way. Env values never reach the store or the terminal - a key line's value
+  is replaced by a short digest that still changes when the value does.
+- `magus query output <ref> --publish` uploads a failing run's output to the remote cache
+  as a signed bundle, so a teammate can resolve the same ref. Failures are never cached and
+  never pushed, which is backwards from what people actually want to share, so this is an
+  explicit act. A bundle carries no manifest and no artifact blobs, so a published failure
+  can never replay as someone's cache hit. Passing runs still travel automatically, and
+  their artifact now carries the run's descriptor and key lines as well.
+
+### Security
+
+- The remote cache artifact's signature covers every member instead of the manifest alone:
+  the build log and the portable-ref sidecars are authenticated, imported extras are staged
+  until the signature clears so a rejected artifact leaves nothing behind, and a signature
+  is bound both to the KIND of object it was made over and to the (project, cache key) it
+  is served for. Without that binding a signed output bundle could be re-tarred as a cache
+  artifact and replay as a successful entry, turning a published failing run into a
+  teammate's cached pass. Artifacts signed by an older magus still verify; the extras their
+  signature never covered are dropped rather than trusted.
+
 ### Added
 
 - A magusfile can read a credential through a declared provider.
