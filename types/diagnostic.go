@@ -102,6 +102,7 @@ const (
 	DeadOutputGlob            DiagnosticCode = "MGS1018"
 	SelfStalingOutput         DiagnosticCode = "MGS1019"
 	OutputOwnedByTwoTargets   DiagnosticCode = "MGS1020"
+	WorkspaceNeedsNewerMagus  DiagnosticCode = "MGS1021"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -148,7 +149,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TargetMissingContext, TargetNeverReplays, AffectedSetUncomputable,
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
-	SelfStalingOutput, OutputOwnedByTwoTargets,
+	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

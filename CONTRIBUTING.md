@@ -57,6 +57,59 @@ with whichever `go` leads `PATH`, which is how CI once built golangci-lint with 
 different toolchain than the one it analyzed with, and panicked. `mise install`
 gets you both binaries at the pinned versions.
 
+## Adding to a public surface
+
+magus promises that a magusfile which works today keeps working, and there is no
+plan for a 2.0. [docs/concepts/compatibility.md](docs/concepts/compatibility.md)
+is the promise itself; this is how to work inside it.
+
+**Add, never substitute.** A new `magus\project` key goes beside the existing
+ones, a new protobuf field takes a new number, a new flag joins the current set.
+If you find yourself changing what an existing name means, that is the thing the
+promise forbids, and the answer is a second name rather than a redefinition.
+
+**Three gates catch a break before review does**, one per surface:
+
+| Surface           | Gate                                                    |
+| ----------------- | ------------------------------------------------------- |
+| CLI               | `internal/manpage/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
+| protobuf          | `buf breaking`, composed into `lint`                     |
+| magusfile keys    | the `required_version` floor, plus doctor's check that the floor is accurate |
+
+A diff to `api.lock` is the signal to read carefully: a line removed there is a
+removed public surface. Regenerate it with `go generate ./internal/manpage/...`
+after an intentional addition, and treat a deletion as a question rather than a
+regeneration.
+
+**A new key means the workspace needs a newer magus.** Additive changes are safe
+for existing users and unsafe for the repo's own magusfile, which CI runs against
+a pinned release. The rule is release-first: if `magusfile.buzz` starts needing a
+feature no release contains, cut the release before the magusfile depends on it.
+When you hit this locally the symptom is a load error from the pinned binary,
+which is the mechanism working rather than a problem to route around.
+
+Raise `required_version` in `magus.yaml` **in the release commit, not in the
+feature commit.** The floor names a released version, and between releases a build
+describes itself from the last tag - a tree that is 42 commits past `v0.3.0`
+reports `v0.3.0-42-gabc`, which compares as 0.3.0. A floor set to the upcoming
+release therefore rejects a source build of the very commit that raised it, and
+this repo builds magus from source in CI. Add the feature first, cut the tag, then
+raise the floor to the tag.
+
+Downstream users, who run released binaries, get
+[MGS1021](docs/reference/codes/magusfile/MGS1021.md) naming both fixes instead of
+an error from wherever the magusfile happened to break first.
+
+**Before 1.0, renaming is on the table; after, it is not.** magus is pre-1.0, so a
+badly chosen name can still be fixed, and the changelog records it under
+**Breaking**. That window closes at 1.0. If you are adding a name you are not sure
+about, say so in the pull request - it is much cheaper to argue about it now than
+to keep it forever.
+
+**Deprecating** means "there is a better way now", not "this stops working". Keep
+the old surface working, point at the replacement where someone meets it rather
+than only in the changelog, and list it under **Deprecated**.
+
 ## Performance changes need evidence
 
 This is the rule I care about most. Any change that claims to be faster ships
