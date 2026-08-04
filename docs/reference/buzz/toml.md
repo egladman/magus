@@ -37,3 +37,9 @@ Encode a value to a TOML string; the top level must be a table/map, as TOML requ
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`json`](json.md)
+- [`yaml`](yaml.md)
+- [`encoding`](encoding.md)

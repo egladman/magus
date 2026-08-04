@@ -46,20 +46,20 @@ what it touches, so correctness is a declaration contract. See [cache.md](../con
 
 `magus affected <target>` runs a target for every project a VCS diff touched, plus
 everything downstream of those projects in the dependency graph. `magus affected
-ci` is the monorepo CI workhorse. See [affected.md](../guides/affected.md).
+ci` is the monorepo CI workhorse. See [affected.md](../concepts/workspace/affected.md).
 
 ## Do I have to run the daemon?
 
 No. magus runs fine without it. The daemon keeps spells and services warm across
 invocations and backs the MCP server; it starts on demand and is optional. Disable
-it with `MAGUS_DAEMON_ENABLED=false`. See [daemon.md](../guides/daemon.md).
+it with `MAGUS_DAEMON_ENABLED=false`. See [daemon.md](../guides/integrations/daemon.md).
 
 ## How do I add support for a tool magus does not know?
 
 Write a spell. For a one-off, a magusfile function target calling `os\exec` is
 enough; for shared vocabulary, author a spell whose handler returns a `Command` (or
 a `Service` for a long-running process). `magus init spell` scaffolds one. See
-[spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/editor.md).
+[spells.md](../concepts/spells.md) and the [authoring editor setup](../guides/integrations/editor.md).
 
 ## Why did two charms give me a warning about one being "overridden"?
 

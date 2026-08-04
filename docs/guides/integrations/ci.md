@@ -20,6 +20,7 @@ tags:
     jenkins,
     azure pipelines,
   ]
+order: 3
 ---
 
 # CI checkout

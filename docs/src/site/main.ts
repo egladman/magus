@@ -18,6 +18,7 @@ import { initRefDrawer } from "../ui/reference-drawer.js";
 import { initConsoleSettings } from "../ui/console-settings.js";
 import { initAnchors } from "./anchors.js";
 import { initCodeCopy } from "./code-copy.js";
+import { initCopyMarkdown } from "./copy-markdown.js";
 import { initSyntaxHighlight } from "./syntax-highlight.js";
 import { initMermaid } from "./mermaid.js";
 import { initHomeHeading } from "./home-heading.js";
@@ -41,6 +42,7 @@ initRefDrawer();
 initConsoleSettings(); // the gear settings panel on the console apps (no-op on docs pages)
 initAnchors();
 initCodeCopy();
+initCopyMarkdown();
 initSyntaxHighlight();
 initMermaid();
 initHomeHeading();

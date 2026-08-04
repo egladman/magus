@@ -1,5 +1,6 @@
 ---
 title: Package managers and source builds
+order: 5
 description: Install magus through mise via the ubi backend, or build it from source, and the tradeoffs each route makes against the signed-release guarantee.
 tags: [mise, ubi, aqua, package-manager, build-from-source, noselfupdate]
 ---

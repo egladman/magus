@@ -1,5 +1,6 @@
 ---
 title: Quick start
+order: 3
 description: Everything you need to be productive with magus on one page - install, first target, the output flags, the agent skills and the guard hook - each linking to the page that goes deeper.
 tags: [getting-started, install, quickstart, agents, skills, cli, reference]
 ---

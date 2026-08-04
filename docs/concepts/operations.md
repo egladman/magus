@@ -1,6 +1,6 @@
 ---
 title: Operations
-order: 3
+order: 6
 description: Defines an Operation, its place in the Spell to Target to Process hierarchy, and how ops compose into runnable targets.
 tags: [operations, ops, hierarchy, spells, targets, ci, work-model, execution]
 ---

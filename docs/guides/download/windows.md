@@ -1,5 +1,6 @@
 ---
 title: Install on Windows
+order: 3
 description: Download, verify, and install the magus binary on Windows (amd64) with PowerShell and put it on your PATH.
 tags: [download, install, windows, powershell, path]
 ---

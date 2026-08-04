@@ -13,11 +13,12 @@ tags:
     supply-chain,
   ]
 aliases: [concepts/remote-cache]
+order: 2
 ---
 
 # Remote caching
 
-magus's [build cache](../../../README.md#build-model) is content-addressed: a target's
+magus's [build cache](../../../README.md#content-addressed-caching) is content-addressed: a target's
 output is keyed by the SHA-256 of its inputs, so an unchanged target replays its
 previous output instead of rebuilding. That cache lives on disk (`.magus/` in the
 workspace root) and is **local** to one machine.
@@ -228,7 +229,7 @@ MAGUS_CACHE_IMMUTABLE: ${{ github.event_name == 'pull_request' }}
 
 `MAGUS_CACHE_IMMUTABLE=true` (config key `cache.immutable`) opens the cache
 read-only; the default is mutable. See the
-[supply-chain note in the README](../../../README.md#shared-cache-trust-signing-and-read-only-refs).
+[shared cache trust note](../targets/ci.md#shared-cache-trust).
 
 ## Observability
 

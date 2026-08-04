@@ -51,3 +51,6 @@ Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the resu
 
 **Returns:** map[string]any
 
+## See also
+
+- [Standard library modules](index.md)

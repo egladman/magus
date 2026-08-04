@@ -2,6 +2,7 @@
 title: Coming from Nx
 description: A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.
 tags: [nx, migration, monorepo, terminology, comparison, porting]
+order: 1
 ---
 
 # Coming from Nx
@@ -157,7 +158,7 @@ with declared inputs and outputs:
 
 The equivalent magusfile, in the same project directory - the upstream
 dependency is declared once, at the target that needs it, via a project
-import (see [Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
+import (see [Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends-on)):
 
 ```buzz
 import "magus";

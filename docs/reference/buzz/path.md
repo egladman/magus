@@ -74,3 +74,8 @@ Expand a leading ~ (or ~/...) to the current user's home directory; other paths 
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`fs`](fs.md)
+- [`os`](os.md)

@@ -405,6 +405,7 @@ tags/argv/
 tags/auth/
 tags/authoring/
 tags/bash/
+tags/bearer/
 tags/bisect/
 tags/breaking-changes/
 tags/build/
@@ -419,8 +420,10 @@ tags/ci-provider/
 tags/ci/
 tags/claude/
 tags/cli/
+tags/codes/
 tags/codex/
 tags/completion/
+tags/concepts/
 tags/concurrency/
 tags/config/
 tags/configuration/
@@ -450,6 +453,7 @@ tags/documentation/
 tags/download/
 tags/drift/
 tags/ed-25519/
+tags/editor/
 tags/env/
 tags/environment/
 tags/error-codes/
@@ -478,6 +482,7 @@ tags/hotspots/
 tags/http/
 tags/image/
 tags/import/
+tags/index/
 tags/inferred/
 tags/inputs/
 tags/install/
@@ -497,6 +502,7 @@ tags/magus-server/
 tags/magus-status/
 tags/magus-yaml/
 tags/magusfile/
+tags/manpage/
 tags/markdown/
 tags/mcp/
 tags/mgs-1010/
@@ -510,6 +516,7 @@ tags/monitoring/
 tags/monorepo/
 tags/needs/
 tags/node/
+tags/nx/
 tags/oci/
 tags/onboarding/
 tags/operations/
@@ -517,6 +524,7 @@ tags/os/
 tags/output-refs/
 tags/output/
 tags/outputs/
+tags/overview/
 tags/ownership/
 tags/passthrough/
 tags/path/
@@ -534,6 +542,7 @@ tags/python/
 tags/query/
 tags/race/
 tags/readiness/
+tags/reading-order/
 tags/redaction/
 tags/reference/
 tags/registry/
@@ -565,6 +574,7 @@ tags/spell/
 tags/spells/
 tags/status/
 tags/stdlib/
+tags/subcommands/
 tags/supply-chain/
 tags/target/
 tags/targets/
@@ -584,6 +594,7 @@ tags/version/
 tags/vitest/
 tags/volatility/
 tags/ward/
+tags/wards/
 tags/watch/
 tags/workspace/
 tags/zsh/

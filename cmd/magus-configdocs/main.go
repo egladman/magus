@@ -68,6 +68,10 @@ func render() string {
 		}
 		fmt.Fprintf(&b, "\n")
 	}
+
+	fmt.Fprintf(&b, "## See also\n\n")
+	fmt.Fprintf(&b, "- [magus config](manpage/magus-config.md): the CLI verb that reads and writes these keys.\n")
+	fmt.Fprintf(&b, "- [Workspace and projects](../concepts/workspace.md): where `magus.yaml` sits in workspace discovery.\n")
 	return b.String()
 }
 

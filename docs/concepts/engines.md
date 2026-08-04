@@ -2,6 +2,7 @@
 title: Engines
 description: Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.
 tags: [engines, buzz, vm, interpreter, runtime, magusfile, plugin, session]
+order: 12
 ---
 
 # Engines

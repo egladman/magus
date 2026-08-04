@@ -1,5 +1,6 @@
 ---
 title: Getting started
+order: 2
 description: A linear, CLI-first walkthrough from installing magus to running your first spell-composed target and a ci pipeline.
 tags: [getting-started, install, init, magusfile, tutorial, cli]
 ---
@@ -191,8 +192,9 @@ The [documentation index](../documentation.md) is the map. From here, the core c
 - [cache.md](../concepts/cache.md) - the content-addressed cache that makes re-runs fast.
 - [config.md](../reference/config.md) - every `magus.yaml` key, its `MAGUS_*` env var, and CLI flag.
 - [sandbox.md](../concepts/sandbox.md) - how spell subprocesses are confined to the workspace.
+- [Editor setup](integrations/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion and hover.
 
 And the reference:
 
 - [`magus init`](../reference/manpage/magus-init.md), [`magus run`](../reference/manpage/magus-run.md), [`magus ls`](../reference/manpage/magus-ls.md), [`magus affected`](../reference/manpage/magus-affected.md) - the commands in this guide.
-- [playground.html](../playground.html) - try any example live in the browser.
+- [Playground](../playground.html) - try any example live in the browser.

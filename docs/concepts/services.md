@@ -12,6 +12,7 @@ tags:
     MGS5001,
     MGS5002,
   ]
+order: 10
 ---
 
 # Services
@@ -64,7 +65,7 @@ same service get **one** instance, even across different projects that each decl
 their own copy, as long as the configuration matches. This is what stops N projects
 from each spinning up their own Postgres when they meant to share one.
 
-When a [daemon](../guides/daemon.md) is running it hosts shared services and keeps them **warm
+When a [daemon](../guides/integrations/daemon.md) is running it hosts shared services and keeps them **warm
 across invocations**: `magus run test:a` starts Postgres, and a later `magus run
 test:b` reuses the same warm instance instead of restarting it. Without a daemon the
 service is hosted in-process for the single run. A service the daemon cannot reach

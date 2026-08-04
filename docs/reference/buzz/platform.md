@@ -39,3 +39,8 @@ Normalize an OS identifier (Darwin, macOS, win, …) to canonical Go GOOS (darwi
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`env`](env.md)
+- [`os`](os.md)

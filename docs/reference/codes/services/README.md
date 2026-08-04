@@ -7,10 +7,12 @@ tags: [services, diagnostics, error codes, MGS5xxx, service op, doctor, sharing]
 
 # Services diagnostics
 
-Codes in the `MGS5xxx` range flag problems with long-running [service
+Codes in the `MGS5xxx` range flag problems with [long-running
+services](../../../concepts/services.md) built from [service
 ops](../../../concepts/operations.md): services that will run as separate processes when they
-look like they should be one shared instance, and (later) op invocations that
-contradict their declared kind. Magus raises them at run time (as a typed
+look like they should be one shared instance, and op invocations that
+contradict their declared kind - the [ward](../../../concepts/wards.md) rail.
+Magus raises them at run time (as a typed
 `DiagnosticError`) and, where applicable, as a `magus doctor` health check so the
 gap is visible before the work runs.
 

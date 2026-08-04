@@ -16,9 +16,82 @@ import "fs";
 import "io";
 import "std";
 import "engine/types" as _;
+import "engine/route" as _;
 import "lib/text" as _;
 import "lib/csp" as _;
 import "lib/html" as _;
+
+// MAX_BACKLINKS caps a page's "Referenced by" list. Past a dozen the list stops telling a
+// reader who points here and starts being a second table of contents: the busiest pages in
+// this corpus are referenced by most of it, and a hundred rows at the foot of an article is
+// a wall, not a cross-reference. The overflow is counted, not listed.
+final MAX_BACKLINKS = 12;
+
+// resolveBacklinks substitutes each written page's BACKLINK_MARKER for its "Referenced by"
+// block, or removes the marker when nothing links there. It runs over gen/ rather than over
+// site.writtenPaths because a few always-rewritten pages (the /search/ tool page) never
+// register a written path, and a marker left in the shipped HTML is a comment nobody
+// intended to publish.
+//
+// Ordering matters twice: it must run after every page is written (the link graph is a
+// whole-corpus aggregate) and before anything fingerprints gen/ - the service worker's
+// cache version and site-manifest.sha256 both digest these exact bytes - and before the
+// integrity gate, so the links it injects are checked like any others.
+export fun resolveBacklinks(site: Site) > void {
+    var files: [str] = mut [<str>];
+    walkGen("", files, site);
+    foreach (f in files) {
+        if (f.endsWith(".html") == false) { continue; }
+        final fh = io\File.open(site.outDir + "/" + f, io\FileMode.read);
+        final body = fh.readAll();
+        fh.close();
+        if (body.indexOf(BACKLINK_MARKER) == null) { continue; }
+        fs\writeFile(site.outDir + "/" + f, body.replace(BACKLINK_MARKER, backlinksFor(pageUrlOf(f), site)));
+    }
+}
+
+// pageUrlOf turns a gen-relative output path into the clean URL its page renders under -
+// the key Site.backlinks and Site.pageAnchors use ("index.html" for the home page, since
+// that is the spelling renderRoot registers).
+fun pageUrlOf(f: str) > str {
+    if (f == "index.html") { return "index.html"; }
+    if (f.endsWith("/index.html")) { return f.sub(0, f.len() - 10); }   // keep the trailing slash
+    return f;
+}
+
+// backlinksFor renders one page's "Referenced by" block from the collected link graph:
+// every page whose prose links here, by title, capped and alphabetical. Alphabetical
+// because there is no meaningful rank among references - walk order would just expose the
+// filesystem - and a stable order keeps the drift gate quiet.
+fun backlinksFor(url: str, site: Site) > str {
+    final sources = site.backlinks[url];
+    if (sources == null) { return ""; }
+    var dir = url;
+    if (dir == "index.html") { dir = ""; }
+    if (dir.endsWith("/")) { dir = dir.sub(0, dir.len() - 1); }
+
+    var rows: [{str: str}] = mut [<{str: str}>];
+    foreach (src in sources!) {
+        // The home page is not in docPages (it renders from the repo README), so it has no
+        // lookupTitle; it is still a page a reader can go to, and "Home" is what the
+        // breadcrumb already calls it.
+        var title = "Home";
+        var href = relativePath(dir, "index.html");
+        if (src != "index.html") {
+            title = site.lookupTitle(src);
+            href = relativePath(dir, src);
+        }
+        if (title == "") { continue; }
+        rows.append(mut {"title": title, "href": href, "key": title + "|" + src});
+    }
+    final ordered = rows.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["key"]!, b["key"]!); });
+    var shown: [{str: str}] = mut [<{str: str}>];
+    var hidden = 0;
+    foreach (r in ordered) {
+        if (shown.len() < MAX_BACKLINKS) { shown.append(r); } else { hidden = hidden + 1; }
+    }
+    return backlinkBlock(shown, hidden);
+}
 
 // loadMeta populates the commit-metadata fields once, shelling out to git. The
 // GitHub source-navigation links (edit/blame/history/blob) use the git symbolic ref
@@ -64,24 +137,123 @@ export fun axisReport(site: Site) > void {
     if (ordered.len() > 10) { std\print("    ... and {ordered.len() - 10} more"); }
 }
 
+// curationReport lists the editorial gaps a page-by-page reviewer cannot see but a
+// whole-corpus pass can: pages shipping no description of their own, and authored pages in
+// the two hand-written trees that have not been sequenced.
+//
+// Report-only, for axisReport's reason (read its note): a description and a reading order
+// are editorial calls, and a gate that fails the build the moment someone adds a page -
+// before they have written its blurb - teaches people to reach for the escape hatch rather
+// than write the blurb. Print the shortfall, let it be burned down, promote it to a throw
+// once the number is at zero and staying there.
+export fun curationReport(site: Site) > void {
+    var thin: [str] = mut [<str>];
+    var unordered: [str] = mut [<str>];
+    // "<source dir> #<order>" -> the page that claimed it, so a second page claiming the
+    // same slot is reported instead of silently letting the title decide the sort.
+    var claimed: {str: str} = mut {};
+    var dupes: [str] = mut [<str>];
+    foreach (p in site.docPages) {
+        // A synthesized overview's stock blurb says only that the directory has pages in
+        // it, which is what the reader can already see - it wants an authored page.
+        if (p.desc == "" or p.desc == SECTION_STOCK_DESC) { thin.append(p.url); }
+
+        final synthesized = p.srcRel.endsWith("/_index.md");
+        final curated = p.url.startsWith("concepts/") or p.url.startsWith("guides/");
+        if (synthesized or curated == false or isGenerated(p.srcRel, site)) { continue; }
+        // An overview is the root of the sequence it introduces, not a step in it: the
+        // pager walks its children, and an order: on the section page itself would only
+        // claim a slot in its PARENT's sequence, which is not what an author sequencing
+        // "concepts/" means by it.
+        if (p.overview) { continue; }
+        if (p.order == ORDER_UNSET) {
+            unordered.append(p.url);
+        } else {
+            final dir = sourceDirectory(p.srcRel);
+            final key = dir + " #{p.order}";
+            if (claimed[key] != null) { dupes.append(p.url + " (order {p.order}, also " + claimed[key]! + ")"); }
+            else { claimed[key] = p.url; }
+        }
+    }
+    reportList("descriptions", thin, "page(s) with no description of their own");
+    reportList("reading order", unordered, "authored concepts/guides page(s) with no order:");
+    reportList("reading order", dupes, "page(s) sharing an order: with a sibling");
+}
+
+// ORDER_UNSET mirrors DocPage.order's absent-order sentinel (engine/types.buzz's
+// UNORDERED). A third copy of the number, for the same reason types.buzz gives for its
+// second: each file reads the order from its own corpus and stays import-light.
+final ORDER_UNSET = 1000000;
+
+// sourceDirectory is the directory holding a page's source file, the scope an `order:` has
+// to be unique within (the pager sorts a directory's siblings, not a whole section).
+fun sourceDirectory(srcRel: str) > str {
+    final parts = srcRel.split("/");
+    if (parts.len() <= 1) { return ""; }
+    return parts.sub(0, parts.len() - 1).join("/");
+}
+
+// reportList prints one axisReport-shaped finding: a count line, then the first ten,
+// sorted. Nothing at all when the list is empty.
+fun reportList(label: str, items: [str], what: str) > void {
+    if (items.len() == 0) { return; }
+    final ordered = items.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    std\print("  " + label + ": {ordered.len()} " + what);
+    var shown = 0;
+    foreach (u in ordered) {
+        if (shown >= 10) { break; }
+        std\print("    " + u);
+        shown = shown + 1;
+    }
+    if (ordered.len() > 10) { std\print("    ... and {ordered.len() - 10} more"); }
+}
+
 // assetIntegrityCheck throws on any dangling href/src in the written output, so a
-// renamed bundle or forgotten alias fails the build instead of shipping a 404.
+// renamed bundle or forgotten alias fails the build instead of shipping a 404. Also scans
+// the emitted .md mirrors (the "View markdown source" siblings) the same way, so a mirror
+// link left in source-layout form fails the build instead of shipping a dangling one.
+//
+// A reference's #fragment is checked too, against the anchor set renderPage recorded for
+// the target page (Site.pageAnchors). A link whose path resolves and whose fragment does
+// not is the failure mode a path-only gate is blind to, and it is the one that actually
+// happens: a heading gets reworded, every deep link into it keeps resolving to the top of
+// the page, and nothing notices. Fragments pointing at something that is not a rendered
+// page (an asset, a redirect stub, the console app) are skipped - there is no anchor set
+// to judge them against.
 export fun assetIntegrityCheck(site: Site) > void {
     var files: [str] = mut [<str>];
     walkGen("", files, site);
     foreach (f in files) {
-        if (f.endsWith(".html") == false and f.endsWith(".xml") == false and f.endsWith(".txt") == false) {
+        if (f.endsWith(".html") == false and f.endsWith(".xml") == false
+            and f.endsWith(".txt") == false and f.endsWith(".md") == false) {
             // Non-textual asset: nothing to scan for refs.
+        } else if (f == "llms-full.txt") {
+            // The whole corpus concatenated: every page's links are relative to that
+            // page's own directory, so there is no single base to resolve them against
+            // here. Each page's own mirror is scanned above, which is where those links
+            // actually have to work.
         } else {
             final fh = io\File.open(site.outDir + "/" + f, io\FileMode.read);
-            final html = fh.readAll();
+            final body = fh.readAll();
             fh.close();
             final parts = f.split("/");
             var pageDir = "";
             if (parts.len() > 1) { pageDir = parts.sub(0, parts.len() - 1).join("/"); }
-            foreach (target in scanReferencesInHTML(html, pageDir)) {
-                if (checkPathExists(target, site) == false) {
-                    throw "asset integrity: " + f + " references missing " + target;
+            var targets: [str] = mut [<str>];
+            if (f.endsWith(".md")) { targets = scanReferencesInMarkdown(body, pageDir); }
+            else { targets = scanReferencesInHTML(body, pageDir); }
+            foreach (target in targets) {
+                final path = refPath(target);
+                if (checkPathExists(path, site) == false) {
+                    throw "asset integrity: " + f + " references missing " + path;
+                }
+                final frag = refFragment(target);
+                if (frag != "") {
+                    final anchors = site.pageAnchors[fragmentPageUrl(path)];
+                    if (anchors != null and anchors![frag] == null) {
+                        throw "asset integrity: " + f + " references missing anchor #" + frag
+                            + " on " + fragmentPageUrl(path) + " (the heading it named is gone or was reworded)";
+                    }
                 }
             }
         }
@@ -116,7 +288,8 @@ export fun orphanCheck(site: Site) > void {
         final html = fh.readAll();
         fh.close();
         foreach (ref in scanReferencesInHTML(html, key)) {
-            final k = pageKey(ref);
+            // A scanned ref may carry a #fragment; reachability is a property of the page.
+            final k = pageKey(refPath(ref));
             if (isPage[k] != null and visited[k] == null) {
                 visited[k] = true;
                 queue.append(k);
@@ -214,6 +387,68 @@ export fun checkPathExists(target: str, site: Site) > bool {
     return false;
 }
 
+// normalizeGenRef applies the skip rules shared by every reference scan below (external,
+// #, mailto:, javascript:, data:, tel:, root-absolute, .go/.buzz refs) to one raw href/src
+// or markdown link target, then resolves what remains against pageDir into a gen-root-
+// relative path. null when the raw ref should not be checked - factored out so a fix to
+// the skip rules reaches both the HTML scan and the markdown-mirror scan.
+fun normalizeGenRef(raw: str, pageDir: str) > str? {
+    if (raw == "") { return null; }
+    if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
+        or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
+        or raw.startsWith("data:") or raw.startsWith("tel:")) { return null; }
+    // Root-absolute paths (leading /) are the deploy-time reference form (404.html's
+    // exception, the manifest, etc.); they resolve at the deploy base, not gen/'s root,
+    // so we can't check them locally without threading in basePath. Skip.
+    if (raw.startsWith("/")) { return null; }
+    // .go/.buzz refs point at their GitHub location (repo-root-relative), not a site
+    // asset - the markdown module rewrites .md links but leaves these untouched. Skip.
+    if (raw.endsWith(".go") or raw.endsWith(".buzz")) { return null; }
+    // Split the #fragment off the path. Both halves are checked, separately: the path has
+    // to name a file on disk, the fragment an anchor that file offers - so the fragment
+    // rides along on the returned ref as "<path>#<fragment>" rather than being dropped.
+    var path = raw;
+    var frag = "";
+    final hash = path.indexOf("#");
+    if (hash != null) { frag = path.sub(hash + 1); path = path.sub(0, hash); }
+    if (path == "") { return null; }
+    // Also drop a query string.
+    final q = path.indexOf("?");
+    if (q != null) { path = path.sub(0, q); }
+    if (path == "") { return null; }
+    final resolved = resolvePath(pageDir, path);
+    if (frag == "") { return resolved; }
+    return resolved + "#" + frag;
+}
+
+// refPath is the file half of a scanned reference ("spells/go#ops" -> "spells/go").
+export fun refPath(ref: str) > str {
+    final hash = ref.indexOf("#");
+    if (hash == null) { return ref; }
+    return ref.sub(0, hash);
+}
+
+// refFragment is the anchor half of a scanned reference, "" when it carries none.
+export fun refFragment(ref: str) > str {
+    final hash = ref.indexOf("#");
+    if (hash == null) { return ""; }
+    return ref.sub(hash + 1);
+}
+
+// fragmentPageUrl maps a resolved reference path to the clean page URL Site.pageAnchors is
+// keyed by: "" for the home page, else the directory with a trailing slash. Both spellings
+// of a page's file reach the same key, since the HTML scan resolves to the directory and
+// the Markdown-mirror scan resolves to its index.md. An asset path simply produces a key
+// no page owns, and the anchor check skips it.
+export fun fragmentPageUrl(resolved: str) > str {
+    var r = resolved;
+    if (r.endsWith("/index.html")) { r = r.sub(0, r.len() - 11); }
+    if (r.endsWith("/index.md")) { r = r.sub(0, r.len() - 9); }
+    if (r == "index.html" or r == "index.md" or r == "") { return ""; }
+    if (r.endsWith("/")) { return r; }
+    return r + "/";
+}
+
 // scanReferencesInHTML pulls every href="..." and src="..." out of html, skipping
 // external URLs, mailto:, javascript:, data:, and pure fragments. Each reference
 // is returned as a gen-root-relative path (resolved against pageDir).
@@ -237,32 +472,55 @@ export fun scanReferencesInHTML(html: str, pageDir: str) > [str] {
         if (end == null) { return refs; }
         final raw = rest.sub(0, end);
         rest = rest.sub(end + 1);
-        if (raw == "") { continue; }
-        if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
-            or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("javascript:")
-            or raw.startsWith("data:") or raw.startsWith("tel:")) { continue; }
-        // Root-absolute paths (leading /) are the deploy-time reference form (404.html's
-        // exception, the manifest, etc.); they resolve at the deploy base, not gen/'s root,
-        // so we can't check them locally without threading in basePath. Skip.
-        if (raw.startsWith("/")) { continue; }
-        // .go/.buzz refs point at their GitHub location (repo-root-relative), not a site
-        // asset - the markdown module rewrites .md links but leaves these untouched. Skip.
-        if (raw.endsWith(".go") or raw.endsWith(".buzz")) { continue; }
-        // Strip a URL #fragment; the file only needs to exist, the fragment is
-        // client-side.
-        var path = raw;
-        final hash = path.indexOf("#");
-        if (hash != null) { path = path.sub(0, hash); }
-        if (path == "") { continue; }
-        // Also drop a query string.
-        final q = path.indexOf("?");
-        if (q != null) { path = path.sub(0, q); }
-        if (path == "") { continue; }
-        final resolved = resolvePath(pageDir, path);
-        if (seen[resolved] == null) {
-            seen[resolved] = true;
-            refs.append(resolved);
+        final resolved = normalizeGenRef(raw, pageDir);
+        if (resolved != null and seen[resolved!] == null) {
+            seen[resolved!] = true;
+            refs.append(resolved!);
         }
+    }
+    return refs;
+}
+
+// scanReferencesInMarkdown pulls every relative "](target)" (a link or an image) out of an
+// emitted .md mirror, skipping fenced code blocks - a link-looking string inside one is
+// code, not prose - and applying the same skip rules scanReferencesInHTML does. Each
+// reference is returned as a gen-root-relative path (resolved against pageDir), gating the
+// mirror the same way assetIntegrityCheck already gates the HTML.
+export fun scanReferencesInMarkdown(md: str, pageDir: str) > [str] {
+    var refs: [str] = mut [<str>];
+    var seen: {str: bool} = mut {};
+    var inside = false;
+    foreach (part in md.split("```")) {
+        if (inside == false) {
+            // Mask inline code the same way the fence toggle masks blocks: a call site
+            // like `f["op"](ctx, opts)` carries a "](...)" that is code, not a link.
+            var code = false;
+            foreach (chunk in part.split("`")) {
+                if (code == false) {
+                    var rest = chunk;
+                    var idx = rest.indexOf("](");
+                    while (idx != null) {
+                        rest = rest.sub(idx + 2);
+                        final end = rest.indexOf(")");
+                        if (end == null) { idx = null; } else {
+                            final raw = rest.sub(0, end);
+                            rest = rest.sub(end + 1);
+                            // A link destination cannot carry a raw space or backtick.
+                            if (raw.indexOf(" ") == null) {
+                                final resolved = normalizeGenRef(raw, pageDir);
+                                if (resolved != null and seen[resolved!] == null) {
+                                    seen[resolved!] = true;
+                                    refs.append(resolved!);
+                                }
+                            }
+                            idx = rest.indexOf("](");
+                        }
+                    }
+                }
+                code = (code == false);
+            }
+        }
+        inside = (inside == false);
     }
     return refs;
 }

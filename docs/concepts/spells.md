@@ -4,22 +4,7 @@ order: 4
 page_type: overview
 description: A spell is a library of tool-native ops (go-build, cargo-clippy, eslint) plus cache metadata that your magusfile composes into runnable targets.
 tags: [spells, operations, toolchain, cache, targets, go, rust, magusfile]
-aliases:
-  - concepts/spells/ts
-  - concepts/spells/py
-  - concepts/spells/rs
-  - concepts/spells/md
 ---
-
-<!-- The four aliases above keep the pre-83f0a941 spell URLs (/concepts/spells/ts|py|rs|md/) resolving.
-     Those pages were duplicates of typescript/python/rust/markdown, left behind when the spells were
-     renamed for what they adapt, and every Buzz block in them imported a spell name that does not
-     exist (`no spell "ts" to import`). They are deleted now. The redirects live HERE, on this
-     hand-written page, and not on the pages they belong to, because concepts/spells/*.md is GENERATED
-     by cmd/magus-spelldocs (a declared output of docs' content-generate) and its frontmatter has no
-     aliases field - an alias added there would be erased on the next regeneration and fail the drift
-     gate. Retiring the URLs instead would 404 them; the index they land on lists every spell, which is
-     what a reader following an old /spells/ts/ link actually wants. -->
 
 # Spells
 
@@ -282,7 +267,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { rb.rspec(ctx, { "cwd":
 export fun lint(ctx: magus\Context, args: [str]) > void { rb.rubocop(ctx, { "cwd": "gems/" }); }
 ```
 
-For cache-correctness rules (declare every input in `needs`, declare `provides` so outputs replay, toolchain-version footguns), see [Spells in the README](../../README.md#custom-spells).
+For cache-correctness rules (declare every input in `needs`, declare `provides` so outputs replay, toolchain-version footguns), see [a target's cache footprint](cache.md#needs-provides-claims-a-targets-cache-footprint).
 
 ## What magus bounds, and what it does not
 
@@ -401,5 +386,4 @@ Read these spells under [`spells/`](https://github.com/egladman/magus/tree/HEAD/
 - [Anatomy of a magus Target](targets.md): the unit you _run_, and the CLI grammar for addressing it.
 - [Charms](charms.md): execution modifiers that spell ops and targets both honor.
 - [Engines](engines.md): how a magusfile runs on the embedded Buzz VM and the `mgs_` spell contract.
-- [Spells (README)](../../README.md#spells): built-ins list, extending a built-in, and custom-spell best practices.
 - [`magus` module API](../reference/buzz/magus.md): `magus\project.register`, `magus\cache.remote`.

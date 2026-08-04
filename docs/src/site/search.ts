@@ -4,6 +4,11 @@
 // record per page, built at render time, fetched lazily on first focus) and shows
 // ranked results in a dropdown under the toolbar. No-ops if there's no <main>.
 //
+// This module also owns the site's single-key shortcuts generally, not just "/":
+// the input-focus/modifier guard below is shared by the search hotkey and the "["
+// / "]" prev/next pager shortcut, so there is one listener with one guard instead
+// of a second copy of it elsewhere.
+//
 // Query syntax: space-separated terms are AND-ed; "quoted phrases" must appear
 // contiguously; a -term excludes pages containing it. Datadog-style field scoping
 // narrows a term to one field: tag:foo (exact match on a frontmatter tag),
@@ -335,15 +340,32 @@ export function initSearch(): void {
     }
   });
 
-  // Global shortcut: "/" or Cmd/Ctrl-K focuses the search field, unless the user
-  // is already typing in a field (so "/" stays typable in text inputs). Escape,
-  // handled on the input above, blurs it.
+  // Prev/next pager shortcuts ride the same listener below. Reads the pager links
+  // page.buzz's renderPager already put in the DOM (.page-nav-prev / .page-nav-next),
+  // once - the pager is static per page load, never added or removed by other client
+  // JS. null on a page without one (a landing page, or either end of the sibling
+  // order), so the branch below no-ops silently.
+  const pagerPrev = document.querySelector<HTMLAnchorElement>(".page-nav-prev");
+  const pagerNext = document.querySelector<HTMLAnchorElement>(".page-nav-next");
+
+  // Global shortcut: "/" or Cmd/Ctrl-K focuses the search field; "[" / "]" step to the
+  // prev/next page. All share one listener and one guard - unless the user is already
+  // typing in a field (so "/" and brackets stay typable in text inputs), and no
+  // modifier is held. Escape, handled on the input above, blurs it.
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     const cmdK = (e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey);
     const slash = e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey;
-    if (!cmdK && !slash) return;
+    const pagerKey = (e.key === "[" || e.key === "]") && !e.metaKey && !e.ctrlKey && !e.altKey;
+    if (!cmdK && !slash && !pagerKey) return;
     const el = document.activeElement as HTMLElement | null;
     if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+    if (pagerKey) {
+      const link = e.key === "[" ? pagerPrev : pagerNext;
+      if (!link) return; // no pager on this page - no-op
+      e.preventDefault();
+      window.location.href = link.href;
+      return;
+    }
     e.preventDefault();
     input.focus();
     input.select();

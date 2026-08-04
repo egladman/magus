@@ -1,5 +1,6 @@
 ---
 title: Run magus from a container image
+order: 4
 description: Pull and run the official magus OCI images from GHCR or Docker Hub with Docker, Podman, or any OCI runtime, mount your workspace, extract the binary without running a container, read the SBOM, and verify the cosign signature.
 tags:
   [

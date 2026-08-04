@@ -14,6 +14,7 @@ tags:
     secret provider,
     extending,
   ]
+order: 7
 ---
 
 # Writing a spell

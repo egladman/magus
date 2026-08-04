@@ -1,5 +1,6 @@
 ---
 title: Agents
+order: 1
 description: How magus equips AI agents - the installable skills that teach agents to query the knowledge graph instead of grepping, run work through targets instead of raw tools, triage generated files, and ground refactors in graph evidence; plus the guard hook any agent host can wire, the MCP daemon, MAGUS.md routing, and the drift check that keeps installed skills current.
 tags:
   [

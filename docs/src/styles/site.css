@@ -468,6 +468,18 @@ body {
 }
 .page-tools-edit { margin-left: auto; }
 .page-tools-edit a { margin: 0 0.3rem; }
+/* "Copy Markdown" (copy-markdown.ts): a real <button> for native keyboard support,
+   reset to read as plain inline text like its <a> siblings instead of a boxed button. */
+.page-tools-copy {
+  margin: 0 0.3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--pico-primary);
+  cursor: pointer;
+}
+.page-tools-copy:hover { color: var(--pico-primary-hover); text-decoration: underline; }
 
 /* Wrapper that hosts the input and the right-side keybinding hint together.
    Takes the flex sizing so the input itself can be width:100% inside it. */
@@ -1457,6 +1469,33 @@ a code {
   color: var(--pico-primary);
   font-weight: 600;
 }
+/* Caption under the pager cards: "3 of 12 in Concepts". A sibling of .page-nav
+   rather than a child, since .page-nav is a flex row and a third item would sit
+   beside the cards instead of below them. */
+.page-nav-context {
+  margin: 0.5rem 0 0;
+  text-align: center;
+  color: var(--pico-muted-color);
+}
+
+/* "Referenced by" - the inbound half of the link graph, injected after the walk
+   (resolveBacklinks) once every page's outbound links are known. Reuses the
+   .toc-title label the section nav uses; the list stays plain and dense because
+   it is a reference tail, not a call to action like .related. */
+.page-backlinks {
+  margin-top: 2.5rem;
+}
+.page-backlinks ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+}
+.page-backlinks li {
+  font-size: 0.9rem;
+}
 
 /* Reverse-chronological listing on /blog/. Each entry stacks title + date + one-
    line description; hover raises the title (no background flash) to keep the list
@@ -1764,6 +1803,8 @@ a code {
   .toc,
   .toc-backdrop,
   .page-nav,
+  .page-nav-context,
+  .page-backlinks,
   .page-provenance,
   .site-footer,
   .back-to-top,

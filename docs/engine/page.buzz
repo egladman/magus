@@ -58,6 +58,12 @@ export fun render404(site: Site) > void {
 </head>
 <body>
 {{{nav}}}  <main class="container">
+    <!-- The search toolbar search.js fills in, same as renderPage's. A 404 is where a
+         reader most needs to look something up, and a hand-picked list of five links is
+         only useful to the reader who wanted one of those five. The <noscript> line
+         explains its absence when the bundle cannot run, matching every other page. -->
+    <div class="page-tools"></div>
+    <noscript><p class="noscript-notice">Search needs JavaScript. Browse the <a href="{{basePath}}documentation/">documentation</a>, or use GitHub's code search on the <a href="{{gh}}">source repo</a>.</p></noscript>
     <article>
       <h1>You have warped off the map.</h1>
       <p><em>No such target.</em> Let us get you back:</p>
@@ -76,6 +82,7 @@ export fun render404(site: Site) > void {
 `;
     final doc = template\render(tmpl, {
         "title": title, "desc": desc, "basePath": basePath, "csp": site.csp,
+        "gh": site.config.repoURL,
         "nav": renderSiteNav(basePath, "", false, site.config), "footer": renderSiteFooter(basePath, site),
     });
     fs\writeFile(site.outDir + "/404.html", doc);
@@ -226,9 +233,106 @@ fun renderPager(rel: str, site: Site) > str {
     if (pos > 0) { body = body + renderPagerLink(srcDir, ordered[pos - 1], "Previous", "page-nav-prev", climbPrefix); }
     if (pos < ordered.len() - 1) { body = body + renderPagerLink(srcDir, ordered[pos + 1], "Next", "page-nav-next", climbPrefix); }
     if (body == "") { return ""; }
+    // "3 of 8 in Concepts": prev/next alone say a sequence exists but not where in it you
+    // are, so a reader three pages into a section cannot tell whether the next click is
+    // the last one. A sibling <p> rather than a third child of .page-nav, which is a flex
+    // row - a third item would land beside the two cards instead of captioning them.
     return template\render(`    <nav class="page-nav" aria-label="Pagination">
 {{{body}}}    </nav>
-`, {"body": body});
+    <p class="page-nav-context"><small>{{n}} of {{total}} in {{section}}</small></p>
+`, {"body": body, "n": pos + 1, "total": ordered.len(), "section": pagerSectionTitle(rel, parts, site)});
+}
+
+// pagerSectionTitle names the sequence the pager is stepping through, resolved the way
+// renderSectionNav resolves its own root: the nearest-ancestor overview's real title,
+// falling back to the source directory's capitalized name when no overview governs the
+// page (and to the corpus root's name when it is a top-level page, which is what the
+// synthesized overviews call that level too).
+fun pagerSectionTitle(rel: str, parts: [str], site: Site) > str {
+    final curUrl = cleanURL(rel, site.blog);
+    var rootUrl = "";
+    foreach (p in site.docPages) {
+        if (p.overview and p.url != curUrl and curUrl.startsWith(p.url) and p.url.len() > rootUrl.len()) {
+            rootUrl = p.url;
+        }
+    }
+    if (rootUrl != "") {
+        final t = site.lookupTitle(rootUrl);
+        if (t != "") { return t; }
+    }
+    if (parts.len() > 1) { return capitalizeFirst(parts[parts.len() - 2]); }
+    return "Documentation";
+}
+
+
+// crumbAbsoluteUrl turns one breadcrumb href (relative, e.g. "../../documentation/") into
+// the absolute URL JSON-LD needs, resolving it against the page's own clean directory.
+fun crumbAbsoluteUrl(dir: str, href: str, baseURL: str) > str {
+    var path = href;
+    final hash = path.indexOf("#");
+    if (hash != null) { path = path.sub(0, hash); }
+    var p = resolvePath(dir, path);
+    if (p == "index.html") { p = ""; }
+    if (p != "" and p.endsWith("/") == false) { p = p + "/"; }
+    return baseURL + p;
+}
+
+// breadcrumbJsonLd emits the page's trail as a schema.org BreadcrumbList, so a search
+// result shows "Documentation > Concepts > Caching" instead of a bare URL.
+//
+// It reads the breadcrumb markup renderBreadcrumb already produced rather than deriving
+// the trail a second time from srcRel. That trail has seven special cases (blog, search,
+// tour, /public/, /development/, the documentation root, and the docs tree's own
+// title-per-crumb lookup); a parallel derivation of them is a second opinion that drifts
+// from the one on screen, and structured data that disagrees with the visible page is
+// worse than none. A crumb with no link contributes a name but no item, except the last
+// one, which is this page and therefore always addressable.
+//
+// "" without an absolute base (item URLs must be absolute) or without a breadcrumb.
+fun breadcrumbJsonLd(bc: str, canonUrl: str, baseURL: str) > str {
+    if (bc == "" or baseURL == "") { return ""; }
+    var dir = canonUrl;
+    if (dir.endsWith("/")) { dir = dir.sub(0, dir.len() - 1); }
+
+    var rows: [{str: any}] = mut [<{str: any}>];
+    var rest = bc;
+    var idx = rest.indexOf("<li");
+    while (idx != null) {
+        rest = rest.sub(idx + 3);
+        final open = rest.indexOf(">");
+        if (open == null) { break; }
+        rest = rest.sub(open + 1);
+        final close = rest.indexOf("</li>");
+        if (close == null) { break; }
+        final inner = rest.sub(0, close);
+        rest = rest.sub(close + 5);
+        var abs = "";
+        if (inner.startsWith("<a href=\"")) {
+            final after = inner.sub(9);
+            final q = after.indexOf("\"");
+            if (q != null) { abs = crumbAbsoluteUrl(dir, after.sub(0, q), baseURL); }
+        }
+        final row = mut {<str: any>};
+        row["@type"] = "ListItem";
+        row["position"] = rows.len() + 1;
+        row["name"] = decodeEntities(stripTags(inner));
+        if (abs != "") { row["item"] = abs; }
+        rows.append(row);
+        idx = rest.indexOf("<li");
+    }
+    if (rows.len() == 0) { return ""; }
+    // The leaf crumb is the current page: it renders unlinked (you are already there), but
+    // it still has an address, and a BreadcrumbList whose last item has none is a trail
+    // that stops one step short.
+    final last = rows[rows.len() - 1];
+    if (last["item"] == null) { last["item"] = baseURL + canonUrl; }
+
+    final doc: {str: any} = mut {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": rows};
+    var encoded = serialize\jsonEncode(serialize\Boxed.init(doc));
+    // A page title carrying a "<" would otherwise be able to close this <script> early;
+    // < is valid JSON for the same character and inert to the HTML parser.
+    while (encoded.indexOf("<") != null) { encoded = encoded.replace("<", "\\u003C"); }
+    return "  <script type=\"application/ld+json\">" + encoded + "</script>\n";
 }
 
 
@@ -327,7 +431,18 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     }
     site.pageAxes[canonUrl] = axes;
 
-    var contentBlock = "" + readingHtml + "    <article>\n" + content + "    </article>\n";
+    // Every #fragment this page offers, for the anchor half of assetIntegrityCheck.
+    // Recorded here because renderPage is the one choke point where a page's finished
+    // content and its canonical URL are both in hand.
+    site.pageAnchors[canonUrl] = contentAnchors(content);
+
+    // The "Referenced by" slot. It sits at the foot of the article - after the prose, ahead
+    // of the pager and the Related grid - and holds only a marker for now: the inbound-link
+    // set is a whole-corpus aggregate, and this page is rendering in the middle of the walk
+    // that computes it. resolveBacklinks fills or removes it once the walk is done.
+    final article = content + "      " + BACKLINK_MARKER + "\n";
+
+    var contentBlock = "" + readingHtml + "    <article>\n" + article + "    </article>\n";
     if (sectionNav != "" or subtree != "" or tocList != "") {
         // Muted closing hint at the foot of the aside, shown only when it is the mobile
         // bottom sheet; CSS hides it on the desktop sidebar, where there's nothing to dismiss.
@@ -335,7 +450,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
             + "        <p class=\"toc-hint\" aria-hidden=\"true\">Tap outside or press Esc to close</p>\n"
             + "      </nav>\n    </aside>\n";
         contentBlock = "    <div class=\"with-toc\">\n" + aside
-            + "    <div>\n" + readingHtml + "    <article>\n" + content + "    </article>\n    </div>\n"
+            + "    <div>\n" + readingHtml + "    <article>\n" + article + "    </article>\n    </div>\n"
             + "    </div>\n";
     }
     // Page tools: plain links on the right of the secondary row, middot-separated. "View
@@ -410,6 +525,9 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
   <meta property="og:image" content="{{siteUrl}}assets/gopher.png">
   <meta name="twitter:card" content="summary_large_image">
 {{/hasSiteUrl}}
+{{#hasSource}}
+  <link rel="alternate" type="text/markdown" href="index.md">
+{{/hasSource}}
 {{#hasReleasesFeed}}
   <link rel="alternate" type="application/atom+xml" title="magus releases" href="{{root}}public/atom/releases.atom.xml">
 {{/hasReleasesFeed}}
@@ -431,7 +549,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
        NOT console.css (that is the console-app-only shell). -->
   <link rel="stylesheet" href="{{root}}ui-panels.css">
   <script src="{{root}}theme.js"></script>
-</head>
+{{{jsonld}}}</head>
 <body{{#bodyClass}} class="{{bodyClass}}"{{/bodyClass}}>
   <a class="skip-link" href="#main-content">Skip to content</a>
 {{{announcement}}}{{{nav}}}  <main id="main-content" class="container" tabindex="-1">
@@ -442,12 +560,17 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
 </body>
 </html>
 `;
+    // Built once here so the head block and the visible trail come from the same string.
+    final breadcrumb = site.renderBreadcrumb(srcRel, title, root);
+
     return template\render(pageTmpl, {
         "fullTitle": fullTitle,
         "csp": pageCsp,
+        "jsonld": breadcrumbJsonLd(breadcrumb, canonUrl, site.config.baseURL),
         "description": description,
         "hasDescription": hasDescription,
         "hasSiteUrl": hasSiteUrl,
+        "hasSource": hasSource,
         "siteUrl": site.config.baseURL,
         "canonUrl": canonUrl,
         "ogType": ogType,
@@ -459,7 +582,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "gh": site.config.repoURL,
         "announcement": renderAnnouncementBar(site),
         "nav": renderSiteNav(root, active, true, site.config),
-        "breadcrumb": site.renderBreadcrumb(srcRel, title, root),
+        "breadcrumb": breadcrumb,
         "secondaryRow": secondaryRow,
         "contentBlock": contentBlock,
         "pager": pager,
@@ -495,6 +618,11 @@ export fun renderRoot(site: Site) > void {
     // The home page sits at gen root, so its in-content links are rewritten root-to-root.
     html = renderContentHTML(html, "", "");
 
+    // The README links deep into the docs by hand; those are the most deliberate
+    // references in the corpus, so they count towards a page's "Referenced by" like any
+    // other page's would. Collected before the auto-linkers below, same as renderFile.
+    site.collectContentLinks(html, "", "index.html");
+
     // Same cross-linking every other docs page gets (glossary.md is exempt there since it
     // defines the terms; the README doesn't, so it always gets linked): auto-link the first
     // occurrence of each glossary term, link inline-code domain references, and hint rendered
@@ -519,9 +647,17 @@ export fun renderRoot(site: Site) > void {
     final of = io\File.open(site.outDir + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    // "View source" targets this file directly - write the original, unamended README so it
-    // matches the committed source byte for byte (the synthesized tags are build-only).
-    fs\writeFile(site.outDir + "/index.md", rawMd);
+    // "View source" used to write the original README byte for byte - nothing in the build
+    // depends on that (no gate or test compares gen/index.md against the committed file), and
+    // its links stayed in source-layout form (docs/concepts/knowledge.md, ...), 404ing as a
+    // URL. Strip the same "docs/" prefix the HTML path strips above (these are raw markdown
+    // targets, not rendered <a> tags, so that pass never sees them), then run every relative
+    // link through the mirror rewriter so it points at its sibling index.md like every other
+    // page's mirror does.
+    var mirrorMd = rawMd;
+    while (mirrorMd.indexOf("](./docs/") != null) { mirrorMd = mirrorMd.replace("](./docs/", "]("); }
+    while (mirrorMd.indexOf("](docs/") != null) { mirrorMd = mirrorMd.replace("](docs/", "]("); }
+    fs\writeFile(site.outDir + "/index.md", rewriteMirrorLinks(mirrorMd, "", ""));
     site.addRecord("index.html", title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), "index.html"); }
     std\print("  README.md -> " + site.outDir + "/index.html");
@@ -584,6 +720,11 @@ export fun renderFile(rel: str, site: Site) > void {
 
     final url = cleanURL(rel, site.blog);
 
+    // Record this page's outbound links for the corpus link graph, BEFORE the auto-linkers
+    // below add theirs: a "Referenced by" row should mean a writer pointed here, not that
+    // the page happened to say a glossary word.
+    site.collectContentLinks(html, newCleanDirectory(rel, site), url);
+
     // Auto-link the first occurrence of each glossary term to its glossary entry, baking the
     // definition into the link, and record the cross-references. The glossary page itself is
     // not auto-linked (it defines the terms); instead it gets each term's "referenced on"
@@ -625,8 +766,13 @@ export fun renderFile(rel: str, site: Site) > void {
     of.close();
 
     // Emit the page's source Markdown next to its HTML for "View source" (or copy-as-
-    // markdown), and as the per-page input llms-full.txt reuses.
-    fs\writeFile(dir + "/index.md", md);
+    // markdown). It is also the per-page input writeLLMsFull (engine/discovery.buzz) reads
+    // back off disk to concatenate into gen/llms-full.txt, so an agent gets the whole
+    // corpus in one fetch with the same rewritten links. Relative links are
+    // rewritten from the flat source layout (targets.md, ../concepts/cache.md, ...) into the
+    // mirror's own traversable form first, so the emitted index.md is a URL a reader (or an
+    // llms.txt-following agent) can actually follow instead of one that 404s.
+    fs\writeFile(dir + "/index.md", rewriteMirrorLinks(md, oldFlatDirectory(rel), newCleanDirectory(rel, site)));
 
     site.addRecord(url, title, desc, md);
     // Redirect stubs for any old paths this page declares (frontmatter aliases:).
@@ -646,4 +792,26 @@ test "substituteVersionTokens replaces every __MAGUS_VERSION__ with the latest r
 test "substituteVersionTokens is a no-op before any release has shipped" {
     final s = mut Site{};
     assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
+}
+
+test "crumbAbsoluteUrl resolves a relative crumb href against the page directory" {
+    assert\equal(crumbAbsoluteUrl("concepts/cache", "../../documentation/", "https://x/m/"),
+        "https://x/m/documentation/", "a sibling section resolves and stays directory-shaped");
+    assert\equal(crumbAbsoluteUrl("concepts/cache", "../../index.html", "https://x/m/"),
+        "https://x/m/", "the home crumb is the bare base");
+}
+
+test "breadcrumbJsonLd mirrors the rendered trail as a BreadcrumbList" {
+    final bc = "    <nav class=\"breadcrumb\" aria-label=\"Breadcrumb\">\n"
+        + "      <ul><li><a href=\"../../index.html\">Home</a></li>"
+        + "<li><a href=\"../../documentation/\">Documentation</a></li>"
+        + "<li aria-current=\"page\">Caching</li></ul>\n    </nav>\n";
+    final got = breadcrumbJsonLd(bc, "concepts/cache/", "https://x/m/");
+    assert\equal(got.startsWith("  <script type=\"application/ld+json\">"), true, "emitted as an ld+json data block");
+    assert\equal(got.indexOf("BreadcrumbList") != null, true, "declares the schema type");
+    assert\equal(got.indexOf("https://x/m/documentation/") != null, true, "a linked crumb becomes an absolute item URL");
+    assert\equal(got.indexOf("https://x/m/concepts/cache/") != null, true, "the unlinked leaf carries this page's own URL");
+    assert\equal(got.indexOf("Caching") != null, true, "crumb text becomes the item name");
+    assert\equal(breadcrumbJsonLd(bc, "concepts/cache/", ""), "", "no absolute base, no structured data");
+    assert\equal(breadcrumbJsonLd("", "", "https://x/m/"), "", "no breadcrumb, no structured data");
 }

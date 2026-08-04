@@ -26,3 +26,8 @@ Format string args into the template using Go printf verbs (e.g. %s, %q). Return
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`strings`](strings.md)
+- [`template`](template.md)

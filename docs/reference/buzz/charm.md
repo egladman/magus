@@ -255,3 +255,7 @@ Guard: assert the first argv element for which fn(s) is truthy is still at its p
 
 **Returns:** map[string]any
 
+## See also
+
+- [Standard library modules](index.md)
+- [`magus`](magus.md)

@@ -1,6 +1,7 @@
 ---
 title: Download
 page_type: overview
+order: 1
 description: Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.
 tags: [download, install, release, self-update, ed25519, verify, signing]
 ---

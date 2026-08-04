@@ -73,3 +73,8 @@ std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partia
 // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
 ```
 
+## See also
+
+- [Standard library modules](index.md)
+- [`strings`](strings.md)
+- [`fmt`](fmt.md)

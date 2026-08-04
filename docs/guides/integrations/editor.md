@@ -1,5 +1,6 @@
 ---
 title: Editor setup
+order: 5
 description: Wire your editor to the magus language server (magus buzz lsp) for completion, hover, and signature help in magusfiles and spells.
 tags: [editor, lsp, language-server, completion, hover, neovim, vscode, helix]
 aliases: [guides/editor]

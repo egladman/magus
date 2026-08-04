@@ -1,5 +1,6 @@
 ---
 title: Tips and tricks
+order: 6
 description: Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, typed data boundaries, container registry vocabulary and auth realms, and recursive invocation.
 tags:
   [
@@ -284,4 +285,4 @@ Targets can call `magus` recursively. Child invocations forward work to the pare
 magus\cmd(["run", "build", "api"]);
 ```
 
-`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.
+`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](integrations/daemon.md) is running, the call rides the existing socket connection instead of spawning a new process.

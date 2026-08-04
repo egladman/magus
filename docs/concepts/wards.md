@@ -2,6 +2,7 @@
 title: Wards
 description: Wards are coded guardrails that inspect a resolved op before it runs and reject an argv that contradicts the op's declared kind, so a misconfigured service or command op fails fast with a fix.
 tags: [wards, diagnostics, operations, services, kind, MGSxxxx, guardrails]
+order: 13
 ---
 
 # Wards
@@ -33,7 +34,7 @@ the argv lies about that kind:
 Both are mirror images of the same bug: the argv and the kind disagree. Catching it
 at resolution time turns a confusing hang or a lost log into a one-line fix.
 
-See [Services](services.md#kind-coherence-wards) for the full rationale, and
+See [Services](services.md#guarding-against-foot-guns) for the full rationale, and
 [Operations](operations.md) for how op kinds fit the work hierarchy.
 
 ## Where wards fit

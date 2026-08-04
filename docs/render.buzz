@@ -291,9 +291,19 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     renderTourPage(site);
     writeManifest(site);
 
+    // Every page is on disk now, so the corpus link graph is complete: swap each page's
+    // backlink marker for its "Referenced by" list. Must stay above the two passes that
+    // digest gen/'s bytes (buildServiceWorker below, and writeSiteManifest in
+    // site_publish) and above assetIntegrityCheck, which gates the links it injects.
+    resolveBacklinks(site);
+
     // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown
     // at <url>index.md. A post-walk aggregate over the corpus, like search-index.json below.
     writeLLMsIndex(site);
+    // llms-full.txt: the same corpus concatenated, for the agent that would rather fetch
+    // once than follow 200 links. Reads the emitted index.md mirrors, so it runs after the
+    // walk that writes them.
+    writeLLMsFull(site);
 
     // Flat {url, title, text, tags, description?} record per page; search.js fetches it
     // lazily on first focus. serialize sorts keys and the walk order is fs.list's (sorted),
@@ -325,6 +335,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Reports, never throws - see axisReport. orphanCheck above is the objective floor
     // (reachable at all); this is the editorial one (reachable three different ways).
     axisReport(site);
+    // The other editorial report: pages with no description of their own, and authored
+    // concepts/guides pages that have not been given a reading order.
+    curationReport(site);
 
     // Parity gate: no previously-shipped URL may silently start 404-ing.
     abandonedLinkCheck(site);

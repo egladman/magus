@@ -135,3 +135,10 @@ Build a URL string from a {scheme, host, port, path, query, fragment} map; missi
 
 [^buzz-stdlib-encoding-base64_encode]: `encoding\base64Encode` is also in Buzz's standard library (`str.encodeBase64 (built-in string method)`); the magus form is sandbox-aware.
 [^buzz-stdlib-encoding-hex_encode]: `encoding\hexEncode` is also in Buzz's standard library (`str.hex (built-in string method)`); the magus form is sandbox-aware.
+
+## See also
+
+- [Standard library modules](index.md)
+- [`json`](json.md)
+- [`yaml`](yaml.md)
+- [`toml`](toml.md)

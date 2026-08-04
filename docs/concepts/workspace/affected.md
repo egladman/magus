@@ -3,6 +3,7 @@ title: Affected
 description: How magus runs a target only for the projects a VCS diff touched, taking the transitive closure over the dependency graph, and the forensic modes that explain, graph, shard, and bisect that set.
 tags: [affected, vcs, git, changed-files, dependency-graph, ci, bisect, watch]
 aliases: [guides/affected, concepts/affected]
+order: 1
 ---
 
 # Affected
@@ -32,7 +33,7 @@ A project enters the affected set two ways:
 2. **Transitive.** A project it depends on is affected. Dependencies come from
    [the two dependency mechanisms](../dependencies.md): a `magus\needs` edge, a
    project-level `depends_on`, or a cross-project target reference (folded
-   into `depends_on` - see [the fold](../dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)).
+   into `depends_on` - see [the fold](../dependencies.md#the-fold-a-cross-project-needs-also-declares-depends-on)).
 
 The closure runs until it reaches a fixed point, so a chain A -> B -> C rebuilds C
 when A changes. `magus affected --explain <project>` prints the reason a project is
@@ -64,7 +65,7 @@ Four flags reason about the affected set instead of executing the target:
 
 `magus affected ci` is the workhorse of a monorepo pipeline: it runs the `ci`
 anchor for exactly the projects a pull request touched. Because
-[`magus affected` never applies `default_charms`](../charms.md#defaulting-charms-per-workspace-default_charms)
+[`magus affected` never applies `default_charms`](../charms.md#defaulting-charms-per-workspace-default-charms)
 and `RunCI` strips the `rw` charm, an affected CI run is always read-only no matter
 how the workspace is configured. Fan out at scale with `--plan` feeding a shard
 matrix.

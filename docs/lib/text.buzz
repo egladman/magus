@@ -70,6 +70,15 @@ export fun pad4(n: int) > str {
     return s;
 }
 
+// pad7 zero-pads a non-negative int to seven digits - wide enough for DocPage.order's
+// UNORDERED sentinel (1000000) - so an (order, title) sort key compares lexically the
+// same as numerically-then-alphabetically.
+export fun pad7(n: int) > str {
+    var s = "{n}";
+    while (s.len() < 7) { s = "0" + s; }
+    return s;
+}
+
 // strToNat parses a decimal digit string to a non-negative int, ignoring
 // non-digits. Used for semver segment parsing.
 export fun strToNat(s: str) > int {
@@ -157,6 +166,11 @@ test "pad4 left-pads to width four" {
     assert\equal(pad4(7), "0007", "7 -> 0007");
     assert\equal(pad4(1234), "1234", "1234 unchanged");
     assert\equal(pad4(12345), "12345", "wider than four is kept");
+}
+
+test "pad7 left-pads to width seven" {
+    assert\equal(pad7(3), "0000003", "3 -> 0000003");
+    assert\equal(pad7(1000000), "1000000", "the UNORDERED sentinel is already seven digits");
 }
 
 test "escapeAttr escapes the attribute-dangerous characters" {

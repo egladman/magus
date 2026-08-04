@@ -13,6 +13,7 @@ tags:
     github actions,
   ]
 aliases: [ci]
+order: 1
 ---
 
 # CI

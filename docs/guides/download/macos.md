@@ -1,5 +1,6 @@
 ---
 title: Install on macOS
+order: 2
 description: Download, verify, and install the magus binary on macOS (Apple Silicon or Intel), clear the quarantine flag, and put it on your PATH.
 tags: [download, install, macos, apple silicon, quarantine, path]
 ---

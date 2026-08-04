@@ -8,9 +8,10 @@ tags:
 
 # Knowledge-graph diagnostics
 
-Codes in the `MGS7xxx` range flag ambiguities the knowledge-graph extractor hits
-while assembling the deterministic graph from workspace sources (the graph that
-backs `magus query`, `magus explain`, and `magus graph`). Unlike most magus
+Codes in the `MGS7xxx` range flag ambiguities the [knowledge
+graph](../../../concepts/knowledge.md) extractor hits while assembling the
+deterministic graph from workspace sources (the graph that backs `magus
+query`, `magus explain`, and `magus graph`). Unlike most magus
 diagnostics, these
 are not raised as errors that stop a build: the graph is derived and safe to
 rebuild implicitly, so an ambiguity is recorded as a silent attribute on the

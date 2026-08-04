@@ -214,6 +214,97 @@ export fun rewriteLinks(html: str, oldDir: str, newDir: str) > str {
     return buf + rest;
 }
 
+// rewriteMirrorHref rebases one RAW MARKDOWN link target (not yet rendered to HTML) so the
+// emitted index.md mirror is traversable as a URL instead of 404ing off the flat source
+// layout: resolve against the page's OLD source directory, map through the same clean-URL
+// logic the HTML pipeline uses (cleanTarget/resolvePath), and re-relativize against the
+// page's NEW clean directory. A ".md" target points at its clean directory's own index.md
+// sibling (the mirror another page's mirror can actually follow); a ".html" target maps to
+// its clean directory with no index.md suffix; anything else (an image, a non-markdown
+// download) is just re-relativized, matching rewriteHref's asset branch. External/anchor/
+// mailto/root-absolute targets pass through unchanged.
+export fun rewriteMirrorHref(h: str, oldDir: str, newDir: str) > str {
+    if (h.startsWith("http://") or h.startsWith("https://") or h.startsWith("//")
+        or h.startsWith("#") or h.startsWith("mailto:") or h.startsWith("/")) { return h; }
+    // A markdown link destination cannot carry a raw space or backtick; a "](...)" whose
+    // inside has one is code (a call site like `f["op"](ctx, opts)`), not a link.
+    if (h.indexOf(" ") != null or h.indexOf("`") != null) { return h; }
+    var path = h;
+    var frag = "";
+    final hash = h.indexOf("#");
+    if (hash != null) { path = h.sub(0, hash); frag = h.sub(hash); }
+    if (path == "") { return h; }
+    final oldTarget = resolvePath(oldDir, path);
+    if (path.endsWith(".md")) {
+        final cleaned = cleanTarget(oldTarget.sub(0, oldTarget.len() - 3) + ".html");
+        return relativePath(newDir, cleaned + "index.md") + frag;
+    }
+    if (path.endsWith(".html")) {
+        return relativePath(newDir, cleanTarget(oldTarget)) + frag;
+    }
+    return relativePath(newDir, oldTarget) + frag;
+}
+
+// rewriteMirrorLinksInProse applies rewriteMirrorHref to every "](target)" in one fence-free
+// segment, masking inline code first: single-backtick spans carry call sites like
+// `go["go-build"](ctx)` whose "](ctx)" is not a link. Same toggle idiom as the fence skip.
+fun rewriteMirrorLinksInProse(text: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var code = false;
+    var i = 0;
+    foreach (c in text.split("`")) {
+        if (i > 0) { buf = buf + "`"; }
+        if (code) { buf = buf + c; } else { buf = buf + rewriteMirrorLinksInText(c, oldDir, newDir); }
+        code = (code == false);
+        i = i + 1;
+    }
+    return buf;
+}
+
+// rewriteMirrorLinksInText is the innermost pass: prose with fences AND inline code already
+// masked off - covers both [text](target) links and ![alt](target) images, the two markdown
+// forms that carry a link target in that position.
+fun rewriteMirrorLinksInText(text: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var rest = text;
+    var idx = rest.indexOf("](");
+    while (idx != null) {
+        buf = buf + rest.sub(0, idx + 2);
+        rest = rest.sub(idx + 2);
+        final end = rest.indexOf(")");
+        if (end == null) {
+            buf = buf + rest;
+            rest = "";
+            idx = null;
+        } else {
+            buf = buf + rewriteMirrorHref(rest.sub(0, end), oldDir, newDir) + ")";
+            rest = rest.sub(end + 1);
+            idx = rest.indexOf("](");
+        }
+    }
+    return buf + rest;
+}
+
+// rewriteMirrorLinks rewrites every relative link/image target in a raw Markdown document
+// (see rewriteMirrorHref) before it is written as the emitted index.md mirror, so a reader
+// (or an agent following llms.txt) can traverse from one page's markdown straight to the
+// next instead of hitting the flat source-layout paths the page was authored with. Fenced
+// code blocks (```) are left untouched - a link-looking string inside one is code, not
+// prose, and md.split("```") plus a toggling "inside" flag is the same fence-skip idiom
+// cleanBody uses for the search index.
+export fun rewriteMirrorLinks(md: str, oldDir: str, newDir: str) > str {
+    var buf = "";
+    var inside = false;
+    var i = 0;
+    foreach (p in md.split("```")) {
+        if (i > 0) { buf = buf + "```"; }
+        if (inside) { buf = buf + p; } else { buf = buf + rewriteMirrorLinksInProse(p, oldDir, newDir); }
+        inside = (inside == false);
+        i = i + 1;
+    }
+    return buf;
+}
+
 // oldFlatDirectory is a docs page's pre-move directory (its source subdir).
 export fun oldFlatDirectory(rel: str) > str {
     final parts = rel.split("/");
@@ -239,6 +330,119 @@ export fun cleanBody(md: str) > str {
     final words: [str] = mut [<str>];
     foreach (w in buf.split(" ")) { if (w != "") { words.append(w); } }
     return words.join(" ");
+}
+
+// BACKLINK_MARKER is the placeholder renderPage() emits at the foot of every article.
+// A page renders during the walk, long before the corpus-wide link graph is known, so
+// the "Referenced by" list cannot be built in place; the marker reserves the spot and
+// resolveBacklinks() (engine/gates.buzz) substitutes the finished block - or removes the
+// marker - once every page has been written. Same shape of problem the glossary solves by
+// rendering last, except every page needs it, so a second pass beats a render order.
+export final BACKLINK_MARKER = "<!--magus:backlinks-->";
+
+// contentLinkTargets pulls every intra-site href out of one page's finished CONTENT html
+// (the article body, before the chrome wraps it), resolved against pageDir into gen-root-
+// relative paths with the fragment and query dropped, deduped in document order.
+//
+// Content only, and content only BEFORE the auto-linkers run: the caller records these as
+// the "this page links to that page" edges behind the Referenced-by block, and a backlink
+// is worth reading exactly when a human decided to write it. Nav, breadcrumb, pager,
+// Related cards and section nav are emitted for every page automatically, and the glossary
+// term / code entity / convention auto-linkers add a link per vocabulary hit - counting
+// either turns the list into a census of the corpus rather than a set of references.
+export fun contentLinkTargets(html: str, pageDir: str) > [str] {
+    var refs: [str] = mut [<str>];
+    var seen: {str: bool} = mut {};
+    var rest = html;
+    var idx = rest.indexOf("href=\"");
+    while (idx != null) {
+        rest = rest.sub(idx + 6);
+        final end = rest.indexOf("\"");
+        if (end == null) { return refs; }
+        final raw = rest.sub(0, end);
+        rest = rest.sub(end + 1);
+        // Same skip set the integrity scan uses: off-site, in-page, and root-absolute refs
+        // are not a link from one page of this corpus to another.
+        if (raw != "" and raw.startsWith("http://") == false and raw.startsWith("https://") == false
+            and raw.startsWith("//") == false and raw.startsWith("#") == false
+            and raw.startsWith("mailto:") == false and raw.startsWith("/") == false) {
+            var path = raw;
+            final hash = path.indexOf("#");
+            if (hash != null) { path = path.sub(0, hash); }
+            final q = path.indexOf("?");
+            if (q != null) { path = path.sub(0, q); }
+            if (path != "") {
+                final resolved = resolvePath(pageDir, path);
+                if (seen[resolved] == null) {
+                    seen[resolved] = true;
+                    refs.append(resolved);
+                }
+            }
+        }
+        idx = rest.indexOf("href=\"");
+    }
+    return refs;
+}
+
+// backlinkBlock renders the "Referenced by" nav that replaces BACKLINK_MARKER: a
+// toc-title label over a list of the pages whose prose links here. items carry an
+// already-relativized "href" and a plain-text "title"; hidden is how many more were
+// dropped by the cap, rendered as an unlinked tail row rather than a longer list (a hub
+// page is referenced by most of the corpus, and listing all of it says nothing).
+// "" for no inbound links, so the marker simply disappears.
+export fun backlinkBlock(items: [{str: str}], hidden: int) > str {
+    if (items.len() == 0) { return ""; }
+    var lis = "";
+    foreach (it in items) {
+        lis = lis + el("li", "", el("a", attr("href", it["href"]!), esc(it["title"]!)));
+    }
+    if (hidden > 0) { lis = lis + el("li", "", "and {hidden} more"); }
+    return el("nav", attr("class", "page-backlinks") + attr("aria-label", "Pages referencing this page"),
+        el("p", attr("class", "toc-title"), "Referenced by") + el("ul", "", lis)) + "\n";
+}
+
+// mdSections splits a markdown body into its "## " sections: one {title, text} entry per
+// H2, title being the heading text and text the prose beneath it up to the next H2, run
+// through cleanBody. Anything before the first H2 is not a section (it is the page intro,
+// already covered by the whole-page record). Fenced blocks are skipped with the same
+// toggling-split idiom cleanBody and rewriteMirrorLinks use, so a "## " comment inside a
+// shell fence never starts a section.
+// mdIntro is everything before the first "## " - the part of a page no section record
+// covers. It is what the whole-page search record carries once sections carry the rest:
+// the union stays the full page, with each half indexed exactly once instead of the body
+// appearing in both. Fence-aware for the same reason mdSections is.
+export fun mdIntro(md: str) > str {
+    var body = "";
+    var fenced = false;
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("```")) { fenced = (fenced == false); }
+        if (fenced == false and line.startsWith("## ")) { break; }
+        body = body + line + "\n";
+    }
+    return body;
+}
+
+export fun mdSections(md: str) > [{str: str}] {
+    var sections: [{str: str}] = mut [<{str: str}>];
+    var title = "";
+    var body = "";
+    var fenced = false;
+    foreach (line in md.split("\n")) {
+        if (line.startsWith("```")) { fenced = (fenced == false); }
+        if (fenced == false and line.startsWith("## ")) {
+            if (title != "") { sections.append(mut {"title": title, "text": cleanBody(body)}); }
+            // Backticks and a trailing "#" run are heading DECORATION; the search result
+            // shows this as a label, and goldmark's id drops them either way.
+            title = line.sub(3).trim();
+            while (title.indexOf("`") != null) { title = title.replace("`", ""); }
+            title = title.trim();
+            body = "";
+        } else {
+            body = body + line + "\n";
+        }
+    }
+    if (title != "") { sections.append(mut {"title": title, "text": cleanBody(body)}); }
+    return sections;
 }
 
 // redirectScript is the exact inline-script body aliasStub emits below. Exposed so
@@ -438,6 +642,47 @@ test "cleanBody strips fences and markers for the search index" {
     assert\equal(cleanBody("a ```fenced``` c"), "a c", "drops fenced content");
 }
 
+test "contentLinkTargets resolves in-content page links and skips everything else" {
+    assert\equal(contentLinkTargets("<a href=\"../cache/\">Cache</a>", "concepts/targets"),
+        ["concepts/cache"], "sibling page link resolved against the page directory");
+    assert\equal(contentLinkTargets("<a href=\"../cache/#the-cache-key\">k</a>", "concepts/targets"),
+        ["concepts/cache"], "fragment dropped - the edge is page to page");
+    assert\equal(contentLinkTargets("<a href=\"../cache/\">a</a><a href=\"../cache/\">b</a>", "concepts/targets"),
+        ["concepts/cache"], "the same target twice is one edge");
+    assert\equal(contentLinkTargets("<a href=\"https://x\">x</a><a href=\"#top\">t</a><a href=\"/abs/\">a</a><a href=\"mailto:a@b\">m</a>", "concepts"),
+        mut [<str>], "external, in-page, root-absolute and mailto refs are not corpus edges");
+}
+
+test "backlinkBlock renders a labelled list and the capped tail" {
+    final items: [{str: str}] = mut [<{str: str}>];
+    items.append(mut {"href": "../targets/", "title": "Targets"});
+    assert\equal(backlinkBlock(items, 0),
+        "<nav class=\"page-backlinks\" aria-label=\"Pages referencing this page\">"
+        + "<p class=\"toc-title\">Referenced by</p><ul><li><a href=\"../targets/\">Targets</a></li></ul></nav>\n",
+        "one inbound page");
+    assert\equal(backlinkBlock(items, 3).indexOf("<li>and 3 more</li>") != null, true, "the tail row is unlinked");
+    assert\equal(backlinkBlock(mut [<{str: str}>], 0), "", "no inbound links renders nothing");
+}
+
+test "mdSections splits a body on its H2 headings and ignores fenced ones" {
+    final got = mdSections("intro text\n\n## First\nalpha\n\n## Second\nbeta\n");
+    assert\len(got, 2, "the intro is not a section");
+    assert\equal(got[0], {"title": "First", "text": "alpha"}, "first section carries its own prose");
+    assert\equal(got[1], {"title": "Second", "text": "beta"}, "second section stops at the end");
+    assert\len(mdSections("## Real\nx\n```\n## Fenced\n```\n"), 1, "a heading inside a fence is code, not a section");
+    final decorated = mdSections("## `magus run`\nx\n");
+    assert\equal(decorated[0]["title"], "magus run", "backtick decoration dropped from the label");
+}
+
+test "mdIntro is the part of a body no section record covers" {
+    assert\equal(mdIntro("intro text\n\n## First\nalpha\n").trim(), "intro text",
+        "everything above the first H2, and nothing below it");
+    assert\equal(mdIntro("only prose, no headings\n").trim(), "only prose, no headings",
+        "a body with no H2 is all intro");
+    assert\equal(mdIntro("intro\n```\n## Fenced\n```\nstill intro\n\n## Real\nx\n").trim(),
+        "intro\n```\n## Fenced\n```\nstill intro", "a heading inside a fence does not end the intro");
+}
+
 test "aliasStub is a redirect page to rel, carrying the caller's CSP" {
     final stub = aliasStub("/new/", "default-src 'none'; script-src 'sha256-x'");
     assert\equal(stub.sub(0, 15), "<!DOCTYPE html>", "html stub");
@@ -502,4 +747,23 @@ test "rewriteHref passes through external and fragment links" {
 test "rewriteHref re-relativizes an internal page link" {
     assert\equal(rewriteHref("sibling.html", "docs/guide", "docs/guide/page"), "../sibling/",
         "sibling .html resolves, cleans, and re-relativizes");
+}
+
+test "rewriteMirrorLinks rewrites relative markdown link/image targets into the traversable mirror form" {
+    assert\equal(rewriteMirrorLinks("[x](sibling.md)", "guide", "guide/page"),
+        "[x](../sibling/index.md)", "sibling .md link points at its clean directory's index.md");
+    assert\equal(rewriteMirrorLinks("[x](../sibling.md)", "a/b", "a/b/c"),
+        "[x](../../sibling/index.md)", "a ../ link resolves up before mapping to the clean directory");
+    assert\equal(rewriteMirrorLinks("[x](sibling.md#frag)", "guide", "guide/page"),
+        "[x](../sibling/index.md#frag)", "a #fragment survives the rewrite");
+    assert\equal(rewriteMirrorLinks("prose\n```\n[x](sibling.md)\n```\nmore", "guide", "guide/page"),
+        "prose\n```\n[x](sibling.md)\n```\nmore", "a link-looking string inside a fenced code block is left untouched");
+    assert\equal(rewriteMirrorLinks("[x](https://example.com)", "guide", "guide/page"),
+        "[x](https://example.com)", "an external link is untouched");
+    assert\equal(rewriteMirrorLinks("![alt](images/pic.png)", "guide", "guide/page"),
+        "![alt](../images/pic.png)", "a non-.md relative target is re-relativized without the index.md mapping");
+    assert\equal(rewriteMirrorLinks("run `bash[\"<op>\"](ctx, opts?)` to invoke", "guide", "guide/page"),
+        "run `bash[\"<op>\"](ctx, opts?)` to invoke", "a call site inside inline code is not a link");
+    assert\equal(rewriteMirrorLinks("run `go[\"go-build\"](ctx)` then see [x](sibling.md)", "guide", "guide/page"),
+        "run `go[\"go-build\"](ctx)` then see [x](../sibling/index.md)", "inline code is masked while the real link beside it still rewrites");
 }

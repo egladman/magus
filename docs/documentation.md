@@ -19,8 +19,13 @@ That machinery stays transparent. The cache, the daemon socket, and the run log 
 
 ## Getting started
 
-Prefer a linear, written walkthrough? The [Getting started guide](guides/getting-started.md)
-runs install to first `ci` pipeline as prose. The quick version:
+Three ways in, depending on how you like to learn:
+
+- **[Quick start](guides/quickstart.md)** - the whole loop on one dense page: install, first target, output flags, agent skills. Read this to be productive now.
+- **[Getting started](guides/getting-started.md)** - the same ground as a linear, explained-as-you-go walkthrough, install to your first `ci` pipeline.
+- **[Playground](playground.html)** - try magus in your browser via WebAssembly, no install.
+
+Prefer to skim right here instead? The quick version:
 
 **1. [Install magus](guides/download.md).** A single self-contained binary. The [Download guide](guides/download.md) covers install, verification, and updating.
 
@@ -58,7 +63,7 @@ magus affected ci   # run ci only for the projects your changes touched
 
 ## Core concepts
 
-Start here to understand the model magus is built on.
+Start here to understand the model magus is built on. The [Concepts overview](concepts.md) maps a reading order through all of them.
 
 - [Workspace and projects](concepts/workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
 - [Targets](concepts/targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
@@ -76,16 +81,16 @@ Start here to understand the model magus is built on.
 
 ## Going further
 
-Once the basics click, these cover running magus at scale and in CI.
+Once the basics click, these cover running magus at scale and in CI. The [Guides overview](guides.md) collects every guide, grouped by stage.
 
 - [CI](concepts/targets/ci.md) - compose a `ci` target with `magus\needs`, and the shared-cache trust model.
-- [Daemon and concurrency](guides/daemon.md) - one persistent process, one shared pool across every client.
+- [Daemon and concurrency](guides/integrations/daemon.md) - one persistent process, one shared pool across every client.
 - [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations (with `MAGUS_NO_WAIT`).
 - [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
-- [Editor setup](guides/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
+- [Editor setup](guides/integrations/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
 - [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
-- [MCP](guides/mcp.md) - drive magus from agents over the Model Context Protocol.
+- [MCP](guides/integrations/mcp.md) - drive magus from agents over the Model Context Protocol.
 - [Telemetry](concepts/telemetry.md) - OpenTelemetry traces and metrics.
 
 ## Coming from other tools
@@ -107,6 +112,7 @@ The magusfile API and diagnostics:
 - [Configuration](reference/config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
 - [Standard library modules](reference/buzz/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
 - [Daemon API](reference/api/index.md) - the Connect, gRPC, and gRPC-Web contract the daemon serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or front end against it.
+- [Go SDK](reference/go-sdk.md) - use magus as a Go library instead of the CLI: `Open` versus `Inspect`, the interface hierarchy, and what the SDK does not give you yet.
 - [Spells reference](concepts/spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
 - Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](concepts/wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](reference/codes/services/MGS5002.md)). Browse by family: [magusfile](reference/codes/magusfile/README.md), [race](reference/codes/race/README.md), [sandbox](reference/codes/sandbox/README.md), [services](reference/codes/services/README.md), and [knowledge graph](reference/codes/knowledge/README.md).
 - [Documentation conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.

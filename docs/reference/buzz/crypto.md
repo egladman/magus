@@ -113,3 +113,8 @@ Return the lowercase hex MD5 digest of the file at path. For interop with legacy
 [^buzz-stdlib-crypto-sha512_hex]: `crypto\sha512Hex` is also in Buzz's standard library (`crypto.hash(HashAlgorithm.Sha512, …)`); the magus form is sandbox-aware.
 [^buzz-stdlib-crypto-sha1_hex]: `crypto\sha1Hex` is also in Buzz's standard library (`crypto.hash(HashAlgorithm.Sha1, …)`); the magus form is sandbox-aware.
 [^buzz-stdlib-crypto-md5_hex]: `crypto\md5Hex` is also in Buzz's standard library (`crypto.hash(HashAlgorithm.Md5, …)`); the magus form is sandbox-aware.
+
+## See also
+
+- [Standard library modules](index.md)
+- [`uuid`](uuid.md)

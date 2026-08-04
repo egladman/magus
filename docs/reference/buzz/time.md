@@ -85,3 +85,6 @@ Return a minus b in milliseconds (positive when a is later than b).
 
 **Returns:** float64
 
+## See also
+
+- [Standard library modules](index.md)

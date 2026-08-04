@@ -17,8 +17,10 @@ tags:
 
 # Race condition diagnostics
 
-Codes in the `MGS4xxx` range are emitted by the magus race condition detector.
-Enable with `magus run <target> --race`.
+Codes in the `MGS4xxx` range are emitted by the magus race condition detector,
+which watches for the [concurrency](../../../concepts/concurrency.md) hazards
+that parallel project dispatch can produce. Enable with `magus run <target>
+--race`.
 
 The `--race` flag follows the `--output` pattern: an enumerated mode value.
 Modes are **orthogonal** and can be combined with a comma:
@@ -50,3 +52,5 @@ or a manual audit rather than every push.
 - [MGS4002](MGS4002.md): declared output overlap.
 - [MGS4003](MGS4003.md): non-deterministic output.
 - [MGS4004](MGS4004.md): potential undeclared dependency.
+- [MGS4005](MGS4005.md): environmental drift - a generated output changed but its inputs did not.
+- [MGS4006](MGS4006.md): stale generated output - a declared input changed and the output was not regenerated.

@@ -1,5 +1,6 @@
 ---
 title: Install on Linux
+order: 1
 description: Download, verify, and install the magus binary on Linux (amd64 or arm64) and put it on your PATH - no root, no sudo.
 tags: [download, install, linux, path]
 ---

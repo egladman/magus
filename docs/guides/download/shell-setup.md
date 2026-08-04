@@ -1,5 +1,6 @@
 ---
 title: Shell setup
+order: 7
 description: Set up magus tab-completion for bash, zsh, fish, or PowerShell, and install mgs, the shorthand, as a symlink beside the binary.
 tags: [completion, shell, bash, zsh, fish, powershell, mgs, shorthand, setup]
 ---

@@ -17,6 +17,10 @@ tags:
 
 # The sandbox
 
+See [concepts/sandbox.md](../../../concepts/sandbox.md) for the full threat
+model, the allowlist semantics, and the diagnostic map this page's codes come
+from. This page is the quick-reference landing page for those codes.
+
 The sandbox confines every magus subprocess and in-process spell to the
 workspace plus a curated allowlist of cache and system paths, and replaces
 the child-process environment with a minimum allowlist so secret-bearing
@@ -111,3 +115,7 @@ Two layers run together:
 - [MGS2007](MGS2007.md): exec denied.
 - [MGS2008](MGS2008.md): daemon socket withheld from sandboxed children.
 - [MGS2010](MGS2010.md): sandbox policy mismatch (undeclared / fingerprint).
+- [MGS2011](MGS2011.md): a secret read through `secret.read` is too short to mask.
+- [MGS3001](MGS3001.md): a write-mode dispatch crossed into a descendant project's directory.
+- [MGS3002](MGS3002.md): a `vcs` host-module call could not resolve or its command failed.
+- [MGS3003](MGS3003.md): `os\which` could not resolve a command on PATH.

@@ -157,3 +157,6 @@ Human-readable version string from the nearest tag (git's `describe --tags --alw
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)

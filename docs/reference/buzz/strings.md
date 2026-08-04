@@ -179,3 +179,9 @@ std\print(strings\ellipsis("the quick brown fox", 12));
 // -> "the quick..."
 ```
 
+## See also
+
+- [Standard library modules](index.md)
+- [`fmt`](fmt.md)
+- [`template`](template.md)
+- [`markdown`](markdown.md)

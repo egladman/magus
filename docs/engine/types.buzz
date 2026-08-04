@@ -11,6 +11,26 @@ namespace types;
 // a real section index page instead. See Site.renderSubtree.
 final maxSubtreeRows = 40;
 
+// UNORDERED sorts every DocPage without a frontmatter `order:` after every page with one
+// (see DocPage.order), so a section can be curated a few pages at a time instead of
+// all-or-nothing. Mirrors page.buzz's own UNORDERED sentinel for the pager - a separate
+// constant because that corpus (sibling files on disk) and this one (the whole docPages
+// tree) are read differently, and this file stays leaf-only (no engine/page import).
+final UNORDERED = 1000000;
+
+// MIN_SECTION_TEXT is the shortest section that earns its own search record (see
+// Site.sectionRecords). Below it a section is a heading plus a sentence, whose words are
+// already in the page record - a second hit for them costs index bytes and buys the reader
+// nothing.
+final MIN_SECTION_TEXT = 200;
+
+// SECTION_STOCK_DESC is the placeholder description collectSectionIndexes gives a
+// synthesized overview - it says the directory has pages in it, which is what a reader can
+// already see. Exported because three passes have to recognize it and none of them should
+// carry its own copy of the string: site/sections.buzz writes it, engine/gates.buzz counts
+// it as a missing description, engine/discovery.buzz drops those entries from llms.txt.
+export final SECTION_STOCK_DESC = "Pages in this section.";
+
 import "fs";
 import "io";
 import "serialize";
@@ -96,6 +116,11 @@ export object DocPage {
     section: str = "",
     overview: bool = false,
     srcRel: str = "",
+    // Frontmatter `order:` (1-based; absent or non-positive reads as 1000000, matching
+    // UNORDERED above), read the same way page.buzz's pager reads its own copy. Drives the
+    // (order, title) sort every listing of this corpus uses (renderSectionNav, section
+    // index cards) - NOT the pager, which stays on its own sibling-file read.
+    order: int = 1000000,
 }
 
 // Release is one entry read from releases/v<semver>.yaml. body is the trimmed markdown for
@@ -203,6 +228,21 @@ export object Site {
     // behind it.
     pageAxes: {str: int} = mut {},
 
+    // The corpus link graph, inverted: target page URL -> the URLs of the pages whose PROSE
+    // links to it, in walk order and deduped. Filled during the walk by collectContentLinks
+    // and consumed after it by resolveBacklinks, which swaps each page's BACKLINK_MARKER for
+    // its "Referenced by" list. Inverted at collection time because that is the only
+    // direction anyone reads it in, and the walk hands us the forward edges one page at a
+    // time anyway.
+    backlinks: {str: [str]} = mut {},
+
+    // url -> the set of #fragment names that page actually offers, harvested from the
+    // finished content by renderPage (see contentAnchors). assetIntegrityCheck reads it to
+    // gate a link's fragment the same way it gates the link's path: a
+    // "guide/#the-heading-that-got-renamed" resolves to a real file and still lands the
+    // reader nowhere, which is the failure a path-only check cannot see.
+    pageAnchors: {str: {str: bool}} = mut {},
+
     // Every gen-root-relative file this render actually wrote, populated at the choke points
     // that own a write (addRecord, writeAliases, renderAutoindex; a few one-off index.md
     // siblings track themselves). pruneStaleOutputs() diffs this against disk and deletes
@@ -278,13 +318,79 @@ export object Site {
         var filePath = url;
         if (filePath.endsWith("/")) { filePath = filePath + "index.html"; }
         this.writtenPaths[filePath] = true;
+        final body = markdown\stripFrontmatter(md);
+        final tags = parseTags(md);
         final rec = mut {<str: any>};
         rec["url"] = url;
         rec["title"] = title;
-        rec["text"] = cleanBody(markdown\stripFrontmatter(md));
-        rec["tags"] = parseTags(md);
+        // The body is split between this record and the section records rather than copied
+        // into both: sections own their own prose, so this one carries the intro above the
+        // first H2. Indexing the whole body here too would double search-index.json - which
+        // every visitor precaches - to buy a second hit on words already findable.
+        // sectionRecords reports what it will cover, so a page whose sections were all too
+        // short to earn a record keeps its full text here.
+        final sections = this.sectionRecords(url, title, body, tags);
+        var indexed = cleanBody(body);
+        if (sections.len() > 0) { indexed = cleanBody(mdIntro(body)); }
+        rec["text"] = indexed;
+        rec["tags"] = tags;
         if (desc != "") { rec["description"] = desc; }
         this.searchRecords.append(serialize\jsonEncode(serialize\Boxed.init(rec)));
+        foreach (s in sections) { this.searchRecords.append(s); }
+    }
+
+    // sectionRecords builds one EXTRA record per H2 section of a page, deep-linked at
+    // "<page url>#<anchor>". A whole-page record answers "which page is this on"; on a
+    // 400-line concepts page that is a poor answer, because the reader still has to find
+    // the part that matched. The section record lands them on it.
+    //
+    // The record shape is unchanged, so a client that knows nothing about section records
+    // keeps working; they are ordinary records whose url carries a fragment. Two guards
+    // keep the index honest: a section under MIN_SECTION_TEXT characters is a heading with
+    // a sentence under it (a result per stub section is noise), and the anchor comes from
+    // glossarySlug, the same goldmark mirror the glossary and conventions anchors use, so
+    // the deep link lands on a real heading id.
+    //
+    // It RETURNS the records rather than appending them, so addRecord can ask what the
+    // sections will cover before deciding what its own record should carry, and still
+    // append the page record first. An empty result means no section was substantial
+    // enough, and the page record keeps the whole body - no prose falls out of the index
+    // either way.
+    fun sectionRecords(url: str, title: str, body: str, tags: [str]) > [str] {
+        var recs: [str] = mut [<str>];
+        foreach (s in mdSections(body)) {
+            final text = s["text"]!;
+            if (text.len() < MIN_SECTION_TEXT) { continue; }
+            final anchor = glossarySlug(s["title"]!);
+            if (anchor == "") { continue; }
+            final rec = mut {<str: any>};
+            rec["url"] = url + "#" + anchor;
+            rec["title"] = title + " - " + s["title"]!;
+            rec["text"] = text;
+            rec["tags"] = tags;
+            recs.append(serialize\jsonEncode(serialize\Boxed.init(rec)));
+        }
+        return recs;
+    }
+
+    // collectContentLinks records the page-to-page edges in one page's finished content
+    // (see contentLinkTargets for what counts), inverted into backlinks. fromUrl is the
+    // page being rendered, pageDir its clean directory. A link to something that is not a
+    // docs page - an asset, a tag page, an alias stub - is not an edge: lookupTitle is what
+    // decides, because a backlink with no title is a row a reader cannot act on.
+    fun collectContentLinks(html: str, pageDir: str, fromUrl: str) > void {
+        foreach (resolved in contentLinkTargets(html, pageDir)) {
+            var target = resolved;
+            if (target.endsWith("/index.html")) { target = target.sub(0, target.len() - 11); }
+            if (target == "" or target == "index.html") { continue; }
+            target = target + "/";
+            if (target == fromUrl) { continue; }
+            if (this.lookupTitle(target) == "") { continue; }
+            if (this.backlinks[target] == null) { this.backlinks[target] = mut [<str>]; }
+            var seen = false;
+            foreach (u in this.backlinks[target]!) { if (u == fromUrl) { seen = true; } }
+            if (seen == false) { this.backlinks[target]!.append(fromUrl); }
+        }
     }
 
     // collectAlias records that the clean old path `alias` should redirect to
@@ -305,16 +411,40 @@ export object Site {
     // writeAliases writes one redirect stub per collected alias (after the walk, so
     // every real page URL is known for the collision guard). It throws if an alias
     // would shadow a real generated page.
+    //
+    // Each stub gets an index.md sibling too, because the Markdown mirror is a tree a
+    // reader (or an llms.txt-following agent) TRAVERSES: a retired URL that redirects in a
+    // browser and 404s one directory over is a dead end in exactly the corpus that has no
+    // JavaScript to follow the meta-refresh with. The stub is frontmatter-free - it is a
+    // signpost, not a page - and its one link points at the target's own index.md, the same
+    // "<path>/index.md" form rewriteMirrorLinks emits, so the mirror integrity gate
+    // resolves it like any other.
     fun writeAliases() > void {
         foreach (a in this.aliasTarget.keys()) {
             if (this.pageUrls[a + "/"] != null or this.pageUrls[a] != null) {
                 throw "alias \"" + a + "\" collides with a real page at the same path";
             }
             fs\makeDirectory(this.outDir + "/" + a);
-            final rel = relativePath(a, this.aliasTarget[a]);
+            final target = this.aliasTarget[a]!;
+            final rel = relativePath(a, target);
             final csp = cspForRedirectStub(redirectScript(rel));
             fs\writeFile(this.outDir + "/" + a + "/index.html", aliasStub(rel, csp));
             this.writtenPaths[a + "/index.html"] = true;
+
+            // The home page's mirror is gen/index.md; every other page's is the index.md
+            // inside its own clean directory. Gated on the target actually HAVING a mirror:
+            // the synthesized surfaces (/development/, the section overviews) emit HTML
+            // only, and a signpost pointing at a file that was never written is the dead
+            // end this exists to remove, plus an integrity-gate failure.
+            var mdTarget = target + "index.md";
+            if (target == "index.html") { mdTarget = "index.md"; }
+            if (fs\exists(this.outDir + "/" + mdTarget)) {
+                var label = this.lookupTitle(target);
+                if (label == "") { label = "its new location"; }
+                fs\writeFile(this.outDir + "/" + a + "/index.md",
+                    "# Moved\n\nThis page is now at [" + label + "](" + relativePath(a, mdTarget) + ").\n");
+                this.writtenPaths[a + "/index.md"] = true;
+            }
         }
     }
 
@@ -337,6 +467,11 @@ export object Site {
             if (first) { joined = t; first = false; }
             else { joined = joined + "||" + t; }
         }
+        // .integer() is null when the key is absent, so the null check comes BEFORE any
+        // compare - the same read page.buzz's pageOrder does for the pager.
+        var order = UNORDERED;
+        final orderVal = fm.q("order").integer();
+        if (orderVal != null and orderVal! > 0) { order = orderVal!; }
         this.docPages.append(DocPage{
             url = url,
             title = title,
@@ -345,6 +480,7 @@ export object Site {
             section = firstPathSegment(url),
             overview = pageType(md) == "overview",
             srcRel = this.docs + "/" + rel,
+            order = order,
         });
     }
 
@@ -604,18 +740,21 @@ export object Site {
         if (rootUrl == "") { rootUrl = curUrl; }
 
         // Direct children: pages whose clean URL is exactly one path segment deeper than
-        // the section root (so a grandchild does not surface in a parent's list).
+        // the section root (so a grandchild does not surface in a parent's list). Sort key
+        // is frontmatter order (padded so it compares lexically the same as numerically),
+        // then title - a directory without any `order:` set falls back to reading
+        // alphabetically by title.
         var kids: [{str: str}] = mut [<{str: str}>];
         foreach (p in this.docPages) {
             if (p.url != rootUrl and p.url.startsWith(rootUrl)) {
                 final rest = p.url.sub(rootUrl.len());
                 if (splitPath(rest).len() == 1) {
-                    kids.append(mut {"url": p.url, "title": p.title});
+                    kids.append(mut {"url": p.url, "title": p.title, "key": pad7(p.order) + p.title});
                 }
             }
         }
         if (kids.len() == 0) { return ""; }
-        final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["url"], b["url"]); });
+        final ordered = kids.sort(fun (a: {str: str}, b: {str: str}) > bool { return strLess(a["key"], b["key"]); });
 
         // Render through Mustache so {{title}} is HTML-escaped in both the link text and the
         // title attribute.
@@ -957,6 +1096,16 @@ test "Site.addRecord marks the URL written and appends one search record" {
     s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nBody text.");
     assert\equal(s.pageUrls, {"guide/": true}, "url marked written");
     assert\len(s.searchRecords, 1, "one search record appended");
+}
+
+test "Site.addRecord adds a deep-linked record per substantial section" {
+    final s = mut Site{};
+    var long = "";
+    while (long.len() < MIN_SECTION_TEXT + 20) { long = long + "prose about the cache key "; }
+    s.addRecord("guide/", "Guide", "", "---\ntitle: Guide\n---\nintro\n\n## Deep dive\n" + long + "\n\n## Stub\ntoo short\n");
+    assert\len(s.searchRecords, 2, "the page record plus one section record; the short section earns none");
+    assert\equal(s.searchRecords[1].indexOf("guide/#deep-dive") != null, true, "the section record deep-links its heading anchor");
+    assert\equal(s.searchRecords[1].indexOf("Guide - Deep dive") != null, true, "and reads as page then heading");
 }
 
 

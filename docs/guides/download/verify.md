@@ -1,5 +1,6 @@
 ---
 title: Verify a release
+order: 6
 description: Verify a magus release against its Ed25519-signed SHA256SUMS manifest, by hand on first install or with the built-in verifier afterwards.
 tags: [verify, signature, ed25519, sha256, openssl, release, security]
 ---
@@ -52,3 +53,9 @@ Raw base64 (32 bytes):
 ```
 
 The key is embedded in every magus binary via `//go:embed`, so `magus self update` trusts it transitively. A planned rotation first ships a release signed by the current key that embeds the replacement key; later releases can use the replacement. Older binaries cannot be remotely revoked if the current key is compromised. The maintainer procedure is in the [contributing guide](../../development/contributing/).
+
+## See also
+
+- [Download](../download.md) - every other install route: Linux, macOS, Windows, containers, and package managers.
+- [Package managers](package-managers.md) - mise, and building from source, with the tradeoffs each makes against this signed-release guarantee.
+- [Getting started](../getting-started.md) - your first target, once magus is installed and verified.

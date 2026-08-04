@@ -11,6 +11,7 @@ tags:
     changelog,
     proto,
   ]
+order: 2
 ---
 
 # Breaking changes
@@ -87,3 +88,9 @@ a diff:
 The `CHANGELOG` note is the release story; the `.lock` diff is the proof. Neither
 requires a new subcommand or a config flag, because the compatibility record is the
 same review every other change already goes through.
+
+## See also
+
+- [Changelog](../changelog.md) - magus's own release notes, in the Keep a Changelog format described above.
+- [Coming from Nx](from-nx.md) - Nx's compatibility conventions, for teams porting a workspace.
+- [CI](../concepts/targets/ci.md) - where the `.lock` drift gate and `buf-breaking` fit into a `ci` target.

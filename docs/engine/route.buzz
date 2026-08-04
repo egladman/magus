@@ -8,13 +8,18 @@ import "engine/types" as _;
 
 // isGenerated reports whether a doc page is machine-generated. The generators overwrite
 // fixed docs/ subtrees wholesale: buzz/modules/, spells/*.md (but the spells.md landing is
-// hand-written), and manpage/, plus config.md. srcRel is the docs/-prefixed path. A path
-// convention because the generated .md carries no frontmatter marker.
+// hand-written), manpage/, skills/, api/, plus config.md and changelog.md. srcRel is the
+// docs/-prefixed path. A path convention because the generated .md carries no frontmatter
+// marker. Kept in sync with docs/magusfile.buzz's content_generate ctx.writesFiles() list -
+// that target is the source of truth for which docs/ subtrees are generated.
 export fun isGenerated(srcRel: str, site: Site) > bool {
     return srcRel.startsWith(site.docs + "/reference/buzz/")
         or srcRel.startsWith(site.docs + "/concepts/spells/")
         or srcRel.startsWith(site.docs + "/reference/manpage/")
-        or srcRel == site.docs + "/reference/config.md";
+        or srcRel == site.docs + "/reference/config.md"
+        or srcRel.startsWith(site.docs + "/reference/skills/")
+        or srcRel.startsWith(site.docs + "/reference/api/")
+        or srcRel == site.docs + "/changelog.md";
 }
 
 

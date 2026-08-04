@@ -2,6 +2,7 @@
 title: Uninstall
 description: What to delete when you remove magus, from the binary and man pages to the XDG state and config paths and the workspace-local build cache.
 tags: [uninstall, remove, xdg, state, config, cache, paths, cleanup]
+order: 8
 ---
 
 # Uninstall

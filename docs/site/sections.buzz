@@ -76,7 +76,7 @@ export fun collectSectionIndexes(site: Site) > void {
         site.docPages.append(DocPage{
             url = dir,
             title = title,
-            desc = "Pages in this section.",
+            desc = SECTION_STOCK_DESC,
             // The marker srcRel the page pipeline expects for a synthesized page;
             // no .md exists on disk, so "View source" correctly stays hidden.
             srcRel = dir + "_index.md",
@@ -101,12 +101,15 @@ export fun renderSectionIndexes(site: Site) > void {
         foreach (c in site.docPages) {
             if (c.url == p.url or c.url.startsWith(p.url) == false) { continue; }
             if (splitPath(c.url.sub(p.url.len())).len() != 1) { continue; }
-            cards.append(mut {"url": c.url, "title": c.title, "desc": c.desc, "hasDesc": c.desc != ""});
+            cards.append(mut {"url": c.url, "title": c.title, "desc": c.desc, "hasDesc": c.desc != "", "key": pad7(c.order) + c.title});
         }
         if (cards.len() == 0) { continue; }
 
+        // Sort key is frontmatter order (padded so it compares lexically the same as
+        // numerically), then title - a section without any `order:` set falls back to
+        // reading alphabetically, same as before.
         final ordered = cards.sort(fun (a: {str: any}, b: {str: any}) > bool {
-            return strLess("" + a["title"], "" + b["title"]);
+            return strLess("" + a["key"], "" + b["key"]);
         });
 
         final root = rootPrefix(p.srcRel, site);

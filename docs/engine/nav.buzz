@@ -82,6 +82,31 @@ export fun renderCommitFooter(path: str, site: Site) > str {
     return line;
 }
 
+// contentAnchors collects every fragment target a page's finished content offers, as a
+// set of anchor names. The ids are read back out of the rendered HTML rather than slugged
+// again here: goldmark already assigned them, and re-deriving the slug would give the
+// integrity gate a second opinion to disagree with (it is exactly a stale hand-slug -
+// "depends_on-..." against goldmark's "depends-on-..." - that the gate exists to catch).
+//
+// EVERY id, not just the headings renderTocList reads: a tour card (<li id="step-3">), a
+// footnote (<li id="fn:1">) and an admonition are all legitimate #fragment destinations,
+// and a heading-only set would fail the build on links that resolve perfectly.
+export fun contentAnchors(content: str) > {str: bool} {
+    var set: {str: bool} = mut {};
+    var rest = content;
+    var idx = rest.indexOf(" id=\"");
+    while (idx != null) {
+        rest = rest.sub(idx + 5);
+        final end = rest.indexOf("\"");
+        if (end == null) { return set; }
+        final id = rest.sub(0, end);
+        rest = rest.sub(end + 1);
+        if (id != "") { set[id] = true; }
+        idx = rest.indexOf(" id=\"");
+    }
+    return set;
+}
+
 // renderTocList builds the "On this page" block from a page's h2/h3 headings (goldmark
 // puts each on its own line with a slug id); h3s nest under their h2. Returns "" below
 // three headings - too little for a sidebar. Returns just the title + list; renderPage()

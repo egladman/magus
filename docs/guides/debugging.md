@@ -1,5 +1,6 @@
 ---
 title: Debugging magusfiles
+order: 5
 description: Drop into an interactive Buzz REPL with magusfile bindings preloaded, or set magus\pry() breakpoints mid-target to inspect frames, locals, and state.
 tags:
   [
@@ -127,3 +128,10 @@ At each pause, magus prints the command and working directory, then waits:
 | `k`                | Skip this command without executing it                        |
 | `r`                | Open a REPL in the current context, then re-prompt            |
 | `a` / `q` / Ctrl-C | Abort the run                                                 |
+
+## See also
+
+- [Engines](../concepts/engines.md) - the embedded Buzz VM the REPL and `magus\pry()` evaluate against.
+- [Testing](testing.md) - writing Buzz `test` blocks, an alternative to stepping through the REPL by hand.
+- [`magus run`](../reference/manpage/magus-run.md) and [`magus x`](../reference/manpage/magus-x.md) - running (or interactively picking) the target you are debugging.
+- [Tips and tricks](tips.md) - more non-obvious ways to combine magus subcommands.

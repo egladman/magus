@@ -1,21 +1,76 @@
 // engine/discovery.buzz - machine-readable content indexes: sitemap.xml + robots.txt for
-// crawlers (writeSEOFiles) and llms.txt for AI agents (writeLLMsIndex, body is the pure,
-// unit-tested llmsIndexBody). Each reads the finished Site and writes one index post-walk,
-// gated on a configured base URL.
+// crawlers (writeSEOFiles), llms.txt for AI agents (writeLLMsIndex, body is the pure,
+// unit-tested llmsIndexBody), and llms-full.txt for the agent that would rather fetch the
+// whole corpus once (writeLLMsFull). Each reads the finished Site and writes one index
+// post-walk, gated on a configured base URL.
 namespace discovery;
 
 import "fs";
+import "io";
 import "assert";
 import "engine/types" as _;
 import "lib/text" as _;
 import "lib/feed" as _;
 
+// LLMS_SECTIONS is the reading order of the top-level docs trees, shared by llms.txt and
+// llms-full.txt: concepts first (what the words mean), then the task-shaped trees, then
+// the lookup material, then the contributor surface. A page whose leading URL segment is
+// not one of these is a root page - the documentation hub, the glossary, the changelog -
+// and leads the file, since that is where a reader starts too.
+final LLMS_SECTIONS = ["concepts", "guides", "migrating", "reference", "development"];
+
+// llmsSectionOf returns which LLMS_SECTIONS bucket a page URL belongs to, "" for a root
+// page. A section's own overview ("concepts/") sorts into its section, not the root group:
+// it is the section's first page, and its description is the section's lead line.
+fun llmsSectionOf(url: str) > str {
+    final seg = firstPathSegment(url);
+    foreach (s in LLMS_SECTIONS) {
+        if (s == seg) { return s; }
+    }
+    return "";
+}
+
+// llmsGroups is LLMS_SECTIONS with the root group ("") in front - the full emit order.
+fun llmsGroups() > [str] {
+    var groups: [str] = mut [""];
+    foreach (s in LLMS_SECTIONS) { groups.append(s); }
+    return groups;
+}
+
+// pageLastmod is the YYYY-MM-DD date of the last commit that changed a page, read from the
+// provenance the "Last updated" footer already uses (Site.metaCommits, one git-log pass in
+// engine/gates.buzz). Same two-key lookup renderCommitFooter does - the page's source under
+// docs/, then its committed output - so the sitemap and the footer never disagree about
+// when a page last changed. "" when neither key hits, which is the honest answer for a
+// synthesized page: no commit touched it, so it claims no date.
+fun pageLastmod(srcRel: str, site: Site) > str {
+    var rec = site.metaCommits[site.metaPrefix + srcRel];
+    if (rec == null) { rec = site.metaCommits[site.metaPrefix + site.outDir + "/" + srcRel]; }
+    if (rec == null) { return ""; }
+    final parts = rec!.split("|");
+    if (parts.len() < 3) { return ""; }
+    final stamp = parts[2];
+    if (stamp.len() < 10) { return ""; }
+    return stamp.sub(0, 10);
+}
+
 // writeSEOFiles writes sitemap.xml + robots.txt from the real page URLs (sorted, so
 // byte-stable), each an absolute baseURL loc - "index.html" maps to the bare site root.
 // Aliases are omitted (only canonical pages belong in a sitemap). Gated on baseURL so the
 // site can ship dark until the host is confirmed. robots points crawlers at the sitemap.
+//
+// A page backed by a real source file also carries <lastmod>, so a crawler recrawls what
+// changed instead of guessing from the whole site's freshness. Pages with no commit behind
+// them (the synthesized overviews, the tag index) omit it rather than stamping today: a
+// lastmod that moves every build is worse than none, and it would drift the gate.
 export fun writeSEOFiles(site: Site) > void {
     if (site.config.baseURL == "") { return; }
+    // url -> the source whose history dates it. The home page renders from the repo README,
+    // which is not part of the docs corpus and so not in docPages.
+    var srcByUrl: {str: str} = mut {};
+    srcByUrl["index.html"] = "README.md";
+    foreach (p in site.docPages) { srcByUrl[p.url] = p.srcRel; }
+
     var urls: [str] = mut [<str>];
     foreach (u in site.pageUrls.keys()) { urls.append(u); }
     final sorted = urls.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
@@ -24,7 +79,13 @@ export fun writeSEOFiles(site: Site) > void {
     foreach (u in sorted) {
         var loc = u;
         if (loc == "index.html") { loc = ""; }
-        body = body + "  <url>" + xmlElement("loc", site.config.baseURL + loc) + "</url>\n";
+        var entry = xmlElement("loc", site.config.baseURL + loc);
+        final src = srcByUrl[u];
+        if (src != null) {
+            final stamp = pageLastmod(src!, site);
+            if (stamp != "") { entry = entry + xmlElement("lastmod", stamp); }
+        }
+        body = body + "  <url>" + entry + "</url>\n";
     }
     body = body + "</urlset>\n";
     fs\writeFile(site.outDir + "/sitemap.xml", body);
@@ -32,11 +93,29 @@ export fun writeSEOFiles(site: Site) > void {
 }
 
 
+// llmsSectionLead returns the lead line for one section: its overview page's authored
+// description. A synthesized overview has none worth printing, and the root group is not a
+// section anyone wrote a blurb for, so both give "".
+fun llmsSectionLead(pages: [DocPage], group: str) > str {
+    if (group == "") { return ""; }
+    foreach (p in pages) {
+        if (p.url == group + "/" and p.desc != "" and p.desc != SECTION_STOCK_DESC) { return p.desc; }
+    }
+    return "";
+}
+
 // llmsIndexBody builds gen/llms.txt (the llms.txt convention): an H1, a one-line summary,
-// then every docs page as "- [title](base+url): description", sorted by URL for a
-// byte-stable artifact. base is the link prefix (baseURL, else "/"). Links point at each
-// page's <url>index.md Markdown sibling, so an agent fetches clean content. Pure so a unit
-// test can pin the output.
+// then every docs page as "- [title](base+url): description", grouped under an H2 per
+// top-level section and sorted by URL within a group for a byte-stable artifact. base is
+// the link prefix (baseURL, else "/"). Links point at each page's <url>index.md Markdown
+// sibling, so an agent fetches clean content. Pure so a unit test can pin the output.
+//
+// Grouped rather than one flat list because a flat list sorted by URL is a directory
+// listing: it puts changelog next to concepts and gives an agent no signal about which
+// pages are orientation and which are lookup material. The section's own overview supplies
+// the lead line where one is authored. Entries whose description is the synthesized
+// placeholder are dropped entirely - a link that promises only "Pages in this section" is
+// a fetch that will not repay itself.
 fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
     final sorted = pages.sort(fun (a: DocPage, b: DocPage) > bool {
         return strLess(a.url, b.url);
@@ -44,43 +123,128 @@ fun llmsIndexBody(pages: [DocPage], base: str, title: str) > str {
     var body = "# " + title + "\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
         + "Every link below is the page's raw Markdown (its index.md sibling), "
-        + "so an agent fetches clean content directly.\n\n"
-        + "## Documentation\n\n";
-    foreach (p in sorted) {
-        // Link straight to the page's Markdown (url + index.md), not the HTML, so no URL
-        // guessing is needed.
-        var line = "- [" + p.title + "](" + base + p.url + "index.md)";
-        if (p.desc != "") { line = line + ": " + p.desc; }
-        body = body + line + "\n";
+        + "so an agent fetches clean content directly. Pages are grouped by section, "
+        + "in reading order; gen/llms-full.txt has all of it in one file.\n";
+    foreach (g in llmsGroups()) {
+        var lines = "";
+        foreach (p in sorted) {
+            if (llmsSectionOf(p.url) != g) { continue; }
+            if (p.desc == SECTION_STOCK_DESC) { continue; }
+            // Link straight to the page's Markdown (url + index.md), not the HTML, so no
+            // URL guessing is needed.
+            var line = "- [" + p.title + "](" + base + p.url + "index.md)";
+            if (p.desc != "") { line = line + ": " + p.desc; }
+            lines = lines + line + "\n";
+        }
+        if (lines == "") { continue; }
+        var heading = "Documentation";
+        if (g != "") { heading = capitalizeFirst(g); }
+        body = body + "\n## " + heading + "\n\n";
+        final lead = llmsSectionLead(sorted, g);
+        if (lead != "") { body = body + lead + "\n\n"; }
+        body = body + lines;
     }
     return body;
 }
 
 
-// writeLLMsIndex writes gen/llms.txt from the collected docs corpus. Links are absolute
-// under baseURL when set (so an external agent can follow them), else root-relative.
+// llmsBase is the link prefix for both indexes: the absolute base URL when one is
+// configured (so an external agent can follow a link), else root-relative.
+fun llmsBase(site: Site) > str {
+    if (site.config.baseURL == "") { return "/"; }
+    var base = site.config.baseURL;
+    if (base.endsWith("/") == false) { base = base + "/"; }
+    return base;
+}
+
+// writeLLMsIndex writes gen/llms.txt from the collected docs corpus.
 export fun writeLLMsIndex(site: Site) > void {
-    var base = "/";
-    if (site.config.baseURL != "") {
-        base = site.config.baseURL;
-        if (base.endsWith("/") == false) { base = base + "/"; }
-    }
-    fs\writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, base, site.config.title));
+    fs\writeFile(site.outDir + "/llms.txt", llmsIndexBody(site.docPages, llmsBase(site), site.config.title));
 }
 
 
-test "llmsIndexBody lists docs pages sorted by URL, base-prefixed, with descriptions" {
+// llmsReadingOrder flattens the corpus into the order llms-full.txt concatenates it:
+// section by section (llmsGroups), and within a section by frontmatter order then title -
+// the same (order, title) sort every on-page listing of this corpus uses, so the file reads
+// in the order the section nav offers rather than in filesystem order.
+fun llmsReadingOrder(pages: [DocPage]) > [DocPage] {
+    var ordered_pages: [DocPage] = mut [<DocPage>];
+    foreach (g in llmsGroups()) {
+        var bucket: [DocPage] = mut [<DocPage>];
+        foreach (p in pages) {
+            if (llmsSectionOf(p.url) == g) { bucket.append(p); }
+        }
+        final ordered = bucket.sort(fun (a: DocPage, b: DocPage) > bool {
+            return strLess(pad7(a.order) + a.title, pad7(b.order) + b.title);
+        });
+        foreach (p in ordered) { ordered_pages.append(p); }
+    }
+    return ordered_pages;
+}
+
+// writeLLMsFull writes gen/llms-full.txt: every docs page's emitted Markdown mirror,
+// concatenated in reading order, each preceded by a "---\nurl: <canonical>\n---" separator
+// so a reader can tell where one page ends and cite the one it took a passage from.
+//
+// llms.txt is the index - follow a link, fetch a page. This is the same corpus in one
+// request, for the agent that would rather pay once than walk 200 URLs. It reads each
+// page's index.md back off disk rather than re-rendering the source, so the links inside
+// are the mirror-rewritten, traversable ones the page actually ships (see renderFile). A
+// page with no mirror on disk (a synthesized overview - HTML only) is skipped: it has no
+// prose of its own, only cards pointing at the pages already in this file.
+export fun writeLLMsFull(site: Site) > void {
+    final base = llmsBase(site);
+    var body = "";
+    foreach (p in llmsReadingOrder(site.docPages)) {
+        final path = site.outDir + "/" + p.url + "index.md";
+        if (fs\exists(path) == false) { continue; }
+        final f = io\File.open(path, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        body = body + "\n---\nurl: " + base + p.url + "\n---\n" + md;
+    }
+    fs\writeFile(site.outDir + "/llms-full.txt", body);
+}
+
+
+test "llmsIndexBody groups pages under a section heading, in section order" {
     final pages = mut [<DocPage>];
-    pages.append(DocPage{url = "concepts/targets/", title = "Targets", desc = "What a target is"});
-    pages.append(DocPage{url = "concepts/cache/", title = "Cache", desc = "The cache model"});
     pages.append(DocPage{url = "reference/faq/", title = "FAQ", desc = ""});
+    pages.append(DocPage{url = "concepts/targets/", title = "Targets", desc = "What a target is"});
+    pages.append(DocPage{url = "documentation/", title = "Documentation", desc = "Start here"});
+    pages.append(DocPage{url = "concepts/", title = "Concepts", desc = "The vocabulary"});
+    pages.append(DocPage{url = "concepts/cache/", title = "Cache", desc = "The cache model"});
     final want = "# magus\n\n"
         + "> Workspace-aware build orchestrator and content-addressed cache. "
         + "Every link below is the page's raw Markdown (its index.md sibling), "
-        + "so an agent fetches clean content directly.\n\n"
-        + "## Documentation\n\n"
+        + "so an agent fetches clean content directly. Pages are grouped by section, "
+        + "in reading order; gen/llms-full.txt has all of it in one file.\n"
+        + "\n## Documentation\n\n"
+        + "- [Documentation](/documentation/index.md): Start here\n"
+        + "\n## Concepts\n\n"
+        + "The vocabulary\n\n"
+        + "- [Concepts](/concepts/index.md): The vocabulary\n"
         + "- [Cache](/concepts/cache/index.md): The cache model\n"
         + "- [Targets](/concepts/targets/index.md): What a target is\n"
+        + "\n## Reference\n\n"
         + "- [FAQ](/reference/faq/index.md)\n";
-    assert\equal(llmsIndexBody(pages, "/", "magus"), want, "llms.txt links to each page's index.md, sorted, base-prefixed, description only when present");
+    assert\equal(llmsIndexBody(pages, "/", "magus"), want,
+        "root pages lead, then each section in reading order, sorted by URL within a section, with the overview's description as the lead");
+}
+
+test "llmsIndexBody drops synthesized overviews and their empty sections" {
+    final pages = mut [<DocPage>];
+    pages.append(DocPage{url = "migrating/", title = "Migrating", desc = SECTION_STOCK_DESC});
+    pages.append(DocPage{url = "migrating/from-nx/", title = "From Nx", desc = "Coming from Nx"});
+    final got = llmsIndexBody(pages, "/", "magus");
+    assert\equal(got.indexOf("Pages in this section.") == null, true, "the placeholder entry is dropped");
+    assert\equal(got.indexOf("- [Migrating](/migrating/index.md)") == null, true, "with it, the overview's own line");
+    assert\equal(got.indexOf("- [From Nx](/migrating/from-nx/index.md): Coming from Nx") != null, true, "the real page still lists");
+    assert\equal(got.indexOf("## Migrating") != null, true, "the section heading survives its overview");
+}
+
+test "llmsSectionOf buckets a page by its leading URL segment" {
+    assert\equal(llmsSectionOf("concepts/cache/"), "concepts", "a section page");
+    assert\equal(llmsSectionOf("concepts/"), "concepts", "the section overview sorts into its own section");
+    assert\equal(llmsSectionOf("glossary/"), "", "a root page has no section");
 }

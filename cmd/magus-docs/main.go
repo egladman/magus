@@ -79,6 +79,34 @@ var moduleCategories = []struct {
 	{"Magus internals", []string{"magus", "charm"}},
 }
 
+// moduleSiblings curates 1-3 genuinely related modules per module page's "See
+// also" section, so a reader lands somewhere useful instead of a dead end. A
+// module absent here (time, semver, vcs) has no natural sibling and gets only
+// the index-page link. Not necessarily symmetric: the pairing is judged from
+// each module's actual use, not mechanically mirrored.
+var moduleSiblings = map[string][]string{
+	"archive":  {"fs", "path"},
+	"charm":    {"magus"},
+	"crypto":   {"uuid"},
+	"encoding": {"json", "yaml", "toml"},
+	"env":      {"platform", "os"},
+	"fmt":      {"strings", "template"},
+	"fs":       {"path", "os", "archive"},
+	"http":     {"json"},
+	"json":     {"yaml", "toml", "http"},
+	"magus":    {"charm"},
+	"markdown": {"strings", "fmt"},
+	"os":       {"fs", "path", "env"},
+	"path":     {"fs", "os"},
+	"platform": {"env", "os"},
+	"strings":  {"fmt", "template", "markdown"},
+	"template": {"strings", "fmt"},
+	"toml":     {"json", "yaml", "encoding"},
+	"uuid":     {"crypto"},
+	"xml":      {"json", "yaml", "encoding"},
+	"yaml":     {"json", "toml", "encoding"},
+}
+
 func main() {
 	outDir := flag.String("out", "docs/buzz/modules", "output directory for module docs")
 	flag.Parse()
@@ -354,6 +382,20 @@ func renderModule(m std.Module) string {
 	for _, n := range notes {
 		fmt.Fprintf(&b, "[^%s]: `%s` is also in Buzz's standard library (`%s`); "+
 			"the magus form is sandbox-aware.\n", n.label, n.method, n.equiv)
+	}
+
+	// See also: every module page linked back to the index, plus its curated
+	// siblings, so the reference reads as a graph instead of dead ends. A
+	// footnote line ends in a single "\n" with no blank line, so add one
+	// before the heading; with no footnotes the buffer already ends in a
+	// blank line from the last block.
+	if len(notes) > 0 {
+		b.WriteByte('\n')
+	}
+	fmt.Fprintf(&b, "## See also\n\n")
+	fmt.Fprintf(&b, "- [Standard library modules](index.md)\n")
+	for _, sib := range moduleSiblings[m.Name] {
+		fmt.Fprintf(&b, "- [`%s`](%s.md)\n", sib, sib)
 	}
 
 	return b.String()

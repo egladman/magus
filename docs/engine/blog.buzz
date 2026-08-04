@@ -88,7 +88,11 @@ export fun renderBlogPost(base: str, site: Site) > void {
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
     of.close();
-    fs\writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md", md);
+    // Same oldDir/newDir pair the HTML rendered above resolves against, so a relative
+    // in-content link ends up pointing at the mirror the same way whichever pipeline a
+    // reader followed.
+    fs\writeFile(site.outDir + "/" + site.blog + "/" + urlPath + "/index.md",
+        rewriteMirrorLinks(md, site.blog, site.blog + "/" + urlPath));
 
     site.addRecord(url, title, desc, md);
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }

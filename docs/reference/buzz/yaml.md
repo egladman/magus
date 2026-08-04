@@ -37,3 +37,9 @@ Encode a value to a YAML string; errors on unencodable input.
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`json`](json.md)
+- [`toml`](toml.md)
+- [`encoding`](encoding.md)

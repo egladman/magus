@@ -3,6 +3,7 @@ title: Target output references
 description: Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
 tags: [output, ref, logs, query, failure, debugging, clipboard, mcp, agent]
 aliases: [concepts/output-refs]
+order: 1
 ---
 
 # Target output references
@@ -116,7 +117,7 @@ equivalent).
 
 ## For agents and MCP
 
-The [MCP](../../guides/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
+The [MCP](../../guides/integrations/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
 pass a `ref` (`ref1a2b3c`, or a unique prefix) and it returns that execution's exact
 bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
 directly, instead of re-reading a wall of text or asking you to paste it. It is a

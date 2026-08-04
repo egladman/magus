@@ -80,7 +80,7 @@ work is skipped. See [cache.md](concepts/cache.md).
 ### Affected
 
 The set of projects touched by a change; `magus affected <target>` runs a target
-only over them. See [affected.md](guides/affected.md).
+only over them. See [affected.md](concepts/workspace/affected.md).
 
 ### Sandbox
 
@@ -95,7 +95,7 @@ one-shot target. See [services.md](concepts/services.md).
 ### Daemon
 
 The background magus host that owns shared state such as services and the warm
-knowledge graph. See [daemon.md](guides/daemon.md).
+knowledge graph. See [daemon.md](guides/integrations/daemon.md).
 
 ### CI
 
@@ -111,7 +111,7 @@ A short, shareable id (`ref1a2b3c`, "ref" for short) for one target execution's
 captured output; it appears on each target's line, and
 `magus query output ref1a2b3c` prints those exact bytes. In OpenTelemetry terms
 it corresponds to a **span** (one target execution) within its **trace** (the
-whole `magus` invocation). See [output-refs.md](concepts/output-refs.md).
+whole `magus` invocation). See [output-refs.md](concepts/cache/output-refs.md).
 
 ### Trace
 
@@ -129,56 +129,56 @@ captured output. See [telemetry.md](concepts/telemetry.md).
 The concurrency pool: the shared set of slots that caps how many targets run in
 parallel on one machine. Its capacity defaults to `MAGUS_CONCURRENCY`, then 4 on
 GitHub-hosted runners, then `min(NumCPU, 8)`; `magus status` and the
-[dashboard](guides/daemon.md) report it live. See [daemon.md](guides/daemon.md).
+[dashboard](guides/integrations/daemon.md) report it live. See [daemon.md](guides/integrations/daemon.md).
 
 ### Slot
 
 One unit of the pool's capacity. A target acquires the slots it needs to run
 (most take one) and releases them when it finishes; the pool tracks capacity
 (total slots), running (acquired), and queued (blocked). See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Concurrency
 
 How many targets run at once. It is bounded by the pool's capacity and set with
 `--concurrency`, `MAGUS_CONCURRENCY`, or the `concurrency` config key. See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Queued
 
 A target that wants a slot while the pool is full; it blocks first-in-first-out
 until a slot frees. The dashboard colors a sample with queued > 0 accordingly.
-See [daemon.md](guides/daemon.md).
+See [daemon.md](guides/integrations/daemon.md).
 
 ### Pool mode
 
 Which pool a run uses: **daemon** (one shared pool the background daemon owns
 across every workspace and client) or **proc** (a per-process pool for a single
-one-off invocation). See [daemon.md](guides/daemon.md).
+one-off invocation). See [daemon.md](guides/integrations/daemon.md).
 
 ### One-off
 
 A single `magus` invocation that runs a target and exits, using a per-process
 pool; the opposite of the long-lived daemon or a service. See
-[daemon.md](guides/daemon.md).
+[daemon.md](guides/integrations/daemon.md).
 
 ### Remote cache
 
 A CI-only backend that shares content-addressed artifacts across runners: a cold
 machine replays a build another runner already did instead of rebuilding. Every
 remote artifact must be signed by a trusted key. See
-[remote-cache.md](concepts/remote-cache.md).
+[remote-cache.md](concepts/cache/remote.md).
 
 ### Snapshot
 
 A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See [daemon.md](guides/daemon.md).
+metrics - as opposed to accumulated history. See [daemon.md](guides/integrations/daemon.md).
 
 ### Backfill
 
 The recent history the daemon replays to a dashboard on connect, so its charts
 start populated instead of empty. It is served from a bounded ring buffer of the
-last few hundred samples. See [daemon.md](guides/daemon.md).
+last few hundred samples. See [daemon.md](guides/integrations/daemon.md).
 
 ## Telemetry and health
 
@@ -198,7 +198,7 @@ about. See [telemetry.md](concepts/telemetry.md).
 
 The at-a-glance daemon state derived from the pool: **healthy** when the pool is
 reporting, **degraded** when it reports an error, **down** when there is no pool.
-The dashboard color-codes each state. See [daemon.md](guides/daemon.md).
+The dashboard color-codes each state. See [daemon.md](guides/integrations/daemon.md).
 
 ### Volatility
 
@@ -225,31 +225,31 @@ so it is the entry point an agent reads first. See
 ### Insight
 
 The reports magus derives over the graph and history (hotspots, affinity,
-ownership, trend). See [insight.md](guides/insight.md).
+ownership, trend). See [insight.md](concepts/knowledge/insight.md).
 
 ### Hotspot
 
 An insight lens: edit frequency times complexity, the prime refactoring targets.
 The project view heat-colors the dependency graph by churn; `--files` ranks
-individual files. See [insight.md](guides/insight.md).
+individual files. See [insight.md](concepts/knowledge/insight.md).
 
 ### Affinity
 
 An insight lens: projects that change together (temporal coupling). A pair that
 co-changes without either declaring a dependency on the other is a candidate
-architectural smell. See [insight.md](guides/insight.md).
+architectural smell. See [insight.md](concepts/knowledge/insight.md).
 
 ### Ownership
 
 An insight lens: author concentration - the primary author and their share, the
 distinct-author count (the bus factor), and abandonment. See
-[insight.md](guides/insight.md).
+[insight.md](concepts/knowledge/insight.md).
 
 ### Trend
 
 An insight lens: the recent half of the window against the earlier half. A
 positive delta is a rising hotspot; a negative one is cooling. See
-[insight.md](guides/insight.md).
+[insight.md](concepts/knowledge/insight.md).
 
 ### Diagnostic code
 

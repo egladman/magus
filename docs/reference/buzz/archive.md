@@ -41,3 +41,8 @@ Create an archive at dest from src (a file or directory). Format is inferred fro
 
 **Returns:** map[string]any
 
+## See also
+
+- [Standard library modules](index.md)
+- [`fs`](fs.md)
+- [`path`](path.md)

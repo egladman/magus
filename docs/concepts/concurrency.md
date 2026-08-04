@@ -35,7 +35,7 @@ runs targets concurrently where the graph allows. `magus\needs` edges order the 
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). When a daemon is present, that
 fan-out draws from **one shared concurrency pool** across every client
-([daemon](../guides/daemon.md)).
+([daemon](../guides/integrations/daemon.md)).
 
 All of this lives inside one process. It has no bearing on a _second_ `magus` you
 start in another terminal - the two invocations have separate graphs and separate
@@ -94,7 +94,7 @@ know why.
 
 ## Relationship to the daemon
 
-The [daemon](../guides/daemon.md) is the long-lived process that hosts the shared pool and
+The [daemon](../guides/integrations/daemon.md) is the long-lived process that hosts the shared pool and
 serves clients. When it is coordinating your work, it is the natural single point
 that knows what is running. The workspace lock is what protects the case the daemon
 does _not_ cover: two plain `magus` invocations with no daemon in the loop. The two
@@ -104,5 +104,5 @@ compose - the lock is the floor that holds even when nothing else is watching.
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [Daemon](../guides/daemon.md): the persistent process and the shared concurrency pool.
+- [Daemon](../guides/integrations/daemon.md): the persistent process and the shared concurrency pool.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.

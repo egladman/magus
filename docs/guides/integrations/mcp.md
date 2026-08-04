@@ -1,5 +1,6 @@
 ---
 title: MCP
+order: 2
 description: The magus daemon exposes a Model Context Protocol server over Streamable HTTP so AI agents and IDE plugins can call build tools directly.
 tags: [mcp, model-context-protocol, ai, agents, claude, codex, cursor, daemon, ide]
 aliases: [guides/mcp]
@@ -149,7 +150,7 @@ The endpoint requires a **bearer token**, and accepts two kinds:
 - **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph open --live`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
 - **Connector tokens** - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.
 
-Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized`. Manage them with:
+Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized` (see [MGS9001](../../reference/codes/auth/MGS9001.md) if a client reports this). Manage them with:
 
 ```text
 magus config mcp token print                     # show the cli token

@@ -3,6 +3,7 @@ title: Volatility
 description: How magus tells a volatile failure from a real regression using per-target history and a Wilson-score volatility rate, when it auto-retries, and the tools for chasing down a genuine intermittent break.
 tags: [volatile, volatility, retry, regression, bisect, race, ci, debugging]
 aliases: [flaky-builds]
+order: 14
 ---
 
 # Volatility
@@ -55,7 +56,7 @@ magus affected --bisect ./apps/myapp
 
 magus uses recorded outcomes to seed the known-good end (`--good` overrides it) and
 bisects the target across commits until it isolates the break. See
-[affected.md](../guides/affected.md#forensic-modes).
+[affected.md](workspace/affected.md#forensic-modes).
 
 ## Chasing a genuine intermittent break
 
@@ -85,6 +86,6 @@ surfaces retried and regression outcomes as GitHub Actions annotations.
 
 ## See also
 
-- [affected.md](../guides/affected.md) - the `--bisect` regression hunt.
+- [affected.md](workspace/affected.md) - the `--bisect` regression hunt.
 - [cache.md](cache.md) - why an under-declared input reads as volatility.
 - [debugging.md](../guides/debugging.md) - the interactive REPL and `magus\pry` breakpoints.

@@ -51,3 +51,9 @@ Parse an XML string into a node tree: each element becomes {"tag": name, "attrs"
 
 **Returns:** any
 
+## See also
+
+- [Standard library modules](index.md)
+- [`json`](json.md)
+- [`yaml`](yaml.md)
+- [`encoding`](encoding.md)

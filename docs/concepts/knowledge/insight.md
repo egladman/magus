@@ -3,6 +3,7 @@ title: Insight
 description: How magus reads VCS history to show where a codebase's attention and risk concentrate - hotspots, temporal coupling, ownership, and trend - as a behavioral complement to static structure.
 tags: [insight, vcs, history, hotspots, coupling, ownership, churn, analysis]
 aliases: [guides/insight, concepts/insight]
+order: 1
 ---
 
 # Insight
@@ -69,4 +70,4 @@ run.
 ## See also
 
 - [targets.md](../targets.md) - the dependency graph insight heat-colors.
-- [affected.md](../affected.md) - the other VCS-driven command, for building rather than analyzing.
+- [affected.md](../workspace/affected.md) - the other VCS-driven command, for building rather than analyzing.

@@ -12,6 +12,7 @@ tags:
     network,
     exec,
   ]
+order: 9
 ---
 
 # Sandbox model
@@ -185,4 +186,4 @@ Every sandbox violation maps to a boundary described above.
 - [operations.md](operations.md): the Operation and Target model whose declared footprint the sandbox confines.
 - [targets.md](targets.md): the workspace-scope "descend only, never ascend" rule and the resolved-path guarantee.
 - [config.md](../reference/config.md): the `sandbox.*` configuration keys (`enabled`, `allow`, `env.passthrough`).
-- [daemon.md](../guides/daemon.md): the long-running daemon, its declared workspaces, and the union-policy application MGS2010 guards.
+- [daemon.md](../guides/integrations/daemon.md): the long-running daemon, its declared workspaces, and the union-policy application MGS2010 guards.

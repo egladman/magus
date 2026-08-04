@@ -48,3 +48,47 @@ func TestModuleDocsUpToDate(t *testing.T) {
 			"orphaned doc %s: no module registers it; delete it (re-run magus-docs)", base)
 	}
 }
+
+// TestRenderModuleSeeAlso checks the "## See also" section every module page
+// ends with: a link back to the index, plus the module's curated siblings (or
+// just the index link when it has none). This is the fix for the link-audit
+// finding that every stdlib module page was a dead end with zero outbound
+// links.
+func TestRenderModuleSeeAlso(t *testing.T) {
+	byName := make(map[string]std.Module)
+	for _, m := range std.All() {
+		byName[m.Name] = m
+	}
+
+	fs, ok := byName["fs"]
+	require.True(t, ok, "fs module must be registered")
+	out := renderModule(fs)
+	assert.Contains(t, out, "## See also\n\n")
+	assert.Contains(t, out, "- [Standard library modules](index.md)\n")
+	assert.Contains(t, out, "- [`path`](path.md)\n")
+	assert.Contains(t, out, "- [`os`](os.md)\n")
+	assert.Contains(t, out, "- [`archive`](archive.md)\n")
+
+	// A module with no curated sibling (e.g. semver) still gets the index
+	// link and nothing else.
+	semver, ok := byName["semver"]
+	require.True(t, ok, "semver module must be registered")
+	out = renderModule(semver)
+	assert.True(t, strings.HasSuffix(out, "## See also\n\n- [Standard library modules](index.md)\n"),
+		"semver has no curated siblings; See also must end with just the index link, got:\n%s", out)
+}
+
+// TestModuleSiblingsReferenceRealModules guards against a typo in
+// moduleSiblings silently linking to a module page that does not exist.
+func TestModuleSiblingsReferenceRealModules(t *testing.T) {
+	byName := make(map[string]bool)
+	for _, m := range std.All() {
+		byName[m.Name] = true
+	}
+	for name, sibs := range moduleSiblings {
+		assert.True(t, byName[name], "moduleSiblings key %q is not a registered module", name)
+		for _, s := range sibs {
+			assert.True(t, byName[s], "moduleSiblings[%q] references unregistered module %q", name, s)
+		}
+	}
+}

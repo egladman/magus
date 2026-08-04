@@ -227,19 +227,89 @@ func writeFilesSectionMD(m *mdBuf) {
 	m.def(mdB(".magus-cache/"), mdEsc(filesCache))
 }
 
+// relatedCommands curates 2-4 genuinely related commands per subcommand, so a
+// page's See Also links somewhere a reader would actually go next instead of
+// repeating an identical, exhaustive 18-command list on every page (the
+// link-audit finding this fixes). Pairings are judged from each command's
+// purpose (see internal/manpage/registry.go's Short/Long text), not mirrored
+// mechanically - the relation need not be symmetric.
+var relatedCommands = map[string][]string{
+	"ls":         {"describe", "where", "x"},
+	"describe":   {"ls", "run", "graph"},
+	"run":        {"affected", "watch", "x", "describe"},
+	"x":          {"run", "where", "ls"},
+	"where":      {"x", "ls"},
+	"affected":   {"run", "describe", "status"},
+	"insight":    {"graph", "affected", "doctor"},
+	"graph":      {"describe", "insight"},
+	"watch":      {"run", "affected"},
+	"status":     {"server", "doctor"},
+	"doctor":     {"status", "affected", "init"},
+	"config":     {"init", "status"},
+	"server":     {"status", "watch"},
+	"completion": {"self", "init"},
+	"man":        {"completion", "self"},
+	"init":       {"config", "doctor"},
+	"self":       {"completion", "version", "init"},
+	"version":    {"self", "doctor"},
+}
+
+// conceptLink is one entry in commandConcepts: a concept page's display label
+// and its path relative to docs/reference/manpage/, matching the relative-link
+// style the rest of the docs corpus already uses for cross-links.
+type conceptLink struct {
+	label string
+	href  string
+}
+
+// commandConcepts curates the concept pages genuinely relevant to each
+// subcommand, rendered as a "Concepts" line after See Also (md format only -
+// roff has no equivalent section). A command absent here has no concept
+// pairing strong enough to be worth a link.
+var commandConcepts = map[string][]conceptLink{
+	"run":        {{"Targets", "../../concepts/targets.md"}, {"Charms", "../../concepts/charms.md"}, {"Cache", "../../concepts/cache.md"}},
+	"x":          {{"Targets", "../../concepts/targets.md"}},
+	"describe":   {{"Targets", "../../concepts/targets.md"}, {"Spells", "../../concepts/spells.md"}, {"Charms", "../../concepts/charms.md"}},
+	"affected":   {{"Affected", "../../concepts/workspace/affected.md"}, {"CI target", "../../concepts/targets/ci.md"}},
+	"watch":      {{"Affected", "../../concepts/workspace/affected.md"}},
+	"insight":    {{"Insight", "../../concepts/knowledge/insight.md"}, {"Volatility", "../../concepts/volatility.md"}},
+	"graph":      {{"Knowledge graph", "../../concepts/knowledge.md"}},
+	"ls":         {{"Workspace", "../../concepts/workspace.md"}},
+	"where":      {{"Workspace", "../../concepts/workspace.md"}},
+	"doctor":     {{"Workspace", "../../concepts/workspace.md"}},
+	"config":     {{"Workspace", "../../concepts/workspace.md"}},
+	"init":       {{"Workspace", "../../concepts/workspace.md"}},
+	"status":     {{"Concurrency", "../../concepts/concurrency.md"}},
+	"server":     {{"Daemon", "../../guides/integrations/daemon.md"}},
+}
+
 func writeSeeAlsoMD(m *mdBuf, currentName string) {
 	m.h2("See Also")
 	var refs []string
-	if currentName != "" {
-		refs = append(refs, fmt.Sprintf("[%s(1)](magus.md)", mdB("magus")))
-	}
-	for _, seg := range imanpage.All {
-		if seg.Name == currentName {
-			continue
+	if currentName == "" {
+		// The umbrella page (magus.md) IS the command index: keep the full
+		// list so every subcommand is reachable from it.
+		for _, seg := range imanpage.All {
+			refs = append(refs, fmt.Sprintf("[%s(1)](magus-%s.md)", mdB("magus-"+seg.Name), seg.Name))
 		}
-		refs = append(refs, fmt.Sprintf("[%s(1)](magus-%s.md)", mdB("magus-"+seg.Name), seg.Name))
+		m.p(strings.Join(refs, ", "))
+		return
+	}
+
+	refs = append(refs, fmt.Sprintf("[%s(1)](magus.md)", mdB("magus")))
+	for _, name := range relatedCommands[currentName] {
+		refs = append(refs, fmt.Sprintf("[%s(1)](magus-%s.md)", mdB("magus-"+name), name))
 	}
 	m.p(strings.Join(refs, ", "))
+
+	if concepts := commandConcepts[currentName]; len(concepts) > 0 {
+		m.h2("Concepts")
+		var links []string
+		for _, c := range concepts {
+			links = append(links, fmt.Sprintf("[%s](%s)", c.label, c.href))
+		}
+		m.p(strings.Join(links, ", "))
+	}
 }
 
 // flagLabelMD builds the Markdown definition-list term for a CLI flag.

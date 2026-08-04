@@ -49,3 +49,8 @@ Return the Markdown body with any leading YAML frontmatter block removed (the so
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`strings`](strings.md)
+- [`fmt`](fmt.md)

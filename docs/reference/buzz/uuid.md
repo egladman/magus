@@ -53,3 +53,7 @@ A cryptographically random URL-safe base64 token from n bytes of entropy (no pad
 
 **Returns:** string
 
+## See also
+
+- [Standard library modules](index.md)
+- [`crypto`](crypto.md)

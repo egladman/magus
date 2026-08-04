@@ -1,6 +1,6 @@
 ---
 title: Dependencies
-order: 6
+order: 3
 description: The two dependency mechanisms in magus - magus\needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.
 tags: [dependencies, needs, depends_on, cache, affected, cycles, magusfile]
 ---
@@ -10,7 +10,7 @@ tags: [dependencies, needs, depends_on, cache, affected, cycles, magusfile]
 magus has two dependency mechanisms that answer two different questions, and
 the story of how they interact is scattered today across getting-started
 (`needs`), [workspace.md](workspace.md) (`depends_on`), and
-[affected.md](../guides/affected.md) (the edges the affected closure walks). This page
+[affected.md](workspace/affected.md) (the edges the affected closure walks). This page
 owns that story end to end.
 
 ## The two mechanisms and the decision rule
@@ -22,7 +22,7 @@ owns that story end to end.
 - **`depends_on`** is project-level, declared in `magus\project`'s options
   map. It says "that project is upstream of me" - an ordering barrier for
   same-target runs, a seed for the affected closure, and an input to the
-  cache key. See [workspace.md](workspace.md#depends_on-cross-project-dependencies).
+  cache key. See [workspace.md](workspace.md#depends-on-cross-project-dependencies).
 
 **Rule of thumb:** reach for `needs` inside a magusfile to sequence work
 ("run `generate` before I `build`"); reach for `depends_on` to declare that
@@ -307,7 +307,7 @@ blocking on the service process itself. See
   `magus\project` options map it lives in.
 - [cache.md](cache.md): the cache key `dep:` lines and the granularity note
   this page's caching section builds on.
-- [affected.md](../guides/affected.md): the transitive closure these edges feed.
+- [affected.md](workspace/affected.md): the transitive closure these edges feed.
 - [The guided tour, step 7](../tour/index.html#step-7): the pattern forms above, runnable and
   editable in the browser - including the negation that keeps one member of a family
   out of its umbrella.

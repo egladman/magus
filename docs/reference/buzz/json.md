@@ -69,3 +69,10 @@ std\print(json\stringify(config, "  "));
 
 [^buzz-stdlib-json-parse]: `json\parse` is also in Buzz's standard library (`serialize.jsonDecode`); the magus form is sandbox-aware.
 [^buzz-stdlib-json-stringify]: `json\stringify` is also in Buzz's standard library (`serialize.jsonEncode`); the magus form is sandbox-aware.
+
+## See also
+
+- [Standard library modules](index.md)
+- [`yaml`](yaml.md)
+- [`toml`](toml.md)
+- [`http`](http.md)

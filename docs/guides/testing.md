@@ -1,5 +1,6 @@
 ---
 title: Testing
+order: 4
 description: How to test Buzz code in magus with the test primitive and the assert and suite libraries, and why not to test magusfiles.
 tags: [testing, buzz, assert, suite, spells, conventions]
 ---
@@ -143,3 +144,9 @@ s.it("reads the fixture", fun () > void {
     s.equal(handle.read(), "expected", "contents");
 });
 ```
+
+## See also
+
+- [Debugging](debugging.md) - drop into the REPL or step through a target when a test fails.
+- [Spells](../concepts/spells.md) - where logic worth testing usually lives, instead of in the magusfile.
+- [Buzz standard library](../reference/buzz/index.md) - the `assert` and `suite` modules, and everything else your tests can import.

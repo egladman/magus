@@ -13,6 +13,7 @@ tags:
     graphml,
     mcp,
   ]
+order: 17
 ---
 
 # Knowledge graph
@@ -172,6 +173,10 @@ magus insight ownership   # author concentration and bus factor
 magus explain <node>      # a node's edges and how many nodes reach it (blast radius)
 magus path <a> <b>        # the shortest edge chain between two nodes
 ```
+
+See [Insight](knowledge/insight.md) for the full command reference: how it reads
+VCS history through the graph, and hotspots, temporal coupling, ownership, and
+trend in more depth than the recipes above.
 
 **Which code lacks test coverage?** magus runs the tests, so it owns the coverage
 profile - a pure code-graph tool cannot answer this.
@@ -518,7 +523,7 @@ and [MGS7002](../reference/codes/knowledge/MGS7002.md) (a doc citing an unregist
 
 The MCP daemon exposes the verbs as tools: `magus_query`, `magus_explain`,
 `magus_path`, `magus_stats`, and `magus_refs` (plus `magus_output`, which retrieves a
-target's captured output by ref). See [MCP](../guides/mcp.md) for wiring. Prefer
+target's captured output by ref). See [MCP](../guides/integrations/mcp.md) for wiring. Prefer
 these over grep to find and relate magus-domain entities; start from the `MAGUS.md`
 routing table, which is already in context in a fresh clone.
 
@@ -537,7 +542,7 @@ target-first execution, generated-file triage, and graph-grounded refactoring.
 They ship with the binary and teach only the tool surface, so they stay current
 with the magus version rather than the workspace. Each installed file carries a
 version footer, and `magus graph verify --strict` reports actionable drift after
-an upgrade. See [Agents](../guides/agents.md) for the full host setup.
+an upgrade. See [Agents](../guides/integrations/agents.md) for the full host setup.
 
 ## Prior art
 

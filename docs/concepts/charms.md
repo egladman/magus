@@ -475,3 +475,4 @@ type Charm struct {
 - [targets.md](targets.md): what a Target is, and the CLI grammar charms attach to.
 - [spells.md](spells.md): what a Spell is, and [Spells vs Targets](spells.md#spells-vs-targets).
 - [modules/charm.md](../reference/buzz/charm.md): the generated `charm` module API reference.
+- [charm diagnostics](../reference/codes/charms/README.md): the coded errors a misapplied charm raises.

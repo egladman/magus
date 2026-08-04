@@ -58,9 +58,6 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **format**
 : Format source files in selected projects
 
-**security**
-: Run security scanners over selected projects (read-only)
-
 **clean**
 : Remove build artifacts from selected projects
 
@@ -134,5 +131,9 @@ magus run build -o jsonl --tee build.jsonl
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-graph**(1)](magus-graph.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-server**(1)](magus-server.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-affected**(1)](magus-affected.md), [**magus-watch**(1)](magus-watch.md), [**magus-x**(1)](magus-x.md), [**magus-describe**(1)](magus-describe.md)
+
+## Concepts
+
+[Targets](../../concepts/targets.md), [Charms](../../concepts/charms.md), [Cache](../../concepts/cache.md)
 
