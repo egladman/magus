@@ -218,6 +218,12 @@ deliberately instead:
   the wrong marker for an internal branch nobody should stop reaching. Do not mark
   code that merely LOOKS like a shim: resolving an old-width output ref is not
   compat, because attempt ids share that shape and there is nothing to rip out.
+- `TODO`, `FIXME`, and `BUG` comments are WELCOME and stay. Do not add `godox` (or
+  any linter that reports them) to `.golangci.yml`: a gate that fails because a
+  note exists is red by design, and banning the note does not do the work. This is
+  a standing decision, not an oversight - the `compat(until:)` marker above is the
+  one comment convention worth enforcing, and even it is served better by a
+  structural check than by keyword matching.
 
 ## Working style
 
