@@ -499,13 +499,32 @@
           "dependencies": [
             "lint",
             "build",
-            "test"
+            "test",
+            "completion-test"
           ]
         },
         {
           "name": "completion-test",
           "declared": "completion_test",
-          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell."
+          "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell.",
+          "spells": [
+            {
+              "spell": "docker",
+              "ops": [
+                "docker-run"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "hack/completion-checks/*"
+            },
+            {
+              "project": ".",
+              "glob": "cmd/magus/completions/*"
+            }
+          ]
         },
         {
           "name": "ci-shard",

@@ -128,11 +128,21 @@ fun build_date() > str {
     }
 }
 
+// built_by is the CI workflow that produced the binary, empty for a local build so
+// nothing claims a pedigree it does not have. It should match the job_workflow_ref a
+// keyless signature carries, which is what lets the claim be checked against proof.
+fun built_by() > str {
+    final ref = os\env("GITHUB_WORKFLOW_REF");
+    if (ref == null) { return ""; }
+    return "" + ref;
+}
+
 fun ld_flags() > str {
     return "-w -s"
         + " -X main.version=" + version()
         + " -X main.commit=" + commit()
-        + " -X main.buildDate=" + build_date();
+        + " -X main.buildDate=" + build_date()
+        + " -X main.builtBy=" + built_by();
 }
 
 // Compiles the version-stamped magus binary.
@@ -775,13 +785,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     if (ctx.has_charm("rw")) { return; }
 
     if (clean_before and vcs\isDirty()) {
-        // Name the files. Without them this reads "something drifted, go find it",
-        // which on a CI runner means reproducing the whole run locally to learn what
-        // a `git status` already knew - and a generate gate fires precisely when the
-        // person reading it does NOT have the tree in front of them. Diffed against
-        // HEAD rather than the base ref: the question is what THIS regeneration
-        // changed, not what the branch changed.
-        final changed = vcs\diff("HEAD");
+        // dirtyFiles, not a shell-out and not vcs.diff: magus already knows which files
+        // moved, and the gate fires exactly when its reader has a CI log instead of the
+        // tree. Not diagnoseDrift either - that classifies against a target's DECLARED
+        // outputs and inputs, and this gate is whole-tree by design (it composes every
+        // *-generate target), so with no inputs to compare it would always land on the
+        // dev-build verdict and tell an author their own uncommitted output was "not
+        // your change".
+        final changed = vcs\dirtyFiles();
         var detail = "";
         if (changed.len() > 0) { detail = ": " + changed.join(", "); }
         throw "generate: regeneration changed generated files; re-run "
@@ -1209,13 +1220,15 @@ export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate);
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test);
+    ctx.needs(lint, build, test, completion_test);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
-// shell. Not part of ci: it needs a docker daemon, and a gate that silently skips when a
-// tool is missing is how the zsh recipe stayed broken - it told users to append a script
-// to ~/.zshrc that registers nothing, and nothing ever ran it to find out.
+// shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one:
+// a gate that silently skips when a tool is missing is how the zsh recipe stayed broken
+// - it told users to append a script to ~/.zshrc that registers nothing, and nothing
+// ever ran it to find out. Its declared footprint keeps the cost off every run: affected
+// only reaches it when the completion scripts or their checks change.
 //
 // One image per shell, pinned to a major-version tag, and nothing is installed into any
 // of them: each image already carries its shell. There is no magus binary inside, so the
@@ -1228,6 +1241,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
 export fun completion_test(ctx: magus\Context, args: [str]) > void {
+    // Declared so `magus affected` knows when this matters. Without it CI had to
+    // re-derive the same answer with a git-diff grep in the workflow.
+    ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
     try {
         os\which("docker");
     } catch (e) {
@@ -1239,8 +1255,11 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void {
         "bash:5": "bash hack/completion-checks/bash.sh",
         "mcr.microsoft.com/dotnet/sdk:8.0": "pwsh -NoProfile -File hack/completion-checks/pwsh.ps1",
     };
+    final root = vcs\root();
     foreach (image, cmd in checks) {
-        os\execSh("docker run --rm -v \"$PWD\":/w -w /w " + image + " " + cmd);
+        var argv = mut ["-v", root + ":/w", "-w", "/w", image];
+        foreach (part in cmd.split(" ")) { argv.append(part); }
+        docker["docker-run"](ctx, {"args": argv});
     }
 }
 
