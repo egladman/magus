@@ -48,6 +48,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		printURL    bool
 		viewerBase  string
 		attempts    bool
+		meta        bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
@@ -58,9 +59,10 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&printURL, "print", false, "with --open, print the viewer URL instead of launching a browser")
 		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
 		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
+		fs.BoolVar(&meta, "meta", false, "with `output <ref>`, show the run's identity instead of its output: descriptor, lineage, cache key, component digests")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -74,6 +76,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s the descriptor + output as a record\n", clihint.QueryOutput.With("out1a2b3c", "-o json"))
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", clihint.QueryOutput.With("out1a2b3c", "--open"))
 			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored executions\n", clihint.QueryOutput.With("out1a2b3c", "--attempts"))
+			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", clihint.QueryOutput.With("out1a2b3c", "--meta"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--open respects the BROWSER environment variable to pick the browser")
 			fmt.Fprintln(os.Stderr, "(e.g. BROWSER=firefox); otherwise it uses your desktop's default handler.")
@@ -103,16 +106,22 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if oerr != nil {
 			return oerr
 		}
-		if attempts && (open || printURL) {
-			fmt.Fprintf(os.Stderr, "magus query output: --attempts lists executions and cannot combine with --open/--print\n")
+		exclusive := 0
+		for _, set := range []bool{attempts, meta, open || printURL} {
+			if set {
+				exclusive++
+			}
+		}
+		if exclusive > 1 {
+			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, and --open/--print are distinct views; pick one\n")
 			return errSilent{exitCode: 2}
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, out: outOpts})
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, out: outOpts})
 	}
-	if open || printURL || attempts {
-		// --open/--print/--attempts only apply to `query output <ref>`. Set on a graph search,
-		// they were a mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
+	if open || printURL || attempts || meta {
+		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
+		// search, they were a mistake; stop rather than silently ignore them.
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -169,6 +178,7 @@ type outputRefOpts struct {
 	printURL   bool          // with open, print the URL instead of launching a browser
 	viewerBase string        // log viewer base URL
 	attempts   bool          // list the ref's stored executions instead of printing output
+	meta       bool          // show the run's identity (descriptor, lineage, key digests)
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
@@ -192,6 +202,9 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	}
 	if o.attempts {
 		return listOutputAttempts(m, ref, o.out)
+	}
+	if o.meta {
+		return showOutputMeta(m, ref, o.out)
 	}
 	if o.open {
 		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
@@ -254,6 +267,94 @@ func listOutputAttempts(m *magus.Magus, ref string, out OutputOptions) error {
 	// for reaching an OLDER one.
 	if len(list) > 1 {
 		fmt.Printf("\nRetrieve one attempt's exact output: %s\n", clihint.QueryOutput.With(list[len(list)-1].Attempt))
+	}
+	return nil
+}
+
+// outputMetaRecord is the -o json/yaml projection of `query output <ref> --meta`: the
+// stored descriptor, the producing invocation's lineage when its run log survives, and
+// the cache key's component-class digests when the run persisted its key lines.
+type outputMetaRecord struct {
+	cache.OutputDescriptor
+	Invocation   *journal.Invocation `json:"invocation,omitempty"`
+	ClassDigests []cache.ClassDigest `json:"class_digests,omitempty"`
+}
+
+// showOutputMeta renders a stored run's IDENTITY rather than its output: what ran,
+// how it ended, which invocation produced it, and the digests of its cache key's
+// component classes - the machine-comparable half of the works-on-my-machine story
+// (two machines compare digests to learn WHICH class disagrees; `describe target
+// --cache --against` then names the exact line).
+func showOutputMeta(m *magus.Magus, ref string, out OutputOptions) error {
+	desc, err := m.OutputDescriptorByRef(ref)
+	if err != nil {
+		return reportRefLookupError(ref, err)
+	}
+	var digests []cache.ClassDigest
+	lines, lerr := m.OutputKeyLines(ref)
+	switch {
+	case lerr == nil:
+		digests = cache.ClassDigests(lines)
+	case !errors.Is(lerr, fs.ErrNotExist):
+		// Absent lines are ordinary (a run predating persistence); anything else is a
+		// real read failure and must not masquerade as one.
+		return fmt.Errorf("magus query output: read stored key lines for %s: %w", ref, lerr)
+	}
+	var inv *journal.Invocation
+	if desc.Inv != "" {
+		if got, ierr := m.InvocationByID(desc.Inv); ierr == nil {
+			inv = &got
+		}
+	}
+	switch out.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(out, outputMetaRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
+	case outputName:
+		fmt.Println(desc.Ref)
+		return nil
+	}
+	fmt.Printf("ref:     %s\n", desc.Ref)
+	fmt.Printf("project: %s\n", desc.Project)
+	if desc.Target != "" {
+		fmt.Printf("target:  %s\n", desc.Target)
+	}
+	status := "pass"
+	if desc.Failed {
+		status = "fail"
+	}
+	fmt.Printf("status:  %s (%s) at %s\n", status,
+		(time.Duration(desc.DurationMs) * time.Millisecond).Round(time.Millisecond),
+		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
+	if desc.ErrMsg != "" {
+		fmt.Printf("error:   %s\n", desc.ErrMsg)
+	}
+	if desc.Attempt != "" {
+		fmt.Printf("attempt: %s\n", desc.Attempt)
+	}
+	if desc.Inv != "" {
+		fmt.Printf("inv:     %s", desc.Inv)
+		if inv != nil && len(inv.Command.Arguments) > 0 {
+			fmt.Printf("  (magus %s)", strings.Join(inv.Command.Arguments, " "))
+		}
+		fmt.Println()
+	}
+	if desc.Key != "" {
+		fmt.Printf("key:     %s (keyVersion %d)\n", desc.Key, desc.KeyVersion)
+	}
+	if desc.MagusVersion != "" {
+		fmt.Printf("magus:   %s\n", desc.MagusVersion)
+	}
+	if len(digests) == 0 {
+		fmt.Println("\nkey components: unavailable (run predates key-line persistence; re-run the target to record them)")
+		return nil
+	}
+	fmt.Println("\nkey components:")
+	for _, d := range digests {
+		noun := "lines"
+		if d.Count == 1 {
+			noun = "line"
+		}
+		fmt.Printf("  %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
 	}
 	return nil
 }

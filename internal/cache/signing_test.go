@@ -201,7 +201,7 @@ func TestHashStep_SpellDefVersion(t *testing.T) {
 	assert.NotEqual(t, h0, h2, "empty and second SpellDefVersion must hash differently")
 }
 
-// TestHashStep_KeyVersionIsHashed verifies that keyVersion is mixed into the
+// TestHashStep_KeyVersionIsHashed verifies that KeyVersion is mixed into the
 // hash: the hash of a fixed Step is stable across calls (deterministic) and
 // non-empty, confirming the format-version prefix is always written.
 func TestHashStep_KeyVersionIsHashed(t *testing.T) {
@@ -217,10 +217,10 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 
 	assert.Equal(t, h1, h2, "hashStep not deterministic")
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
-	// The current keyVersion is always mixed in; bumping it must change the
+	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
 	const wantKeyVersion = 3
-	assert.Equal(t, wantKeyVersion, keyVersion, "keyVersion changed; update this test when bumping")
+	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 
 // TestHashStep_ToolVersionsChangeMisses verifies that two Steps differing only
@@ -272,7 +272,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 
 	// Reconstruct the expected byte stream independently, in hashStep's field order.
 	var want bytes.Buffer
-	fmt.Fprintf(&want, "keyVersion:%d\n", keyVersion)
+	fmt.Fprintf(&want, "keyVersion:%d\n", KeyVersion)
 	want.WriteString("projectPath:pkg/x\n")
 	want.WriteString("target:build\n")
 	want.WriteString("charm:race\n")

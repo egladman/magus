@@ -156,6 +156,24 @@ func (m *Magus) OutputAttempts(ref string) ([]cache.OutputDescriptor, error) {
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).Attempts(ref)
 }
 
+// OutputDescriptorByRef resolves a ref to just its stored descriptor, without reading
+// the output blob. The metadata views (`query output <ref> --meta`, `describe target
+// --cache --against <ref>`) want the identity, not the bytes, and a captured log can
+// be large.
+func (m *Magus) OutputDescriptorByRef(ref string) (cache.OutputDescriptor, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).DescriptorByRef(ref)
+}
+
+// OutputKeyLines returns the pre-hash key lines stored behind ref - the deterministic
+// label:value lines hashStep consumed to mint the step's cache key, secret-redacted at
+// write. They are the explanation surface for `magus query output <ref> --meta`
+// (component-class digests) and `describe target --cache --against <ref>` (the exact
+// disagreeing line). Returns fs.ErrNotExist when the ref resolves but the run predates
+// key-line persistence.
+func (m *Magus) OutputKeyLines(ref string) ([]string, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).KeyLinesByRef(ref)
+}
+
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
 // lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when

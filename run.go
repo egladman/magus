@@ -416,6 +416,39 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	return step
 }
 
+// ComputeTargetKey computes target's live cache key and the pre-hash key lines behind
+// it for the project at projectPath, without executing anything. The step is keyed
+// exactly as a run with these charms would key it - spell claims, tool versions and
+// the env allowlist all included - so the returned key equals the one a real run
+// mints, and PortableRef of it equals the ref that run would print. Only args after
+// `--` are absent (this is not a run, so there are none). It is the live half of the
+// works-on-my-machine diff: `describe target --cache` compares these lines against
+// the set stored behind a ref. Returns types.ErrNoCache on an Inspect workspace.
+func (m *Magus) ComputeTargetKey(ctx context.Context, projectPath, target string, charms []string) (key string, lines []string, err error) {
+	if m.cache == nil {
+		return "", nil, types.ErrNoCache
+	}
+	p := m.Get(projectPath)
+	if p == nil {
+		return "", nil, fmt.Errorf("magus: compute target key: unknown project %q", projectPath)
+	}
+	step := m.buildStep(p, target)
+	applyRunKeying(&step, m.toolVersionsByProject(ctx, []*types.Project{p})[p.Path], charms)
+	return m.cache.StepKey(ctx, &step)
+}
+
+// applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
+// buildStep: resolved tool versions and the active charm set (sorted and deduped, so
+// charm order never forks a key). Both the scheduler and ComputeTargetKey go through
+// it, so `describe target --cache` cannot silently drift from the key a real run
+// mints when a new key-relevant field is added here.
+func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
+	step.ToolVersions = toolVersions
+	ck := slices.Clone(charms)
+	slices.Sort(ck)
+	step.Charms = slices.Compact(ck)
+}
+
 // outputWatchDirs are the base directories the race detector and the race-replay
 // snapshots must watch for one target: the project-wide Outputs plus every per-target
 // glob declared via ctx.writesFiles, each already resolved to an absolute directory. It keeps
@@ -662,9 +695,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Active charms participate in the cache key: a charm can change a target's
 	// behaviour (pass/fail or output), so charm-variant runs must not collide.
 	// A charm-less run hashes identically to before, keeping existing entries valid.
-	charmKey := slices.Clone(opts.Charms)
-	slices.Sort(charmKey)
-	charmKey = slices.Compact(charmKey)
+	// Normalized by applyRunKeying below, shared with ComputeTargetKey.
+	charmKey := opts.Charms
 
 	var steps []cache.Step
 	byPath := make(map[string]*types.Project)
@@ -679,8 +711,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		for _, p := range st.projects {
 			step := m.buildStep(p, st.target)
-			step.ToolVersions = toolVer[p.Path]
-			step.Charms = charmKey
+			applyRunKeying(&step, toolVer[p.Path], charmKey)
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.

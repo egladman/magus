@@ -45,7 +45,7 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	assert.Equal(t, OutputDescriptor{
 		Ref: ref, Project: "svc/api", Target: "test",
 		Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200,
-		Schema: descriptorSchema, Key: "deadbeefcafef00d", KeyVersion: keyVersion,
+		Schema: descriptorSchema, Key: "deadbeefcafef00d", KeyVersion: KeyVersion,
 		Attempt: desc.Attempt,
 	}, desc)
 }
@@ -265,11 +265,11 @@ func TestPrePortableStoreResolves(t *testing.T) {
 	assert.Equal(t, oldRef, desc.Ref)
 	assert.Zero(t, desc.Schema)
 
-	data, _, err = s.ByRef(portableRef(key)) // the step-level ref the same key mints today
+	data, _, err = s.ByRef(PortableRef(key)) // the step-level ref the same key mints today
 	require.NoError(t, err)
 	assert.Equal(t, "legacy bytes\n", string(data))
 
-	assert.Equal(t, portableRef(key), s.StepRef(key), "a pre-portable dir already answers with the portable ref")
+	assert.Equal(t, PortableRef(key), s.StepRef(key), "a pre-portable dir already answers with the portable ref")
 
 	attempts, err := s.Attempts(oldRef)
 	require.NoError(t, err)

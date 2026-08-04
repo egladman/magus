@@ -82,7 +82,7 @@ type OutputDescriptor struct {
 	// execution-unique file stem and these fields are empty.
 	Schema       int    `json:"schema,omitempty"`
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
-	KeyVersion   int    `json:"key_version,omitempty"` // hashStep keyVersion that produced Key
+	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 }
@@ -135,13 +135,14 @@ func NewOutputStore(cacheDir string) *OutputStore {
 // outputsDir is where the per-execution blobs live: <cacheDir>/outputs.
 func (s *OutputStore) outputsDir() string { return filepath.Join(s.cacheDir, "outputs") }
 
-// portableRef derives the user-facing reference id from the cache key alone:
+// PortableRef derives the user-facing reference id from the cache key alone:
 // RefPrefix + the key's first refHexLen hex digits. Same inputs -> same key -> same
 // ref on every machine, so an inspect line from CI or a teammate's terminal resolves
 // locally, and two machines printing DIFFERENT refs for one target proves their
 // inputs differ. The ref names the STEP (the outputs/<cacheKey>/ directory);
-// execution-level identity lives a level down in attempt ids.
-func portableRef(cacheKey string) string {
+// execution-level identity lives a level down in attempt ids. Exported so the CLI
+// can predict the ref a computed-but-not-yet-run key would print.
+func PortableRef(cacheKey string) string {
 	if len(cacheKey) < refHexLen {
 		return RefPrefix + cacheKey
 	}
@@ -176,10 +177,10 @@ const (
 // id that names the files just written. Best-effort at the call site: on error the caller keeps
 // the run's own outcome.
 func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (OutputDescriptor, error) {
-	d.Ref = portableRef(cacheKey)
+	d.Ref = PortableRef(cacheKey)
 	d.Schema = descriptorSchema
 	d.Key = cacheKey
-	d.KeyVersion = keyVersion
+	d.KeyVersion = KeyVersion
 	d.Attempt = s.mintAttempt(cacheKey)
 	d.MagusVersion = types.MagusVersionFromContext(ctx)
 	dir := filepath.Join(s.outputsDir(), cacheKey)
@@ -234,7 +235,7 @@ func (s *OutputStore) StepRef(cacheKey string) string {
 	}
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), outExt) {
-			return portableRef(cacheKey)
+			return PortableRef(cacheKey)
 		}
 	}
 	return ""
@@ -560,7 +561,7 @@ func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 		}
 		d, derr := readDescriptor(filepath.Join(dir, stem+descExt))
 		if derr != nil {
-			d = OutputDescriptor{Ref: portableRef(filepath.Base(dir))}
+			d = OutputDescriptor{Ref: PortableRef(filepath.Base(dir))}
 			if info, ierr := f.Info(); ierr == nil {
 				d.TimestampMs = info.ModTime().UnixMilli()
 			}
@@ -730,6 +731,19 @@ func (s *OutputStore) removeForProject(project string) {
 			_ = os.Remove(dir)
 		}
 	}
+}
+
+// DescriptorByRef resolves a ref (or unique prefix) to its stored descriptor alone,
+// without reading the output blob - the identity views (`--meta`, `--against`) want
+// the metadata, and a captured log can be large. A resolvable ref whose descriptor is
+// missing or unreadable yields the error, unlike ByRef, which still has bytes to
+// return and so degrades to a zero descriptor.
+func (s *OutputStore) DescriptorByRef(ref string) (OutputDescriptor, error) {
+	path, err := s.resolveRef(ref)
+	if err != nil {
+		return OutputDescriptor{}, err
+	}
+	return readDescriptor(descriptorPath(path))
 }
 
 // ByRef resolves a ref (or unique prefix) to the target's VERBATIM captured output bytes plus

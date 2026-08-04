@@ -19,19 +19,29 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// keyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
-const keyVersion = 3
+// KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
+const KeyVersion = 3
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
+	return c.hashStepLines(ctx, s, nil)
+}
+
+// hashStepLines is hashStep with an optional collector: when lines is non-nil, every
+// pre-hash key line (sans trailing newline) is appended to it in hash order. The
+// collected lines are the key's EXPLANATION - what `describe target --cache` diffs and
+// what the output store persists beside a step's attempts - so they must stay
+// byte-identical to what the hash consumed; collecting inside the same writeLine keeps
+// that true by construction. The nil path adds no allocations to the hot path.
+func (c *Cache) hashStepLines(ctx context.Context, s *Step, lines *[]string) (string, error) {
 	h := sha256.New()
 
 	// Build each key line in a reused scratch buffer and write it straight to the
 	// hash. This avoids fmt.Fprintf's format-string parsing and per-line interface
 	// boxing (~1 alloc/line) on the cache-key hot path; the byte layout is byte-for-
 	// byte identical to the prior fmt formatting, so existing cache keys stay valid
-	// and keyVersion need not change.
+	// and KeyVersion need not change.
 	//
 	// optimization: fmt.Fprintf -> append+Write on the key serialization path.
 	// BenchmarkHashStep (200 deps/40 env/20 tools): -41% sec/op (71.6µ->42.1µ),
@@ -46,12 +56,18 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 		}
 		buf = append(buf, '\n')
 		_, _ = h.Write(buf)
+		if lines != nil {
+			*lines = append(*lines, string(buf[:len(buf)-1]))
+		}
 	}
 
 	buf = append(buf, "keyVersion:"...)
-	buf = strconv.AppendInt(buf, keyVersion, 10)
+	buf = strconv.AppendInt(buf, KeyVersion, 10)
 	buf = append(buf, '\n')
 	_, _ = h.Write(buf)
+	if lines != nil {
+		*lines = append(*lines, string(buf[:len(buf)-1]))
+	}
 
 	writeLine("projectPath:", s.ProjectPath)
 	if s.Target != "" {
@@ -64,7 +80,7 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	}
 	// Same reasoning as charms, and the same empty-adds-nothing property: a run
 	// with no extra args hashes exactly as before, so this does not invalidate a
-	// single existing cache entry and keyVersion need not change.
+	// single existing cache entry and KeyVersion need not change.
 	for _, a := range s.ExtraArgs {
 		writeLine("arg:", a)
 	}
@@ -126,6 +142,17 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 	result := hex.EncodeToString(h.Sum(nil))
 
 	return result, nil
+}
+
+// StepKey computes s's cache key plus the pre-hash key lines behind it, without
+// executing or storing anything. It is the SDK seam for the live half of the
+// works-on-my-machine diff: `describe target --cache` keys the step exactly as a run
+// would, then compares these lines against the set stored behind a ref. The returned
+// key is what portable refs truncate, so callers can also predict the ref a run of
+// this step would print.
+func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []string, err error) {
+	key, err = c.hashStepLines(ctx, s, &lines)
+	return key, lines, err
 }
 
 // hashFiles returns one sha256 per file: mtime fast-path → io_uring (Linux) → goroutine pool.

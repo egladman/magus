@@ -57,6 +57,8 @@ refactor` always searches the graph.
   status, duration) plus the output as one record; `-o yaml` too.
 - `magus query output ref1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
 - `magus query output out1a2b3c --attempts` - list the ref's stored executions.
+- `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
+  cache key, and per-class key digests.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.
@@ -85,6 +87,40 @@ magus query output outa1b2c3d4e5f6 --attempts
 lists them newest first (attempt id, pass/fail, duration, time, invocation id). The
 bare ref always answers with the newest execution; pass a full attempt id to
 `magus query output` to retrieve an older one's exact bytes.
+
+### Explaining a ref difference
+
+Because the ref is the key, "different ref" means "different inputs" - and magus can
+name the input. Each run stores the deterministic label:value lines its key was
+hashed from (secret-redacted), so:
+
+```sh
+magus query output out4ef30de6abcd --meta
+```
+
+shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
+compact enough to compare across machines to learn WHICH class disagrees - and
+
+```sh
+magus describe target build . --cache --against out4ef30de6abcd
+```
+
+computes the key a run would mint RIGHT NOW (without running anything) and diffs it
+against the stored lines behind the ref, printing the exact line that drifted: the
+edited source file with old and new content hash, the changed env var, the bumped
+tool version. `--cache` alone shows the live key, the ref a run would print, and the
+class digests. This is the works-on-my-machine debugging story: paste CI's ref into
+`--against` and read off what your machine disagrees about.
+
+The verdict is key equality, not the line list, and a mismatch exits non-zero so a
+script can gate on it. CI runs with `--no-default-charms`, so pass that flag too when
+comparing against a CI ref - otherwise your local `default_charms` show up as the
+difference.
+
+Env values never reach the store: a key line's value is replaced by a short digest
+(`env:TOKEN=sha256:...`) before it is written or printed, on both sides of the diff.
+The digest still changes when the value does, so a drifted variable is named without
+its contents being shown.
 
 For the LATEST log of a project or target (rather than a specific past execution),
 [`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.

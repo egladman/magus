@@ -568,6 +568,29 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		} else {
 			ref = stored.Ref
 		}
+		// Persist the key's pre-hash lines beside the attempts - the explanation
+		// `--meta` and `describe target --cache --against` diff. Recomputed (cheap:
+		// source hashing is mtime-cached) rather than threaded from Run, and only
+		// written when the recomputed key still equals the one being recorded, so a
+		// source edited mid-run can never store lines that misdescribe the key.
+		var lines []string
+		switch h2, lerr := c.hashStepLines(ctx, &s, &lines); {
+		case lerr != nil:
+			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+				fmt.Sprintf("key lines for %s (%s): %v", s.ProjectPath, shortHash(hash), lerr)))
+		case h2 != hash:
+			// A source changed while the target ran, so these lines describe a
+			// DIFFERENT key. Storing them would make a later --against blame the wrong
+			// input; say so instead of dropping it silently.
+			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+				fmt.Sprintf("key lines for %s skipped: inputs changed during the run (%s -> %s)",
+					s.ProjectPath, shortHash(hash), shortHash(h2))))
+		default:
+			if perr := c.outputs.PersistKeyLines(ctx, hash, lines); perr != nil {
+				c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+					fmt.Sprintf("persist key lines for %s (%s): %v", s.ProjectPath, shortHash(hash), perr)))
+			}
+		}
 	}
 
 	// Stream the result event to the capture logger (invocation log / live viewer), carrying
