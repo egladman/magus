@@ -33,5 +33,18 @@ var jitRuns atomic.Int64
 // JITRunCount returns the number of native JIT entries so far.
 func JITRunCount() int64 { return jitRuns.Load() }
 
-// ResetJITStats zeroes the JIT engagement counter (test helper).
-func ResetJITStats() { jitRuns.Store(0) }
+// jitDeopts counts how many native runs handed control back to the interpreter
+// mid-chunk. Engagement alone does not prove a backend COMPILED the arithmetic in
+// a program: a backend that declines a shape still enters native code and then
+// deopts, so a purely run-count assertion passes either way. Tests use this to pin
+// which shapes each backend actually computes natively.
+var jitDeopts atomic.Int64
+
+// JITDeoptCount returns the number of deopts back to the interpreter so far.
+func JITDeoptCount() int64 { return jitDeopts.Load() }
+
+// ResetJITStats zeroes the JIT counters (test helper).
+func ResetJITStats() {
+	jitRuns.Store(0)
+	jitDeopts.Store(0)
+}

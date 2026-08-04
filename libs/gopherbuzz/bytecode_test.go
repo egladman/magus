@@ -3,8 +3,11 @@ package buzz
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1562,4 +1565,344 @@ func trimSpace(s string) string {
 		j--
 	}
 	return s[i:j]
+}
+
+// assertJITComputesNatively runs src with the JIT on and requires that it engaged
+// AND never handed back to the interpreter. This is the assertion TestJITMatches-
+// Interpreter cannot make: a backend that declines a shape still enters native code
+// and then deopts, so the differential test passes whether the arithmetic was
+// compiled or merely attempted. The result is still checked against the interpreter.
+func assertJITComputesNatively(t *testing.T, src string) {
+	t.Helper()
+	assertJITMatchesInterp(t, src) // same result, and the JIT engaged
+	if !vmpackage.JITAvailable() {
+		t.Skip("no native JIT backend on this arch")
+	}
+	require.Zero(t, vmpackage.JITDeoptCount(),
+		"deopted to the interpreter: this backend does not compile the shape natively")
+}
+
+// TestJITComputesNatively pins the set of shapes a backend compiles rather than
+// declines, so a backend silently narrowing cannot pass unnoticed. It is the guard
+// on arm64 reaching amd64 parity: before the float path existed there, every one of
+// the float and div/mod cases below deopted, and the differential suite still went
+// green because deopting produces the right answer, just slowly.
+func TestJITComputesNatively(t *testing.T) {
+	t.Run("int_add_sub_mul", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0; var i = 0;
+			while (i < 100) { s = s + i * 2 - 1; i = i + 1; } return s;`)
+	})
+	t.Run("int_div", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0; var i = 1;
+			while (i < 100) { s = s + 1000 / i; i = i + 1; } return s;`)
+	})
+	t.Run("int_mod", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0; var i = 1;
+			while (i < 100) { s = s + i % 7; i = i + 1; } return s;`)
+	})
+	// arm64 has no integer remainder instruction, so the backend open-codes
+	// rem = left - (left/right)*right. Truncating division gives the remainder the
+	// DIVIDEND's sign, matching amd64's IDIV/RDX; nothing above would notice if a
+	// sign flipped, because every operand there is positive.
+	t.Run("int_div_mod_negative_operands", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0; var i = 1;
+			while (i < 50) {
+			  s = s + (0 - 1000) / i + (0 - 1000) % i;
+			  s = s + 1000 / (0 - i) + 1000 % (0 - i);
+			  s = s + (0 - 1000) / (0 - i) + (0 - 1000) % (0 - i);
+			  i = i + 1;
+			}
+			return s;`)
+	})
+	t.Run("float_negative_operands", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0.0; var i = 1.0;
+			while (i < 50.0) {
+			  s = s + (0.0 - 1000.0) / i - i * (0.0 - 2.5);
+			  if ((0.0 - i) < 0.0) { s = s + 1.0; }
+			  if ((0.0 - i) >= 0.0 - 50.0) { s = s - 0.5; }
+			  i = i + 1.0;
+			}
+			return s;`)
+	})
+	t.Run("int_cmp", func(t *testing.T) {
+		assertJITComputesNatively(t, `var c = 0; var i = 0;
+			while (i < 100) { if (i >= 50) { c = c + 1; } i = i + 1; } return c;`)
+	})
+	t.Run("float_add_sub_mul", func(t *testing.T) {
+		assertJITComputesNatively(t, `var s = 0.0; var i = 0.0;
+			while (i < 100.0) { s = s + i * 2.0 - 1.0; i = i + 1.0; } return s;`)
+	})
+	t.Run("float_div", func(t *testing.T) {
+		assertJITComputesNatively(t, `var x = 1048576.0; var i = 0.0;
+			while (i < 15.0) { x = x / 2.0; i = i + 1.0; } return x;`)
+	})
+	t.Run("float_cmp", func(t *testing.T) {
+		assertJITComputesNatively(t, `var c = 0.0; var i = 0.0;
+			while (i < 100.0) { if (i >= 50.0) { c = c + 1.0; } i = i + 1.0; } return c;`)
+	})
+	t.Run("mixed_int_float_promotion", func(t *testing.T) {
+		assertJITComputesNatively(t, `var acc = 0.0; var px = 0;
+			while (px < 100) { acc = acc + (px * 0.0125 - 1.5); px = px + 1; } return acc;`)
+	})
+	t.Run("mandelbrot", func(t *testing.T) {
+		assertJITComputesNatively(t, `var checksum = 0; var py = 0;
+			while (py < 20) {
+			  var px = 0;
+			  while (px < 20) {
+			    var x0 = px * 0.0625 - 1.5; var y0 = py * 0.05 - 1.0;
+			    var zx = 0.0; var zy = 0.0; var iter = 0;
+			    while (iter < 50 and zx * zx + zy * zy <= 4.0) {
+			      var tmp = zx * zx - zy * zy + x0; zy = 2.0 * zx * zy + y0; zx = tmp; iter = iter + 1;
+			    }
+			    checksum = checksum + iter; px = px + 1;
+			  }
+			  py = py + 1;
+			}
+			return checksum;`)
+	})
+}
+
+// TestJITDeoptsOnRuntimeError pins the cases both backends must DECLINE, so the
+// interpreter is the one that raises the error. Getting these wrong is the
+// dangerous direction: a backend that computed through a zero divisor would return
+// a value where the language requires an error.
+func TestJITDeoptsOnRuntimeError(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"int_div_by_zero", `var d = 0; var i = 0;
+			while (i < 5) { i = i + 1; } return 10 / d;`},
+		{"int_mod_by_zero", `var d = 0; var i = 0;
+			while (i < 5) { i = i + 1; } return 10 % d;`},
+		{"float_div_by_zero", `var d = 0.0; var i = 0.0;
+			while (i < 5.0) { i = i + 1.0; } return 10.0 / d;`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, wantErr := runProgJIT(t, c.src, false)
+			require.Error(t, wantErr, "interpreter must raise")
+			vmpackage.ResetJITStats()
+			_, gotErr := runProgJIT(t, c.src, true)
+			require.Error(t, gotErr, "JIT must surface the same error, not compute a value")
+			require.Equal(t, wantErr.Error(), gotErr.Error(), "jit vs interp error")
+			if !vmpackage.JITAvailable() {
+				return
+			}
+			// Without these the test passes on a backend that never engaged, which is
+			// the same blind spot TestJITComputesNatively exists to close: the error
+			// has to come from the interpreter AFTER a native run declined the shape,
+			// not from the JIT having sat out entirely.
+			require.NotZero(t, vmpackage.JITRunCount(), "JIT did not engage")
+			require.NotZero(t, vmpackage.JITDeoptCount(), "JIT computed through the error instead of deopting")
+		})
+	}
+}
+
+// TestJITBackendPresence pins the build-tag algebra: exactly the architectures with
+// a backend file must report a backend, on every OS. Without it the tag expressions
+// are only ever checked by whether the package compiles, and a stub silently
+// selected on an arch that has real codegen looks identical to a pass - every JIT
+// test would skip and the suite would go green having run nothing. That matters most on
+// the CI legs added for Windows, where a silently-selected stub would leave the
+// whole suite skipping and the job green having run nothing.
+func TestJITBackendPresence(t *testing.T) {
+	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go.
+	backends := map[string]bool{"amd64": true, "arm64": true}
+	want := backends[runtime.GOARCH]
+	require.Equalf(t, want, vmpackage.JITAvailable(),
+		"GOOS=%s GOARCH=%s: JITAvailable()=%v but a backend is %spresent for this arch",
+		runtime.GOOS, runtime.GOARCH, vmpackage.JITAvailable(),
+		map[bool]string{true: "", false: "not "}[want])
+}
+
+// randJITProgram generates a top-level numeric loop of the shape the baseline JIT
+// actually compiles. Two constraints are load-bearing and were both learned the
+// hard way, by instrumenting how many generated programs really engaged:
+//
+//   - A BARE NEGATIVE LITERAL makes the whole chunk ineligible. Negation is not in
+//     depths()' opcode whitelist, so `var s = -5;` is declined outright and the JIT
+//     never runs - the differential test then compares the interpreter with itself
+//     and proves nothing. Negatives are spelled `(0 - n)`, which is exactly why the
+//     fixed corpus above spells them that way too.
+//   - A VARIABLE'S NUMERIC TYPE IS FIXED. Assigning a double into an int local is a
+//     runtime type error, so each program picks int or float mode and stays in it.
+//     Mixed int/float promotion is still covered, in the one shape the language
+//     allows: a float accumulator absorbing an int operand.
+//
+// Ignoring either produced a suite that looked like 400 cases and was really ~49.
+func randJITProgram(rng *rand.Rand) string {
+	flt := rng.Intn(2) == 0
+
+	// Non-negative magnitudes only; negatives go through neg() so no bare unary
+	// minus ever reaches the compiler.
+	num := func() string {
+		if flt {
+			return strconv.FormatFloat(float64(rng.Intn(2000))/8.0, 'f', 4, 64)
+		}
+		return strconv.Itoa(rng.Intn(200))
+	}
+	lit := func() string {
+		if rng.Intn(3) == 0 {
+			return "(0 - " + num() + ")"
+		}
+		return num()
+	}
+	// Divisors are literal and non-zero so the generator explores arithmetic rather
+	// than dying on a zero divisor; TestJITDeoptsOnRuntimeError covers that path.
+	divisor := func() string {
+		if flt {
+			return strconv.FormatFloat(float64(rng.Intn(32)+1)/4.0, 'f', 4, 64)
+		}
+		return strconv.Itoa(rng.Intn(9) + 1)
+	}
+	vars := []string{"a", "b", "acc"}
+	operand := func() string {
+		if rng.Intn(2) == 0 {
+			return vars[rng.Intn(len(vars))]
+		}
+		return lit()
+	}
+	// Modulo is int-only: float % is a runtime error in the interpreter, and both
+	// backends deopt on it by design.
+	arith := func() string {
+		ops := []string{"+", "-", "*", "/"}
+		if !flt {
+			ops = append(ops, "%")
+		}
+		return ops[rng.Intn(len(ops))]
+	}
+	// The accumulator's own operator excludes / and %: repeatedly dividing acc
+	// drives it to zero or infinity in a few iterations, making the program
+	// degenerate rather than exploratory.
+	accOp := func() string { return []string{"+", "-", "*"}[rng.Intn(3)] }
+	expr := func() string {
+		op := arith()
+		r := operand()
+		if op == "/" || op == "%" {
+			r = divisor()
+		}
+		return operand() + " " + op + " " + r
+	}
+	cmp := []string{"<", "<=", ">", ">=", "==", "!="}[rng.Intn(6)]
+
+	// Comparison senses differ from their neighbours ONLY at equality (>= vs >,
+	// <= vs <), so independently drawn operands almost never separate them. Not
+	// hypothetical: a mutation flipping integer >= to > survived every generated
+	// case until these boundaries were added. So b is often exactly a, and the
+	// counter is compared against a bound it actually reaches.
+	n := rng.Intn(60) + 5
+	bInit := lit()
+	if rng.Intn(2) == 0 {
+		bInit = "a"
+	}
+	bound := strconv.Itoa(rng.Intn(2) + n - 1) // n-1 (the last value i takes) or n
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "var a = %s; var b = %s; var acc = %s; var i = 0;\n", lit(), bInit, lit())
+	fmt.Fprintf(&b, "while (i < %d) {\n", n)
+	fmt.Fprintf(&b, "  acc = acc %s (%s);\n", accOp(), expr())
+	if rng.Intn(2) == 0 {
+		fmt.Fprintf(&b, "  if (a %s b) { acc = acc + %s; }\n", cmp, lit())
+	}
+	if flt && rng.Intn(2) == 0 {
+		// The mixed-promotion shape: an int operand folded into a float accumulator.
+		fmt.Fprintf(&b, "  acc = acc + i * %s;\n", divisor())
+	}
+	fmt.Fprintf(&b, "  if (i %s %s) { acc = acc + 1; }\n", cmp, bound)
+	b.WriteString("  i = i + 1;\n}\nreturn acc;")
+	return b.String()
+}
+
+// TestJITMatchesInterpreterRandomized is the property the whole JIT design rests
+// on: for ANY program, native and interpreted execution agree - same value, or the
+// same error. The fixed corpus above pins the shapes someone thought to write down;
+// this explores the combinations nobody did, which is where a codegen defect
+// actually lives (an operand order, a sign, a promotion, or a comparison sense that
+// only misbehaves on one arch with one mix of types).
+//
+// Deterministic by construction - fixed seed - so a failure reproduces and a green
+// run means the same thing on every machine. The failure prints the generating
+// source, so a counterexample can be pasted straight into the fixed corpus.
+func TestJITMatchesInterpreterRandomized(t *testing.T) {
+	if !vmpackage.JITAvailable() {
+		t.Skip("no native JIT backend on this arch")
+	}
+	rng := rand.New(rand.NewSource(20260803))
+	const cases = 400
+	engaged := 0
+	for i := 0; i < cases; i++ {
+		src := randJITProgram(rng)
+		wantV, wantErr := runProgJIT(t, src, false)
+		vmpackage.ResetJITStats()
+		gotV, gotErr := runProgJIT(t, src, true)
+		if vmpackage.JITRunCount() > 0 {
+			engaged++
+		}
+		switch {
+		case wantErr != nil && gotErr != nil:
+			require.Equalf(t, wantErr.Error(), gotErr.Error(), "case %d: differing errors\n%s", i, src)
+		case wantErr != nil || gotErr != nil:
+			t.Fatalf("case %d: interp err=%v but jit err=%v\n%s", i, wantErr, gotErr, src)
+		default:
+			require.Equalf(t, wantV.String(), gotV.String(), "case %d: differing results\n%s", i, src)
+		}
+	}
+	// Without this the suite silently degrades: an eligibility rule the generator
+	// trips (a bare negative literal was the real one) turns every case into the
+	// interpreter compared against itself, which passes while testing nothing.
+	// The floor is deliberately well under the measured rate so a small compiler
+	// change does not fail the build, but a collapse does.
+	require.Greaterf(t, engaged, cases*3/4,
+		"only %d/%d generated programs engaged the JIT; the generator has drifted outside "+
+			"what depths() accepts, so this test is no longer differential", engaged, cases)
+}
+
+// FuzzJITMatchesInterpreter is the same property with the corpus supplied by the
+// fuzzer rather than a generator, so it reaches shapes randJITProgram cannot spell.
+// Most inputs fail to parse or compile and are skipped; that is expected and cheap.
+// Run: go test ./ -run FuzzJITMatchesInterpreter -fuzz FuzzJIT -fuzztime 60s
+func FuzzJITMatchesInterpreter(f *testing.F) {
+	if !vmpackage.JITAvailable() {
+		f.Skip("no native JIT backend on this arch")
+	}
+	for _, seed := range []string{
+		`var s = 0; var i = 0; while (i < 20) { s = s + i; i = i + 1; } return s;`,
+		`var s = 0.0; var i = 0.0; while (i < 20.0) { s = s + i * 0.5; i = i + 1.0; } return s;`,
+		`var s = 0; var i = 1; while (i < 20) { s = s + 100 / i + 100 % i; i = i + 1; } return s;`,
+		`var a = 0; var i = 0; while (i < 20 and a < 50) { a = a + 3; i = i + 1; } return a;`,
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, src string) {
+		prog, err := ParseEmbedded(src)
+		if err != nil {
+			t.Skip()
+		}
+		chunk, err := CompileWith(prog, CompileOptions{})
+		if err != nil {
+			t.Skip()
+		}
+		run := func(jit bool) (vmpackage.Value, error) {
+			env := vmpackage.NewEnv()
+			vmpackage.RegisterStdlib(env)
+			vmpackage.SetJIT(jit)
+			defer vmpackage.SetJIT(false)
+			return vmpackage.NewVM(context.Background()).Run(chunk, env)
+		}
+		wantV, wantErr := run(false)
+		gotV, gotErr := run(true)
+		if (wantErr == nil) != (gotErr == nil) {
+			t.Fatalf("interp err=%v but jit err=%v for:\n%s", wantErr, gotErr, src)
+		}
+		if wantErr != nil {
+			if wantErr.Error() != gotErr.Error() {
+				t.Fatalf("differing errors %q vs %q for:\n%s", wantErr, gotErr, src)
+			}
+			return
+		}
+		if wantV.String() != gotV.String() {
+			t.Fatalf("differing results %s vs %s for:\n%s", wantV.String(), gotV.String(), src)
+		}
+	})
 }
