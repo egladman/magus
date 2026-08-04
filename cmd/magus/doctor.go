@@ -22,7 +22,12 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "syntax, spell docs, dependency cycles, workspace-escaping symlinks,")
 			fmt.Fprintln(os.Stderr, "recognised env vars, charm/target name collisions, and VCS")
 			fmt.Fprintln(os.Stderr, "base-ref reachability.")
-			fmt.Fprintln(os.Stderr, "Exits non-zero if any check fails.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Findings come at two levels. [fail] is a workspace that is wrong -")
+			fmt.Fprintln(os.Stderr, "a dependency cycle, an unparseable magusfile, two targets claiming")
+			fmt.Fprintln(os.Stderr, "one output - and exits non-zero. [advice] is a convention magus")
+			fmt.Fprintln(os.Stderr, "recommends, reported and not fatal, because how your workspace is")
+			fmt.Fprintln(os.Stderr, "laid out is your call.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -88,7 +93,13 @@ func emitDoctor(opts OutputOptions, out doctor.Report) error {
 			fmt.Printf("    %s\n", d)
 		}
 	}
-	fmt.Printf("\nsummary: %d ok, %d fail\n", out.Summary.OK, out.Summary.Fail)
+	fmt.Printf("\nsummary: %d ok, %d fail", out.Summary.OK, out.Summary.Fail)
+	if out.Summary.Advice > 0 {
+		// Named only when there is some. A count of things that did not fail reads as
+		// a scold when it is always there.
+		fmt.Printf(", %d advice", out.Summary.Advice)
+	}
+	fmt.Println()
 	return nil
 }
 
@@ -102,6 +113,10 @@ func statusGlyph(status doctor.CheckStatus, color bool) string {
 		label, code = "[pass]", "32" // green
 	case doctor.StatusFail:
 		label, code = "[fail]", "31" // red
+	case doctor.StatusAdvice:
+		// Yellow, not red: it did not fail, and colouring it like a failure would
+		// undo the whole point of the level.
+		label, code = "[advice]", "33"
 	}
 	if color {
 		return "\x1b[" + code + "m" + label + "\x1b[0m"

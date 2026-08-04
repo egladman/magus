@@ -15,9 +15,39 @@ import (
 type CheckStatus string
 
 // The CheckStatus constants enumerate the possible doctor-check outcomes.
+//
+// StatusFail and StatusAdvice are a deliberate split, and which one a check
+// returns is a statement about whose judgement is involved.
+//
+// StatusFail is for a workspace that is WRONG in a way nobody's taste can rescue:
+// a dependency cycle, a magusfile that will not parse, two targets claiming one
+// output, a policy naming a target that does not exist. These are facts, they
+// break the build or corrupt the cache, and failing on them is not an opinion.
+//
+// StatusAdvice is for a convention magus RECOMMENDS: how targets are named,
+// whether every project binds a language spell, whether a spell target carries a
+// doc comment. These are conventions that have worked well, documented so you can
+// take them - not requirements, because magus does not get to decide how your
+// repository is laid out. `ci` is the one reserved target, and everything past it
+// is yours.
+//
+// The distinction is not cosmetic. When doctor had only ok and fail, a convention
+// check had two options: fail (and dictate) or not exist. What actually happened
+// is that each one grew its own private escape hatch - no_language for language
+// coverage, and briefly allow_bespoke_name for target naming - so the config
+// surface grew one key per opinion, and taking magus's advice became mandatory
+// unless you wrote a paragraph explaining yourself. Advice that exits zero needs
+// no escape hatch at all.
+//
+// There is deliberately no switch that promotes advice to failure. A knob for
+// that would just be the imposition again with an opt-in label on it, and the
+// workspace that wants a convention enforced can enforce it - in its own lint
+// target, with its own tools, on its own terms. magus reports what it noticed and
+// gets out of the way.
 const (
-	StatusOK   CheckStatus = "ok"
-	StatusFail CheckStatus = "fail"
+	StatusOK     CheckStatus = "ok"
+	StatusFail   CheckStatus = "fail"
+	StatusAdvice CheckStatus = "advice"
 )
 
 // Check is one doctor check result.
@@ -30,8 +60,9 @@ type Check struct {
 
 // Summary counts check outcomes.
 type Summary struct {
-	OK   int `json:"ok" yaml:"ok"`
-	Fail int `json:"fail" yaml:"fail"`
+	OK     int `json:"ok" yaml:"ok"`
+	Fail   int `json:"fail" yaml:"fail"`
+	Advice int `json:"advice" yaml:"advice"`
 }
 
 // Report is the full doctor output.
@@ -185,6 +216,8 @@ func (r *runner) run(wsErr error) Report {
 			out.Summary.OK++
 		case StatusFail:
 			out.Summary.Fail++
+		case StatusAdvice:
+			out.Summary.Advice++
 		}
 	}
 	return out
