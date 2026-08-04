@@ -247,24 +247,24 @@ func TestRemovedContextMethods(t *testing.T) {
 }
 
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
-// dotted (`md.prettier(`) op calls are captured and grouped by spell, in call
+// dotted (`markdown.prettier(`) op calls are captured and grouped by spell, in call
 // order, but only for handles a spell import brought into scope — a host call
 // (os.exec) or a call on a non-spell identifier is dropped.
 func TestSpellOps(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
-import "magus/spell/md";
+import "magus/spell/markdown";
 import "os";
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
-    go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
+    go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); markdown.markdownlint();
 }
 export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
 		{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}}, // grouped, deduped, call order
-		{Spell: "md", Ops: []string{"markdownlint"}},
+		{Spell: "markdown", Ops: []string{"markdownlint"}},
 	}
 	assert.Equal(t, want, lint.Spells)
 	assert.Equal(t, []string{"format"}, lint.Dependencies, "the identifier edge resolves to the exported target")

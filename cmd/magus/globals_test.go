@@ -88,14 +88,16 @@ func TestPartitionFlags(t *testing.T) {
 }
 
 // captureStderr runs fn with os.Stderr redirected to a pipe and returns everything
-// written to it.
+// written to it. Only interactive.Emit/fmt.Fprintln output is captured: the slog
+// default handler holds the process's original stderr from package init. Restored
+// on return rather than via t.Cleanup, so a test may capture more than once.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	previous := os.Stderr
 	read, write, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stderr = write
-	t.Cleanup(func() { os.Stderr = previous })
+	defer func() { os.Stderr = previous }()
 
 	fn()
 

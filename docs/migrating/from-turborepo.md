@@ -23,7 +23,7 @@ not, that is stated plainly, and vice versa.
 | task (a `package.json` script name, configured in `turbo.json`)      | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](../concepts/targets.md#the-target-name))                                     |
 | `tasks` (Turborepo 2) / `pipeline` (Turborepo 1) in `turbo.json`     | targets declared per project; there is no single root manifest - each project's magusfile is its own pipeline                                                                |
 | the task's underlying script (`"build": "tsc -b"` in `package.json`) | the target body / a [spell](../concepts/spells.md) op                                                                                                                          |
-| `dependsOn: ["^build"]` (upstream packages' `build`)                 | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from a cross-project `needs` folding into `depends_on` - see [dependencies.md](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)) |
+| `dependsOn: ["^build"]` (upstream packages' `build`)                 | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from a cross-project `needs` folding into `depends_on` - see [dependencies.md](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends-on)) |
 | `dependsOn: ["build"]` (same-package ordering)                       | `ctx.needs(build)` calling another exported `fun` in the same magusfile                                                                                                        |
 | `inputs`                                                              | a spell's `needs` globs, plus [`ctx.readsFiles(...)`](../concepts/cache.md#per-target-inputs-and-outputs) for a target-specific footprint                                     |
 | `outputs`                                                             | a spell's `provides` globs, plus [`ctx.writesFiles(...)`](../concepts/cache.md#per-target-inputs-and-outputs)                                                                  |
@@ -174,7 +174,7 @@ targets within one project; the upstream-package case, `dependsOn: ["^build"]`,
 is a cross-project `ctx.needs(alias.target)` against an imported project handle,
 which folds into `depends_on` automatically rather than needing both written by
 hand - see
-[Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
+[Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends-on)):
 
 ```buzz
 import "magus";

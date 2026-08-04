@@ -150,3 +150,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `volatility.min_samples` | `MAGUS_VOLATILITY_MIN_SAMPLES` | `--volatility-min-samples` | int | `20` |
 | `volatility.threshold` | `MAGUS_VOLATILITY_THRESHOLD` | `--volatility-threshold` | float | `0.05` |
 
+## See also
+
+- [magus config](manpage/magus-config.md): the CLI verb that reads and writes these keys.
+- [Workspace and projects](../concepts/workspace.md): where `magus.yaml` sits in workspace discovery.

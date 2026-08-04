@@ -16,25 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// captureStderr runs fn with os.Stderr redirected to a pipe and returns what it
-// wrote there. Only interactive.Emit/fmt.Fprintln output is captured: the slog
-// default handler holds the process's original stderr from package init.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	previous := os.Stderr
-	read, write, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = write
-	defer func() { os.Stderr = previous }()
-
-	fn()
-
-	require.NoError(t, write.Close())
-	out, err := io.ReadAll(read)
-	require.NoError(t, err)
-	return string(out)
-}
-
 func TestWriteMagusfileStub(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, writeMagusfileStub(dir))

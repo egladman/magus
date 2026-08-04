@@ -181,7 +181,7 @@ Both are extension points on purpose. magus itself knows neither a cache service
 
 An op's public name is the **map key** in `mgs_listTargets` (or the `ops` table). That key is what a magusfile calls and what `magus run spell::op` invokes. The implementation function is private. Name both after the CLI command, not after a magus lifecycle verb, so the spell is self-documenting and a developer who knows the toolchain can invoke an op without reading the magusfile.
 
-**Op key: the CLI command, kebab-case, lowercase, no flags.** Write the command as you type it and replace spaces with hyphens. The golang spell:
+**Op key: the CLI command, kebab-case, lowercase, no flags.** Write the command as you type it and replace spaces with hyphens. The `go` spell:
 
 | runs            | op key          | handler        |
 | --------------- | --------------- | -------------- |

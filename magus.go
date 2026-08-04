@@ -540,14 +540,14 @@ const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 // unless insecure is set, the explicit opt-out that accepts and produces unsigned
 // artifacts (no trust set, no signing key) for trusted single-repo CI or backend
 // validation.
-func remoteCacheSigningOpts(trustedB64 []string, insecure bool) ([]cache.Option, error) {
+func remoteCacheSigningOpts(ctx context.Context, trustedB64 []string, insecure bool) ([]cache.Option, error) {
 	if insecure {
 		// Warn, because this is the one setting that turns a documented supply-chain
 		// control into a no-op with no other user-visible signal. It also short-circuits
 		// before trustedB64 is read, so a config declaring BOTH (as this repo's CI did)
 		// silently verifies nothing while looking like it verifies everything.
-		slog.Warn("remote cache signature verification is DISABLED (cache.remote.insecure); " +
-			"artifacts are accepted and produced unsigned, so anyone who can write to the " +
+		slog.WarnContext(ctx, "remote cache signature verification is DISABLED (cache.remote.insecure); "+
+			"artifacts are accepted and produced unsigned, so anyone who can write to the "+
 			"shared cache can inject build output into every consumer")
 		return []cache.Option{cache.WithInsecureRemote()}, nil
 	}
@@ -628,7 +628,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// REQUIRES a trust set (cache.remote.trusted_keys in magus.yaml), enforced at load on
 	// every machine so the misconfiguration can't silently go live.
 	if name := m.wsReg.RemoteBackend(); name != "" {
-		trusted, sErr := remoteCacheSigningOpts(m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
+		trusted, sErr := remoteCacheSigningOpts(ctx, m.cfg.Cache.Remote.TrustedKeys, m.cfg.Cache.Remote.Insecure)
 		if sErr != nil {
 			return nil, sErr
 		}

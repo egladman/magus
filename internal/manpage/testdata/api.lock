@@ -128,6 +128,7 @@ target affected/format
 target affected/generate
 target affected/lint
 target affected/ls
+target affected/security
 target affected/test
 target run/build
 target run/ci
@@ -136,4 +137,5 @@ target run/format
 target run/generate
 target run/lint
 target run/ls
+target run/security
 target run/test

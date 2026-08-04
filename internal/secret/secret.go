@@ -389,7 +389,7 @@ func (r *Resolver) record(key memoKey, v string) {
 // (addRedactable dedupes) and expected: a value with no special characters percent-escapes
 // to itself.
 func encodedForms(v string) []string {
-	forms := []string{
+	return append([]string{
 		v,
 		base64.StdEncoding.EncodeToString([]byte(v)),
 		base64.RawStdEncoding.EncodeToString([]byte(v)),
@@ -400,8 +400,7 @@ func encodedForms(v string) []string {
 		strings.ToUpper(hex.EncodeToString([]byte(v))), // xxd -u, openssl, most JVM/.NET tooling
 		url.QueryEscape(v),
 		url.PathEscape(v),
-	}
-	return append(forms, jsonStringForms(v)...)
+	}, jsonStringForms(v)...)
 }
 
 // jsonStringForms returns v spelled as it appears INSIDE a JSON string literal.

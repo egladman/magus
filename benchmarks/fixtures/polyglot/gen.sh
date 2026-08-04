@@ -48,24 +48,24 @@ MF
 
 cat > "$GEN/ts-lib/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/ts";
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts]}); return true; });
-export fun build(args: [str]) > void { ts["tsc"]({"args": ["-b"]}); }
+import "magus/spell/typescript";
+magus.project.register(fun(p, cb) > bool { cb({"spells": [typescript]}); return true; });
+export fun build(args: [str]) > void { typescript["tsc"]({"args": ["-b"]}); }
 MF
 
 cat > "$GEN/ts-app/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/ts";
+import "magus/spell/typescript";
 import "project/ts-lib" as tslib;
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts], "depends_on": ["ts-lib"]}); return true; });
-export fun build(args: [str]) > void { magus.needs(tslib.build); ts["tsc"]({"args": ["-b"]}); }
+magus.project.register(fun(p, cb) > bool { cb({"spells": [typescript], "depends_on": ["ts-lib"]}); return true; });
+export fun build(args: [str]) > void { magus.needs(tslib.build); typescript["tsc"]({"args": ["-b"]}); }
 MF
 
 cat > "$GEN/py-tool/magusfile.buzz" <<'MF'
 import "magus";
-import "magus/spell/py";
+import "magus/spell/python";
 import "os";
-magus.project.register(fun(p, cb) > bool { cb({"spells": [py]}); return true; });
+magus.project.register(fun(p, cb) > bool { cb({"spells": [python]}); return true; });
 export fun build(args: [str]) > void { os.exec("python", ["-m", "py_compile", "src/tool.py"]); }
 MF
 

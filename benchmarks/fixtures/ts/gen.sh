@@ -149,11 +149,11 @@ TS
     # Leaf library: ts spell, build = tsc -b (a handle apps can magus.needs).
     cat > "$lib/magusfile.buzz" <<'MAGUSFILE'
 import "magus";
-import "magus/spell/ts";
+import "magus/spell/typescript";
 
-magus.project.register(fun(p, cb) > bool { cb({"spells": [ts]}); return true; });
+magus.project.register(fun(p, cb) > bool { cb({"spells": [typescript]}); return true; });
 
-export fun build(args: [str]) > void { ts["tsc"]({"args": ["-b"]}); }
+export fun build(args: [str]) > void { typescript["tsc"]({"args": ["-b"]}); }
 MAGUSFILE
 done
 
@@ -256,12 +256,12 @@ JSON
     # ordering and the graph.
     {
         echo 'import "magus";'
-        echo 'import "magus/spell/ts";'
+        echo 'import "magus/spell/typescript";'
         for j in $(seq 0 $(( M - 1 ))); do
             echo "import \"project/libs/lib-$j\" as lib$j;"
         done
         echo ''
-        printf 'magus.project.register(fun(p, cb) > bool { cb({"spells": [ts], "depends_on": ['
+        printf 'magus.project.register(fun(p, cb) > bool { cb({"spells": [typescript], "depends_on": ['
         for j in $(seq 0 $(( M - 1 ))); do
             printf '"libs/lib-%d"' "$j"
             [[ $j -lt $(( M - 1 )) ]] && printf ', '
@@ -273,7 +273,7 @@ JSON
             printf 'lib%d.build' "$j"
             [[ $j -lt $(( M - 1 )) ]] && printf ', '
         done
-        echo '); ts["tsc"]({"args": ["-b"]}); }'
+        echo '); typescript["tsc"]({"args": ["-b"]}); }'
     } > "$app/magusfile.buzz"
 done
 

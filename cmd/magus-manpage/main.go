@@ -267,20 +267,20 @@ type conceptLink struct {
 // roff has no equivalent section). A command absent here has no concept
 // pairing strong enough to be worth a link.
 var commandConcepts = map[string][]conceptLink{
-	"run":        {{"Targets", "../../concepts/targets.md"}, {"Charms", "../../concepts/charms.md"}, {"Cache", "../../concepts/cache.md"}},
-	"x":          {{"Targets", "../../concepts/targets.md"}},
-	"describe":   {{"Targets", "../../concepts/targets.md"}, {"Spells", "../../concepts/spells.md"}, {"Charms", "../../concepts/charms.md"}},
-	"affected":   {{"Affected", "../../concepts/workspace/affected.md"}, {"CI target", "../../concepts/targets/ci.md"}},
-	"watch":      {{"Affected", "../../concepts/workspace/affected.md"}},
-	"insight":    {{"Insight", "../../concepts/knowledge/insight.md"}, {"Volatility", "../../concepts/volatility.md"}},
-	"graph":      {{"Knowledge graph", "../../concepts/knowledge.md"}},
-	"ls":         {{"Workspace", "../../concepts/workspace.md"}},
-	"where":      {{"Workspace", "../../concepts/workspace.md"}},
-	"doctor":     {{"Workspace", "../../concepts/workspace.md"}},
-	"config":     {{"Workspace", "../../concepts/workspace.md"}},
-	"init":       {{"Workspace", "../../concepts/workspace.md"}},
-	"status":     {{"Concurrency", "../../concepts/concurrency.md"}},
-	"server":     {{"Daemon", "../../guides/integrations/daemon.md"}},
+	"run":      {{"Targets", "../../concepts/targets.md"}, {"Charms", "../../concepts/charms.md"}, {"Cache", "../../concepts/cache.md"}},
+	"x":        {{"Targets", "../../concepts/targets.md"}},
+	"describe": {{"Targets", "../../concepts/targets.md"}, {"Spells", "../../concepts/spells.md"}, {"Charms", "../../concepts/charms.md"}},
+	"affected": {{"Affected", "../../concepts/workspace/affected.md"}, {"CI target", "../../concepts/targets/ci.md"}},
+	"watch":    {{"Affected", "../../concepts/workspace/affected.md"}},
+	"insight":  {{"Insight", "../../concepts/knowledge/insight.md"}, {"Volatility", "../../concepts/volatility.md"}},
+	"graph":    {{"Knowledge graph", "../../concepts/knowledge.md"}},
+	"ls":       {{"Workspace", "../../concepts/workspace.md"}},
+	"where":    {{"Workspace", "../../concepts/workspace.md"}},
+	"doctor":   {{"Workspace", "../../concepts/workspace.md"}},
+	"config":   {{"Workspace", "../../concepts/workspace.md"}},
+	"init":     {{"Workspace", "../../concepts/workspace.md"}},
+	"status":   {{"Concurrency", "../../concepts/concurrency.md"}},
+	"server":   {{"Daemon", "../../guides/integrations/daemon.md"}},
 }
 
 func writeSeeAlsoMD(m *mdBuf, currentName string) {

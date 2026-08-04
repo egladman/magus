@@ -43,7 +43,7 @@ type Spell struct {
 	packageManagerBin   string            // recorded package-manager bin the engine substitutes per project; "" = no substitution
 	unprobedBins        map[string]string // op bins deliberately shipped without a version probe, bin -> reason
 	installHints        map[string]string // op bin -> one-line install command, appended to a bin-not-found error
-	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
+	serviceTargets      map[string]bool   // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
 	targetSources       map[string][]string

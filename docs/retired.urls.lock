@@ -183,3 +183,21 @@ reference/codes/sandbox/MGS2009/
 # page for a view you could already get. No successor page: the capability did not
 # move, it was folded into an existing verb.
 reference/manpage/magus-tail/
+
+# The four duplicate spell pages (concepts/spells/ts|py|rs|md) were deleted: each was a
+# stale copy of typescript/python/rust/markdown whose Buzz blocks imported a spell name
+# that does not exist. Those pages were the SECOND carrier for the ten tags below, and a
+# tag earns a /tags/<slug>/ page only when two or more pages carry it (collectTagIndex in
+# site/tags.buzz). Down to one carrier each, the pages are correctly no longer generated.
+# Retired rather than redirected because a one-page tag has no page to alias to - by
+# design its chip points at search/?q=tag:"<tag>", which is where the content still is.
+tags/cargo/
+tags/eslint/
+tags/node/
+tags/prettier/
+tags/pytest/
+tags/python/
+tags/ruff/
+tags/typescript/
+tags/uv/
+tags/vitest/

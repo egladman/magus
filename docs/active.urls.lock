@@ -213,6 +213,7 @@ mcp/
 migrating/
 migrating/breaking-changes/
 migrating/from-nx/
+migrating/from-turborepo/
 modules/
 modules/archive/
 modules/charm/
@@ -312,6 +313,8 @@ reference/codes/magusfile/MGS1017/
 reference/codes/magusfile/MGS1018/
 reference/codes/magusfile/MGS1019/
 reference/codes/magusfile/MGS1020/
+reference/codes/magusfile/MGS1022/
+reference/codes/magusfile/MGS1023/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -338,6 +341,7 @@ reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
 reference/codes/sandbox/MGS3002/
 reference/codes/sandbox/MGS3003/
+reference/codes/sandbox/MGS3004/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -422,6 +426,7 @@ tags/claude/
 tags/cli/
 tags/codes/
 tags/codex/
+tags/comparison/
 tags/completion/
 tags/concepts/
 tags/concurrency/
@@ -530,6 +535,7 @@ tags/passthrough/
 tags/path/
 tags/permissions/
 tags/pool/
+tags/porting/
 tags/powershell/
 tags/prettier/
 tags/project/

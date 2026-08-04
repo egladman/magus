@@ -25,7 +25,7 @@ in a `magus\needs` literal, or in a per-target policy key. `go_build`,
 `goBuild`, and `go-build` all normalize to the same registered target, so any
 spelling reaches it - there is exactly one target, not a table of aliases.
 This does not apply to a spell op after `::` (`go::golangci-lint` matches
-verbatim) or to a Buzz map subscript like `ts["tsc"]`. See
+verbatim) or to a Buzz map subscript like `typescript["tsc"]`. See
 [targets.md](../concepts/targets.md#name-normalization-casing--delimiters).
 
 ## Why is my `format` run read-only? How do I make it write?

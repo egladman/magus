@@ -256,8 +256,16 @@ func (e *ghaEmulator) handler() http.Handler {
 	})
 }
 
+// The request structs below tag every field with its wire name rather than
+// leaning on Go's field-name matching. v1 encoding/json matches case-insensitively,
+// so untagged Key bound the spell's "key"; jsonv2 (this repo builds under
+// GOEXPERIMENT=jsonv2) matches case-sensitively and binds nothing, which read as
+// the emulator rejecting a well-formed request.
 func (e *ghaEmulator) createEntry(w http.ResponseWriter, r *http.Request) {
-	var body struct{ Key, Version string }
+	var body struct {
+		Key     string `json:"key"`
+		Version string `json:"version"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.Key == "" {
 		http.Error(w, "missing key", http.StatusBadRequest)
@@ -292,9 +300,9 @@ func (e *ghaEmulator) upload(w http.ResponseWriter, r *http.Request) {
 
 func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Key       string
-		SizeBytes string // int64 is a JSON string in proto3
-		Version   string
+		Key       string `json:"key"`
+		SizeBytes string `json:"sizeBytes"` // int64 is a JSON string in proto3
+		Version   string `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	e.mu.Lock()
@@ -317,9 +325,9 @@ func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 
 func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Key         string
-		RestoreKeys []string
-		Version     string
+		Key         string   `json:"key"`
+		RestoreKeys []string `json:"restoreKeys"`
+		Version     string   `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	e.mu.Lock()
