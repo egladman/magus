@@ -40,7 +40,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 - **[Verify the release](download/verify.md)** before first run. Every build ships an Ed25519-signed `SHA256SUMS`; on a first install, verify it by hand rather than with the binary you just downloaded.
 - **[Set up your shell](download/shell-setup.md)** for tab-completion (bash, zsh, fish, PowerShell) and the `mgs` shorthand.
-- **[Uninstall](download/uninstall.md)** when you want it gone: the binary, the man pages, and the XDG state, config, and cache paths, listed out.
+- **[Uninstall](download/uninstall.md)** lists every path to delete: the binary, the man pages, the XDG state and config directories, and the workspace cache.
 
 ## Update
 
