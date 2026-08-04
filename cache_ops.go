@@ -190,14 +190,14 @@ func (m *Magus) OutputDescriptorByRef(ref string) (cache.OutputDescriptor, error
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).DescriptorByRef(ref)
 }
 
-// OutputKeyLines returns the pre-hash key lines stored behind ref - the deterministic
+// OutputKeyInputs returns the pre-hash key inputs stored behind ref - the deterministic
 // label:value lines hashStep consumed to mint the step's cache key, secret-redacted at
 // write. They are the explanation surface for `magus query output <ref> --meta`
 // (component-class digests) and `describe target --cache --against <ref>` (the exact
 // disagreeing line). Returns fs.ErrNotExist when the ref resolves but the run predates
-// key-line persistence.
-func (m *Magus) OutputKeyLines(ref string) ([]string, error) {
-	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).KeyLinesByRef(ref)
+// key-input persistence.
+func (m *Magus) OutputKeyInputs(ref string) ([]string, error) {
+	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).KeyInputsByRef(ref)
 }
 
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command

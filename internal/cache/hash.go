@@ -25,19 +25,19 @@ const KeyVersion = 3
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.
 func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
-	return c.hashStepLines(ctx, s, nil)
+	return c.hashStepInputs(ctx, s, nil)
 }
 
-// hashStepLines is hashStep with an optional collector: when lines is non-nil, every
-// pre-hash key line (sans trailing newline) is appended to it in hash order. The
+// hashStepInputs is hashStep with an optional collector: when lines is non-nil, every
+// pre-hash key input (sans trailing newline) is appended to it in hash order. The
 // collected lines are the key's EXPLANATION - what `describe target --cache` diffs and
 // what the output store persists beside a step's attempts - so they must stay
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
-func (c *Cache) hashStepLines(ctx context.Context, s *Step, lines *[]string) (string, error) {
+func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
 	h := sha256.New()
 
-	// Build each key line in a reused scratch buffer and write it straight to the
+	// Build each key input in a reused scratch buffer and write it straight to the
 	// hash. This avoids fmt.Fprintf's format-string parsing and per-line interface
 	// boxing (~1 alloc/line) on the cache-key hot path; the byte layout is byte-for-
 	// byte identical to the prior fmt formatting, so existing cache keys stay valid
@@ -144,14 +144,14 @@ func (c *Cache) hashStepLines(ctx context.Context, s *Step, lines *[]string) (st
 	return result, nil
 }
 
-// StepKey computes s's cache key plus the pre-hash key lines behind it, without
+// StepKey computes s's cache key plus the pre-hash key inputs behind it, without
 // executing or storing anything. It is the SDK seam for the live half of the
 // works-on-my-machine diff: `describe target --cache` keys the step exactly as a run
 // would, then compares these lines against the set stored behind a ref. The returned
 // key is what portable refs truncate, so callers can also predict the ref a run of
 // this step would print.
 func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []string, err error) {
-	key, err = c.hashStepLines(ctx, s, &lines)
+	key, err = c.hashStepInputs(ctx, s, &lines)
 	return key, lines, err
 }
 

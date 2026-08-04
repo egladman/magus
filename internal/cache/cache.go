@@ -521,7 +521,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	result.Ref = ref
 
 	// Push AFTER recordOutput, never before: the artifact ships this run's output
-	// descriptor and key lines, and recordOutput is what writes them. Pushing first
+	// descriptor and key inputs, and recordOutput is what writes them. Pushing first
 	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
 	// attempt's), so a consumer could not resolve the producer's ref - the whole
 	// point of shipping them.
@@ -590,21 +590,21 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		// written when the recomputed key still equals the one being recorded, so a
 		// source edited mid-run can never store lines that misdescribe the key.
 		var lines []string
-		switch h2, lerr := c.hashStepLines(ctx, &s, &lines); {
+		switch h2, lerr := c.hashStepInputs(ctx, &s, &lines); {
 		case lerr != nil:
 			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
-				fmt.Sprintf("key lines for %s (%s): %v", s.ProjectPath, shortHash(hash), lerr)))
+				fmt.Sprintf("key inputs for %s (%s): %v", s.ProjectPath, shortHash(hash), lerr)))
 		case h2 != hash:
 			// A source changed while the target ran, so these lines describe a
 			// DIFFERENT key. Storing them would make a later --against blame the wrong
 			// input; say so instead of dropping it silently.
 			c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
-				fmt.Sprintf("key lines for %s skipped: inputs changed during the run (%s -> %s)",
+				fmt.Sprintf("key inputs for %s skipped: inputs changed during the run (%s -> %s)",
 					s.ProjectPath, shortHash(hash), shortHash(h2))))
 		default:
-			if perr := c.outputs.PersistKeyLines(ctx, hash, lines); perr != nil {
+			if perr := c.outputs.PersistKeyInputs(ctx, hash, lines); perr != nil {
 				c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
-					fmt.Sprintf("persist key lines for %s (%s): %v", s.ProjectPath, shortHash(hash), perr)))
+					fmt.Sprintf("persist key inputs for %s (%s): %v", s.ProjectPath, shortHash(hash), perr)))
 			}
 		}
 	}

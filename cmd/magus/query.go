@@ -238,10 +238,10 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
 		}
 		// The run's per-class key digests ride along so the viewer can show a
-		// machine-vs-machine key comparison. Best-effort: a run predating key-line
+		// machine-vs-machine key comparison. Best-effort: a run predating key-input
 		// persistence just opens without them.
 		var keyDigests string
-		if lines, lerr := m.OutputKeyLines(ref); lerr == nil {
+		if lines, lerr := m.OutputKeyInputs(ref); lerr == nil {
 			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
 			for _, c := range cache.ClassDigests(lines) {
 				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
@@ -306,7 +306,7 @@ func listOutputAttempts(m *magus.Magus, ref string, out OutputOptions) error {
 
 // outputMetaRecord is the -o json/yaml projection of `query output <ref> --meta`: the
 // stored descriptor, the producing invocation's lineage when its run log survives, and
-// the cache key's component-class digests when the run persisted its key lines.
+// the cache key's component-class digests when the run persisted its key inputs.
 type outputMetaRecord struct {
 	cache.OutputDescriptor
 	Invocation   *journal.Invocation `json:"invocation,omitempty"`
@@ -324,14 +324,14 @@ func showOutputMeta(m *magus.Magus, ref string, out OutputOptions) error {
 		return reportRefLookupError(ref, err)
 	}
 	var digests []cache.ClassDigest
-	lines, lerr := m.OutputKeyLines(ref)
+	lines, lerr := m.OutputKeyInputs(ref)
 	switch {
 	case lerr == nil:
 		digests = cache.ClassDigests(lines)
 	case !errors.Is(lerr, fs.ErrNotExist):
 		// Absent lines are ordinary (a run predating persistence); anything else is a
 		// real read failure and must not masquerade as one.
-		return fmt.Errorf("magus query output: read stored key lines for %s: %w", ref, lerr)
+		return fmt.Errorf("magus query output: read stored key inputs for %s: %w", ref, lerr)
 	}
 	var inv *journal.Invocation
 	if desc.Inv != "" {
@@ -378,7 +378,7 @@ func showOutputMeta(m *magus.Magus, ref string, out OutputOptions) error {
 		fmt.Printf("magus:   %s\n", desc.MagusVersion)
 	}
 	if len(digests) == 0 {
-		fmt.Println("\nkey components: unavailable (run predates key-line persistence; re-run the target to record them)")
+		fmt.Println("\nkey components: unavailable (run predates key-input persistence; re-run the target to record them)")
 		return nil
 	}
 	fmt.Println("\nkey components:")

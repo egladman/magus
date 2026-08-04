@@ -57,15 +57,15 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	assert.Contains(t, string(data), "built on machine A", "B serves A's captured bytes")
 	assert.Equal(t, "test/pkg", desc.Project)
 
-	lines, err := cB.outputs.KeyLinesByRef(rA.Ref)
-	require.NoError(t, err, "the key lines travel too, so B can diff its key against A's")
-	assert.Equal(t, rA.Hash, hashOfLines(MaskKeyLines(lines)), "the imported lines re-derive the shared key")
+	lines, err := cB.outputs.KeyInputsByRef(rA.Ref)
+	require.NoError(t, err, "the key inputs travel too, so B can diff its key against A's")
+	assert.Equal(t, rA.Hash, hashOfLines(MaskKeyInputs(lines)), "the imported lines re-derive the shared key")
 
 	// Ref equality alone proves nothing - refs are key-derived, so B would compute
 	// A's ref even if the artifact shipped no sidecars at all. Assert what actually
 	// crossed the wire.
 	names := tarMemberNames(t, findBackendArtifact(t, remote, "test__pkg"))
-	assert.Contains(t, names, "outputs/"+rA.Hash+"/"+keyLinesName, "the artifact must carry the key lines")
+	assert.Contains(t, names, "outputs/"+rA.Hash+"/"+keyInputsName, "the artifact must carry the key inputs")
 	hasDescriptor := false
 	for _, n := range names {
 		if strings.HasPrefix(n, "outputs/"+rA.Hash+"/") && strings.HasSuffix(n, descExt) {
@@ -180,12 +180,12 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 	assert.Equal(t, "test/pkg", desc.Project)
 
 	// The fetched bundle is kept, so the foreign ref now behaves like a local one:
-	// it resolves without the network, and its key lines are there to explain it.
+	// it resolves without the network, and its key inputs are there to explain it.
 	local, _, err := cB.outputs.ByRef(ref)
 	require.NoError(t, err, "the fetched bundle must be filed into the local store")
 	assert.Contains(t, string(local), "FAIL: assertion failed on machine A")
-	lines, err := cB.outputs.KeyLinesByRef(ref)
-	require.NoError(t, err, "the published key lines must be usable by --against")
+	lines, err := cB.outputs.KeyInputsByRef(ref)
+	require.NoError(t, err, "the published key inputs must be usable by --against")
 	assert.NotEmpty(t, lines)
 }
 

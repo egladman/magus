@@ -538,7 +538,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&explain, "explain", false, "show the per-charm argv trace (base -> +charm -> +charm) for the rendered command")
 		fs.BoolVar(&explain, "e", false, "shorthand for --explain")
 		fs.BoolVar(&cacheKey, "cache", false, "show the target's live cache key, the ref a run would print, and its component classes")
-		fs.StringVar(&against, "against", "", "with --cache, diff the live key lines against the stored lines behind an output `ref`")
+		fs.StringVar(&against, "against", "", "with --cache, diff the live key inputs against the stored lines behind an output `ref`")
 		fs.BoolVar(&noDefaultCharms, "no-default-charms", false, "with --cache, ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
@@ -602,16 +602,16 @@ type targetCacheReport struct {
 }
 
 type targetCacheAgainst struct {
-	Ref     string              `json:"ref"`
-	Key     string              `json:"key"` // the stored run's full cache key
-	Matches bool                `json:"matches"`
-	Diff    []cache.KeyLineDiff `json:"diff,omitempty"`
+	Ref     string               `json:"ref"`
+	Key     string               `json:"key"` // the stored run's full cache key
+	Matches bool                 `json:"matches"`
+	Diff    []cache.KeyInputDiff `json:"diff,omitempty"`
 }
 
 // describeTargetCache answers "what cache key would this target mint RIGHT NOW, and
 // why does it differ from that stored run": it keys the target exactly as `magus run`
 // would (default charms merged, tool versions resolved) without executing, and with
-// --against diffs the live key lines against the redacted lines stored behind an
+// --against diffs the live key inputs against the redacted lines stored behind an
 // output ref. This is the CLI half of the portable-ref debugging story: two machines
 // print different refs for one target; this names the line that disagrees.
 func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms bool) error {
@@ -665,13 +665,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if storedRef == "" {
 			storedRef = against
 		}
-		storedLines, err = m.OutputKeyLines(against)
+		storedLines, err = m.OutputKeyInputs(against)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			fmt.Fprintf(os.Stderr, "magus describe target --cache: ref %s resolves but has no stored key lines (the run predates key-line persistence); re-run the target once to record them\n", storedRef)
+			fmt.Fprintf(os.Stderr, "magus describe target --cache: ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them\n", storedRef)
 			return errSilent{exitCode: 1}
 		case err != nil:
-			return fmt.Errorf("magus describe target --cache: read stored key lines for %s: %w", storedRef, err)
+			return fmt.Errorf("magus describe target --cache: read stored key inputs for %s: %w", storedRef, err)
 		}
 	}
 
@@ -685,7 +685,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		// Mask before comparing or showing: the store persists masked lines, so both
 		// sides must be masked to be byte-comparable - and a live env value must not
 		// print merely because this machine holds it.
-		lines = cache.MaskKeyLines(lines)
+		lines = cache.MaskKeyInputs(lines)
 		r := targetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
@@ -696,18 +696,18 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			ClassDigests: cache.ClassDigests(lines),
 		}
 		if against != "" {
-			// The VERDICT is key equality, never the line diff: DiffKeyLines is a
+			// The VERDICT is key equality, never the line diff: DiffKeyInputs is a
 			// set difference (multiplicity and order collapse), so an empty diff
 			// cannot prove two keys equal. The lines explain the verdict; they do
 			// not decide it. A stored descriptor predating descriptor v2 carries no
 			// key, so fall back to the lines it does have.
 			matches := key == storedKey
 			if storedKey == "" {
-				matches = hashOfKeyLines(storedLines) == hashOfKeyLines(lines)
+				matches = hashOfKeyInputs(storedLines) == hashOfKeyInputs(lines)
 			}
 			r.Against = &targetCacheAgainst{
 				Ref: storedRef, Key: storedKey, Matches: matches,
-				Diff: cache.DiffKeyLines(storedLines, lines),
+				Diff: cache.DiffKeyInputs(storedLines, lines),
 			}
 			if !matches {
 				mismatched = true
@@ -762,7 +762,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		}
 		fmt.Printf("  against %s: keys DIFFER\n", r.Against.Ref)
 		if len(r.Against.Diff) == 0 {
-			fmt.Println("    (no line-level difference to show: the stored run recorded no key lines)")
+			fmt.Println("    (no line-level difference to show: the stored run recorded no key inputs)")
 		}
 		for _, d := range r.Against.Diff {
 			fmt.Printf("    %s:\n", d.Class)
@@ -783,9 +783,9 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	return nil
 }
 
-// hashOfKeyLines digests a key-line set for equality comparison, used only when a
+// hashOfKeyInputs digests a key-input set for equality comparison, used only when a
 // stored descriptor predates the v2 field carrying the key itself.
-func hashOfKeyLines(lines []string) string {
+func hashOfKeyInputs(lines []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 	return hex.EncodeToString(sum[:])
 }

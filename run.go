@@ -416,7 +416,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	return step
 }
 
-// ComputeTargetKey computes target's live cache key and the pre-hash key lines behind
+// ComputeTargetKey computes target's live cache key and the pre-hash key inputs behind
 // it for the project at projectPath, without executing anything. The step is keyed
 // exactly as a run with these charms would key it - spell claims, tool versions and
 // the env allowlist all included - so the returned key equals the one a real run

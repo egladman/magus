@@ -98,7 +98,7 @@ func TestKnownSurfaces(t *testing.T) {
 
 // TestLogViewerURLKeyDirective: the key directive rides the fragment ahead of the
 // payload, carries only class digests (never key content), and is omitted entirely
-// when the run recorded no key lines - so an old ref's link keeps its pre-key shape.
+// when the run recorded no key inputs - so an old ref's link keeps its pre-key shape.
 func TestLogViewerURLKeyDirective(t *testing.T) {
 	digests := KeyDigestsParam([]KeyClassDigest{
 		{Class: "src", Digest: "aabbccddeeff"},

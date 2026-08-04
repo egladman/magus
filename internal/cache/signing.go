@@ -44,7 +44,7 @@ const (
 // public key (not chosen), so the verifier treats it only as a trust-set lookup hint.
 //
 // Members extends the envelope to cover the artifact's NON-manifest files (the build
-// log, the output descriptor, the key lines): one content hash per cache-relative
+// log, the output descriptor, the key inputs): one content hash per cache-relative
 // path. The signature is computed over the manifest bytes CONCATENATED with the
 // canonical rendering of that map (signedPayload), so one signature still
 // authenticates the whole artifact - the manifest already commits to every cas blob,

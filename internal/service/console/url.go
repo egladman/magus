@@ -55,7 +55,7 @@ func LogViewerURL(base, ref string, events []journal.Event, inv journal.Invocati
 	return u + "&data=" + encoded, nil
 }
 
-// KeyClassDigest is one cache-key component class and the digest of its key lines.
+// KeyClassDigest is one cache-key component class and the digest of its key inputs.
 // A pair type rather than two parallel slices, so a caller cannot hand the renderer
 // mismatched lists.
 type KeyClassDigest struct {

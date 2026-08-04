@@ -180,7 +180,7 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 }
 
 // exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured
-// build log, and the run's portable-ref sidecars (output descriptor + key lines) for
+// build log, and the run's portable-ref sidecars (output descriptor + key inputs) for
 // (projectPath, hash). Every non-manifest member is recorded in the signature
 // envelope's Members map, so the whole artifact is authenticated rather than just its
 // manifest and blobs.
@@ -299,9 +299,9 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 				}
 			}
 		}
-		if lines, err := os.ReadFile(filepath.Join(c.dir, "outputs", hash, keyLinesName)); err == nil {
-			if err := addSigned(path.Join("outputs", hash, keyLinesName), lines); err != nil {
-				return fmt.Errorf("exportArtifact: key lines: %w", err)
+		if lines, err := os.ReadFile(filepath.Join(c.dir, "outputs", hash, keyInputsName)); err == nil {
+			if err := addSigned(path.Join("outputs", hash, keyInputsName), lines); err != nil {
+				return fmt.Errorf("exportArtifact: key inputs: %w", err)
 			}
 		}
 	}
@@ -356,7 +356,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 		sigBytes      []byte                      // signature.json, buffered for verification (never persisted)
 		seenBlobs     = make(map[string]struct{}) // verified blob hashes present in the tar
 		committed     bool
-		// Extra members (log, descriptor, key lines) are STAGED, never written to
+		// Extra members (log, descriptor, key inputs) are STAGED, never written to
 		// their final path during the scan: they are unauthenticated until the
 		// signature gate below, and a rejected artifact must leave nothing behind.
 		extras      []stagedMember

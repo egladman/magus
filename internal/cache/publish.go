@@ -51,11 +51,11 @@ const bundleProject = "@outputs"
 const bundleManifestName = "output.json"
 
 // OutputBundle is the metadata half of a published output: the run's descriptor plus
-// the key lines behind it. The captured bytes travel beside it as a separate member.
+// the key inputs behind it. The captured bytes travel beside it as a separate member.
 type OutputBundle struct {
 	Schema     int              `json:"schema"`
 	Descriptor OutputDescriptor `json:"descriptor"`
-	KeyLines   []string         `json:"key_lines,omitempty"`
+	KeyInputs  []string         `json:"key_inputs,omitempty"`
 }
 
 // bundleSchema is the OutputBundle wire version.
@@ -89,8 +89,8 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 	if desc.Ref == "" {
 		return "", fmt.Errorf("cache: ref %q has no descriptor to publish", ref)
 	}
-	lines, _ := c.outputs.KeyLinesByRef(ref) // absent is fine: the bytes are the point
-	bundle := OutputBundle{Schema: bundleSchema, Descriptor: desc, KeyLines: lines}
+	lines, _ := c.outputs.KeyInputsByRef(ref) // absent is fine: the bytes are the point
+	bundle := OutputBundle{Schema: bundleSchema, Descriptor: desc, KeyInputs: lines}
 	meta, err := json.Marshal(bundle)
 	if err != nil {
 		return "", err
@@ -296,10 +296,10 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 	if meta, err := json.Marshal(b.Descriptor); err == nil {
 		_ = os.WriteFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
 	}
-	if len(b.KeyLines) > 0 {
-		// Already masked and redacted by the publisher; PersistKeyLines is idempotent
+	if len(b.KeyInputs) > 0 {
+		// Already masked and redacted by the publisher; PersistKeyInputs is idempotent
 		// over an already-masked set.
-		_ = c.outputs.PersistKeyLines(ctx, b.Descriptor.Key, b.KeyLines)
+		_ = c.outputs.PersistKeyInputs(ctx, b.Descriptor.Key, b.KeyInputs)
 	}
 }
 
