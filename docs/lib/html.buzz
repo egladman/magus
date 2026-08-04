@@ -653,7 +653,7 @@ test "contentLinkTargets resolves in-content page links and skips everything els
         mut [<str>], "external, in-page, root-absolute and mailto refs are not corpus edges");
 }
 
-test "backlinkBlock renders a labelled list and the capped tail" {
+test "backlinkBlock renders a labeled list and the capped tail" {
     final items: [{str: str}] = mut [<{str: str}>];
     items.append(mut {"href": "../targets/", "title": "Targets"});
     assert\equal(backlinkBlock(items, 0),

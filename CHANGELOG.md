@@ -64,7 +64,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 ### Fixed
 
 - The OpenCode guard plugin invoked the removed `magus agent hook` form with a
-  positional argument, so every judgement errored and the plugin's fail-open path
+  positional argument, so every judgment errored and the plugin's fail-open path
   allowed EVERY call - an unguarded session unless someone read the console. It now
   pipes the command to `magus hook` on stdin, and a test pins every hook template to
   the stdin contract.
