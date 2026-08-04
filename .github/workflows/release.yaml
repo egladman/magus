@@ -122,7 +122,7 @@ jobs:
   # does not have. The cgo fast path is a marginal win and Intel Macs are legacy, so this is the trade.
   release-darwin:
     name: Build release artifacts (darwin arm64 + amd64-static)
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: read
     steps:
