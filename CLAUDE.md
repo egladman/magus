@@ -207,6 +207,17 @@ deliberately instead:
   subagent, and run mutating subagents isolated or serialized. Never a whole-tree
   git op (`stash`/`reset`/`checkout .`/`clean`) to verify a build - it wipes a
   concurrent agent's untracked work. See the magus-vcs skill.
+- Code that exists ONLY to keep older data, artifacts, or callers working carries a
+  `compat(until: <condition>):` comment, in the shape of the existing
+  `optimization:` prefix. Three things, or it is not auditable: what it supports,
+  the condition that retires it, and how you would OBSERVE that dropping it is
+  safe. A date is not a condition - "no store still serves ed25519 envelopes" is.
+  Secondary sites say `compat: see <the primary site>` rather than restating it.
+  Use Go's `// Deprecated:` instead when the thing is an exported API callers
+  should stop using - staticcheck's SA1019 already enforces that one, and it is
+  the wrong marker for an internal branch nobody should stop reaching. Do not mark
+  code that merely LOOKS like a shim: resolving an old-width output ref is not
+  compat, because attempt ids share that shape and there is nothing to rip out.
 
 ## Working style
 

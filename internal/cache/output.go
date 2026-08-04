@@ -266,6 +266,7 @@ func newestAttemptBlob(dir string) string {
 		path := filepath.Join(dir, f.Name())
 		d, derr := readDescriptor(filepath.Join(dir, stem+descExt))
 		if derr == nil {
+			// compat: see the v1-descriptor note in Attempts.
 			if d.Attempt == "" {
 				d.Attempt = stem
 			}
@@ -566,6 +567,12 @@ func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 				d.TimestampMs = info.ModTime().UnixMilli()
 			}
 		}
+		// compat(until: no store holds schema-1 descriptors): a v1 descriptor predates
+		// the Attempt field, so its file stem - which WAS its ref - fills in, keeping
+		// every row addressable. Delete when the oldest reachable store has been
+		// written by a schema-2 magus for longer than the retention window; the
+		// descriptors age out on their own, so this needs no migration. Observable:
+		// deletion makes pre-portable rows list with an empty attempt id.
 		if d.Attempt == "" {
 			d.Attempt = stem
 		}

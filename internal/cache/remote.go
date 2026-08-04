@@ -490,9 +490,10 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 			return fmt.Errorf("importArtifact: %w", err)
 		}
 		if legacy {
-			// A pre-domain producer signed only the manifest, so its log is
-			// unauthenticated: keep the entry (it still replays) and drop the extras
-			// rather than reject an artifact every released magus produces.
+			// compat: see sigAlg in signing.go. A pre-domain producer signed only the
+			// manifest, so its log is unauthenticated: keep the entry (it still
+			// replays) and drop the extras rather than reject an artifact every
+			// released magus produces. Delete this branch with sigAlg.
 			extras = nil
 		}
 	} else {

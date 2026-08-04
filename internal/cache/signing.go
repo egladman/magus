@@ -29,9 +29,16 @@ import (
 const (
 	// sigFileName is the artifact-tar member holding the detached signature envelope.
 	sigFileName = "signature.json"
-	// sigAlg is the pre-domain scheme: a bare ed25519 signature over the manifest
-	// bytes alone. Still ACCEPTED (artifacts signed by an older magus keep
-	// verifying, minus their unauthenticated extras), never produced.
+	// compat(until: no store still serves "ed25519" envelopes): sigAlg is the
+	// pre-domain scheme - a bare ed25519 signature over the manifest bytes alone.
+	// Still ACCEPTED so artifacts signed by a released magus keep verifying;
+	// never produced. Dropping it early turns every pre-upgrade remote entry into
+	// a full miss on both sides of the rollout.
+	//
+	// Safe to delete when every producer writing to the shared store has been on
+	// sigAlgV2 for a full retention cycle. Observable: deletion makes those
+	// imports fail with "unsupported alg", so a store still serving them says so
+	// loudly rather than silently degrading.
 	sigAlg = "ed25519"
 	// sigAlgV2 is what magus produces now: ed25519 over signedPayload - a domain tag,
 	// the length-prefixed manifest, and the extra members' digests.
@@ -244,9 +251,10 @@ func (v *verifier) verify(domain string, sigBytes, manifestBytes []byte, gotMemb
 			return false, err
 		}
 	case sigAlg:
-		// Pre-domain producer: it signed the manifest alone, so any extras that came
-		// with it are unauthenticated and the caller drops them. Rejecting the
-		// artifact instead would turn every release-built entry into a miss.
+		// compat: see sigAlg. A pre-domain producer signed the manifest alone, so any
+		// extras that came with it are unauthenticated and the caller drops them.
+		// Rejecting the artifact instead would turn every release-built entry into a
+		// miss. Delete this arm together with sigAlg.
 		legacy = true
 		env.Members = nil
 	default:
