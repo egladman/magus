@@ -1,0 +1,66 @@
+// What a target reads, what it writes, and who owns the result. This is the
+// declaration people get wrong most often, because there are two places to put a glob and
+// the difference is not obvious from the names.
+//
+//   magus\project({"sources": [...]})   what makes the PROJECT affected, and seeds the
+//                                        cache key of every target that declares nothing
+//   ctx.readsFiles(...)                  THIS target's exact inputs; magus then hashes
+//                                        only these instead of the project baseline
+//   ctx.writesFiles(...)                 THIS target's outputs; snapshotted, replayed on
+//                                        a hit, and removable by `magus clean`
+//   ctx.modifiesExistingFiles(...)       files that already exist and are edited in PART -
+//                                        hashed, but never snapshotted or removed
+//
+// The rule: does the glob affect EVERY target, or ONE? A shared schema is project
+// `sources`, declared once. A target's own `dist/` is `ctx.writesFiles` in its body.
+// Outputs are almost always target-specific, so a project-wide `outputs` is usually the
+// wrong tool - it makes every target snapshot it.
+//
+// The third one is not a synonym for the second. `writesFiles` says "I own this file and
+// create it whole"; `modifiesExistingFiles` says "this file is someone else's and I edit a
+// region of it". Get that backwards and `magus clean` deletes a hand-written page.
+//
+// This magusfile contains a deliberate contradiction. Run `doctor` and read the ward.
+
+import "magus";
+import "fs";
+
+magus\project({
+    "name": "tour-footprints",
+    // Project-wide because EVERY target here reads it. A target-specific input would not
+    // belong up here - see report/stamp below.
+    "sources": ["magusfile.buzz", "shared/**"],
+});
+
+// Narrow on purpose. readsFiles replaces the project baseline for this target, so editing
+// something outside data/ does not re-run it. Name every input the target actually reads:
+// a glob you forget is a file whose change magus cannot see, and a stale hit is the result.
+export fun report(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("data/**");
+    ctx.writesFiles("gen/report.txt");
+    fs\makeDirectory("gen");
+    fs\writeFile("gen/report.txt", "report");
+    magus\info("wrote gen/report.txt");
+}
+
+// THE CONTRADICTION. This target claims the same output as `report`. Nothing stops both
+// from running, so whichever finishes last wins and the other's drift gate fails against a
+// file it did not write - a failure that points at the wrong target and wastes an afternoon.
+//
+// `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has
+// exactly one owner; if two targets genuinely need to contribute, they write separate files
+// and a third target combines them.
+export fun stamp(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/report.txt");
+    fs\makeDirectory("gen");
+    fs\writeFile("gen/report.txt", "stamp");
+}
+
+// Editing rather than producing. This page is hand-written and only a region of it is
+// generated, so it is NOT an output magus owns - declaring it with writesFiles would let
+// `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.
+export fun inject(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("data/**");
+    ctx.modifiesExistingFiles("README.md");
+    magus\info("would rewrite the generated block in README.md, leaving the rest alone");
+}
