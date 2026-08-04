@@ -37,7 +37,7 @@ jobs:
   # "Install codec build dependencies" step, or MSYS2 packages on Windows.
   # contents: read only; none of these see MAGUS_SIGNING_KEY.
   release-linux-amd64:
-    name: Build release artifacts (linux/amd64)
+    name: Build release artifacts (linux amd64 + armv6/armv7-static)
     runs-on: ubuntu-latest
     permissions:
       contents: read  # publish is the only job that creates the Release/uploads assets
@@ -62,10 +62,22 @@ jobs:
       # No remote-cache env is set in CD on purpose: a release builds clean off the
       # cache. magusfile.buzz leaves the backend unbound without it, so there is zero
       # chance of replaying a cached (unsigned) artifact into a release.
-      - name: Build release artifacts (static + dynamic)
+      # The 32-bit ARM archives ride along here rather than getting their own runner:
+      # they are CGO_ENABLED=0 pure-Go cross-compiles, so any host builds them. They are
+      # passed as explicit ARGS, not as GOOS/GOARCH env like the darwin and windows
+      # cross-builds above, because armv6/armv7 are ASSET names rather than real GOARCH
+      # values - putting them in GOARCH would be a lie to every other tool reading the
+      # environment. The magusfile folds them back to GOARCH=arm plus a GOARM level.
+      # Two assets and not one: an ARMv7 binary traps on ARMv6 hardware, so the older
+      # boards need their own build. Both are hardware-float (GOARM=6 is VFPv1, GOARM=7
+      # is VFPv3; softfloat would be GOARM=5, which is not built here) - the v6 asset
+      # gives up the newer VFP, not floating point. No -cgo variant for either.
+      - name: Build release artifacts (amd64 static + dynamic, armv6/armv7 static)
         run: |
           magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          magus run release-build:static --no-default-charms -- linux armv6
+          magus run release-build:static --no-default-charms -- linux armv7
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-linux-amd64
@@ -138,8 +150,16 @@ jobs:
             dist/*.sha256
           if-no-files-found: error
 
-  release-windows-amd64:
-    name: Build release artifacts (windows/amd64)
+  # No separate windows-11-arm job: this runner cross-compiles the windows/arm64 STATIC binary
+  # instead (CGO_ENABLED=0 pure-Go cross-compiles from any host), the same trade the darwin job
+  # above makes for amd64. The windows/arm64 DYNAMIC variant is dropped because cgo would need
+  # an aarch64 mingw/clang toolchain plus arm64 libzstd/liblzma, which MINGW64 here does not
+  # have; MSYS2's CLANGARM64 environment is the only route and it is far less proven than the
+  # x86_64 packages above. What is forgone is only internal/codec's zstd/xz fast path, which is
+  # marginal. (This does NOT cost the Buzz JIT: it used to be excluded on Windows, but the same
+  # change that added this job dropped that exclusion, so the arm64 backend runs here.)
+  release-windows:
+    name: Build release artifacts (windows amd64 + arm64-static)
     runs-on: windows-latest
     permissions:
       contents: read
@@ -175,15 +195,16 @@ jobs:
 
       # release-build:static doesn't need MAGUS_CGO_CC/PKG_CONFIG_PATH (CGO_ENABLED=0
       # ignores them), so running it here too is harmless: same runner, same shell.
-      - name: Build release artifacts (static + dynamic)
+      - name: Build release artifacts (amd64 static + dynamic, arm64 static)
         shell: msys2 {0}
         run: |
           magus run release-build:static --no-default-charms
           magus run release-build --no-default-charms
+          GOOS=windows GOARCH=arm64 magus run release-build:static --no-default-charms
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dist-windows-amd64
+          name: dist-windows
           path: |
             dist/magus_*.tar.gz
             dist/*.sha256
@@ -195,7 +216,7 @@ jobs:
       - release-linux-amd64
       - release-linux-arm64
       - release-darwin
-      - release-windows-amd64
+      - release-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write  # create the GitHub Release and upload assets

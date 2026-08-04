@@ -56,7 +56,7 @@ func newTestFixture(t *testing.T, tag string, manifestVersion ...string) *testFi
 	}
 
 	tarball := makeFakeTarball(t)
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, runtime.GOARCH)
+	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", tag, runtime.GOOS, releaseArch())
 	sum := sha256.Sum256(tarball)
 	sumHex := hex.EncodeToString(sum[:])
 
@@ -144,7 +144,7 @@ func (fx *testFixture) activate(t *testing.T) {
 
 	// Build a client that redirects GitHub release asset fetches to the artifact server.
 	artifactBase := fx.artifactSrv.URL
-	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", fx.tag, runtime.GOOS, runtime.GOARCH)
+	assetName := fmt.Sprintf("magus_%s_%s_%s.tar.gz", fx.tag, runtime.GOOS, releaseArch())
 	ghPrefix := fmt.Sprintf("https://github.com/egladman/magus/releases/download/%s/", fx.tag)
 	transport := &redirectTransport{
 		base:        http.DefaultTransport,
@@ -480,4 +480,54 @@ func TestCompare(t *testing.T) {
 	assertCompare("v0.9.0", "v1.0.0", -1)
 	assertCompare("unknown", "v1.0.0", 0)
 	assertCompare("v1.0.0", "unknown", 0)
+}
+
+// TestArchToken verifies the asset architecture token, which is runtime.GOARCH
+// everywhere except 32-bit ARM. There the token must resolve to one of the exactly
+// two names CD publishes (armv6, armv7); echoing an unpublished level back would
+// name an asset that does not exist.
+func TestArchToken(t *testing.T) {
+	cases := []struct {
+		name   string
+		goarch string
+		goarm  string
+		want   string
+	}{
+		{"amd64 passes through", "amd64", "", "amd64"},
+		{"arm64 is not a GOARM arch", "arm64", "7", "arm64"},
+		{"arm with GOARM=7", "arm", "7", "armv7"},
+		{"arm with GOARM=6", "arm", "6", "armv6"},
+		{"GOARM options are trimmed", "arm", "7,softfloat", "armv7"},
+		{"GOARM=6 with options", "arm", "6,softfloat", "armv6"},
+		// Levels CD does not publish must not be echoed back as an asset name.
+		{"GOARM=5 clamps to the published armv6", "arm", "5", "armv6"},
+		{"an unknown future level clamps to armv6", "arm", "9", "armv6"},
+		{"no recorded level falls back to armv6", "arm", "", "armv6"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.want, archToken(c.goarch, c.goarm))
+		})
+	}
+}
+
+// TestArchTokenOnlyPublishedARMNames pins the invariant that no GOARM value can
+// produce a name outside the set CD uploads, so a `magus self update` on any 32-bit
+// ARM build resolves to an asset that exists.
+func TestArchTokenOnlyPublishedARMNames(t *testing.T) {
+	published := map[string]bool{"armv6": true, "armv7": true}
+	for _, goarm := range []string{"", "5", "6", "7", "8", "9", "7,softfloat", "6,softfloat", "garbage"} {
+		require.Truef(t, published[archToken("arm", goarm)],
+			"GOARM=%q resolved to an unpublished asset name %q", goarm, archToken("arm", goarm))
+	}
+}
+
+// TestReleaseArchMatchesGOARCHOffARM guards that the token only ever deviates from
+// runtime.GOARCH on 32-bit ARM, so no other platform's `magus self update` can start
+// requesting an asset name the release does not publish.
+func TestReleaseArchMatchesGOARCHOffARM(t *testing.T) {
+	if runtime.GOARCH == "arm" {
+		t.Skip("host is 32-bit ARM; the deviation is expected there")
+	}
+	require.Equal(t, runtime.GOARCH, releaseArch())
 }

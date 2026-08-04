@@ -29,9 +29,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 
 | Route                                              | When                                                       |
 | -------------------------------------------------- | ---------------------------------------------------------- |
-| [Linux](download/linux.md)                          | manual install, amd64 or arm64                              |
+| [Linux](download/linux.md)                          | manual install, amd64, arm64, or 32-bit ARM (armv6/armv7)   |
 | [macOS](download/macos.md)                          | manual install, Apple Silicon or Intel                      |
-| [Windows](download/windows.md)                      | amd64                                                       |
+| [Windows](download/windows.md)                      | manual install, amd64 or arm64                              |
 | [Container image](download/container-image.md)      | run from an OCI image, or extract the binary from one       |
 | [mise](download/package-managers.md)                | you already manage tool versions with mise                  |
 | [Build from source](download/package-managers.md#build-from-source) | you want a local build, or a `noselfupdate` build |

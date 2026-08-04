@@ -886,6 +886,19 @@ export fun tapes(ctx: magus\Context, args: [str]) > void {
 // `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target.
 // release-build's cgo and static (charm) modes both call this, differing only in
 // CGO_ENABLED and the asset suffix.
+// Maps an ASSET architecture token to the GOARM level it implies, or "" for the arches
+// that carry no variant. The two 32-bit ARM builds ship as separate assets because
+// neither serves the other's hardware: an ARMv7 binary traps on ARMv6, and the ARMv6
+// build is limited to VFPv1 where v7 silicon offers VFPv3 (both are hardware float -
+// softfloat would be GOARM=5, which is not built). GOARCH stays "arm" for both; only
+// GOARM and the asset name differ. Go records GOARM in the binary's build info, which is
+// how `magus self update` picks the matching asset back out (see cmd/magus/selfupdate.go).
+fun goarm_level(goarch: str) > str {
+    if (goarch == "armv6") { return "6"; }
+    if (goarch == "armv7") { return "7"; }
+    return "";
+}
+
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void {
     fs\makeDirectory("dist");
     final v = version();
@@ -896,6 +909,9 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     fs\makeDirectory(stage);
 
     var env = mut {"GOOS": goos, "GOARCH": goarch, "GOEXPERIMENT": "jsonv2"};
+    // armv6/armv7 are asset names, not GOARCHes: fold them back to GOARCH=arm + GOARM.
+    final goarm = goarm_level(goarch);
+    if (goarm != "") { env["GOARCH"] = "arm"; env["GOARM"] = goarm; }
     if (cgo) {
         env["CGO_ENABLED"] = "1";
         // CC/PKG_CONFIG_PATH are set by the CD workflow only where the native toolchain
@@ -963,10 +979,24 @@ fun release_target_platform(goos: str, goarch: str) > [str] {
 // build:container): this is a magusfile function target with no spell, so :static
 // trips the soft undeclared-charm typo-guard warning — expected here, same as that
 // example.
-export fun release_build(ctx: magus\Context, goos: str, goarch: str) > void {
+// Takes the platform as positional ARGS, not as declared parameters: a target's second
+// parameter is bound to the whole argument list, whatever it is named, so the earlier
+// `(ctx, goos: str, goarch: str)` signature put that list in goos and null in goarch -
+// which made `goos + "-"` a list+str concatenation and failed EVERY release-build, on
+// every platform, before it reached the compiler.
+export fun release_build(ctx: magus\Context, args: [str]) > void {
     // dist/* is skip_cache (never snapshotted), but declaring it keeps
     // `magus clean --outputs` aware of the release artifacts via AllOutputs.
     ctx.writesFiles("dist/*");
+    var goos = "";
+    var goarch = "";
+    if (args.len() == 1) {
+        // Half a platform is always a typo. Falling through would silently build the
+        // runner's OWN platform and name the archive after it, handing back a
+        // plausible asset for the wrong target.
+        throw "release-build: got one argument; pass both goos and goarch, e.g. -- linux armv7";
+    }
+    if (args.len() >= 2) { goos = args[0]; goarch = args[1]; }
     // The UNSUFFIXED archive is the static one, and the cgo build carries "-cgo". That is
     // the same convention as the image tags (`latest` static, `latest-cgo` cgo), and it was
     // inverted here: the archives spelled static with a suffix and gave the bare name to

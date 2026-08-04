@@ -61,9 +61,12 @@ export fun artifactDesc(name: str, platform: str) > str {
     // Tarballs: derive from the platform string.
     if (platform == "linux/amd64")   { return "Linux amd64 binary"; }
     if (platform == "linux/arm64")   { return "Linux arm64 binary"; }
+    if (platform == "linux/armv6")   { return "Linux 32-bit ARMv6 binary"; }
+    if (platform == "linux/armv7")   { return "Linux 32-bit ARMv7 binary"; }
     if (platform == "darwin/amd64")  { return "macOS Intel binary"; }
     if (platform == "darwin/arm64")  { return "macOS Apple Silicon binary"; }
     if (platform == "windows/amd64") { return "Windows amd64 binary"; }
+    if (platform == "windows/arm64") { return "Windows arm64 binary"; }
     return name;
 }
 
