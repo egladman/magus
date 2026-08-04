@@ -96,6 +96,7 @@ concepts/remote-cache/
 concepts/sandbox/
 concepts/secrets/
 concepts/services/
+concepts/spell-naming/
 concepts/spells/
 concepts/spells/bash/
 concepts/spells/buf/
@@ -136,6 +137,7 @@ development/gopherbuzz/
 development/libs-diag/
 development/libs-diagnostics/
 development/libs-gopherbuzz/
+development/libs-proto/
 development/libs-textsearch/
 development/magus/
 development/projects/
@@ -519,6 +521,7 @@ tags/mise/
 tags/module/
 tags/monitoring/
 tags/monorepo/
+tags/naming/
 tags/needs/
 tags/node/
 tags/nx/

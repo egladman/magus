@@ -2,7 +2,7 @@
 title: Wards
 description: Wards are coded guardrails that inspect a resolved op before it runs and reject an argv that contradicts the op's declared kind, so a misconfigured service or command op fails fast with a fix.
 tags: [wards, diagnostics, operations, services, kind, MGSxxxx, guardrails]
-order: 13
+order: 14
 ---
 
 # Wards

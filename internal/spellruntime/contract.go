@@ -32,6 +32,7 @@ var OptionalContract = []ContractEntry{
 	{Name: "mgs_getVersionCommand", Field: "version_cmd"},
 	{Name: "mgs_getVersionCommands", Field: "version_cmds"},
 	{Name: "mgs_listUnprobedBins", Field: "unprobed_bins"},
+	{Name: "mgs_listNamingDeviations", Field: "naming_deviations"},
 	{Name: "mgs_listInstallHints", Field: "install_hints"},
 	{Name: "mgs_getLanguage", Field: "language"},
 	{Name: "mgs_getPackageManagerBin", Field: "package_manager_bin"},

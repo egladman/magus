@@ -13,7 +13,7 @@ tags:
     registry,
     ci,
   ]
-order: 11
+order: 12
 ---
 
 # Secrets

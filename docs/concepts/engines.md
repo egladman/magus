@@ -2,7 +2,7 @@
 title: Engines
 description: Why magus embeds Buzz, what that embedding buys over an external SDK, and the small engine.Engine seam a new scripting language would plug into.
 tags: [engines, buzz, vm, interpreter, runtime, magusfile, plugin, session]
-order: 12
+order: 13
 ---
 
 # Engines

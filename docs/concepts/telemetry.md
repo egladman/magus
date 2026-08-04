@@ -12,7 +12,7 @@ tags:
     logs,
     monitoring,
   ]
-order: 15
+order: 16
 ---
 
 # Telemetry (OpenTelemetry)

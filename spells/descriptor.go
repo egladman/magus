@@ -98,6 +98,15 @@ type Descriptor struct {
 	// implied. A reason is required, mirroring skip_cache: an opt-out without a
 	// stated why is indistinguishable from a forgotten probe.
 	UnprobedBins map[string]string `json:"unprobed_bins,omitempty"`
+	// NamingDeviations are the ops whose name the naming formula does not produce,
+	// op name to a one-line reason (declared by mgs_listNamingDeviations). The
+	// formula (see docs/concepts/spell-naming.md) decides an op's name from its own
+	// argv, and `magus doctor` enforces it mechanically, so the cases it cannot
+	// decide - `node --test` reduces to `node`, which names a runtime rather than an
+	// action - must be argued rather than silently taken. A reason is required for
+	// the same reason UnprobedBins requires one: an undeclared deviation is
+	// indistinguishable from an op nobody thought about.
+	NamingDeviations map[string]string `json:"naming_deviations,omitempty"`
 	// InstallHints map an op bin to a one-line install command (declared by
 	// mgs_listInstallHints, e.g. "mise use -g shellcheck # or: brew install
 	// shellcheck"). When forking an op fails because the bin is absent from PATH,
@@ -149,3 +158,9 @@ func (d Descriptor) ServiceOpNames() []string {
 	sort.Strings(names)
 	return names
 }
+
+// IsLanguageSpell reports whether this spell adapts a language whose canonical
+// name is also its toolchain binary - Go's name is Go and the command is `go`.
+// Such a spell is naming its domain, not a binary, so the naming ward exempts it
+// from the domain rule and its ops drop the redundant prefix instead.
+func (d Descriptor) IsLanguageSpell() bool { return d.Language != "" && d.Language == d.Name }

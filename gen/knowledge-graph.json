@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2577,
-  "edge_count": 5887,
+  "node_count": 2580,
+  "edge_count": 5907,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -226,6 +226,14 @@
       "label": "MGS1023",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1023/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1024",
+      "kind": "diagnostic",
+      "label": "MGS1024",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1024/"
       }
     },
     {
@@ -1175,7 +1183,7 @@
       "source": "docs/concepts",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "37",
+        "dir_files": "38",
         "dir_languages": "markdown"
       }
     },
@@ -1307,7 +1315,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "151",
+        "dir_files": "152",
         "dir_languages": "markdown"
       }
     },
@@ -1340,7 +1348,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "73",
+        "dir_files": "74",
         "dir_languages": "markdown"
       }
     },
@@ -1384,7 +1392,7 @@
       "source": "docs/reference/codes/magusfile",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "23",
+        "dir_files": "24",
         "dir_languages": "markdown"
       }
     },
@@ -2807,6 +2815,18 @@
       }
     },
     {
+      "id": "doc:docs/concepts/spell-naming.md",
+      "kind": "doc",
+      "label": "docs/concepts/spell-naming.md",
+      "source": "docs/concepts/spell-naming.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "spells,operations,naming,conventions,authoring,ward,toolchain",
+        "title": "Naming spells and ops"
+      }
+    },
+    {
       "id": "doc:docs/concepts/spells.md",
       "kind": "doc",
       "label": "docs/concepts/spells.md",
@@ -4202,6 +4222,18 @@
         "section": "reference",
         "tags": "MGS1023,magusfile,load,sandbox,workspace",
         "title": "MGS1023: magusfile load failed"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1024.md",
+      "source": "docs/reference/codes/magusfile/MGS1024.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1024,magusfile,spells,naming,conventions,doctor",
+        "title": "MGS1024: spell op named against the formula"
       }
     },
     {
@@ -24843,6 +24875,14 @@
     },
     {
       "source": "dir:docs/concepts",
+      "target": "doc:docs/concepts/spell-naming.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "dir:docs/concepts",
       "target": "doc:docs/concepts/spells.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -26096,6 +26136,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -31368,6 +31416,94 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/concepts/services.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "doc:docs/concepts/operations.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "doc:docs/guides/authoring-spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:docker",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:markdown",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:python",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
+    },
+    {
+      "source": "doc:docs/concepts/spell-naming.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/concepts/spell-naming.md"
     },
     {
       "source": "doc:docs/concepts/spells.md",
@@ -37296,6 +37432,62 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/codes/magusfile/MGS1023.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1022",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "doc:docs/concepts/spell-naming.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1022.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "spell:docker",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "spell:go",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "target": "spell:rust",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/reference/codes/magusfile/MGS1024.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",

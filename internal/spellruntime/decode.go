@@ -57,6 +57,7 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		VersionCmd:        src.Strs("version_cmd"),
 		VersionCmds:       decodeVersionCmds(src),
 		UnprobedBins:      decodeStrMap(src, "unprobed_bins"),
+		NamingDeviations:  decodeStrMap(src, "naming_deviations"),
 		InstallHints:      decodeStrMap(src, "install_hints"),
 		Language:          language,
 		PackageManagerBin: pmBin,

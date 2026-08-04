@@ -918,6 +918,161 @@ func probeCoverageFindings(spec spells.Descriptor) []string {
 	return out
 }
 
+// checkSpellOpNaming is MGS1024: it makes the spell/op naming formula mechanical.
+// The formula (docs/concepts/spell-naming.md) derives an op's name from its own
+// argv, so a name that drifts from what it runs is decidable rather than a matter
+// of taste - which is the point, because the failure it prevents is one taste
+// cannot see. `docker["docker-push"]` reads as "docker docker push" and nobody
+// notices while writing it; the stutter only becomes expensive once callers exist.
+//
+// Same built-ins-only boundary as checkSpellProbeCoverage above, and for the same
+// reason: the judgment needs the raw descriptor (op argvs, declared deviations),
+// which a workspace-local spell does not surface past registration.
+//
+// Unlike that check it walks EVERY built-in rather than only the ones this
+// workspace binds. Probe coverage is a fact about this workspace's cache keys, so
+// an unbound spell cannot stale anything here; a name is a fact about magus, which
+// ships it to every workspace. Checking only bound spells would mean the docker
+// spell's naming went unexamined in a repo that happens not to build an image.
+// A warning, not a load error: the workspace still runs.
+func (*runner) checkSpellOpNaming([]*types.Project) Check {
+	const name = "spell op naming"
+	var details []string
+	for _, spec := range spellruntime.Builtins() {
+		details = append(details, namingFindings(spec)...)
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "every bound built-in spell's ops are named by the formula or declare a reason"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d spell op name(s) are not what the naming formula yields from their own argv, which is how a name drifts from what it runs. "+
+				"Rename the op, or declare the deviation with a reason (mgs_listNamingDeviations) (see %s)",
+			len(details), types.CodeURL(types.SpellOpMisnamed)),
+		Details: details,
+	}
+}
+
+// namingFindings reports the ops of one spell descriptor whose name the formula
+// does not produce, one line per op. It reports two distinct faults: a spell named
+// after a binary it forks (which is what makes every op under it stutter), and an
+// op name that is not kebab(bin + subcommands) - or kebab(subcommands) when the bin
+// IS the spell name, or when the bin is a substitutable package manager whose name
+// would be a lie under a different one.
+func namingFindings(spec spells.Descriptor) []string {
+	var out []string
+	deviations := spec.NamingDeviations
+
+	// Rule 1 first: a spell named after a binary it forks is the fault that makes
+	// every op under it stutter, and renaming those ops one by one only papers over
+	// it. Reported once, against the spell, and the per-op findings are suppressed -
+	// they are consequences, and renaming the spell settles them all.
+	//
+	// The exception is a language whose canonical name IS its toolchain binary: Go's
+	// name is Go and the command is `go`. A spell that declares that language (
+	// mgs_getLanguage) is naming its domain, not its binary, so it takes the B == D
+	// branch instead of this finding.
+	if !spec.IsLanguageSpell() {
+		for _, opName := range spec.OpNames() {
+			if bin := spec.Ops[opName].Bin; bin != "" && bin == spec.Name {
+				return []string{fmt.Sprintf(
+					"spell %s: the spell is named after %q, a binary it forks (op %s), so every op under it either stutters or hides its tool; "+
+						"name the spell for the domain it adapts instead (see the domain rule)",
+					spec.Name, bin, opName)}
+			}
+		}
+	}
+
+	// A canonical name claimed by more than one op means those ops differ only by a
+	// mode flag; the disambiguation clause lets each extend the shared name.
+	claims := map[string]int{}
+	for _, opName := range spec.OpNames() {
+		op := spec.Ops[opName]
+		if op.Bin == "" || op.Bin == "sh" {
+			continue
+		}
+		if want := canonicalOpName(spec, op.Bin, op.Args); want != "" {
+			claims[want]++
+		}
+	}
+
+	for _, opName := range spec.OpNames() {
+		op := spec.Ops[opName]
+		bin := op.Bin
+		// A sh -c wrapper's real tool lives inside the script string and a marker op
+		// has no bin at all, so neither is derivable from argv.
+		if bin == "" || bin == "sh" {
+			continue
+		}
+		if _, declared := deviations[opName]; declared {
+			continue
+		}
+		want := canonicalOpName(spec, bin, op.Args)
+		if want == "" || want == opName {
+			continue
+		}
+		// Contested name: the op only has to extend it, since the suffix is what
+		// tells `tsc --build` from `tsc --build --clean`.
+		if claims[want] > 1 && strings.HasPrefix(opName, want+"-") {
+			continue
+		}
+		out = append(out, fmt.Sprintf(
+			"spell %s op %s: the formula yields %q from %q; rename it, or declare it in mgs_listNamingDeviations with a reason",
+			spec.Name, opName, want, strings.TrimSpace(bin+" "+strings.Join(op.Args, " "))))
+	}
+	return out
+}
+
+// canonicalOpName applies the naming formula to one op's argv. Returns "" when the
+// argv is not derivable (no bin), so the caller reports nothing rather than a guess.
+//
+// Subcommands are the leading bare words: the scan stops at the first flag, path,
+// glob, or other operand, because `markdownlint **/*.md` takes a file argument, not
+// a subcommand, and naming the op after it would be nonsense.
+func canonicalOpName(spec spells.Descriptor, bin string, args []string) string {
+	if bin == "" {
+		return ""
+	}
+	var sub []string
+	for _, a := range args {
+		if a == "" || strings.HasPrefix(a, "-") || strings.ContainsAny(a, "/*$") || a == "." || a == ".." {
+			break
+		}
+		sub = append(sub, a)
+	}
+	// A runner is plumbing, not the binary: `uv run ruff check` runs ruff, and
+	// `pnpm exec eslint` runs eslint. Drop the launcher and re-read the real tool.
+	// With nothing after the verb the launcher is not launching anything - `pnpm run`
+	// IS the op, taking its script name as an argument - so this falls through to the
+	// substitutable branch below rather than naming a tool that is not there.
+	if len(sub) > 1 && isRunnerVerb(sub[0]) {
+		return canonicalOpName(spec, sub[1], sub[2:])
+	}
+	// A substitutable package manager is swapped per project, so naming it would be
+	// false under any other one: the subcommand alone is the honest name.
+	if spec.PackageManagerBin != "" && bin == spec.PackageManagerBin {
+		return strings.Join(sub, "-")
+	}
+	if bin == spec.Name {
+		return strings.Join(sub, "-")
+	}
+	return strings.Join(append([]string{bin}, sub...), "-")
+}
+
+// isRunnerVerb reports whether a token is the "run this tool for me" verb of a
+// package manager (pnpm exec, uv run, bun x). The verb, not the launcher, is what
+// marks the following token as the real binary.
+func isRunnerVerb(s string) bool {
+	switch s {
+	case "run", "exec", "x":
+		return true
+	}
+	return false
+}
+
 // checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static
 // extractor can't reach from a target body - one in an unreferenced or
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration

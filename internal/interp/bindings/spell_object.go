@@ -27,6 +27,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("package_manager_bin", vm.StrValue(m.PackageManagerBin))
 	h.MapSet("unprobed_bins", strMapToBuzzMap(m.UnprobedBins))
+	h.MapSet("naming_deviations", strMapToBuzzMap(m.NamingDeviations))
 	h.MapSet("install_hints", strMapToBuzzMap(m.InstallHints))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))

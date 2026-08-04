@@ -1,6 +1,6 @@
 ---
 title: Concurrency
-order: 8
+order: 9
 description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, and the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache.
 tags:
   [
