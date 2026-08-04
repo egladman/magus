@@ -23,7 +23,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		b := Str(bzArgs, 2)
 		ret0, err := std.SemverCompare(ctx, a, op, b)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -31,7 +31,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		v := Str(bzArgs, 0)
 		ret0, err := std.SemverParse(ctx, v)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueSemverSemverVersion(ret0), nil
 	}))
@@ -39,7 +39,7 @@ func RegisterSemver(ctx context.Context, sess *buzz.Session) vm.Value {
 		v := Str(bzArgs, 0)
 		ret0, err := std.SemverNext(ctx, v)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueSemverSemverNext(ret0), nil
 	}))

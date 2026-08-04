@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2443,
-  "edge_count": 5537,
+  "node_count": 2451,
+  "edge_count": 5549,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -298,6 +298,22 @@
       "label": "MGS3001",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3001/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS3002",
+      "kind": "diagnostic",
+      "label": "MGS3002",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3002/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS3003",
+      "kind": "diagnostic",
+      "label": "MGS3003",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3003/"
       }
     },
     {
@@ -1267,7 +1283,7 @@
       "source": "docs/reference",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "143",
+        "dir_files": "145",
         "dir_languages": "markdown"
       }
     },
@@ -1300,7 +1316,7 @@
       "source": "docs/reference/codes",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "67",
+        "dir_files": "69",
         "dir_languages": "markdown"
       }
     },
@@ -1377,7 +1393,7 @@
       "source": "docs/reference/codes/sandbox",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "12",
+        "dir_files": "14",
         "dir_languages": "markdown"
       }
     },
@@ -1432,7 +1448,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "18",
+        "dir_files": "19",
         "dir_languages": "buzz"
       }
     },
@@ -4658,6 +4674,30 @@
       }
     },
     {
+      "id": "doc:docs/reference/codes/sandbox/MGS3002.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3002.md",
+      "source": "docs/reference/codes/sandbox/MGS3002.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3002,vcs,git,host-modules,errors,magusfile",
+        "title": "MGS3002: VCS unavailable"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3003.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3003.md",
+      "source": "docs/reference/codes/sandbox/MGS3003.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3003,path,tools,host-modules,errors,magusfile",
+        "title": "MGS3003: tool not on PATH"
+      }
+    },
+    {
       "id": "doc:docs/reference/codes/sandbox/README.md",
       "kind": "doc",
       "label": "docs/reference/codes/sandbox/README.md",
@@ -6044,6 +6084,15 @@
       "kind": "file",
       "label": "docs/tour/18-typed-boundaries.buzz",
       "source": "docs/tour/18-typed-boundaries.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/19-error-handling.buzz",
+      "kind": "file",
+      "label": "docs/tour/19-error-handling.buzz",
+      "source": "docs/tour/19-error-handling.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -10505,6 +10554,36 @@
       "label": "select",
       "doc": "Selection is BY NAME. Positional indexing looks tempting and is a trap here: the charm decides the list's length, so index 1 is a valid registry under `prod` and out of range under `dev`. An unknown host is an error naming the valid ones rather than a silent no-op.",
       "source": "docs/tour/18-typed-boundaries.buzz:57"
+    },
+    {
+      "id": "function:docs/tour/19-error-handling.buzz:gate",
+      "kind": "function",
+      "label": "gate",
+      "doc": "The judgment a real language buys you. A scanner answers \"does a problem match?\" with an exit code, but a gate needs \"is there something I can do about it right now?\" - and those come apart constantly. Fail on what is actionable; report the rest and carry on, so the gate never fails on something nobody can fix. A gate that does gets muted, and a muted gate is `|| true` with extra steps.",
+      "source": "docs/tour/19-error-handling.buzz:64",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/19-error-handling.buzz:stamp",
+      "kind": "function",
+      "label": "stamp",
+      "doc": "A failure that is EXPECTED in a known situation. Building outside a checkout is real - a release tarball, a container build context - so it is caught and named once, here, rather than every caller remembering a check the type system never asked for.",
+      "source": "docs/tour/19-error-handling.buzz:32",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/19-error-handling.buzz:tools",
+      "kind": "function",
+      "label": "tools",
+      "doc": "Branching on the CODE, not the wording. MGS3003 is \"tool not on PATH\"; anything else is a failure this target has no answer for, so it is re-thrown rather than swallowed. Catching everything and continuing is how a gate stops being a gate.",
+      "source": "docs/tour/19-error-handling.buzz:45",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:evals/magusfile.buzz:ci",
@@ -25137,6 +25216,22 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3002.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3002.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3003.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3003.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -25622,6 +25717,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/18-typed-boundaries.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/19-error-handling.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/19-error-handling.buzz"
     },
     {
       "source": "dir:evals/fixtures",
@@ -34728,6 +34831,22 @@
       "provenance": "docs/reference/codes/sandbox/MGS3001.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3002.md",
+      "target": "diagnostic:MGS3002",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3002.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3003.md",
+      "target": "diagnostic:MGS3003",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3003.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -43382,6 +43501,54 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/18-typed-boundaries.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "function:docs/tour/19-error-handling.buzz:gate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "function:docs/tour/19-error-handling.buzz:stamp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "function:docs/tour/19-error-handling.buzz:tools",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/19-error-handling.buzz",
+      "target": "import:vcs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/19-error-handling.buzz"
     },
     {
       "source": "file:evals/magusfile.buzz",
@@ -65959,6 +66126,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/18-typed-boundaries.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/19-error-handling.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

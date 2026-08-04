@@ -4,7 +4,6 @@ package std
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"sync"
@@ -227,11 +226,11 @@ func VcsDiff(ctx context.Context, base string) ([]string, error) {
 func vcsMetadata(ctx context.Context) (types.VCSMeta, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return types.VCSMeta{}, errors.New("no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
+		return types.VCSMeta{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
 	}
 	meta, err := v.Metadata(ctx, "")
 	if err != nil {
-		return types.VCSMeta{}, fmt.Errorf("read %s metadata: %w", v.Name(), err)
+		return types.VCSMeta{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
 	}
 	return meta, nil
 }
@@ -310,7 +309,7 @@ func VcsDiagnoseDrift(ctx context.Context, outputs, inputs []string) (map[string
 		// Split from the !outDirty case below on purpose: they were one branch, so a
 		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
 		// drift diagnosis that cannot read the tree has no verdict to give.
-		return nil, fmt.Errorf("read %s status: %w", v.Name(), err)
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
 	if !outDirty {
 		return clean, nil
@@ -366,7 +365,7 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 		// passes having checked nothing - the one outcome a gate must never produce
 		// silently. No VCS at all is still false above; that is a known state, not a
 		// failed probe.
-		return false, fmt.Errorf("read %s status: %w", v.Name(), err)
+		return false, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
 	return dirty, nil
 }
@@ -403,7 +402,7 @@ func VcsMetadata(ctx context.Context) (map[string]any, error) {
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return types.Commit{}, errors.New("no VCS resolved for this workspace; use vcs.name() to test before looking up a commit")
+		return types.Commit{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before looking up a commit")
 	}
 	c, err := v.FindCommit(ctx, "", rev) // host bindings run in the project cwd
 	if err != nil {
@@ -411,7 +410,7 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 		if which == "" {
 			which = "the current revision"
 		}
-		return types.Commit{}, fmt.Errorf("look up %s in %s: %w", which, v.Name(), err)
+		return types.Commit{}, types.WrapDiagnostic(types.VCSUnavailable, err, "look up %s in %s", which, v.Name())
 	}
 	return c, nil
 }
@@ -425,7 +424,7 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	}
 	commits, err := v.History(ctx, "", limit)
 	if err != nil {
-		return nil, fmt.Errorf("read %s history: %w", v.Name(), err)
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s history", v.Name())
 	}
 	return commits, nil
 }
@@ -441,7 +440,7 @@ func VcsDescribe(ctx context.Context) (string, error) {
 	}
 	out, err := v.Describe(ctx, "") // host bindings run in the project cwd
 	if err != nil {
-		return "", fmt.Errorf("describe %s revision: %w", v.Name(), err)
+		return "", types.WrapDiagnostic(types.VCSUnavailable, err, "describe %s revision", v.Name())
 	}
 	return out, nil
 }
@@ -472,7 +471,7 @@ func VcsExe(ctx context.Context) (string, error) {
 	}
 	path, err := exec.LookPath(v.Name())
 	if err != nil {
-		return "", fmt.Errorf("%s is the resolved VCS but is not on PATH: %w", v.Name(), err)
+		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%s is the resolved VCS but is not on PATH", v.Name())
 	}
 	return path, nil
 }

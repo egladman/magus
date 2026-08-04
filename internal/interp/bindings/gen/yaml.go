@@ -20,7 +20,7 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 		source := Str(bzArgs, 0)
 		ret0, err := std.YAMLParse(ctx, source)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterYaml(ctx context.Context, sess *buzz.Session) vm.Value {
 		value := Any(bzArgs, 0)
 		ret0, err := std.YAMLStringify(ctx, value)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

@@ -21,7 +21,7 @@ func RegisterTemplate(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Any(bzArgs, 1)
 		ret0, err := std.TemplateRender(ctx, template, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -31,7 +31,7 @@ func RegisterTemplate(ctx context.Context, sess *buzz.Session) vm.Value {
 		partials := StrMap(bzArgs, 2)
 		ret0, err := std.TemplateRenderPartials(ctx, template, data, partials)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

@@ -235,7 +235,7 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 func OsWhich(_ context.Context, cmd string) (string, error) {
 	path, err := exec.LookPath(cmd)
 	if err != nil {
-		return "", fmt.Errorf("%q is not on PATH: %w", cmd, err)
+		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", cmd)
 	}
 	return path, nil
 }

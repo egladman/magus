@@ -29,7 +29,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("root", vm.DirectValue("vcs.root", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRoot(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -37,35 +37,35 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		base := Str(bzArgs, 0)
 		ret0, err := std.VcsDiff(ctx, base)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
 	m.MapSet("shortHash", vm.DirectValue("vcs.shortHash", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsShortHash(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("hash", vm.DirectValue("vcs.hash", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsHash(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("branch", vm.DirectValue("vcs.branch", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsBranch(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("commitDate", vm.DirectValue("vcs.commitDate", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsCommitDate(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -73,7 +73,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		paths := StrSlice(bzArgs, 0)
 		ret0, err := std.VcsIsDirty(ctx, paths)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -82,14 +82,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		inputs := StrSlice(bzArgs, 1)
 		ret0, err := std.VcsDiagnoseDrift(ctx, outputs, inputs)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
 	m.MapSet("metadata", vm.DirectValue("vcs.metadata", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsMetadata(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -97,7 +97,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		rev := Str(bzArgs, 0)
 		ret0, err := std.VcsCommit(ctx, rev)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueVcsCommit(ret0), nil
 	}))
@@ -105,14 +105,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		limit := Int(bzArgs, 0, 10)
 		ret0, err := std.VcsHistory(ctx, limit)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueVcsCommitSlice(ret0), nil
 	}))
 	m.MapSet("exe", vm.DirectValue("vcs.exe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsExe(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -120,14 +120,14 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		pattern := Str(bzArgs, 0)
 		ret0, err := std.VcsTags(ctx, pattern)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueVcsVCSTagSlice(ret0), nil
 	}))
 	m.MapSet("describe", vm.DirectValue("vcs.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsDescribe(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

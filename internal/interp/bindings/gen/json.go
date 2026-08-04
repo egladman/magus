@@ -20,7 +20,7 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.JSONParse(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyVal(ret0), nil
 	}))
@@ -29,7 +29,7 @@ func RegisterJson(ctx context.Context, sess *buzz.Session) vm.Value {
 		indent := Str(bzArgs, 1)
 		ret0, err := std.JSONStringify(ctx, value, indent)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

@@ -20,7 +20,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsCamelCase(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsSnakeCase(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -36,7 +36,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsKebabCase(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -44,7 +44,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsPascalCase(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -52,7 +52,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsCapitalize(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -60,7 +60,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.StringsWords(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
@@ -69,7 +69,7 @@ func RegisterStrings(ctx context.Context, sess *buzz.Session) vm.Value {
 		length := Int(bzArgs, 1, 0)
 		ret0, err := std.StringsEllipsis(ctx, s, length)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

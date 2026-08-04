@@ -26,21 +26,21 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 1)
 		ret0, err := std.MagusCmd(ctx, args, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
 	m.MapSet("ls", vm.DirectValue("magus.ls", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusLs(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusProjectsOutput(ret0), nil
 	}))
 	m.MapSet("targets", vm.DirectValue("magus.targets", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusTargets(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusTargetGraphOutput(ret0), nil
 	}))
@@ -48,27 +48,27 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		base := Str(bzArgs, 0)
 		ret0, err := std.MagusAffected(ctx, base)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusAffectedResult(ret0), nil
 	}))
 	m.MapSet("goModReplaceArgs", vm.DirectValue("magus.goModReplaceArgs", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGoModReplaceArgs(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
 	m.MapSet("goModReplaceCheck", vm.DirectValue("magus.goModReplaceCheck", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		if err := std.MagusGoModReplaceCheck(ctx); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("graph", vm.DirectValue("magus.graph", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.MagusGraph(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusGraphView(ret0), nil
 	}))
@@ -76,7 +76,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		dir := Str(bzArgs, 0)
 		ret0, err := std.MagusWhere(ctx, dir)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -85,7 +85,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 1)
 		ret0, err := std.MagusRun(ctx, args, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
@@ -94,7 +94,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDescribe(ctx, args, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
@@ -103,7 +103,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 1)
 		ret0, err := std.MagusInsight(ctx, args, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
@@ -112,14 +112,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 1)
 		ret0, err := std.MagusDoctor(ctx, args, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusExecResult(ret0), nil
 	}))
 	m.MapSet("bustCache", vm.DirectValue("magus.bustCache", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		project_path := Str(bzArgs, 0)
 		if err := std.MagusBustCache(ctx, project_path); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -127,7 +127,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		name := Str(bzArgs, 0)
 		ret0, err := std.MagusHasCharm(ctx, name)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))

@@ -237,13 +237,13 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 	switch len(meth.Returns) {
 	case 0:
 		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", std.MethodFuncName(meth), callStr)
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
 		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects)
 		if err != nil {
@@ -258,7 +258,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		lhsParts = append(lhsParts, "err")
 		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {

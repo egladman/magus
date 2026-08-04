@@ -5,6 +5,7 @@ package gen
 
 import (
 	"context"
+	"errors"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -336,4 +337,37 @@ func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
 		return nil, err
 	}
 	return []any{valToAny(res)}, nil
+}
+
+// HostError wraps an error on its way from a host method into the VM so a magusfile
+// always catches the same SHAPE.
+//
+// gopherbuzz deliberately leaves a plain error as a string, because upstream Buzz does and
+// its conformance fixtures pin that; enriching is the embedder's opt-in. This is magus
+// taking it. Without it magus would have a two-shape error surface - coded diagnostics
+// arriving as maps, everything else as text - and an author would have to know which calls
+// raise which before knowing whether e["code"] is safe to read. That is the kind of thing
+// you memorise instead of learn.
+//
+// A diagnostic keeps its own fields (code, url); anything else gets message alone. Every
+// generated trampoline routes its error through here, so the guarantee holds by
+// construction rather than by remembering.
+func HostError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var se vm.StructuredError
+	if errors.As(err, &se) {
+		return err // already carries its own fields
+	}
+	return hostError{err}
+}
+
+// hostError gives a bare error the minimum structured shape: just a message.
+type hostError struct{ err error }
+
+func (e hostError) Error() string { return e.err.Error() }
+func (e hostError) Unwrap() error { return e.err }
+func (e hostError) BuzzError() map[string]string {
+	return map[string]string{"message": e.err.Error()}
 }

@@ -1968,10 +1968,18 @@ func errUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", 
 
 // caughtValue renders a host error as the value a `catch` binds.
 //
-// A plain error becomes its message, which is what every catch has always received. An
-// error implementing StructuredError becomes a MAP, so a magusfile can branch on a field
-// instead of substring-matching a sentence that was never meant to be parsed. "message" is
-// filled from Error() when the embedder did not supply it, so the value is always
+// An ordinary error becomes its message, which is what upstream Buzz does and what this
+// package's conformance fixtures pin - a host failure surfaces as a str. Changing that for
+// every error would make this VM disagree with the language it implements, for the
+// convenience of one embedder.
+//
+// An error implementing StructuredError becomes a MAP instead. That is the embedder's
+// opt-in: it decides which of its errors carry identity worth branching on, and gets a
+// value a caller can index rather than a sentence to substring-match. An embedder wanting
+// EVERY error indexable makes every error implement the interface - that uniformity is its
+// policy to set, not this VM's.
+//
+// "message" is filled from Error() when the embedder omits it, so a caught map is always
 // printable.
 func caughtValue(err error) Value {
 	var se StructuredError

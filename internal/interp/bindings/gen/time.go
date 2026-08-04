@@ -21,7 +21,7 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		unix_millis := Float(bzArgs, 1, 0)
 		ret0, err := std.TimeFormat(ctx, layout, unix_millis)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -30,7 +30,7 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		value := Str(bzArgs, 1)
 		ret0, err := std.TimeParse(ctx, layout, value)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return FloatVal(ret0), nil
 	}))
@@ -38,14 +38,14 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		duration := Str(bzArgs, 0)
 		ret0, err := std.TimeParseDuration(ctx, duration)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return FloatVal(ret0), nil
 	}))
 	m.MapSet("nowIso", vm.DirectValue("time.nowIso", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.TimeNowISO(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -54,7 +54,7 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		duration := Str(bzArgs, 1)
 		ret0, err := std.TimeAdd(ctx, unix_millis, duration)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return FloatVal(ret0), nil
 	}))
@@ -63,7 +63,7 @@ func RegisterTime(ctx context.Context, sess *buzz.Session) vm.Value {
 		b := Float(bzArgs, 1, 0)
 		ret0, err := std.TimeDiff(ctx, a, b)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return FloatVal(ret0), nil
 	}))

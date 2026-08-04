@@ -20,7 +20,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.PathAbs(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -29,7 +29,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		target := Str(bzArgs, 1)
 		ret0, err := std.PathRel(ctx, base, target)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -37,7 +37,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.PathClean(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -45,7 +45,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.PathIsAbs(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -53,7 +53,7 @@ func RegisterPath(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.PathExpandUser(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

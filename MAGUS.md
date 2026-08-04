@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2443 nodes** and **5537 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2451 nodes** and **5549 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -52,11 +52,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 52 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 290 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| diagnostic | 54 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
+| doc | 292 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 171 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 228 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1193 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| file | 229 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1196 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 

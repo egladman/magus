@@ -21,7 +21,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.EncodingBase64Encode(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -29,7 +29,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EncodingBase64Decode(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -37,7 +37,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.EncodingBase64URLEncode(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -45,7 +45,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EncodingBase64URLDecode(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -53,7 +53,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.EncodingHexEncode(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -61,7 +61,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EncodingHexDecode(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -69,7 +69,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EncodingURLEncode(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -77,7 +77,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EncodingURLDecode(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -85,7 +85,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		raw_url := Str(bzArgs, 0)
 		ret0, err := std.EncodingParseURL(ctx, raw_url)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueEncodingURL(ret0), nil
 	}))
@@ -93,7 +93,7 @@ func RegisterEncoding(ctx context.Context, sess *buzz.Session) vm.Value {
 		parts := AnyMap(bzArgs, 0)
 		ret0, err := std.EncodingBuildURL(ctx, parts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

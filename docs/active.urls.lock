@@ -335,6 +335,8 @@ reference/codes/sandbox/MGS2009/
 reference/codes/sandbox/MGS2010/
 reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
+reference/codes/sandbox/MGS3002/
+reference/codes/sandbox/MGS3003/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -449,6 +451,7 @@ tags/ed-25519/
 tags/env/
 tags/environment/
 tags/error-codes/
+tags/errors/
 tags/eslint/
 tags/exec/
 tags/extraction/
@@ -468,6 +471,7 @@ tags/go/
 tags/graph/
 tags/graphml/
 tags/grpc/
+tags/host-modules/
 tags/hotspots/
 tags/http/
 tags/image/

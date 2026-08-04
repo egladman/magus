@@ -21,7 +21,7 @@ func RegisterFmt(ctx context.Context, sess *buzz.Session) vm.Value {
 		args := VariadicStr(bzArgs, 1)
 		ret0, err := std.FmtSprintf(ctx, format, args...)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

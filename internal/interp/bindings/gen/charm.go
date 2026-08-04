@@ -20,7 +20,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 0)
 		ret0, err := std.CharmAppend(ctx, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 0)
 		ret0, err := std.CharmPrepend(ctx, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -38,7 +38,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 2)
 		ret0, err := std.CharmAfter(ctx, argv, anchor, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -48,7 +48,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 2)
 		ret0, err := std.CharmBefore(ctx, argv, anchor, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -58,7 +58,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		val := Str(bzArgs, 2)
 		ret0, err := std.CharmSet(ctx, argv, anchor, val)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -67,7 +67,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		anchor := Str(bzArgs, 1)
 		ret0, err := std.CharmDrop(ctx, argv, anchor)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -77,7 +77,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 2)
 		ret0, err := std.CharmAfterFunc(ctx, argv, fn, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -87,7 +87,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		vals := StrSlice(bzArgs, 2)
 		ret0, err := std.CharmBeforeFunc(ctx, argv, fn, vals)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -97,7 +97,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		val := Str(bzArgs, 2)
 		ret0, err := std.CharmSetFunc(ctx, argv, fn, val)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -106,7 +106,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		fn := CallbackArg(sess, bzArgs, 1)
 		ret0, err := std.CharmDropFunc(ctx, argv, fn)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -115,7 +115,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		anchor := Str(bzArgs, 1)
 		ret0, err := std.CharmPath(ctx, argv, anchor)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -124,7 +124,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		fn := CallbackArg(sess, bzArgs, 1)
 		ret0, err := std.CharmPathFunc(ctx, argv, fn)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -134,7 +134,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		to := Str(bzArgs, 2)
 		ret0, err := std.CharmMove(ctx, argv, anchor, to)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -144,7 +144,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		to := Str(bzArgs, 2)
 		ret0, err := std.CharmMoveFunc(ctx, argv, fn, to)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -154,7 +154,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		to := Str(bzArgs, 2)
 		ret0, err := std.CharmCopy(ctx, argv, anchor, to)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -164,7 +164,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		to := Str(bzArgs, 2)
 		ret0, err := std.CharmCopyFunc(ctx, argv, fn, to)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -173,7 +173,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		anchor := Str(bzArgs, 1)
 		ret0, err := std.CharmTest(ctx, argv, anchor)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -182,7 +182,7 @@ func RegisterCharm(ctx context.Context, sess *buzz.Session) vm.Value {
 		fn := CallbackArg(sess, bzArgs, 1)
 		ret0, err := std.CharmTestFunc(ctx, argv, fn)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))

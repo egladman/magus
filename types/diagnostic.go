@@ -113,6 +113,8 @@ const (
 	SandboxPolicyMismatch     DiagnosticCode = "MGS2010"
 	SecretTooShortToMask      DiagnosticCode = "MGS2011"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
+	VCSUnavailable            DiagnosticCode = "MGS3002"
+	ToolNotOnPath             DiagnosticCode = "MGS3003"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -150,7 +152,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
-	DescendantBoundaryCrossed,
+	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,
