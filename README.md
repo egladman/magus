@@ -424,6 +424,12 @@ Run the tests through magus itself, since the whole point is that magus builds a
 magus run ci
 ```
 
+## License
+
+magus is licensed under [GPL-3.0-or-later](https://github.com/egladman/magus/blob/main/LICENSE). It is a passion project and
+will never be monetized: no paid tier, no hosted plan, no open-core split, no
+license key gating the cache or any other feature.
+
 [^docs-source]: Source: [docs/](https://github.com/egladman/magus/tree/main/docs).
 
 [^playground]: Magusfiles are written in Buzz. You can run it in your browser, no install, at the [Playground](https://eli.gladman.cc/magus/playground/); the [standard library modules](docs/reference/buzz/index.md) are the API reference.

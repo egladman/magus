@@ -40,6 +40,16 @@ replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagno
 
 Everything below assumes that step is done.
 
+## License
+
+`github.com/egladman/magus` is licensed [GPL-3.0-or-later](https://github.com/egladman/magus/blob/main/LICENSE),
+and `libs/gopherbuzz` carries the same license. Importing either links their
+code into your program, so a program that imports this module is a
+combined work under the GPL: distributing it requires making its complete
+source available under a GPL-compatible license. This is a statement of the
+license's effect, not legal advice; talk to a lawyer if that consequence
+matters for your use case.
+
 ## Open vs Inspect
 
 Two constructors discover a workspace and return a handle to it. Both walk

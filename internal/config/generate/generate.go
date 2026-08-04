@@ -87,6 +87,7 @@ type FlagDef struct {
 	GoPath    string // Go field selector, e.g. "cfg.Cache.Dir"
 	YamlPath  string // dotted yaml path, e.g. "cache.dir"
 	Usage     string // sanitized one-line description for flag.Usage
+	Default   string // human-readable default from config.EnvVarDocs, when documented there; empty otherwise
 }
 
 func parseConfigFlags(configPath string) ([]FlagDef, error) {
@@ -120,13 +121,25 @@ func parseConfigFlags(configPath string) ([]FlagDef, error) {
 		return nil, fmt.Errorf("no Config struct found in %s", configPath)
 	}
 
+	defaults := map[string]string{}
+	for _, d := range config.EnvVarDocs() {
+		if d.YAMLKey != "" {
+			defaults[d.YAMLKey] = d.Default
+		}
+	}
+
 	var defs []FlagDef
-	walkStruct(root, structs, nil, "cfg", &defs)
+	walkStruct(root, structs, nil, "cfg", defaults, &defs)
 	return defs, nil
 }
 
-// walkStruct recurses through st collecting scalar leaf fields.
-func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath []string, goBase string, out *[]FlagDef) {
+// walkStruct recurses through st collecting scalar leaf fields. defaults maps a
+// yaml path to its human-readable default, sourced from config.EnvVarDocs — the
+// hand-curated defaults table already used by the manpage generator, which knows
+// about computed defaults (e.g. concurrency's "min(NumCPU,8)") that a struct
+// literal cannot represent. A yaml path absent from defaults gets no Default;
+// that is more honest than a wrong one.
+func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath []string, goBase string, defaults map[string]string, out *[]FlagDef) {
 	for _, field := range st.Fields.List {
 		if len(field.Names) == 0 {
 			continue // skip embedded fields
@@ -157,7 +170,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 
 		if kind == "" {
 			if nested, ok := structs[typeName]; ok {
-				walkStruct(nested, structs, thisYAML, goSel, out)
+				walkStruct(nested, structs, thisYAML, goSel, defaults, out)
 			}
 			// slices, maps, imported types: skip
 			continue
@@ -167,12 +180,21 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		if kind == "stringslice" || kind == "boolptr" { // env-only; no CLI flag
 			flagName = ""
 		}
-		envVar := config.EnvName("MAGUS", thisYAML...)
+		if kind == "stringmap" { // yaml-only; no CLI flag, no env var
+			flagName = ""
+		}
+		var envVar string
+		if kind != "stringmap" {
+			envVar = config.EnvName("MAGUS", thisYAML...)
+		}
 		// The flag help leads with the env var, then the field's doc comment when
 		// it has one. A field with no doc shows just the env var, not "ENV: ENV".
 		help := envVar
 		if usage := sanitizeUsage(firstDocLine(field.Doc)); usage != "" {
 			help = envVar + ": " + usage
+			if envVar == "" {
+				help = usage
+			}
 		}
 
 		*out = append(*out, FlagDef{
@@ -183,6 +205,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			GoPath:    goSel,
 			YamlPath:  strings.Join(thisYAML, "."),
 			Usage:     help,
+			Default:   sanitizeUsage(defaults[strings.Join(thisYAML, ".")]),
 		})
 	}
 }
@@ -207,6 +230,13 @@ func typeIdentOf(expr ast.Expr) string {
 			return "[]string"
 		}
 		return ""
+	case *ast.MapType:
+		key, keyOK := t.Key.(*ast.Ident)
+		val, valOK := t.Value.(*ast.Ident)
+		if keyOK && valOK && key.Name == "string" && val.Name == "string" {
+			return "map[string]string"
+		}
+		return ""
 	default:
 		return ""
 	}
@@ -228,6 +258,8 @@ func scalarKind(t string) string {
 		return "duration"
 	case "[]string":
 		return "stringslice"
+	case "map[string]string":
+		return "stringmap"
 	}
 	return ""
 }

@@ -271,6 +271,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		}
 		cfg.DefaultCharms = out
 	}
+	if v := getenv("MAGUS_REQUIRES_MAGUS"); v != "" {
+		cfg.RequiresMagus = v
+	}
 	if v := getenv("MAGUS_SANDBOX_ENABLED"); v != "" {
 		cfg.Sandbox.Enabled = parseBoolEnv(v, cfg.Sandbox.Enabled)
 	}

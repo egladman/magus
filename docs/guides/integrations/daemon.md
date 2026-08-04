@@ -1,7 +1,7 @@
 ---
 title: Daemon and concurrency
 order: 4
-description: The magus daemon holds workspace state and enforces one shared concurrency pool across every client, so parallel CI steps and nested invocations do not oversubscribe the machine.
+description: The magus daemon holds workspace state in memory, serves MCP and the console API, and runs background jobs in one shared concurrency pool. Foreground runs execute in the invoking process, where their output belongs.
 tags:
   [
     daemon,
@@ -34,31 +34,35 @@ magus config set key=concurrency,value=4
 MAGUS_CONCURRENCY=4 magus run build
 ```
 
-When a [daemon](#daemon) is running, all clients share a single concurrency pool. Parallel CI steps and nested `magus` invocations all draw from the same budget.
+When a [daemon](#daemon) is running, background work - graph rebuilds, maintenance jobs, VCS-hook builds - draws from its single shared pool. A foreground `magus run` executes in the invoking process with its own limiter, even with a daemon up: the proc protocol cannot yet deliver a run's report back to the invoking terminal, so magus declines to adopt work whose output would land in the daemon log instead of in front of you. Until run adoption can stream output back, size `--concurrency` with your parallel foreground invocations in mind.
 
 `magus status` shows the live pool state and current slot usage.
 
 ## Daemon
 
-By default every `magus run` is a short-lived process with its own concurrency limiter, so parallel invocations oversubscribe the machine. A daemon holds workspace state in memory and enforces **one** concurrency pool across all clients.
+Every `magus run` is a short-lived process with its own concurrency limiter. A daemon holds workspace state in memory (the warm knowledge graph, the SCIP index, cache bookkeeping), serves MCP and the console API, and runs background jobs in **one** shared pool. Foreground runs stay in the invoking process - see [Concurrency](#concurrency) for why.
 
 ```sh
-magus server start &        # foreground process; & or a supervisor backgrounds it
+magus server start          # auto-backgrounds: detaches, waits until accepting, prints the pid
 magus server stop           # graceful shutdown; waits for in-flight work
 magus server stop --services # stop the daemon's hosted services, leave the daemon up
 magus status                # live pool + MCP endpoint health (reports the reason when down)
 magus status -W 15s         # poll and reprint every 15 seconds
 ```
 
-`magus server start` runs in the **foreground** and blocks. It does not daemonize itself;
-you background it with `&`, `nohup`, or - better - a process supervisor so it stays up
-across shells and reboots (see [Keeping the daemon running](#keeping-the-daemon-running)).
+`magus server start` auto-backgrounds by default: it detaches the daemon, waits until it
+is accepting, prints the pid, and returns `0`. Starting when one is already running is a
+no-op that also returns `0`, so scripts can chain on it. Use `--foreground` under a process
+supervisor (or when debugging) to run it blocking in the current process instead, so the
+supervisor - not magus - owns the backgrounding and restart policy (see
+[Keeping the daemon running](#keeping-the-daemon-running)).
 
 ## Two transports
 
 The daemon is a single process with two listeners, one per audience. A **Unix domain
-socket** is the local control plane (the proc RPC that dispatches jobs, answers status,
-and adopts nested calls into one concurrency pool); it is fast and private (`0700`), and
+socket** is the local control plane (the proc RPC that dispatches background jobs and
+answers status; foreground runs are declined so their output stays with the invoking
+terminal); it is fast and private (`0700`), and
 the local CLI - including the `--probe=liveness` and `--probe=readiness` checks - uses it.
 An **HTTP server** on `mcp.address` serves the clients that cannot reach a Unix socket:
 agents over [MCP](mcp.md) at `/mcp`, and orchestrators or scripts at the `/livez`,
@@ -71,7 +75,7 @@ flowchart LR
     ext["kubelet and scripts<br/>httpGet probes<br/>--probe=mcp"]
 
     subgraph daemon["magus daemon - one process"]
-        sock["Unix socket<br/>proc RPC: dispatch, status, adopt"]
+        sock["Unix socket<br/>proc RPC: dispatch, status"]
         http["HTTP server on mcp.address<br/>/mcp + /livez /readyz /healthz"]
         state["workspace state + concurrency pool"]
         sock --> state
@@ -217,7 +221,7 @@ to keep it alive:
 whenever you open a shell by adding this to `~/.zprofile`, `~/.bashrc`, or equivalent:
 
 ```sh
-magus status --probe=liveness >/dev/null 2>&1 || (magus server start &)
+magus status --probe=liveness >/dev/null 2>&1 || magus server start
 ```
 
 It is a no-op when a daemon is already running. This is the least durable option - the
@@ -233,7 +237,7 @@ magus often.
 Description=magus daemon
 
 [Service]
-ExecStart=%h/.local/bin/magus server start
+ExecStart=%h/.local/bin/magus server start --foreground
 Restart=on-failure
 
 [Install]
@@ -260,6 +264,7 @@ loginctl enable-linger "$USER"   # keep it running when you are not logged in
       <string>/usr/local/bin/magus</string>
       <string>server</string>
       <string>start</string>
+      <string>--foreground</string>
     </array>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>

@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/project"
@@ -816,6 +817,59 @@ func (m *Magus) Workspace(ctx context.Context, cfg types.WorkspaceConfig) (types
 	}, nil
 }
 
+// targetKind classifies name against project p, driving the label EvaluateTarget
+// attaches to each entry: "canonical" for the ci anchor, "declared" when p's own
+// magusfile exports name (or a target policy names it explicitly), "spell" when
+// only a bound spell supplies it as an op - no magusfile export in p names it,
+// so a reader must not mistake this for a declared target - or "" when p
+// recognizes name as none of these (a fan-out entry for a project that does not
+// support this target at all).
+func targetKind(p *types.Project, name string) string {
+	if name == types.TargetCI {
+		return "canonical"
+	}
+	if slices.Contains(p.MagusfileTargets, name) {
+		return "declared"
+	}
+	if _, ok := p.TargetPolicies[name]; ok {
+		return "declared"
+	}
+	for _, s := range p.ResolvedSpells {
+		if slices.Contains(s.Targets(), name) {
+			return "spell"
+		}
+	}
+	return ""
+}
+
+// knownTargetNames returns every target name EvaluateTarget can legitimately
+// resolve somewhere in the workspace: the canonical anchor, every project's
+// declared magusfile targets and target policies, and every bound spell's ops.
+// Used to validate a name before building a dispatch plan for it, and to
+// suggest a nearest match when it resolves to nothing.
+func (m *Magus) knownTargetNames() []string {
+	seen := map[string]struct{}{types.TargetCI: {}}
+	for _, p := range m.ws.All() {
+		for _, n := range p.MagusfileTargets {
+			seen[n] = struct{}{}
+		}
+		for n := range p.TargetPolicies {
+			seen[n] = struct{}{}
+		}
+		for _, s := range p.ResolvedSpells {
+			for _, n := range s.Targets() {
+				seen[n] = struct{}{}
+			}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for n := range seen {
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	return out
+}
+
 // EvaluateTarget returns the fully-evaluated dispatch plan for t. Like every other
 // Inspector method, a cancelled ctx is reported as an error rather than truncating
 // the plan silently: a partial dispatch plan is exactly the misleading result
@@ -827,6 +881,28 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 	expanded, err := m.ExpandPath(t)
 	if err != nil {
 		return nil, err
+	}
+
+	// A name that resolves to nothing anywhere in the selected scope used to still
+	// build a full dispatch plan - sources, depends_on, a spell entry per resolved
+	// spell - for every expanded project, none of it backed by anything the name
+	// actually names. Validate before building any of that, the same terminal case
+	// MGS1006 already covers for a magusfile-level dispatch (`magus run <name>`):
+	// the name is unknown IN SCOPE, not merely undeclared by one project among many.
+	known := false
+	for _, et := range expanded {
+		if p := m.Get(et.Path); p != nil && targetKind(p, et.Name) != "" {
+			known = true
+			break
+		}
+	}
+	if !known {
+		registered := m.knownTargetNames()
+		msg := fmt.Sprintf("unknown target %q (registered: %s)", t.Name, strings.Join(registered, ", "))
+		if hint := interactive.SuggestNearest(t.Name, registered); hint != "" {
+			msg += fmt.Sprintf("; did you mean %q?", hint)
+		}
+		return nil, types.DiagnosticErrorf(types.UnknownTarget, "%s", msg)
 	}
 
 	entries := make([]types.EvaluatedTarget, 0, len(expanded))
@@ -913,6 +989,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 		entry := types.EvaluatedTarget{
 			Project:   et.Path,
 			Target:    et.Name,
+			Kind:      targetKind(p, et.Name),
 			Dir:       p.Dir,
 			Sources:   step.Sources,
 			Outputs:   step.Outputs,

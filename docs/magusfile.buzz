@@ -1,6 +1,9 @@
 import "magus";
 // The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
 import "../tools/audit" as audit;
+// The relative-markdown-link resolution gate; see tools/linkcheck.buzz for why the
+// rendered site's alias layer cannot excuse a dead source-tree link.
+import "../tools/linkcheck" as linkcheck;
 // Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
@@ -289,6 +292,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // The docs corpus is the largest prose surface in the workspace and had no spell
     // check at all - the op was defined and never invoked from any target.
     markdown.typos(ctx);
+    // A hand-authored relative .md link that drifts still 404s on GitHub even when a
+    // site alias covers it on the published site - so gate the source tree, not just
+    // the rendered output (docs/engine/gates.buzz already gates that).
+    linkcheck.check();
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
@@ -355,7 +362,7 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     // project baseline (the typescript spell's `dist/**`, which this project never writes).
     ctx.writesFiles("gen/assets/mermaid.js");
     os\exec("pnpm", ["run", "build-mermaid"], ".", {});
-    magus\info("rebuilt gen/assets/mermaid.js");
+    magus\info("mermaid bundle -> gen/assets/mermaid.js");
 }
 
 // build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
@@ -367,7 +374,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     os\exec("pnpm", ["run", "build-hljs"], ".", {});
-    magus\info("rebuilt gen/assets/hljs.js");
+    magus\info("hljs bundle -> gen/assets/hljs.js");
 }
 
 // build-playground-editor bundles the CodeMirror editor the playground loads into

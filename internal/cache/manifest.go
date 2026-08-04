@@ -25,6 +25,12 @@ type Manifest struct {
 	// manifest written before returns existed - which read back as no value, the
 	// same as a void target, so old entries stay valid.
 	Return any `json:"return,omitempty"`
+	// KeyInputs captures the fields that fed this entry's hash, for `describe
+	// target --cache` to diff against a later run and explain a miss. Absent
+	// from every manifest written before this field existed, which reads back
+	// as no captured inputs - the describe path reports that plainly rather
+	// than diffing against zero values.
+	KeyInputs *KeyInputs `json:"keyInputs,omitempty"`
 }
 
 // OutputRecord captures one declared output file.

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -151,4 +153,86 @@ func TestWriteMagusfileStubSkipsExisting(t *testing.T) {
 	require.NoError(t, writeMagusfileStub(dir))
 	data, _ := os.ReadFile(existing)
 	assert.Equal(t, "// mine\n", string(data), "existing magusfile.buzz was modified")
+}
+
+// captureLog redirects the default slog logger to buf for the life of the test,
+// restoring the previous default on cleanup.
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// TestInitCmdEmptyDirLoadsFreshWorkspace is the regression test for the ordering bug:
+// `magus init --local` in an empty directory wrote magus.yaml and magusfile.buzz, then
+// warned that it could not find them. installMergeDriverForInit must load the workspace
+// it just wrote, not a stale pre-write lookup.
+func TestInitCmdEmptyDirLoadsFreshWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	buf := captureLog(t)
+
+	require.NoError(t, initCmd(context.Background(), "", []string{"--local"}))
+
+	assert.FileExists(t, filepath.Join(dir, "magus.yaml"))
+	assert.FileExists(t, filepath.Join(dir, "magusfile.buzz"))
+	assert.NotContains(t, buf.String(), "workspace load failed",
+		"init must not warn that the workspace it just wrote could not be found")
+}
+
+// TestInitCmdGitDirWiresMergeDriver exercises the reported repro (`--vcs git`) against a
+// real git repo whose magusfile already declares outputs, so installMergeDriverForInit
+// takes the full path: fresh workspace load, glob collection, and driver install.
+func TestInitCmdGitDirWiresMergeDriver(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	buf := captureLog(t)
+
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	runGit("init")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "test")
+
+	magusfile := `import "magus";
+magus.project({"outputs": ["gen/**"]});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(magusfile), 0o644))
+
+	require.NoError(t, initCmd(context.Background(), "", []string{"--local", "--vcs", "git"}))
+
+	assert.NotContains(t, buf.String(), "workspace load failed",
+		"a real git repo with a fresh magusfile must load, not warn")
+	data, err := os.ReadFile(filepath.Join(dir, ".gitattributes"))
+	require.NoError(t, err, "expected .gitattributes written by the merge driver install")
+	assert.Contains(t, string(data), "gen/**")
+}
+
+// TestInitCmdSecondRunGlobalConfigHintsLocal is the second half of the F10 repro: a bare
+// `magus init` on a machine that already has a global config must not read as "bootstrap
+// here failed" - the error should point at --local for a per-repo config.
+func TestInitCmdSecondRunGlobalConfigHintsLocal(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+
+	require.NoError(t, initCmd(context.Background(), "", nil), "first run must succeed")
+
+	err := initCmd(context.Background(), "", nil)
+	require.Error(t, err, "second run without --force must fail")
+	assert.Contains(t, err.Error(), "already exists")
+	assert.Contains(t, err.Error(), "--local", "error should point at --local for per-repo init")
 }

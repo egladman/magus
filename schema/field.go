@@ -23,4 +23,5 @@ const (
 	KindBoolPtr     Kind = fieldtype.KindBoolPtr
 	KindDuration    Kind = fieldtype.KindDuration
 	KindStringSlice Kind = fieldtype.KindStringSlice
+	KindStringMap   Kind = fieldtype.KindStringMap
 )

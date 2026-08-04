@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
@@ -84,7 +85,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("init --global: %w", err)
 		}
 		if err := config.Init(cfgPath, *force); err != nil {
-			return err
+			return wrapConfigExistsErr(err)
 		}
 		slog.InfoContext(ctx, "init: wrote global config", slog.String("path", cfgPath))
 		printInitNextSteps(ctx, cfgPath, false, false)
@@ -106,6 +107,9 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	if err := config.Init(cfgPath, *force); err != nil {
+		if !isLocal {
+			return wrapConfigExistsErr(err)
+		}
 		return err
 	}
 	slog.InfoContext(ctx, "init: wrote config", slog.String("path", cfgPath))
@@ -120,6 +124,19 @@ func initCmd(ctx context.Context, root string, args []string) error {
 
 	printInitNextSteps(ctx, cfgPath, true, isLocal)
 	return nil
+}
+
+// wrapConfigExistsErr adds a hint pointing at --local when config.Init reports the
+// global/XDG config already exists. --force on that path overwrites the one config
+// shared by every workspace on the machine just to bootstrap a single repo, which is
+// rarely what a user hitting this on a second project wants; --local writes a config
+// scoped to the CWD instead, and does not already-exist on a repo that has never run
+// init. Other config.Init failures (e.g. a stat error) pass through unchanged.
+func wrapConfigExistsErr(err error) error {
+	if strings.Contains(err.Error(), "already exists") {
+		return fmt.Errorf("%w (per-repo config: rerun with --local instead)", err)
+	}
+	return err
 }
 
 // xdgConfigPath returns $XDG_CONFIG_HOME/magus/magus.yaml, creating the

@@ -360,7 +360,7 @@ fs\copyDir("assets/", "dist/assets/");
 
 Blocking. Watch paths (directories, recursively) and call callback with each debounced batch of changed paths until the callback returns true or the run is interrupted.
 
-**Signature:** `fs\watch(paths, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L527)
+**Signature:** `fs\watch(paths, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L499)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -384,7 +384,7 @@ fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
 
 Recursively walk the directory tree rooted at root, calling callback(path, is_dir) for each entry. Return true from callback to stop the walk early. Sandbox-denied entries are silently skipped.
 
-**Signature:** `fs\walk(root, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L584)
+**Signature:** `fs\walk(root, callback)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L556)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -410,7 +410,7 @@ fs\walk(".", fun (path: str, isDir: bool) > bool {
 
 Append content to path (creating if absent, mode 0644).
 
-**Signature:** `fs\appendFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L621)
+**Signature:** `fs\appendFile(path, content)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L593)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -429,7 +429,7 @@ fs\appendFile("dist/build.log", "compile done\n");
 
 Change the permission bits of path to mode (octal integer, e.g. 0755).
 
-**Signature:** `fs\chmod(path, mode)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L644)
+**Signature:** `fs\chmod(path, mode)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L616)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -450,7 +450,7 @@ fs\chmod("dist/magus", 493);
 
 Create a symbolic link at link pointing to target.
 
-**Signature:** `fs\symlink(target, link)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L660)
+**Signature:** `fs\symlink(target, link)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L632)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -469,7 +469,7 @@ fs\symlink("dist/magus", "/usr/local/bin/magus");
 
 Return the target of the symbolic link at path.
 
-**Signature:** `fs\readlink(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L678)
+**Signature:** `fs\readlink(path) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L650)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -490,7 +490,7 @@ std\print(fs\readlink("/usr/local/bin/magus"));
 
 Create a new temporary directory (in os.TempDir()) with an optional name prefix and return its path.
 
-**Signature:** `fs\tempDir([prefix]) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L721)
+**Signature:** `fs\tempDir([prefix]) → string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L693)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -513,7 +513,7 @@ std\print(tmp);
 
 Read path and return its lines as a list, with the line terminators stripped. A single trailing newline yields no extra empty element; an empty file yields an empty list.
 
-**Signature:** `fs\readLines(path) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L694)
+**Signature:** `fs\readLines(path) → []string` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L666)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|
@@ -534,7 +534,7 @@ foreach (line in fs\readLines("targets.txt")) { std\print(line); }
 
 Write lines to path (mode 0644), each followed by a newline. The companion to read_lines: write_lines(p, read_lines(p)) round-trips a newline-terminated file.
 
-**Signature:** `fs\writeLines(path, lines)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L708)
+**Signature:** `fs\writeLines(path, lines)` · [source](https://github.com/egladman/magus/blob/main/std/fs.go#L680)
 
 | Parameter | Type | Optional | Description |
 |-----------|------|----------|-------------|

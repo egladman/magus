@@ -2,6 +2,8 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -305,6 +307,129 @@ func TestDeclaredEnvVariablesChangeTheKey(t *testing.T) {
 	require.NoError(t, err, "hashStep(base again)")
 	assert.Equal(t, plainKey, plainAgain,
 		"an undeclared variable must not move the key of a step that never declared it")
+}
+
+// TestPassthroughEnvChangesTheKey reproduces friction finding F8 at the cache-key
+// level: this repo's magus.yaml passes GO* through the sandbox, so
+// GOFLAGS=-tags=frictionprobe reached the compiler while the key ignored it, and
+// `magus run build libs/diagnostics` replayed the entry built WITHOUT the flag.
+// With Step.EnvPassthrough carrying the same patterns, a set matching variable
+// must move the key; an unset one must not (the back-compat guarantee that keeps
+// every existing entry valid for runs where no passthrough variable is set).
+func TestPassthroughEnvChangesTheKey(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{}
+	ctx := context.Background()
+
+	step := Step{ProjectPath: "libs/diagnostics", WorkspaceRoot: root, Target: "build",
+		EnvPassthrough: []string{"GO*"}}
+	hashOf := func() string {
+		h, err := c.hashStep(ctx, &step)
+		require.NoError(t, err, "hashStep")
+		return h
+	}
+
+	// Pin every GO* variable the test process may carry (GOPATH, GOFLAGS from the
+	// invoking `go test`, ...) constant across the calls below by controlling the
+	// one we vary. t.Setenv registers restoration; os.Unsetenv models "not set".
+	t.Setenv("GOFLAGS", "")
+	require.NoError(t, os.Unsetenv("GOFLAGS"))
+	unset := hashOf()
+
+	t.Setenv("GOFLAGS", "-tags=frictionprobe")
+	tagged := hashOf()
+	assert.NotEqual(t, unset, tagged,
+		"a set passthrough variable must miss against the entry built without it (F8: the spurious hit)")
+
+	t.Setenv("GOFLAGS", "-tags=other")
+	other := hashOf()
+	assert.NotEqual(t, tagged, other, "different passthrough values must not share a key")
+
+	t.Setenv("GOFLAGS", "-tags=frictionprobe")
+	assert.Equal(t, tagged, hashOf(), "the same passthrough value must replay")
+
+	// Set-to-empty is SET: it still reaches the child, so it must key differently
+	// from unset.
+	t.Setenv("GOFLAGS", "")
+	assert.NotEqual(t, unset, hashOf(), "set-to-empty must not collide with unset")
+
+	// A pattern with no set match is inert: the key equals a step with no
+	// passthrough at all, so shipping this feature invalidated no existing entry.
+	bare := step
+	bare.EnvPassthrough = nil
+	inert := step
+	inert.EnvPassthrough = []string{"MAGUS_TEST_NO_SUCH_PREFIX_*"}
+	bareKey, err := c.hashStep(ctx, &bare)
+	require.NoError(t, err, "hashStep(bare)")
+	inertKey, err := c.hashStep(ctx, &inert)
+	require.NoError(t, err, "hashStep(inert)")
+	assert.Equal(t, bareKey, inertKey,
+		"a passthrough pattern matching nothing set must hash exactly as before (back-compat)")
+}
+
+// TestPassthroughEnvKeyByteLayout pins the byte layout of passthrough env: lines
+// (identical to EnvAllow's "env:K=V\n") and their position after the EnvAllow
+// lines, and proves a name keyed via EnvAllow is not written twice when a
+// passthrough pattern also matches it.
+func TestPassthroughEnvKeyByteLayout(t *testing.T) {
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	ctx := context.Background()
+
+	// A private prefix keeps the match set deterministic regardless of the
+	// invoking environment.
+	t.Setenv("MAGUS_BLPT_ONE", "v1")
+	t.Setenv("MAGUS_BLPT_TWO", "v2")
+
+	step := &Step{
+		ProjectPath:    "pkg/x",
+		Target:         "build",
+		EnvAllow:       []string{"MAGUS_BLPT_ONE"},
+		EnvPassthrough: []string{"MAGUS_BLPT_*"},
+	}
+	got, err := c.hashStep(ctx, step)
+	require.NoError(t, err)
+
+	// Reconstruct the expected stream: the EnvAllow line first, then the
+	// passthrough matches minus the already-keyed name, sorted.
+	want := fmt.Sprintf("keyVersion:%d\n", keyVersion) +
+		"projectPath:pkg/x\n" +
+		"target:build\n" +
+		"env:MAGUS_BLPT_ONE=v1\n" +
+		"env:MAGUS_BLPT_TWO=v2\n"
+	sum := sha256.Sum256([]byte(want))
+	assert.Equal(t, hex.EncodeToString(sum[:]), got,
+		"passthrough env: line layout changed (layout:\n%s)", want)
+}
+
+// TestMatchPassthroughEnv covers the pattern resolver directly: exact names,
+// prefix globs, the EnvAllow exclusion, malformed entries, duplicate names, and
+// the invalid-glob shapes the sandbox allowlist rejects (which must match
+// nothing here too, so the two layers agree).
+func TestMatchPassthroughEnv(t *testing.T) {
+	environ := []string{
+		"GOFLAGS=-tags=x",
+		"GOPATH=/home/u/go",
+		"HOME=/home/u",
+		"EXACT=yes",
+		"GOFLAGS=shadowed", // duplicate name: first wins
+		"malformed",        // no '=': dropped
+		"GO=bare",          // matches the GO* prefix
+	}
+
+	assert.Nil(t, matchPassthroughEnv(nil, nil, environ), "no patterns match nothing")
+
+	got := matchPassthroughEnv([]string{"GO*", "EXACT"}, nil, environ)
+	assert.Equal(t, []string{"EXACT=yes", "GO=bare", "GOFLAGS=-tags=x", "GOPATH=/home/u/go"}, got,
+		"globs and exact names match set entries, sorted, first duplicate wins")
+
+	got = matchPassthroughEnv([]string{"GO*"}, []string{"GOFLAGS"}, environ)
+	assert.Equal(t, []string{"GO=bare", "GOPATH=/home/u/go"}, got,
+		"a name already keyed via EnvAllow is excluded")
+
+	// "*" alone and mid-string wildcards are invalid in the sandbox grammar
+	// (ValidateGlobs); the key must not match through them either.
+	assert.Nil(t, matchPassthroughEnv([]string{"*"}, nil, environ), "bare * must not leak the environment")
+	assert.Nil(t, matchPassthroughEnv([]string{"GO*S"}, nil, environ), "non-suffix wildcard matches nothing")
 }
 
 func TestDerivedOverridesChangeTheKey(t *testing.T) {

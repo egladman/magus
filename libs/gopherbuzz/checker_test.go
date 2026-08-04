@@ -272,11 +272,38 @@ foreach (k, v in m) {
 `)
 }
 
+// TestCheck_ListLen pins `len` on a list/map as a method, matching upstream
+// buzz (src/obj.zig declares `len` as `extern fun len() > int`, not an
+// auto-invoked property). A bare reference is a function value, not an int,
+// so it type-checks fine unannotated but fails once an int is expected; only
+// the call `.len()` infers int.
 func TestCheck_ListLen(t *testing.T) {
 	checkOK(t, `
 final xs = [1, 2, 3];
 final n = xs.len;
 `)
+	checkOK(t, `
+final xs = [1, 2, 3];
+final n = xs.len();
+`)
+	checkErr(t, `
+final xs = [1, 2, 3];
+final n: int = xs.len;
+`, "cannot assign")
+}
+
+// TestCheck_MethodBareLenReturnMismatch guards the return-type-mismatch case:
+// a method declared `> int` that returns a bare (uncalled) `.len` reference is
+// rejected at check time, since bare `.len` is now a function value rather
+// than an auto-invoked int.
+func TestCheck_MethodBareLenReturnMismatch(t *testing.T) {
+	checkErr(t, `
+object Stack {
+    items: [int] = [],
+    fun push(v: int) > void { this.items = this.items + [v]; }
+    fun size() > int { return this.items.len; }
+}
+`, "return type mismatch")
 }
 
 func TestCheck_NullCoalesce(t *testing.T) {

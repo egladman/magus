@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
 	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/versionpin"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -822,7 +823,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 	}
 }
 
-// checkSpellProbeCoverage is MGS1021: it makes the version-probe policy mechanical.
+// checkSpellProbeCoverage is MGS1022: it makes the version-probe policy mechanical.
 // A PATH binary whose upgrade changes verdicts must contribute a probe to the cache
 // key (see spells.Descriptor.VersionCmds); this check walks every built-in spell
 // bound to a workspace project and reports each op bin that neither a probe nor a
@@ -1404,6 +1405,40 @@ func (r *runner) checkStaleShadowAcks() Check {
 		Status:  StatusFail,
 		Message: fmt.Sprintf("%d allow_shadow entr(ies) no longer match a real shadow; remove them", len(details)),
 		Details: details,
+	}
+}
+
+// checkVersionPin is MGS3004: the running magus binary is older than the
+// minimum a workspace declares via magus.yaml's requires_magus. It reuses the
+// same comparison magus.go warns with at load, so `magus doctor` can surface a
+// mismatch on demand rather than only in whatever command happened to load
+// first and print the warning.
+func (r *runner) checkVersionPin() Check {
+	const name = "magus version pin"
+	required := r.opts.cfg.RequiresMagus
+	if required == "" {
+		return Check{Name: name, Status: StatusOK, Message: "no requires_magus pin declared"}
+	}
+	running := r.opts.runningVersion
+	if types.IsDevMagusVersion(running) {
+		return Check{
+			Name:    name,
+			Status:  StatusOK,
+			Message: fmt.Sprintf("running a dev build (%s); requires_magus %q check skipped", running, required),
+		}
+	}
+	if msg := versionpin.Check(running, required); msg != "" {
+		return Check{
+			Name:    name,
+			Status:  StatusFail,
+			Message: msg,
+			Details: []string{fmt.Sprintf("see %s: %s", types.MagusVersionTooOld, types.CodeURL(types.MagusVersionTooOld))},
+		}
+	}
+	return Check{
+		Name:    name,
+		Status:  StatusOK,
+		Message: fmt.Sprintf("running %s satisfies requires_magus %s", running, required),
 	}
 }
 

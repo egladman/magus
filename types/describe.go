@@ -434,10 +434,11 @@ type ModuleEntry struct {
 
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
-	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
-	"output globs that feed the cache key, the spells that will fire (with " +
-	"target-specific sources and effective claims after weight/add/remove resolution), " +
-	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
+	"dispatch plan for a target name, scoped to one project when one is given: the " +
+	"workspace-rooted source and output globs that feed the cache key, the spells " +
+	"that will fire (with target-specific sources and effective claims after " +
+	"weight/add/remove resolution), and any behavioural policy (CheckClean, " +
+	"TrackVolatile, Exclusive)."
 
 // EvaluatedSpell is one spell's contribution to an evaluated target.
 type EvaluatedSpell struct {
@@ -468,10 +469,17 @@ type EvaluatedSpell struct {
 	Service *spells.ServiceView `json:"service,omitempty" yaml:"service,omitempty"`
 }
 
-// EvaluatedTarget is the fully-resolved view of a single path:target pair.
+// EvaluatedTarget is the fully-resolved view of a single project x target pair.
 type EvaluatedTarget struct {
-	Project   string           `json:"project"             yaml:"project"`
-	Target    string           `json:"target"              yaml:"target"`
+	Project string `json:"project"             yaml:"project"`
+	Target  string `json:"target"              yaml:"target"`
+	// Kind labels how Target resolves for Project: "canonical" for the ci anchor,
+	// "declared" when Project's own magusfile exports it (or a target policy names
+	// it explicitly), "spell" when only a bound spell supplies it as an op - no
+	// magusfile export in Project names it, so a reader must not mistake this for
+	// a declared target - or empty for a fan-out entry naming a project that does
+	// not support this target at all.
+	Kind      string           `json:"kind,omitempty"      yaml:"kind,omitempty"`
 	Dir       string           `json:"dir"                 yaml:"dir"`
 	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
@@ -641,7 +649,7 @@ type CharmReport struct {
 	Charms     []Charm `json:"charms"     yaml:"charms"`
 }
 
-// EvaluatedTargetReport is the "describe target <path:target>" envelope.
+// EvaluatedTargetReport is the "describe target <name> [project]" envelope.
 type EvaluatedTargetReport struct {
 	Definition string            `json:"definition" yaml:"definition"`
 	Count      int               `json:"count"      yaml:"count"`

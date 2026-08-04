@@ -32,6 +32,10 @@ func TestFields_nonEmpty(t *testing.T) {
 
 func TestFields_allEnvVarsStartWithMAGUS(t *testing.T) {
 	for _, f := range Fields {
+		if f.Kind == KindStringMap { // yaml-only: no env var at all
+			assert.Emptyf(t, f.EnvVar, "KindStringMap field %q should have empty EnvVar, got %q", f.GoPath, f.EnvVar)
+			continue
+		}
 		assert.Truef(t, len(f.EnvVar) >= 7 && f.EnvVar[:6] == "MAGUS_",
 			"Field %q: EnvVar %q does not start with MAGUS_", f.GoPath, f.EnvVar)
 	}
@@ -40,6 +44,9 @@ func TestFields_allEnvVarsStartWithMAGUS(t *testing.T) {
 func TestFields_noDuplicateEnvVars(t *testing.T) {
 	seen := make(map[string]string, len(Fields))
 	for _, f := range Fields {
+		if f.EnvVar == "" { // yaml-only fields (e.g. KindStringMap) legitimately share the empty value
+			continue
+		}
 		prev, ok := seen[f.EnvVar]
 		assert.Falsef(t, ok, "duplicate EnvVar %q: GoPath %q and %q", f.EnvVar, prev, f.GoPath)
 		seen[f.EnvVar] = f.GoPath

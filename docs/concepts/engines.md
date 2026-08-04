@@ -1,6 +1,6 @@
 ---
 title: Engines
-description: Understand the small engine.Engine seam that lets magus run magusfiles on the embedded Buzz VM and how a new scripting language would plug in.
+description: Why magus embeds Buzz, what that embedding buys over an external SDK, and the small engine.Engine seam a new scripting language would plug into.
 tags: [engines, buzz, vm, interpreter, runtime, magusfile, plugin, session]
 order: 12
 ---
@@ -12,6 +12,70 @@ embedded Buzz VM through a small internal seam. A `magusfile.buzz` exposes the
 `magus.*` API and composes [spells](spells.md), [targets](targets.md), and
 [charms](charms.md). This page covers the seam and how a new language
 would plug in.
+
+## Why Buzz
+
+I will not pretend this was an ideological choice. magus is a solo project, and
+I had never written an interpreter before this one. The requirement I actually
+had was narrow: **statically typed** and **relatively explicit**, so a
+magusfile reads like a program rather than a config format someone has to
+reverse-engineer. Buzz met that bar and was small enough for one person to
+implement end to end (`libs/gopherbuzz` is my own bytecode VM, not a wrapped
+third-party runtime; see [`libs/gopherbuzz`](https://github.com/egladman/magus/tree/main/libs/gopherbuzz)). Nothing here is a claim that Buzz is the best language
+for the job - only that it satisfies the two properties I actually wanted, and
+those two properties are what the rest of this section argues for.
+
+**What embedding buys that an external SDK cannot.** If magus shelled out to a
+separate interpreter (or asked you to write your build in a general-purpose
+SDK and call a library), the tool would only ever see what that program does
+when you run it. Embedding the VM in the same binary lets magus treat the
+magusfile as data it can inspect, not just code it executes:
+
+- The same binary that runs a target also **statically extracts every
+  cache-footprint glob before any run** - the walk over the AST that
+  `ctx.readsFiles`/`ctx.writesFiles`/a spell's `needs`/`provides` feed is
+  read-only and happens at load, well before a target's body is ever called
+  (see [cache.md](cache.md#files-a-target-edits-rather-than-produces)).
+- A **non-literal glob is a load-time error**, not a silent gap: if the
+  argument isn't a string literal the static walk can see, magus refuses to
+  load rather than guess (see the same section).
+- `magus describe`/`magus graph` derive the **target DAG statically**,
+  including **both arms of a runtime charm branch**
+  (`if ctx.has_charm("cd") { ctx.needs(a) } else { ctx.needs(b) }` shows both
+  edges) - a static graph question and a dry run are allowed to disagree,
+  because they answer different questions (see
+  [dependencies.md](dependencies.md#both-arms-rule-the-static-graph-and-a-dry-run-can-disagree)).
+
+None of that is available to a tool that treats the build description as an
+opaque program handed to some other runtime. It requires owning the parser and
+the checker.
+
+**The vendoring stance.** magus embeds its own pure-Go implementation of Buzz,
+`libs/gopherbuzz`, deliberately tracking upstream `buzz-lang/buzz` rather than
+shelling out to the reference Zig implementation or forking away from it. That
+is a compatibility decision, not a survival one: if upstream Buzz development
+stopped tomorrow, magus would keep running on whatever subset gopherbuzz
+already implements - the risk is that gopherbuzz's own conformance work (see
+[`libs/gopherbuzz`](https://github.com/egladman/magus/tree/main/libs/gopherbuzz)) would have no
+upstream to converge toward, not that magusfiles would stop executing.
+
+**The honest cost.** Nobody arrives at magus already knowing Buzz. That is a
+real onboarding tax, and this section is not trying to argue it away. It is
+also worth being precise about which Buzz a magusfile is written in: `magus`
+runs it in a **relaxed dialect** - top-level statements outside a function,
+optional argument labels - that upstream's own strict parser rejects. Use
+`magus buzz --embedded` to parse and run a file (or a REPL) under those same
+relaxed rules instead of upstream-strict ones (`magus buzz --help` for the
+full flag list).
+
+**What evaluating a magusfile actually guarantees.** Magusfile evaluation is
+Turing-complete Buzz: it may perform workspace-confined I/O at load (reading a
+file to decide what to declare, for instance), and magus does not guarantee it
+terminates. What magus does bound is narrower and more useful: the I/O a load
+can perform is confined to the sandbox exactly as a target's own execution is
+(see [sandbox.md](sandbox.md)), and re-deriving the graph from an unchanged
+tree is deterministic - the same magusfile loaded twice produces the same
+targets, the same declared footprints, and the same DAG.
 
 ## The engine interface
 
@@ -144,3 +208,6 @@ are visible rather than surprising.
 - [spells.md](spells.md): the `mgs_` spell contract and how spells compose.
 - [targets.md](targets.md): the runnable unit and its CLI grammar.
 - [modules/index.md](../reference/buzz/index.md): the `magus.*` host module reference.
+- [cache.md](cache.md): the static glob extraction "Why Buzz" leans on.
+- [dependencies.md](dependencies.md): the both-arms rule for a charm-conditional `magus\needs`.
+- [sandbox.md](sandbox.md): the confinement that also bounds magusfile load-time I/O.

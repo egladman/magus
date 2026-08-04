@@ -42,7 +42,7 @@ func render() string {
 	})
 
 	fmt.Fprintf(&b, "# Configuration\n\n")
-	fmt.Fprintf(&b, "magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, and value type.\n\n")
+	fmt.Fprintf(&b, "magus resolves configuration from three layers, highest precedence first: a CLI flag, a `MAGUS_*` environment variable, then the `magus.yaml` file at the workspace root. This page is the complete inventory of config keys, each with its `magus.yaml` path, environment variable, CLI flag, value type, and built-in default.\n\n")
 
 	// Group fields by their top-level yaml section (the segment before the first
 	// "."), so the reference reads section by section.
@@ -60,11 +60,11 @@ func render() string {
 		fields := bySection[s]
 		sort.Slice(fields, func(i, j int) bool { return fields[i].YamlPath < fields[j].YamlPath })
 		fmt.Fprintf(&b, "## %s\n\n", s)
-		fmt.Fprintf(&b, "| Config key | Environment variable | Flag | Type |\n")
-		fmt.Fprintf(&b, "|------------|----------------------|------|------|\n")
+		fmt.Fprintf(&b, "| Config key | Environment variable | Flag | Type | Default |\n")
+		fmt.Fprintf(&b, "|------------|----------------------|------|------|---------|\n")
 		for _, f := range fields {
-			fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s |\n",
-				f.YamlPath, f.EnvVar, flagCell(f.Flag), kindLabel(f.Kind))
+			fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
+				f.YamlPath, envCell(f.EnvVar), flagCell(f.Flag, f.EnvVar), kindLabel(f.Kind), defaultCell(f.Default))
 		}
 		fmt.Fprintf(&b, "\n")
 	}
@@ -87,15 +87,39 @@ func topSection(yamlPath string) string {
 }
 
 // flagCell renders the CLI flag for a table cell: the long form (plus short when
-// present), or an italic "(env only)" for fields with no flag.
-func flagCell(f schema.FlagNames) string {
+// present); a field with no flag shows "(env only)" when it has an env var to
+// fall back to, or "(yaml only)" when it does not (e.g. map-typed fields).
+func flagCell(f schema.FlagNames, envVar string) string {
 	if f.Long == "" {
+		if envVar == "" {
+			return "_(yaml only)_"
+		}
 		return "_(env only)_"
 	}
 	if f.Short != "" {
 		return fmt.Sprintf("`-%s`, `--%s`", f.Short, f.Long)
 	}
 	return fmt.Sprintf("`--%s`", f.Long)
+}
+
+// envCell renders the environment variable for a table cell, or an italic
+// "(yaml only)" for fields with no env var (e.g. map-typed fields, which have
+// no comma-separated or key=value env encoding).
+func envCell(envVar string) string {
+	if envVar == "" {
+		return "_(yaml only)_"
+	}
+	return fmt.Sprintf("`%s`", envVar)
+}
+
+// defaultCell renders the Default column, or a bare "-" when no default is
+// documented (either genuinely unset, or computed at runtime in a way a static
+// string cannot represent).
+func defaultCell(def string) string {
+	if def == "" {
+		return "-"
+	}
+	return fmt.Sprintf("`%s`", def)
 }
 
 // kindLabel maps a schema.Kind to a reader-facing type name.
@@ -115,6 +139,8 @@ func kindLabel(k schema.Kind) string {
 		return "duration"
 	case schema.KindStringSlice:
 		return "list _(comma-separated, env only)_"
+	case schema.KindStringMap:
+		return "map _(yaml only)_"
 	default:
 		return "string"
 	}

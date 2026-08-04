@@ -1,0 +1,14 @@
+# magus.yaml's requires_magus declares the minimum magus version a workspace
+# expects; `magus doctor` runs a named check for it. A test binary has no
+# linker-stamped version (main.version is the dev sentinel "unknown"), so the
+# check is skipped rather than comparing against a version with no meaning -
+# see internal/versionpin and types.IsDevMagusVersion.
+
+# doctor exits nonzero here for reasons unrelated to the version pin (a minimal
+# fixture does not satisfy every check), so this asserts on THIS check's line.
+! exec magus doctor
+stdout 'magus version pin: running a dev build \(unknown\); requires_magus "0\.4\.0" check skipped'
+
+-- magus.yaml --
+requires_magus: "0.4.0"
+-- magusfile.buzz --

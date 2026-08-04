@@ -90,7 +90,8 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("ref", "out1a2b3c4d"),
 		)))
 		out := buf.String()
-		assert.Contains(t, out, "\nout1a2b3c4d\n", "the ref must sit alone on its own bare line for clean copy")
+		assert.Contains(t, out, "\noutput: out1a2b3c4d - inspect: magus query output out1a2b3c4d\n",
+			"the pass-path ref must be labeled and carry the inspect command in-band")
 		assert.NotContains(t, out, "full output:", "a passing run gets no failure hint")
 	})
 

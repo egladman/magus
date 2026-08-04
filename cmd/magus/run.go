@@ -292,6 +292,15 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
+	// -s suppresses the per-target [pass]/[fail] lines the cache logger would
+	// otherwise print (see the "running quietly" hint above), which for a plain
+	// text run leaves nothing but the exit code - no line to quote for a result
+	// that took minutes to produce. Print exactly one verdict so a completed
+	// silent run still reports something. Skipped for --then (its own report) and
+	// for a structured format (json/yaml/template/jsonl already answer this).
+	if global.silent && !chained && opts.Format == outputText {
+		fmt.Fprint(os.Stderr, runVerdictLine(targetName, err, time.Since(startedAt)))
+	}
 	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("run %s: timed out after %s", targetName, *timeout)
 	}
@@ -353,8 +362,17 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 			return []types.Target{{Path: p.Path, Name: t.Name}}, "cwd", nil
 		}
 	}
+	// Unscoped and not cwd-matched: this is the full-workspace fan-out, decided before
+	// a byte of work runs. Say why in the source line ("cache.scope" renders it as the
+	// parenthetical after the project count) rather than leaving a bare count that reads
+	// as a deliberate choice - a run at the workspace root is not the same request as
+	// naming every project, and the reader should be able to ctrl-C before it starts.
 	targets, err := ws.ExpandPath(t)
-	return targets, "", err
+	source := "cwd is not inside a project; all projects selected"
+	if cwd != "" && anchor == "." {
+		source = "cwd is the workspace root; all projects selected"
+	}
+	return targets, source, err
 }
 
 // filterServedTargets keeps only the (project, target) pairs whose project actually
@@ -473,6 +491,17 @@ func clientCwd(ctx context.Context) string {
 	return cwd
 }
 
+// runVerdictLine renders the one-line [pass]/[fail] verdict a --silent run still
+// prints (see the silent branch in runTarget). Kept a pure function so the format
+// is testable without a live workspace.
+func runVerdictLine(target string, err error, elapsed time.Duration) string {
+	status := "pass"
+	if err != nil {
+		status = "fail"
+	}
+	return fmt.Sprintf("[%s] %s (ran, %s)\n", status, target, elapsed.Round(time.Second))
+}
+
 func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "Usage: magus run <target> [flags] [project...]")
 	fmt.Fprintln(os.Stderr, "       magus run <spell>::<target> [flags] [project...]")
@@ -485,7 +514,8 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "To see what a project can run: `magus ls targets [project]`")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Conventional lifecycle names (you compose these in your magusfile from a")
-	fmt.Fprintln(os.Stderr, "spell's tool-native ops, e.g. global function build(_a) go.build() end):")
+	fmt.Fprintln(os.Stderr, "spell's tool-native ops, e.g.:")
+	fmt.Fprintln(os.Stderr, "  export fun build(ctx: magus\\Context, args: [str]) > void { go[\"go-build\"](ctx); }")
 	fmt.Fprintln(os.Stderr, "  build / test / lint / format / clean / generate / ci")
 	fmt.Fprintln(os.Stderr, "  (fmt → format and gen → generate are accepted as aliases)")
 	fmt.Fprintln(os.Stderr, "")
@@ -498,6 +528,9 @@ func targetUsage() error {
 	fmt.Fprintln(os.Stderr, "  magus run build api web/studio extensions/drape")
 	fmt.Fprintln(os.Stderr, "Use \"/\" to target all projects regardless of cwd:")
 	fmt.Fprintln(os.Stderr, "  magus run build /")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+	fmt.Fprintln(os.Stderr, "  --dry-run   print what would run without executing anything (global flag)")
 	return flag.ErrHelp
 }
 

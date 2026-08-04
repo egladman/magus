@@ -97,6 +97,9 @@ history to find the commit that introduced a regression.
 **format**
 : Format source files in selected projects
 
+**security**
+: Run security scanners over selected projects (read-only)
+
 **clean**
 : Remove build artifacts from selected projects
 

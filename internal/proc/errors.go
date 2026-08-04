@@ -43,6 +43,17 @@ var (
 
 	// ErrProtocolMismatch: the client sent an unrecognised non-empty Protocol value.
 	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
+
+	// ErrOutputUndeliverable: the multi-workspace daemon declines a foreground run
+	// because it has no channel to the invoking client's terminal - the run report
+	// would render into the daemon's own stderr (a detached log file) and RunReply
+	// carries only an exit code, so the client would see nothing at all, failure
+	// report included. The client runs the command locally, where the report lands
+	// on its own terminal. Deliberately NOT ErrNotAdoptable: the caller's fallback
+	// for a distinct not-adopted error unsets MAGUS_DAEMON_SOCKET and hosts its own
+	// per-process pool, which keeps nested adoption and cycle detection working for
+	// the local run's children.
+	ErrOutputUndeliverable error = &notAdoptedError{"proc: daemon cannot deliver run output to the client"}
 )
 
 // NotAdopted reports whether err - or any error it wraps - is a call the daemon did
@@ -71,6 +82,8 @@ func decodeWireError(msg string) error {
 		return ErrVersionMismatch
 	case ErrCycleDetected.Error():
 		return ErrCycleDetected
+	case ErrOutputUndeliverable.Error():
+		return ErrOutputUndeliverable
 	}
 	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
 		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))

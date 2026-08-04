@@ -71,6 +71,29 @@ magus run go::go-test:debug         # spell-qualified op + a charm
 
 The project is a **positional** argument, not part of the token. See the full grammar in [targets.md#cli-grammar](targets.md#cli-grammar).
 
+## Built-in charms
+
+magus reserves three charm names so they are recognized everywhere without any
+spell declaring them (`types.ReservedCharms`): a magusfile can call
+`ctx.has_charm("cd")` with no spell declaring `cd`, and the typo guard treats
+the name as known rather than flagging it as a near-miss.
+
+| Charm  | Meaning                                                                        | Survives `ci`? |
+| ------ | ------------------------------------------------------------------------------- | -------------- |
+| `rw`   | mutate in place: flip check-only targets (format, lint, generate) to write      | stripped       |
+| `cd`   | continuous-delivery: a target reads it to publish its artifact (push an image, upload an archive); pairs with `magus run ci:cd` | survives       |
+| `gha`  | GitHub Actions output: swap a tool's reporter to inline workflow annotations     | survives       |
+
+Everything else - `debug` in this workspace's own spells (`go-test`, `golangci-lint`
+add `-v`), or any name a project defines - is a **workspace charm**: ordinary
+vocabulary a spell's `charms` table declares, not a reserved name magus itself
+recognizes.
+
+`magus describe charm <name>` prints a charm's one-line meaning (built-in or
+workspace) plus every target that declares it and the argv edit it makes;
+`magus describe charm` with no name lists every charm known in the workspace.
+See [Discovery](#discovery).
+
 ## The `rw` charm
 
 `rw` (read→write) is a **built-in** charm. It flips a target from check-only (read) to mutate-in-place:
@@ -422,6 +445,24 @@ magus describe target lint:rw,debug
 #     command: go tool golangci-lint run --fix ./... -v
 ```
 
+`magus describe charm <name>` goes the other way: given a charm, it prints the
+charm's own definition (built-in or workspace) plus every target that declares
+it and the argv edit it makes there. `magus describe charm` with no name lists
+every charm known in the workspace - the full enumeration [Built-in
+charms](#built-in-charms) only summarizes:
+
+```sh
+$ magus describe charm rw
+charms (1):
+  rw  [built-in, workspace default]
+    mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci
+    declared by:
+      .:go-fmt  (spell go)
+        base     gofmt -l .
+        + rw     gofmt -w .
+      ...
+```
+
 An active charm that no selected target declares (and isn't a reserved built-in like `rw`) prints a soft warning as a typo guard. It is only a warning, not an error, because a function target may legitimately read a charm it never declares.
 
 ## Naming
@@ -461,6 +502,7 @@ type Charm struct {
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Charm**        | A named, shared execution modifier carried in context. `Target.Charms` / `[]string`.                                                                                                                                                                                              |
 | **`rw`**         | A built-in charm: mutate in place (format/generate; lint autofix where supported). Read via `has_charm("rw")`. Stripped from `ci`.                                                                                                                                                |
+| **`cd`**         | A built-in charm: opt-in continuous-delivery toggle a target reads via `has_charm("cd")` to publish its artifact. Pairs with `magus run ci:cd`. Not stripped from `ci`.                                                                                                           |
 | **`gha`**        | A built-in charm: opt into GitHub Actions output. Swap a tool to its GHA annotation format (ruff/buf/sqlfluff/vitest), or have a target emit GHA-shaped output (the `ci-shard` job matrix → `$GITHUB_OUTPUT`). Set via `:gha`. A no-op where unsupported; not stripped from `ci`. |
 | **JSON Patch**   | The RFC 6902 document a charm declares: an ordered list of element-level ops (`add`/`remove`/`replace`/`move`/`copy`/`test`) over the target's argv.                                                                                                                              |
 | **PatchOp**      | One operation: `{op, path, value?, from?}`.                                                                                                                                                                                                                                       |

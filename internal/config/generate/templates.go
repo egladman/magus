@@ -36,6 +36,8 @@ var fieldsTmpl = template.Must(template.New("fields").Funcs(template.FuncMap{
 			return "KindDuration"
 		case "stringslice":
 			return "KindStringSlice"
+		case "stringmap":
+			return "KindStringMap"
 		}
 		return "KindString"
 	},
@@ -53,6 +55,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "{{.Flag}}"{{if .FlagShort}}, Short: "{{.FlagShort}}"{{end}}},
 		Kind:     fieldtype.{{kindConst .Kind}},
 		Usage:    "{{.Usage}}",
+		Default:  "{{.Default}}",
 	},
 {{- end}}
 }

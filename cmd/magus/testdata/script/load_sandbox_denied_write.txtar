@@ -1,0 +1,18 @@
+# A top-level fs\writeFile to an out-of-workspace absolute path, in a workspace
+# that opts into the sandbox, must be denied (not succeed silently) and must
+# surface as a coded diagnostic naming the file and the denied path - not exit 1
+# with nothing printed.
+
+! exec magus ls
+stderr 'MGS1023'
+stderr 'MGS2002'
+stderr 'usr[/\\]lib[/\\]magus-loadvisibility-denied\.txt'
+! stdout .
+! exists /usr/lib/magus-loadvisibility-denied.txt
+
+-- magus.yaml --
+sandbox:
+  enabled: true
+-- magusfile.buzz --
+import "fs" as fs;
+fs\writeFile("/usr/lib/magus-loadvisibility-denied.txt", "escaped");

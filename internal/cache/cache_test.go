@@ -530,6 +530,144 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	assert.Contains(t, string(data), "lint: undefined symbol foo")
 }
 
+// TestHitReplayMatchesLivePresentation reproduces friction finding F9: the log
+// store keeps every byte the taps saw - including op stdout captured into a
+// magusfile value (`go mod edit -json` and friends) - while collapse mode, the
+// default human display, withholds all of it from the live terminal. A hit that
+// dumped the store raw printed hundreds of lines the miss never showed. The hit
+// must mirror the live presentation decision: collapse stays quiet, streaming
+// replays. The verbatim bytes stay in the store either way (asserted on the log
+// file here; `magus query output <ref>` serves them).
+func TestHitReplayMatchesLivePresentation(t *testing.T) {
+	const noisy = "captured-as-value module graph JSON the live run never printed"
+	prime := func(t *testing.T, collapse bool) (cdir string, step Step, fn func(context.Context) error) {
+		t.Helper()
+		root := t.TempDir()
+		cdir = filepath.Join(t.TempDir(), ".magus")
+		writeMain(t, root, "package main")
+		out := touchOut(t, root)
+		step = makeStep(root)
+		step.Outputs = []string{"test/pkg/out.txt"}
+		fn = func(ctx context.Context) error {
+			stdout, _ := runPkg.OutputWriters(ctx)
+			fmt.Fprintln(stdout, noisy)
+			return os.WriteFile(out, []byte("built"), 0o644)
+		}
+		c, err := Open(t.Context(), cdir, WithMutable(true),
+			WithLogger(slog.New(slog.DiscardHandler)), WithCollapse(collapse))
+		require.NoError(t, err, "cache.Open(prime)")
+		r, err := c.Run(context.Background(), step, fn)
+		require.NoError(t, err, "Run(miss)")
+		require.False(t, r.Hit, "prime run must miss")
+		return cdir, step, fn
+	}
+
+	t.Run("collapse withholds on hit as it did live", func(t *testing.T) {
+		var cdir string
+		var step Step
+		var fn func(context.Context) error
+		liveOut := captureStdout(t, func() {
+			_ = captureStderr(t, func() { cdir, step, fn = prime(t, true) })
+		})
+		require.NotContains(t, liveOut, noisy, "collapse must withhold the live output (test premise)")
+
+		c2, err := Open(t.Context(), cdir, WithMutable(false),
+			WithLogger(slog.New(slog.DiscardHandler)), WithCollapse(true))
+		require.NoError(t, err, "cache.Open(hit)")
+		var r Result
+		hitOut := captureStdout(t, func() {
+			r, err = c2.Run(context.Background(), step, fn)
+			require.NoError(t, err, "Run(hit)")
+		})
+		require.True(t, r.Hit, "second run must hit")
+		assert.NotContains(t, hitOut, noisy,
+			"a collapse-mode hit must not dump captured output the live run withheld")
+
+		// The store is untouched: the full captured bytes stay retrievable.
+		logData, readErr := os.ReadFile(c2.logPath(step.ProjectPath, r.Hash))
+		require.NoError(t, readErr, "captured log must be retained")
+		assert.Contains(t, string(logData), noisy, "the store keeps the verbatim bytes")
+	})
+
+	t.Run("streaming replays on hit as it did live", func(t *testing.T) {
+		var cdir string
+		var step Step
+		var fn func(context.Context) error
+		liveOut := captureStdout(t, func() { cdir, step, fn = prime(t, false) })
+		require.Contains(t, liveOut, noisy, "streaming mode must show the live output (test premise)")
+
+		c2, err := Open(t.Context(), cdir, WithMutable(false),
+			WithLogger(slog.New(slog.DiscardHandler)))
+		require.NoError(t, err, "cache.Open(hit)")
+		var r Result
+		hitOut := captureStdout(t, func() {
+			r, err = c2.Run(context.Background(), step, fn)
+			require.NoError(t, err, "Run(hit)")
+		})
+		require.True(t, r.Hit, "second run must hit")
+		assert.Contains(t, hitOut, noisy,
+			"a streaming-mode hit must replay the log so a cached pass looks like the real one")
+	})
+}
+
+// TestHitReplaySilentBubblesNotices verifies the silent half of presentation
+// fidelity: a live silent pass bubbles only target-marked notice lines, so a
+// cached pass must re-bubble the same notices and nothing else.
+func TestHitReplaySilentBubblesNotices(t *testing.T) {
+	root := t.TempDir()
+	cdir := filepath.Join(t.TempDir(), ".magus")
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	fn := func(ctx context.Context) error {
+		stdout, _ := runPkg.OutputWriters(ctx)
+		fmt.Fprintln(stdout, "compiling...")
+		fmt.Fprintln(stdout, "magus:notice: deployed api v1.2.3")
+		return os.WriteFile(out, []byte("built"), 0o644)
+	}
+	// Silent pairs with quiet (logLevel Error), matching the CLI's -s wiring.
+	open := func() *Cache {
+		c, err := Open(t.Context(), cdir, WithMutable(true),
+			WithLogger(slog.New(slog.DiscardHandler)), WithLog("text", slog.LevelError), WithSilent(true))
+		require.NoError(t, err, "cache.Open")
+		c.log = slog.New(slog.DiscardHandler) // WithLog installed a real logger; keep test output clean
+		return c
+	}
+
+	_ = captureStderr(t, func() {
+		r, err := open().Run(context.Background(), step, fn)
+		require.NoError(t, err, "Run(miss)")
+		require.False(t, r.Hit, "prime run must miss")
+	})
+
+	var r Result
+	hitErr := captureStderr(t, func() {
+		var err error
+		r, err = open().Run(context.Background(), step, fn)
+		require.NoError(t, err, "Run(hit)")
+	})
+	require.True(t, r.Hit, "second run must hit")
+	assert.Equal(t, "notice: test/pkg: deployed api v1.2.3\n", hitErr,
+		"a silent hit must re-bubble the notices the live pass presented, and nothing else")
+}
+
+// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	orig := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+	require.NoError(t, w.Close())
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+	return string(out)
+}
+
 // captureStderr redirects os.Stderr for the duration of fn and returns what was written.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()

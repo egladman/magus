@@ -22,7 +22,9 @@ func init() {
 	byEnv = make(map[string]int, len(Fields))
 	byGoPath = make(map[string]int, len(Fields))
 	for i, f := range Fields {
-		byEnv[f.EnvVar] = i
+		if f.EnvVar != "" { // yaml-only fields (e.g. KindStringMap) have no env var to index
+			byEnv[f.EnvVar] = i
+		}
 		byGoPath[f.GoPath] = i
 	}
 }

@@ -17,6 +17,7 @@ func TestKindString(t *testing.T) {
 	assert.Equal(t, "KindBoolPtr", KindBoolPtr.String())
 	assert.Equal(t, "KindDuration", KindDuration.String())
 	assert.Equal(t, "KindStringSlice", KindStringSlice.String())
+	assert.Equal(t, "KindStringMap", KindStringMap.String())
 }
 
 func TestKindString_Unknown(t *testing.T) {

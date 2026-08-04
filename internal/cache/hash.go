@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/project"
 	"golang.org/x/sync/errgroup"
 )
@@ -99,6 +100,20 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 		} else {
 			writeLine("env:", k, ":unset")
 		}
+	}
+
+	// Sandbox passthrough patterns (sandbox.env.passthrough) name variables the
+	// workspace deliberately lets reach child processes, so a set one can change
+	// what a tool produces (GOFLAGS=-tags=x reaches the compiler) and must key
+	// the cache the same way a declared EnvAllow name does. Resolve the patterns
+	// against the live environment: every SET match contributes an env: line in
+	// the exact EnvAllow byte layout. An unset name contributes nothing - a glob
+	// cannot enumerate unset names, and an unset variable never reached the
+	// child - so a run with no matching variable set hashes exactly as before
+	// and invalidates no existing entry. Names already keyed via EnvAllow above
+	// are skipped, so a variable listed in both writes one line, not two.
+	for _, kv := range matchPassthroughEnv(s.EnvPassthrough, env, os.Environ()) {
+		writeLine("env:", kv)
 	}
 
 	execOv := append([]string(nil), s.ExecOverrides...)
@@ -396,6 +411,48 @@ func isIgnoreDir(name string, spellDirs []string) bool {
 		return true
 	}
 	return slices.Contains(project.IgnoreDirs, name) || slices.Contains(spellDirs, name)
+}
+
+// matchPassthroughEnv resolves sandbox passthrough patterns (exact names or
+// prefix globs ending in "*", the sandbox.env.passthrough grammar) against
+// environ and returns the matching SET entries as sorted "NAME=value" strings.
+// Matching reuses the sandbox allowlist semantics (internal/sandbox/env), so
+// what keys the cache is exactly what the sandbox would let a child inherit.
+// Names in exclude (the step's declared EnvAllow, already keyed) are skipped;
+// malformed environ entries (no '=') and duplicate names (first wins) are
+// dropped.
+func matchPassthroughEnv(patterns, exclude, environ []string) []string {
+	if len(patterns) == 0 {
+		return nil
+	}
+	var exact, globs []string
+	for _, p := range patterns {
+		if strings.Contains(p, "*") {
+			globs = append(globs, p)
+		} else {
+			exact = append(exact, p)
+		}
+	}
+	allow := sandboxenv.Allowlist{Allow: exact, Globs: globs}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, kv := range environ {
+		i := strings.IndexByte(kv, '=')
+		if i < 0 {
+			continue
+		}
+		name := kv[:i]
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		if slices.Contains(exclude, name) || !allow.Allows(name) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	slices.Sort(out)
+	return out
 }
 
 // shortHash returns the first 8 hex characters of h, for log lines.

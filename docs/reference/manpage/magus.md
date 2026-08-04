@@ -143,6 +143,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_VCS_\<NAME\>_BASE_REF**
 : Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 
+**MAGUS_DAEMON_ENABLED**
+: Enabled uses a shared, persistent daemon; false runs each invocation self-contained (default: true). Equivalent magus.yaml key: **daemon.enabled**.
+
 **MAGUS_DAEMON_SOCKET**
 : Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: **daemon.socket**.
 
@@ -202,6 +205,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 
 **MAGUS_MCP_ADDRESS**
 : host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
+
+**MAGUS_CONSOLE_ENABLED**
+: Default true when MCP is up; when 0 or false, refuse to start the console (default: true). Equivalent magus.yaml key: **console.enabled**.
 
 **MAGUS_HINTS_ENABLED**
 : When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: **hints.enabled**.

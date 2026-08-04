@@ -133,6 +133,9 @@ Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalen
 \fBMAGUS_VCS_<NAME>_BASE_REF\fR
 Per\-VCS base\-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs
 .TP
+\fBMAGUS_DAEMON_ENABLED\fR
+Enabled uses a shared, persistent daemon; false runs each invocation self\-contained (default: true). Equivalent magus.yaml key: \fBdaemon.enabled\fR.
+.TP
 \fBMAGUS_DAEMON_SOCKET\fR
 Runtime proc\-server socket set by the daemon for forwarded child processes; unix:// URL or bare path. Equivalent magus.yaml key: \fBdaemon.socket\fR.
 .TP
@@ -192,6 +195,9 @@ When 0 or false, refuse to start the MCP server (default: true). Equivalent magu
 .TP
 \fBMAGUS_MCP_ADDRESS\fR
 host:port for the MCP Streamable HTTP server started alongside the daemon (default: 127.0.0.1:7391). Equivalent magus.yaml key: \fBmcp.address\fR.
+.TP
+\fBMAGUS_CONSOLE_ENABLED\fR
+Default true when MCP is up; when 0 or false, refuse to start the console (default: true). Equivalent magus.yaml key: \fBconsole.enabled\fR.
 .TP
 \fBMAGUS_HINTS_ENABLED\fR
 When false, suppress all hint messages printed to stderr (default: true). Equivalent magus.yaml key: \fBhints.enabled\fR.

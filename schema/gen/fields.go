@@ -11,6 +11,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-dir"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_CACHE_DIR",
+		Default:  "",
 	},
 	{
 		GoPath:   "Cache.Immutable",
@@ -19,6 +20,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-immutable"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_CACHE_IMMUTABLE",
+		Default:  "false",
 	},
 	{
 		GoPath:   "Cache.SizeMB",
@@ -27,6 +29,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-size-mb"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CACHE_SIZE_MB",
+		Default:  "0",
 	},
 	{
 		GoPath:   "Cache.Remote.TrustedKeys",
@@ -35,6 +38,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_CACHE_REMOTE_TRUSTED_KEYS",
+		Default:  "",
 	},
 	{
 		GoPath:   "Cache.Remote.Insecure",
@@ -43,6 +47,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "cache-remote-insecure"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_CACHE_REMOTE_INSECURE: Insecure disables remote-cache signature verification: unsigned artifacts are",
+		Default:  "false",
 	},
 	{
 		GoPath:   "CI.MaxShards",
@@ -51,6 +56,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "ci-max-shards"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CI_MAX_SHARDS",
+		Default:  "8",
 	},
 	{
 		GoPath:   "CI.RunnerPoolBudget",
@@ -59,6 +65,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "ci-runner-pool-budget"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CI_RUNNER_POOL_BUDGET",
+		Default:  "0",
 	},
 	{
 		GoPath:   "Volatility.Enabled",
@@ -67,6 +74,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_VOLATILITY_ENABLED",
+		Default:  "true",
 	},
 	{
 		GoPath:   "Volatility.BootstrapSamples",
@@ -75,6 +83,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-bootstrap-samples"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES",
+		Default:  "20",
 	},
 	{
 		GoPath:   "Volatility.MinSamples",
@@ -83,6 +92,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-min-samples"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_VOLATILITY_MIN_SAMPLES",
+		Default:  "20",
 	},
 	{
 		GoPath:   "Volatility.Threshold",
@@ -91,6 +101,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-threshold"},
 		Kind:     fieldtype.KindFloat64,
 		Usage:    "MAGUS_VOLATILITY_THRESHOLD",
+		Default:  "0.05",
 	},
 	{
 		GoPath:   "Volatility.AnnotateGHA",
@@ -99,6 +110,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "volatility-annotate-gha"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_VOLATILITY_ANNOTATE_GHA",
+		Default:  "true",
 	},
 	{
 		GoPath:   "Graph.Direction",
@@ -107,6 +119,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "graph-direction"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_GRAPH_DIRECTION",
+		Default:  "downstream",
 	},
 	{
 		GoPath:   "Graph.Spell",
@@ -115,6 +128,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "graph-spell"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_GRAPH_SPELL",
+		Default:  "",
 	},
 	{
 		GoPath:   "Graph.Depth",
@@ -123,6 +137,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "graph-depth"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_GRAPH_DEPTH",
+		Default:  "0",
 	},
 	{
 		GoPath:   "Graph.Roots",
@@ -131,6 +146,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "graph-roots"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_GRAPH_ROOTS",
+		Default:  "",
 	},
 	{
 		GoPath:   "Telemetry.Enabled",
@@ -139,6 +155,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_TELEMETRY_ENABLED",
+		Default:  "false",
 	},
 	{
 		GoPath:   "Telemetry.Endpoint",
@@ -147,6 +164,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-endpoint"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_TELEMETRY_ENDPOINT",
+		Default:  "",
 	},
 	{
 		GoPath:   "Telemetry.Protocol",
@@ -155,6 +173,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-protocol"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_TELEMETRY_PROTOCOL",
+		Default:  "grpc",
 	},
 	{
 		GoPath:   "Telemetry.Insecure",
@@ -163,6 +182,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-insecure"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_TELEMETRY_INSECURE",
+		Default:  "false",
 	},
 	{
 		GoPath:   "Telemetry.ServiceName",
@@ -171,6 +191,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-service-name"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_TELEMETRY_SERVICE_NAME",
+		Default:  "magus",
 	},
 	{
 		GoPath:   "Telemetry.SampleRatio",
@@ -179,6 +200,16 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "telemetry-sample-ratio"},
 		Kind:     fieldtype.KindFloat64,
 		Usage:    "MAGUS_TELEMETRY_SAMPLE_RATIO",
+		Default:  "1.0",
+	},
+	{
+		GoPath:   "Telemetry.Headers",
+		YamlPath: "telemetry.headers",
+		EnvVar:   "",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindStringMap,
+		Usage:    "",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.Enabled",
@@ -187,6 +218,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_DAEMON_ENABLED: Enabled uses a shared, persistent daemon; false runs each invocation self-contained. Default true.",
+		Default:  "true",
 	},
 	{
 		GoPath:   "Daemon.Address",
@@ -195,6 +227,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-address"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_DAEMON_ADDRESS: Address is the unix:// socket the parent listens on; empty auto-generates one.",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.IdleTTL",
@@ -203,6 +236,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-idle-ttl"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_DAEMON_IDLE_TTL: IdleTTL controls workspace eviction in the multi-workspace daemon; 0 = default 6h.",
+		Default:  "6h",
 	},
 	{
 		GoPath:   "Daemon.Socket",
@@ -211,6 +245,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-socket"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_DAEMON_SOCKET: Socket is the runtime socket path set by the daemon for forwarded children; unix:// URL or bare path.",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.Workspaces",
@@ -219,6 +254,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_DAEMON_WORKSPACES: Workspaces is the explicit list of workspace roots to serve; non-empty enables eager union of sandbox",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.RotateActivities",
@@ -227,6 +263,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-rotate-activities"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.RotateLogs",
@@ -235,6 +272,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-rotate-logs"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS",
+		Default:  "",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.SyncGraph",
@@ -243,6 +281,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-sync-graph"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_DAEMON_MAINTENANCE_SYNC_GRAPH",
+		Default:  "",
 	},
 	{
 		GoPath:   "VCS.Enabled",
@@ -251,6 +290,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_VCS_ENABLED",
+		Default:  "true",
 	},
 	{
 		GoPath:   "VCS.Name",
@@ -259,6 +299,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "vcs-name"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_VCS_NAME",
+		Default:  "",
 	},
 	{
 		GoPath:   "VCS.BaseRef",
@@ -267,6 +308,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "vcs-base-ref"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_VCS_BASE_REF: BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).",
+		Default:  "",
 	},
 	{
 		GoPath:   "MCP.Enabled",
@@ -275,6 +317,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_MCP_ENABLED",
+		Default:  "true",
 	},
 	{
 		GoPath:   "MCP.Address",
@@ -283,6 +326,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "mcp-address"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_MCP_ADDRESS",
+		Default:  "127.0.0.1:7391",
 	},
 	{
 		GoPath:   "Console.Enabled",
@@ -291,6 +335,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_CONSOLE_ENABLED",
+		Default:  "true",
 	},
 	{
 		GoPath:   "Console.URL",
@@ -299,6 +344,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "console-url"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_CONSOLE_URL: URL is the base URL of the hosted console (with a trailing slash, without",
+		Default:  "",
 	},
 	{
 		GoPath:   "Report.Filter",
@@ -307,6 +353,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_REPORT_FILTER: Filter restricts event types via +type/-type/bare terms; any '+' sets default-deny.",
+		Default:  "",
 	},
 	{
 		GoPath:   "Log.Format",
@@ -315,6 +362,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "log-format"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_LOG_FORMAT",
+		Default:  "pretty",
 	},
 	{
 		GoPath:   "Log.Level",
@@ -323,6 +371,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "log-level"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.",
+		Default:  "info",
 	},
 	{
 		GoPath:   "Log.Silent",
@@ -331,6 +380,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_LOG_SILENT: Silent suppresses progress like --quiet, and additionally bounds the failing-project",
+		Default:  "",
 	},
 	{
 		GoPath:   "Log.Stream",
@@ -339,6 +389,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of",
+		Default:  "",
 	},
 	{
 		GoPath:   "Hints.Enabled",
@@ -347,6 +398,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_HINTS_ENABLED: Enabled controls whether hint messages (actionable nudges) are printed",
+		Default:  "true",
 	},
 	{
 		GoPath:   "Knowledge.Workspaces",
@@ -355,6 +407,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global'",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.MaxSizeMB",
@@ -363,6 +416,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-max-size-mb"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Enabled",
@@ -371,6 +425,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-vcs-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_KNOWLEDGE_VCS_ENABLED",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.VCS.MaxCommits",
@@ -379,6 +434,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-vcs-max-commits"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits. 0 uses a",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.VCS.Authorship",
@@ -387,6 +443,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindBoolPtr,
 		Usage:    "MAGUS_KNOWLEDGE_VCS_AUTHORSHIP: Authorship includes the 'author' nodes and 'authored' edges (who touched which",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.Disabled",
@@ -395,6 +452,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-disabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED: Disabled opts out of background auto-indexing. Auto-indexing is on by default",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.QuietSeconds",
@@ -403,6 +461,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-quiet-seconds"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS: QuietSeconds is how long a project's sources must be quiet after the last change",
+		Default:  "",
 	},
 	{
 		GoPath:   "Knowledge.SymbolIndexing.MinIntervalSeconds",
@@ -411,6 +470,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "knowledge-symbol-indexing-min-interval-seconds"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a",
+		Default:  "",
 	},
 	{
 		GoPath:   "Secret.Interactive",
@@ -419,6 +479,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "secret-interactive-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal. Default 60s.",
+		Default:  "",
 	},
 	{
 		GoPath:   "Secret.Unattended",
@@ -427,6 +488,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "secret-unattended-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.",
+		Default:  "",
 	},
 	{
 		GoPath:   "Concurrency",
@@ -435,6 +497,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "concurrency", Short: "j"},
 		Kind:     fieldtype.KindInt,
 		Usage:    "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).",
+		Default:  "min(NumCPU,8)",
 	},
 	{
 		GoPath:   "TargetTimeout",
@@ -443,6 +506,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "target-timeout"},
 		Kind:     fieldtype.KindDuration,
 		Usage:    "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus",
+		Default:  "",
 	},
 	{
 		GoPath:   "HistoryPath",
@@ -451,6 +515,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "history-path"},
 		Kind:     fieldtype.KindString,
 		Usage:    "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,",
+		Default:  "$XDG_STATE_HOME/magus/history/v1.json",
 	},
 	{
 		GoPath:   "DryRun",
@@ -459,6 +524,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "dry-run", Short: "u"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.",
+		Default:  "false",
 	},
 	{
 		GoPath:   "DefaultCharms",
@@ -467,6 +533,16 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_DEFAULT_CHARMS: DefaultCharms are execution charms applied to every 'magus run' / 'magus x' by",
+		Default:  "",
+	},
+	{
+		GoPath:   "RequiresMagus",
+		YamlPath: "requires_magus",
+		EnvVar:   "MAGUS_REQUIRES_MAGUS",
+		Flag:     fieldtype.FlagNames{Long: "requires-magus"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_REQUIRES_MAGUS: RequiresMagus declares the minimum magus version this workspace expects, as a",
+		Default:  "",
 	},
 	{
 		GoPath:   "Sandbox.Enabled",
@@ -475,6 +551,7 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: "sandbox-enabled"},
 		Kind:     fieldtype.KindBool,
 		Usage:    "MAGUS_SANDBOX_ENABLED",
+		Default:  "false",
 	},
 	{
 		GoPath:   "Sandbox.Env.Passthrough",
@@ -483,5 +560,6 @@ var Fields = []fieldtype.Field{
 		Flag:     fieldtype.FlagNames{Long: ""},
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds names/globs (e.g. 'MISE_*') to the built-in env allowlist.",
+		Default:  "",
 	},
 }

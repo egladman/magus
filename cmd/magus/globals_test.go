@@ -2,9 +2,14 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -78,6 +83,123 @@ func TestPartitionFlags(t *testing.T) {
 			// reorderFlagsFirst must remain flags-then-positionals over the same split.
 			assert.Equal(t, append(append([]string{}, c.flags...), c.posargs...),
 				reorderFlagsFirst(newFS(), c.args), "reorderFlagsFirst")
+		})
+	}
+}
+
+// captureStderr runs fn with os.Stderr redirected to a pipe and returns everything
+// written to it.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	previous := os.Stderr
+	read, write, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = write
+	t.Cleanup(func() { os.Stderr = previous })
+
+	fn()
+
+	require.NoError(t, write.Close())
+	content, err := io.ReadAll(read)
+	require.NoError(t, err)
+	return string(content)
+}
+
+// newRichUsageFS returns a FlagSet shaped like a real subcommand's: a local flag plus
+// a rich fs.Usage (a couple of preamble lines, then fs.PrintDefaults()), so tests can
+// tell the "compact" error path from the "full" help path by whether the -local-flag
+// default line shows up.
+func newRichUsageFS(fs *flag.FlagSet) {
+	fs.Bool("local-flag", false, "a subcommand-local flag")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus fake <terms> [flags]")
+		fmt.Fprintln(os.Stderr, "Flags:")
+		fs.PrintDefaults()
+	}
+}
+
+// TestCmdParseBadFlagCompactUsage locks the fix for a bad flag burying the usage that
+// answers it under a full fs.PrintDefaults() dump of every config/display/local flag:
+// the error must print first, the subcommand's own usage text must still be there
+// (unabridged dumps aside), and the ~50 config flags (and this test's own -local-flag)
+// must NOT appear, replaced by one pointer to `magus -h`.
+func TestCmdParseBadFlagCompactUsage(t *testing.T) {
+	var out string
+	pos, err := func() ([]string, error) {
+		var p []string
+		var e error
+		out = captureStderr(t, func() {
+			p, e = cmdParse("fake", []string{"--nope"}, newRichUsageFS)
+		})
+		return p, e
+	}()
+
+	assert.Nil(t, pos)
+	require.Error(t, err)
+	var silent errSilent
+	require.ErrorAs(t, err, &silent, "a bad flag must exit via errSilent so exitCodeOf does not re-log it")
+	assert.Equal(t, exitUsage, silent.exitCode)
+
+	assert.True(t, strings.HasPrefix(out, "[error] flag provided but not defined: -nope\n"),
+		"error line must come first, got:\n%s", out)
+	assert.Contains(t, out, "Usage: magus fake <terms> [flags]")
+	assert.Contains(t, out, "Global flags are documented by `magus -h`.")
+	assert.NotContains(t, out, "-local-flag", "the full PrintDefaults dump must not appear on a bad flag")
+	assert.NotContains(t, out, "-concurrency", "the ~50 global config flags must not appear on a bad flag")
+}
+
+// TestCmdParseHelpFullDump locks that -h/--help is unabridged: current behavior (the
+// full fs.PrintDefaults() dump, including this test's -local-flag) must be unchanged.
+func TestCmdParseHelpFullDump(t *testing.T) {
+	out := captureStderr(t, func() {
+		_, err := cmdParse("fake", []string{"--help"}, newRichUsageFS)
+		assert.ErrorIs(t, err, flag.ErrHelp)
+	})
+
+	assert.Contains(t, out, "Usage: magus fake <terms> [flags]")
+	assert.Contains(t, out, "-local-flag", "an explicit --help must still show the full flag dump")
+	assert.NotContains(t, out, "[error]")
+}
+
+// TestCmdParseHelpAliasForms locks the help spellings the pre-scan misses but stdlib
+// flag still treats as help: -help, --h, and --help=<value> must exit through
+// flag.ErrHelp (exit 0) with the usage printed, never through the bad-flag branch's
+// "[error] flag: help requested" banner.
+func TestCmdParseHelpAliasForms(t *testing.T) {
+	for _, arg := range []string{"-help", "--h", "--help=true"} {
+		out := captureStderr(t, func() {
+			_, err := cmdParse("fake", []string{arg}, newRichUsageFS)
+			assert.ErrorIs(t, err, flag.ErrHelp, "arg %q", arg)
+		})
+		assert.Contains(t, out, "Usage: magus fake <terms> [flags]", "arg %q", arg)
+		assert.NotContains(t, out, "[error]", "arg %q must not take the bad-flag branch", arg)
+	}
+}
+
+// TestRequestsHelp pins the token scan cmdParse uses to tell -h/--help apart from a
+// bad flag before Parse runs: an exact -h/--help token counts, one consumed as
+// another flag's value does not, and "--" halts the scan.
+func TestRequestsHelp(t *testing.T) {
+	fs := flag.NewFlagSet("t", flag.ContinueOnError)
+	fs.String("val", "", "value flag")
+	fs.Bool("b", false, "bool flag")
+
+	cases := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"bare -h", []string{"-h"}, true},
+		{"bare --help", []string{"--help"}, true},
+		{"help after positional", []string{"foo", "--help"}, true},
+		{"no help", []string{"foo", "--nope"}, false},
+		{"-h consumed as another flag's value", []string{"-val", "-h"}, false},
+		{"halts at --", []string{"--", "-h"}, false},
+		{"bool flag does not consume -h", []string{"-b", "-h"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, requestsHelp(fs, c.args))
 		})
 	}
 }

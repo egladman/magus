@@ -102,7 +102,10 @@ const (
 	DeadOutputGlob            DiagnosticCode = "MGS1018"
 	SelfStalingOutput         DiagnosticCode = "MGS1019"
 	OutputOwnedByTwoTargets   DiagnosticCode = "MGS1020"
-	UnprobedSpellBin          DiagnosticCode = "MGS1021"
+	// MGS1021 is deliberately unallocated: the workspace-provider codes reserved it
+	// before landing, so a code assigned here would collide on that merge.
+	UnprobedSpellBin          DiagnosticCode = "MGS1022"
+	MagusfileLoadFailed       DiagnosticCode = "MGS1023"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -116,6 +119,7 @@ const (
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
 	ToolNotOnPath             DiagnosticCode = "MGS3003"
+	MagusVersionTooOld        DiagnosticCode = "MGS3004"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -149,11 +153,11 @@ var allDiagnosticCodes = []DiagnosticCode{
 	TargetMissingContext, TargetNeverReplays, AffectedSetUncomputable,
 	CrossOutputOwnerUnknown, CrossOutputCycle, CrossOutputGlobEscapes, CrossOutputNotProduced,
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
-	SelfStalingOutput, OutputOwnedByTwoTargets, UnprobedSpellBin,
+	SelfStalingOutput, OutputOwnedByTwoTargets, UnprobedSpellBin, MagusfileLoadFailed,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
-	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath,
+	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, MagusVersionTooOld,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits,

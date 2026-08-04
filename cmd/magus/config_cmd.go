@@ -128,10 +128,25 @@ func intOrDef(n int, def string) string {
 	return strconv.Itoa(n)
 }
 
+// globalConfigPathHelp describes where --global writes, for use in flag help text.
+// $XDG_CONFIG_HOME/magus/magus.yaml is the literal search path on Linux, but
+// config.UserConfigDir only honors XDG_CONFIG_HOME when it's set; unset, it falls
+// back to the OS default (~/Library/Application Support on macOS, not
+// $XDG_CONFIG_HOME), which the old hardcoded string never showed. This resolves
+// the real path for the CURRENT environment and names the env var alongside it,
+// so --help answers "where" without the reader doing the XDG lookup by hand.
+func globalConfigPathHelp() string {
+	dir, err := config.UserConfigDir()
+	if err != nil {
+		return "$XDG_CONFIG_HOME/magus/magus.yaml"
+	}
+	return filepath.Join(dir, "magus", config.Filename) + " (XDG_CONFIG_HOME)"
+}
+
 func runConfigSet(args []string) error {
 	fs := flag.NewFlagSet("config set", flag.ContinueOnError)
 	bindDisplayFlags(fs)
-	useGlobal := fs.Bool("global", false, "Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)")
+	useGlobal := fs.Bool("global", false, "Write to the global config ("+globalConfigPathHelp()+")")
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config set key=<key>,value=<value> [flags]")
 		fmt.Fprintln(os.Stderr, "")

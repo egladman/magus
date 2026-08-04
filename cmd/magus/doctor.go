@@ -46,6 +46,7 @@ func doctorCmd(ctx context.Context, root string, args []string) error {
 		root, ws, wsErr,
 		doctor.WithConfig(globalCfg),
 		doctor.WithDaemonInfo(daemonInfo),
+		doctor.WithRunningVersion(version),
 	)
 
 	if err := emitDoctor(opts, out); err != nil {

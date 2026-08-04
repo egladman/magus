@@ -587,9 +587,23 @@ func (v Value) stringAt(depth int) string {
 		sb.WriteByte('}')
 		return sb.String()
 	case tagFun:
+		// A method reference (`obj.method`, not called) carries its receiver in
+		// This; stringify it the way upstream buzz stringifies ObjBoundMethod
+		// ("bound method: <receiver> to <name>") rather than the opaque "<fun>"
+		// used for an unbound closure, so interpolating a method reference into
+		// a string reads as a function value instead of silent garbage.
+		if fo := v.asFun(); fo != nil && !fo.This.IsNull() {
+			return fmt.Sprintf("bound method: %s to %s", fo.This.String(), fo.Chunk.Name)
+		}
 		return "<fun>"
 	case tagDirect:
-		return fmt.Sprintf("<direct:%s>", v.asDirect().Name)
+		// Upstream formats a native-backed bound method as "bound method: <receiver>
+		// to native 0x<addr>" (obj.zig's ObjBoundMethod.toString) because ObjNative
+		// carries no name, only an address. directObj has no receiver to print (the
+		// receiver lives inside its closure, not a stored field - see DirectValue),
+		// but it does carry a real name (e.g. "list.len"), which is strictly more
+		// useful than an address would be, so that is what is shown instead.
+		return fmt.Sprintf("bound method: %s", v.asDirect().Name)
 	case tagObject:
 		inst := v.asObject()
 		var sb strings.Builder

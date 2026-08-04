@@ -1,0 +1,12 @@
+# Control for load_sandbox_denied_write.txtar: with sandbox.enabled left at its
+# default (false, unset), a load-time write outside the workspace is
+# unconstrained, exactly as it always was. Load-time sandboxing is opt-in, so a
+# workspace that never turned it on sees no behavior change.
+
+exec magus ls
+stdout 'workspace:'
+exists $WORK/unsandboxed-write.txt
+
+-- magusfile.buzz --
+import "fs" as fs;
+fs\writeFile("./unsandboxed-write.txt", "ok");

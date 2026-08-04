@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/proc"
@@ -121,12 +125,21 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
 	})
 
-	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
+	t.Run("cwd outside every project fans out to all, saying so", func(t *testing.T) {
 		// A daemon's own cwd (unrelated to workspace B) must not scope B's run - it
-		// falls through to the full fan-out, not a mis-scoped or empty result.
+		// falls through to the full fan-out, not a mis-scoped or empty result. The
+		// source string is what the reader sees BEFORE any work starts, so it must
+		// name the reason rather than reading as a deliberate "everything" choice.
 		targets, source, err := resolveTargets(ws, types.Target{Name: "test"}, nil, "/tmp/daemon-cwd")
 		require.NoError(t, err)
-		assert.Empty(t, source)
+		assert.Equal(t, "cwd is not inside a project; all projects selected", source)
+		assert.Len(t, targets, 2)
+	})
+
+	t.Run("cwd at the workspace root fans out to all, naming the root", func(t *testing.T) {
+		targets, source, err := resolveTargets(ws, types.Target{Name: "test"}, nil, ws.root)
+		require.NoError(t, err)
+		assert.Equal(t, "cwd is the workspace root; all projects selected", source)
 		assert.Len(t, targets, 2)
 	})
 
@@ -210,6 +223,47 @@ func TestApplyTargetFilter(t *testing.T) {
 		got, err := applyTargetFilter(tgt(".", "gopherbuzz"), "go-vet", defines, label)
 		require.NoError(t, err)
 		assert.Len(t, got, 2)
+	})
+}
+
+// TestTargetUsage locks two regressions in `magus run -h`'s (targetUsage's) static
+// text: the worked example must be real Buzz (not the stale Lua/Ruby-ish
+// "global function build(_a) go.build() end" a drive-by contributor could not have
+// parsed), and --dry-run must be documented even though it is a global flag.
+func TestTargetUsage(t *testing.T) {
+	previous := os.Stderr
+	read, write, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = write
+	t.Cleanup(func() { os.Stderr = previous })
+
+	usageErr := targetUsage()
+
+	require.NoError(t, write.Close())
+	content, err := io.ReadAll(read)
+	require.NoError(t, err)
+
+	assert.Equal(t, flag.ErrHelp, usageErr)
+	out := string(content)
+	assert.Contains(t, out, `export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](ctx); }`,
+		"the worked example must be real Buzz, matching the README")
+	assert.NotContains(t, out, "global function build",
+		"the stale non-Buzz example must be gone")
+	assert.Contains(t, out, "--dry-run", "the flag exists and must be documented here")
+}
+
+// TestRunVerdictLine locks the one-line [pass]/[fail] verdict a --silent run still
+// prints (see the silent branch in runTarget): the ASCII glyph convention, and pass
+// vs fail keyed on whether err is nil.
+func TestRunVerdictLine(t *testing.T) {
+	t.Run("pass", func(t *testing.T) {
+		got := runVerdictLine("test", nil, 3*time.Minute+18*time.Second)
+		assert.Equal(t, "[pass] test (ran, 3m18s)\n", got)
+	})
+
+	t.Run("fail", func(t *testing.T) {
+		got := runVerdictLine("lint", errors.New("boom"), 65*time.Second)
+		assert.Equal(t, "[fail] lint (ran, 1m5s)\n", got)
 	})
 }
 

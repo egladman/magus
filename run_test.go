@@ -226,6 +226,62 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 		"a sibling target must not inherit build's per-target outputs")
 }
 
+// TestSandboxEnvPassthroughWiredIntoCacheKey guards the wiring itself, not just
+// hashStep's handling of it: magus.yaml's sandbox.env.passthrough must actually
+// reach cache.Step.EnvPassthrough through baseStep, or a set passthrough
+// variable (e.g. GOFLAGS under "GO*") silently never enters the cache key even
+// though hash.go knows how to fold it in. Exercised through Open + Run (real
+// construction path), not by hand-setting Step.EnvPassthrough - hash_test.go's
+// TestPassthroughEnvChangesTheKey already covers the hashing half.
+func TestSandboxEnvPassthroughWiredIntoCacheKey(t *testing.T) {
+	const spellName = "zzz-passthrough-wiring-test-spell"
+	var calls atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("build"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			calls.Add(1)
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	cfg := config.Config{Sandbox: config.SandboxConfig{
+		Env: config.SandboxEnv{Passthrough: []string{"MAGUS_TEST_PASSTHROUGH_*"}},
+	}}
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	// buildStep must carry the configured pattern before Run ever executes.
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	step := m.buildStep(p, "build")
+	assert.Equal(t, []string{"MAGUS_TEST_PASSTHROUGH_*"}, step.EnvPassthrough,
+		"sandbox.env.passthrough must flow into the built step's EnvPassthrough")
+
+	ctx := context.Background()
+	targets := []types.Target{{Path: ".", Name: "build"}}
+
+	t.Setenv("MAGUS_TEST_PASSTHROUGH_VAR", "one")
+	require.NoError(t, m.Run(ctx, targets), "first run")
+	assert.Equal(t, int32(1), calls.Load(), "first run: expected one real execution")
+
+	require.NoError(t, m.Run(ctx, targets), "second run, same value (should hit cache)")
+	assert.Equal(t, int32(1), calls.Load(), "unchanged passthrough value must replay")
+
+	t.Setenv("MAGUS_TEST_PASSTHROUGH_VAR", "two")
+	require.NoError(t, m.Run(ctx, targets), "third run, changed passthrough value")
+	assert.Equal(t, int32(2), calls.Load(),
+		"a changed passthrough-matched env var must move the key and force real execution "+
+			"(if this fails, EnvPassthrough is not reaching the cache key end to end)")
+}
+
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
 // magus.inputs/outputs call with a non-literal (computed) argument is a hard load
 // error, because a computed footprint is invisible to the static cache read.

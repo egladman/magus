@@ -3,7 +3,9 @@ package proc
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -14,6 +16,9 @@ import (
 
 // statusQueryTimeout caps the QueryStatus round-trip; prevents hung daemons from blocking forever.
 const statusQueryTimeout = 5 * time.Second
+
+// clientStderr is where Forward writes client-facing lines; a var so tests can capture it.
+var clientStderr io.Writer = os.Stderr
 
 // Forward dials MAGUS_DAEMON_SOCKET, delegates args, and returns the exit code.
 // On any transport error callers should fall back to running locally.
@@ -63,6 +68,27 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	var reply RunReply
 	if err := json.Unmarshal(line, &reply); err != nil {
 		return 0, fmt.Errorf("proc: forward: decode reply: %w", err)
+	}
+	// Invariant: a nonzero exit must land at least one actionable line on the
+	// client. Two adopted-failure shapes used to violate it, exiting nonzero with
+	// zero bytes of output:
+	//   - a cycle reply: the server-generated cause lived only in reply.Err,
+	//     which no side ever rendered, so the recursion guard fired invisibly;
+	//   - a run adopted by a stable daemon: the report rendered into the daemon's
+	//     log, not this terminal. A current daemon declines such runs up front
+	//     (ErrOutputUndeliverable), so this branch only fires against an older
+	//     daemon that still adopts - say where the report went and hand over the
+	//     local rerun.
+	// A per-process pool shares this terminal, so its failed runs already printed
+	// their report; adding lines there would be noise.
+	if reply.ExitCode != 0 {
+		switch {
+		case reply.Err == ErrCycleDetected.Error():
+			_, _ = fmt.Fprintf(clientStderr, "magus: %s\n", reply.Err)
+		case strings.HasSuffix(raw, "/"+stableSocketName):
+			_, _ = fmt.Fprintf(clientStderr, "magus: the daemon ran this command, but its report went to the daemon log, not this terminal (exit %d)\n", reply.ExitCode)
+			_, _ = fmt.Fprintf(clientStderr, "magus: rerun locally to see the report: MAGUS_DAEMON_ENABLED=false magus %s\n", strings.Join(args, " "))
+		}
 	}
 	return reply.ExitCode, nil // reply.Err is informational; callers observe failure via ExitCode
 }

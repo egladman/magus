@@ -1224,12 +1224,19 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		return types.Unknown
 	case *types.ListType:
 		if v.Name == "len" {
-			return types.Int
+			// Upstream (~/Repos/buzz src/obj.zig) declares `len` as `extern fun
+			// len() > int` on list/map/str: a method, not an auto-invoked
+			// property. Bare `.len` types as the method's own FuncType so a call
+			// site (`.len()`) still infers int via inferCall, while a bare
+			// reference used where int is expected is now a checker error
+			// instead of a runtime "not callable" surprise - the compiler emits
+			// OpGetMember either way, which the VM resolves to the bound method.
+			return &types.FuncType{Ret: types.Int}
 		}
 		return types.Unknown
 	case *types.MapType:
 		if v.Name == "len" {
-			return types.Int
+			return &types.FuncType{Ret: types.Int}
 		}
 		return types.Unknown
 	case *types.EnumType:

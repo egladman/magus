@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
@@ -89,7 +92,7 @@ func describeUsage() {
 	fmt.Fprintln(os.Stderr, "Nouns (each accepts singular or plural):")
 	fmt.Fprintln(os.Stderr, "  spell        language/runtime adapters")
 	fmt.Fprintln(os.Stderr, "  charm        execution modifiers (rw, gha) and the targets that declare them")
-	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <path:target>` evaluates one")
+	fmt.Fprintln(os.Stderr, "  target       targets dispatched to projects; `target <name> [project]` evaluates one")
 	fmt.Fprintln(os.Stderr, "  graph        target dependency graph (magus.needs DAG) per project")
 	fmt.Fprintln(os.Stderr, "  project      directories recognized as units of work; `project <path>` details one")
 	fmt.Fprintln(os.Stderr, "  workspace    the active workspace root and its config")
@@ -563,23 +566,33 @@ func firstLine(s string) string {
 }
 
 // describeTargetNoun routes `describe target[s]`: no name lists every target;
-// `target <path:target>` evaluates one into its full dispatch plan.
+// `target <name> [project]` evaluates one into its full dispatch plan. Note the
+// grammar: the FIRST positional is the target name (with an optional
+// ":charm[,charm...]" suffix, parsed by types.ParseTarget), never a "path:target"
+// pair - the project is a second, separate positional. A colon in the first
+// positional always introduces charms.
 func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	// Single parse for the whole noun: the delegates below take the parsed
 	// positionals and do not re-parse, so flags are handled exactly once.
-	var explain bool
+	var explain, cacheDiff bool
 	pos, err := cmdParse("describe target", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&explain, "explain", false, "show the per-charm argv trace (base -> +charm -> +charm) for the rendered command")
 		fs.BoolVar(&explain, "e", false, "shorthand for --explain")
+		fs.BoolVar(&cacheDiff, "cache", false, "explain a miss: diff this target's current cache-key inputs against the last stored entry")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<path:target>] [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus describe target[s] [<name>[:charm[,charm...]]] [<project>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.TargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "With no argument, lists every target. With a path:target ref (e.g.")
-			fmt.Fprintln(os.Stderr, "\"api:build\", \":test\" for all projects) prints its fully-evaluated")
-			fmt.Fprintln(os.Stderr, "dispatch plan. Add a charm and --explain (e.g. \"lint:rw --explain\")")
-			fmt.Fprintln(os.Stderr, "to see each charm reshape the command, one step at a time:")
+			fmt.Fprintln(os.Stderr, "With no argument, lists every target. With a name (e.g. \"build\") prints")
+			fmt.Fprintln(os.Stderr, "its fully-evaluated dispatch plan, fanned out to every project that")
+			fmt.Fprintln(os.Stderr, "resolves it; add a trailing project to scope it to one (e.g. \"build api\").")
+			fmt.Fprintln(os.Stderr, "Add a charm and --explain (e.g. \"lint:rw api --explain\") to see each")
+			fmt.Fprintln(os.Stderr, "charm reshape the command, one step at a time. The colon always introduces")
+			fmt.Fprintln(os.Stderr, "charms, never a project - the project is the separate, trailing argument.")
+			fmt.Fprintln(os.Stderr, "Add --cache to see why the last run for this target missed: which source")
+			fmt.Fprintln(os.Stderr, "files, env vars, charms, dependencies, or tool/magus versions changed since")
+			fmt.Fprintln(os.Stderr, "the cache's last stored entry.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.EvaluatedTargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -593,7 +606,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 	if len(pos) == 0 {
 		return describeTargets(ctx, root)
 	}
-	return describeTarget(ctx, root, pos, explain)
+	return describeTarget(ctx, root, pos, explain, cacheDiff)
 }
 
 func describeTargets(ctx context.Context, root string) error {
@@ -794,9 +807,11 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 }
 
 // describeTarget renders one evaluated target. pos is describeTargetNoun's parsed
-// positionals (pos[0] = path:target ref, optional pos[1] = project path); flags
-// are already parsed and applied by the caller.
-func describeTarget(ctx context.Context, root string, pos []string, explain bool) error {
+// positionals (pos[0] = target name, optionally suffixed ":charm[,charm...]";
+// optional pos[1] = project path); flags are already parsed and applied by the
+// caller. cacheDiff, when true, appends a per-target cache-key diff against the
+// last stored entry (text/wide output only; see describeCacheDiff).
+func describeTarget(ctx context.Context, root string, pos []string, explain, cacheDiff bool) error {
 	if len(pos) == 0 {
 		fmt.Fprintln(os.Stderr, "magus describe target: requires a <target> [project] argument")
 		return errSilent{exitCode: 2}
@@ -839,8 +854,33 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 	// text / wide
 	fmt.Printf("definition: %s\n\n", types.EvaluatedTargetDefinition)
 	fmt.Printf("targets (%d):\n\n", len(out))
+
+	// Opened once for every entry below, not per entry: all of them share the
+	// same workspace cache dir. describeTarget runs on an Inspect workspace,
+	// which never opens a live cache (see cache_ops.go), so this is its own
+	// independent read-only handle onto the same on-disk cache a real `magus
+	// run` would use.
+	var cdiff *cache.Cache
+	if cacheDiff {
+		dir, derr := magus.ResolveCacheDir(root)
+		if derr != nil {
+			return derr
+		}
+		cdiff, err = cache.Open(ctx, dir, cache.WithMutable(false))
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, e := range out {
-		fmt.Printf("project: %s  target: %s\n", e.Project, e.Target)
+		fmt.Printf("project: %s  target: %s", e.Project, e.Target)
+		// "spell" is the one kind worth flagging inline: nothing in this project's own
+		// magusfile names the target, so without the tag the plan below reads exactly
+		// like a declared target's, and a reader has no way to tell the two apart.
+		if e.Kind == "spell" {
+			fmt.Printf("  [spell op]")
+		}
+		fmt.Println()
 		fmt.Printf("  dir:     %s\n", e.Dir)
 		if len(e.Sources) > 0 {
 			fmt.Printf("  sources: %v\n", e.Sources)
@@ -933,9 +973,141 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			fmt.Println()
 		}
+		if cdiff != nil {
+			describeCacheDiff(ctx, cdiff, ws, e)
+		}
 		fmt.Println()
 	}
 	return nil
+}
+
+// describeCacheDiff prints, for one evaluated target, what would make its
+// cache key differ from the last stored entry - the F17/F4 "why was this a
+// miss" answer: which source files, env vars, charms, dependencies, or
+// tool/magus versions changed. c is the read-only cache handle describeTarget
+// opened once for the whole call.
+//
+// It does not have access to buildStep (unexported, package magus), so it
+// reconstructs the Step from what ws.Get and the already-evaluated e expose:
+// exact for Sources/Outputs/Charms/DependsOn/EnvAllow/ExecOverrides/ignore
+// dirs/tool versions/spellDefVersion, empty for EnvPassthrough (sandbox
+// passthrough resolution happens in baseStep, outside this command's reach -
+// see the field comment on cache.Step.EnvPassthrough).
+func describeCacheDiff(ctx context.Context, c *cache.Cache, ws types.WorkspaceRepository, e types.EvaluatedTarget) {
+	fmt.Printf("  cache:\n")
+	prev, _, err := c.LastEntryForTarget(e.Project, e.Target)
+	if errors.Is(err, fs.ErrNotExist) {
+		fmt.Printf("    no prior entry for %s:%s; nothing to compare\n", e.Project, e.Target)
+		return
+	}
+	if err != nil {
+		fmt.Printf("    error reading last entry: %s\n", err)
+		return
+	}
+	if prev.KeyInputs == nil {
+		fmt.Printf("    last entry (hash %s) predates cache-diff support; nothing to compare\n", describeShortHash(prev.Hash))
+		return
+	}
+
+	step := describeStep(ctx, ws, e)
+	cur, err := c.ComputeKeyInputs(ctx, &step)
+	if err != nil {
+		fmt.Printf("    error computing current key inputs: %s\n", err)
+		return
+	}
+
+	diffs := cache.DiffKeyInputs(prev.KeyInputs, cur)
+	if len(diffs) == 0 {
+		fmt.Printf("    matches the last entry (hash %s); no differing components observed\n", describeShortHash(prev.Hash))
+		return
+	}
+	for _, line := range diffs {
+		fmt.Printf("    %s\n", line)
+	}
+}
+
+// describeStep reconstructs the cache.Step for e's current, on-disk state,
+// mirroring what buildStep would produce for the parts observable without a
+// live run. Sources, Outputs, Charms, and DependsOn come straight from e (its
+// EvaluatedTarget already ran through buildStep once, inside package magus);
+// the rest is read from p's per-target declarations and resolved spells.
+func describeStep(ctx context.Context, ws types.WorkspaceRepository, e types.EvaluatedTarget) cache.Step {
+	step := cache.Step{
+		ProjectPath:     e.Project,
+		Target:          e.Target,
+		Sources:         e.Sources,
+		Outputs:         e.Outputs,
+		DependsOn:       e.DependsOn,
+		Charms:          e.Charms,
+		WorkspaceRoot:   ws.Root(),
+		SpellDefVersion: spellruntime.BuiltinsHash(),
+	}
+	p := ws.Get(e.Project)
+	if p == nil {
+		return step
+	}
+	step.EnvAllow = p.TargetEnvAllow[e.Target]
+	// Workspace-wide sandbox passthrough, mirroring baseStep (package magus)
+	// rather than a per-target declaration. Without it the "current" side of a
+	// cache diff would carry no passthrough vars at all, and every variable the
+	// recorded entry captured would be reported as removed on a workspace that
+	// configures sandbox.env.passthrough.
+	step.EnvPassthrough = globalCfg.Sandbox.Env.Passthrough
+	step.ExecOverrides = p.TargetExecOverrides[e.Target]
+	for _, sp := range p.ResolvedSpells {
+		for _, d := range sp.IgnoreDirs() {
+			if !slices.Contains(step.IgnoreDirs, d) {
+				step.IgnoreDirs = append(step.IgnoreDirs, d)
+			}
+		}
+	}
+	step.ToolVersions = describeToolVersions(ctx, p, ws.Root())
+	return step
+}
+
+// describeToolVersions mirrors run.go's toolVersionsByProject for a single
+// project (unexported there, package magus), so the "current" side of a
+// cache diff probes tool versions the same way an actual run's cache key
+// would: gated by MAGUS_CACHE_TOOL_VERSION, one probe per spell that
+// declares one, plus one per named additional tool a multi-tool spell probes.
+func describeToolVersions(ctx context.Context, p *types.Project, workspaceRoot string) []string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("MAGUS_CACHE_TOOL_VERSION")))
+	if mode == "off" {
+		return nil
+	}
+	dir := p.Dir
+	if mode == "workspace" {
+		dir = workspaceRoot
+	}
+	var vers []string
+	for _, s := range p.ResolvedSpells {
+		if !s.HasVersionProbe() {
+			continue
+		}
+		v, err := s.ProbeVersion(ctx, dir)
+		if err != nil {
+			v = "UNPROBED"
+		}
+		vers = append(vers, s.Name()+":"+v)
+		for _, tool := range s.VersionProbeNames() {
+			tv, terr := s.ProbeVersionOf(ctx, tool, dir)
+			if terr != nil {
+				tv = "UNPROBED"
+			}
+			vers = append(vers, s.Name()+":"+tool+":"+tv)
+		}
+	}
+	return vers
+}
+
+// describeShortHash returns the first 8 hex characters of h, matching the log
+// register the rest of magus uses for hashes (internal/cache.shortHash is
+// unexported, so this is its cmd/magus twin).
+func describeShortHash(h string) string {
+	if len(h) <= 8 {
+		return h
+	}
+	return h[:8]
 }
 
 func describeWorkspaces(ctx context.Context, root string, args []string) error {

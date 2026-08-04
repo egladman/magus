@@ -162,8 +162,21 @@ the `Step`. magus writes these lines, in this order, into one hash:
   different umasks), so `chmod +x` on a script - which changes no content -
   still invalidates the key.
 - **`env:` lines** - each allow-listed environment variable name and its value,
-  sorted, distinguishing unset from set-to-empty. A variable's value contributes to
-  the key only if the spell opted it in.
+  sorted, distinguishing unset from set-to-empty. A variable's value contributes
+  to the key one of two ways: an explicit opt-in a spell or target declares, or
+  a match against the workspace's `sandbox.env.passthrough` patterns (see
+  [sandbox.md](sandbox.md#environment-scrubbing)) while the variable is set.
+  These used to be two allowlists that never met: a variable could reach a
+  sandboxed child through passthrough without ever entering the key, so a
+  passthrough var that changed a tool's output (`GOFLAGS`, `GOEXPERIMENT`,
+  `GOOS`) could replay a stale artifact built under a different value.
+  Passthrough matching reuses the sandbox's own name/suffix-glob semantics, so
+  a bare `*` or a mid-string wildcard keys nothing, exactly as the sandbox
+  would refuse to pass it through. It is **set-only**: an unset name that
+  matches a pattern contributes no line - a glob can't enumerate unset names,
+  and an unset variable never reached the child either - so a workspace with
+  no matching variable currently set keys exactly as it did before this
+  mechanism existed, and no existing entry is invalidated by it.
 - **`dep:` lines** - the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
@@ -174,9 +187,16 @@ the `Step`. magus writes these lines, in this order, into one hash:
 
 Because the serialization is stable and sorted, the key is reproducible: identical
 inputs anywhere yield the identical key. A `src` file's content hash uses an
-mtime + size fast path (a per-file memo persisted under the cache dir), so an
-unchanged tree re-keys without re-reading every byte; the memo is a performance
-cache for the hash, never a substitute for it.
+mtime + size fast path (a per-file memo persisted under the cache dir): when a
+file's current mtime and size match the memo, magus trusts the recorded hash and
+never reads the file's bytes at all - the memo substitutes for hashing whenever
+it hits, which is the entire point of it. The trade this makes explicit: a
+same-size edit that lands within the filesystem's mtime resolution (two fast
+writes to the same file within the same second, on a filesystem with
+second-granularity timestamps) is invisible to the memo, because mtime and size
+alone can't distinguish the edit from the file it's replacing. magus probes the
+cache directory's mtime resolution at startup and warns when it is coarse enough
+for that window to matter; the fix on a coarse filesystem is to clear the cache.
 
 ## Invalidation: what busts a key
 
@@ -324,7 +344,12 @@ target stops caching forever, for everyone.
 `skip_cache` is **not** how you handle a target that produces no files. A pure
 orchestration target - a `ci` that only composes `lint`, `build`, and `test` -
 caches correctly with no policy at all: it snapshots an empty manifest and
-replays as a hit, while its stages keep their own entries. Output globs
+replays as a hit. That hit is on the parent alone: a stage reached through
+`ctx.needs` runs as an ordinary call, not through `cache.Run` (see
+[dependencies.md](dependencies.md#caching-interplay)), so composing it into
+`ci` gives it no cache entry of its own. On a `ci` miss every stage
+re-executes as part of the parent's one run; a stage gets its own entry only
+when some invocation dispatches it directly as a top-level target. Output globs
 _inherited_ from the project or a bound spell are allowed to match nothing, and
 only a glob the target declared itself via `ctx.writesFiles` must produce a file.
 If a no-output target ever fails at snapshot time, that is a bug to report, not a

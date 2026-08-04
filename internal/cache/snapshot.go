@@ -61,6 +61,14 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, er
 		// export instead (see exportArtifact).
 		manifest.Return = v
 	}
+	// Best-effort: a describe --cache diff losing its explanation is worse than a
+	// slightly stale one, but never worth failing the run over. ComputeKeyInputs
+	// re-walks Sources (the mtime memo hashStep just warmed makes this cheap) and
+	// looks up each dependency's own last entry, so it costs a bit more than the
+	// hash alone - paid once per miss, not on every replayed hit.
+	if ki, kerr := c.ComputeKeyInputs(ctx, &s); kerr == nil {
+		manifest.KeyInputs = ki
+	}
 	var written []string
 	for _, m := range matches {
 		rec, err := c.snapshotOne(m.abs, m.rel)

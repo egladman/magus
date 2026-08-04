@@ -90,6 +90,14 @@ type Step struct {
 	// two ignore sets that yield the same files hash identically.
 	IgnoreDirs []string
 	EnvAllow   []string // env var names whose values contribute to the key
+	// EnvPassthrough are the workspace's sandbox env passthrough patterns
+	// (sandbox.env.passthrough: exact names or prefix globs ending in "*", e.g.
+	// "GO*"). A passthrough variable reaches child processes, so a set one can
+	// change what a tool produces; every match that is SET at hash time folds
+	// into the key exactly like an EnvAllow name. Unset names contribute
+	// nothing, so a run with no matching variable set hashes as before. See
+	// hashStep and matchPassthroughEnv.
+	EnvPassthrough []string
 	// ExecOverrides are per-op ctx.withEnv / ctx.withCwd execution overrides ("env:K=V", "cwd:V"), extracted
 	// statically. Unlike EnvAllow, which names env vars whose PROCESS value is read, a
 	// derived override's value lives in the magusfile, so it is hashed directly.
@@ -393,9 +401,22 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				types.RecordReturn(ctx, s.ProjectPath, s.Target, manifest.Return)
 				c.hits.Add(1)
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
-				// Quiet mode suppresses log replay; passing projects stay silent.
-				if c.logLevel < slog.LevelError && len(logData) > 0 {
+				// A hit reproduces what the live run PRESENTED, not the raw captured
+				// store. The log holds every byte the taps saw, including captured-as-
+				// value op stdout (ExecOptions.Capture, e.g. `go mod edit -json` read
+				// into a magusfile variable) that collapse mode - the default human
+				// display - withheld from the terminal; dumping it raw made a cached
+				// pass print hundreds of lines the miss never showed. Mirror the live
+				// decision instead: streaming modes replay the log, withholding modes
+				// stay quiet, and silent re-bubbles its notice lines. The verbatim
+				// bytes stay reachable via the output ref (`magus query output <ref>`).
+				if c.streamsLiveOutput() && len(logData) > 0 {
 					_, _ = os.Stdout.Write(logData)
+				}
+				if c.silent {
+					for _, msg := range extractNotices(c.logPath(s.ProjectPath, hash)) {
+						_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", s.ProjectPath, msg)
+					}
 				}
 				// A hit regenerated nothing, so reuse the existing ref for this cache
 				// key rather than minting a duplicate; persist fresh only if the store
@@ -1029,6 +1050,18 @@ func (c *Cache) logPath(projectPath, hash string) string {
 	return filepath.Join(c.dir, "logs", flattenPath(projectPath), hash+".log")
 }
 
+// streamsLiveOutput reports whether a run's subprocess output reaches the
+// terminal as it is produced. Quiet mode (logLevel >= Error) and collapse-on-
+// success both withhold it; silent disables collapse but is paired with quiet
+// by the CLI. This is the single presentation decision: captureRun derives its
+// withhold from it, and the hit path in Run replays the captured log only when
+// this reports true, so a cached pass presents exactly what the live run did.
+func (c *Cache) streamsLiveOutput() bool {
+	quiet := c.logLevel >= slog.LevelError
+	collapse := c.collapse && !c.silent && !quiet
+	return !quiet && !collapse
+}
+
 // captureRun runs fn while teeing stdout/stderr to logPath via context writers.
 // Quiet mode (logLevel >= Error) suppresses live terminal output; on failure it
 // dumps the captured log to stderr.
@@ -1051,7 +1084,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// captured output replayed below. Silent has its own stricter rules, so it takes
 	// precedence and collapse stays off under it.
 	collapse := c.collapse && !c.silent && !quiet
-	withhold := quiet || collapse
+	withhold := !c.streamsLiveOutput()
 
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
 		return nil, fn(ctx)

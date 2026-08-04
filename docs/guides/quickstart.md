@@ -99,8 +99,8 @@ magus has output flags, so you never need to pipe its output through `grep`,
 | `-v` / `-vv` / `-vvv` | more log verbosity |
 | `--tee <file>` | mirror structured output to a file |
 
-When a target fails it mints an output ref (`ref1a2b3c`). Fetch the full log with
-`magus query output ref1a2b3c` instead of re-running the target to see the error
+When a target fails it mints an output ref (`out6f63ea4c`). Fetch the full log with
+`magus query output out6f63ea4c` instead of re-running the target to see the error
 again.
 
 Deeper: [Logging](../reference/logging.md), [CLI reference](../reference/cli.md).

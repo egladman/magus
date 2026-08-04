@@ -104,6 +104,19 @@ func TestValueString(t *testing.T) {
 	assert.Equal(t, "[1, 2]", vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}).String())
 }
 
+// TestValueStringDirect pins a DirectValue's String() to the "bound method:
+// <name>" shape - the fix for a checker hole where interpolating a method
+// reference (not a call) into a string silently printed "<direct:list.len>".
+// Upstream buzz allows interpolating a bound method and stringifies it as
+// "bound method: <receiver> to <name>" (or "to native 0x<addr>" when no name
+// is available); a DirectValue has no separate receiver to print (see
+// DirectValue's doc comment) but does carry a real name, which is what is
+// shown here instead of a native pointer address.
+func TestValueStringDirect(t *testing.T) {
+	noop := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.NullValue(), nil }
+	assert.Equal(t, "bound method: list.len", vm.DirectValue("list.len", noop).String())
+}
+
 func TestValueRawEqual(t *testing.T) {
 	// This is a scalar-only spec: RawEqual compares raw tag+num bits, so heap
 	// values (str, list, map, ...) are not covered here - under buzz_safe and

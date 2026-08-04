@@ -1298,7 +1298,7 @@ object Stack {
     }
 
     fun size() > int {
-        return this.items.len;
+        return this.items.len();
     }
 }
 
@@ -1319,6 +1319,67 @@ final msg = describe(3);
 	require.NoError(t, sess.Exec(context.Background(), src))
 	wantStr(t, sess.GetGlobal("joined"), "abc")
 	wantStr(t, sess.GetGlobal("msg"), "has 3 items")
+}
+
+// TestEval_StackSizeCallsLenMethod actually CALLS Stack.size(), unlike
+// TestParseReferenceConstructs above (which only defines the object and never
+// invokes size()). size() returns `this.items.len()` - the call, not the bare
+// reference - so this exercises the OpInvoke path end to end: len() resolves
+// on the list receiver and its int result flows back out through size()'s
+// own `> int` return.
+func TestEval_StackSizeCallsLenMethod(t *testing.T) {
+	sess := newSession(context.Background())
+	src := `
+object Stack {
+    items: [int] = [],
+
+    fun push(v: int) > void {
+        this.items = this.items + [v];
+    }
+
+    fun size() > int {
+        return this.items.len();
+    }
+}
+
+final s = mut Stack{};
+s.push(1);
+s.push(2);
+s.push(3);
+final result = s.size();
+`
+	require.NoError(t, sess.Exec(context.Background(), src))
+	wantInt(t, sess.GetGlobal("result"), 3)
+}
+
+// TestMethodReferenceStringInterpolation pins the fix for the checker hole
+// where `os\exec("echo", ["built {files.len} files"])` - files.len a METHOD
+// REFERENCE, not a call - type-checked and ran under a [pass], printing the
+// opaque "built <direct:list.len> files". Upstream buzz (~/Repos/buzz,
+// confirmed via `buzz test` against a bound-method interpolation) does not
+// reject this at load either: a bound method is a legal value, and it
+// stringifies as "bound method: <receiver> to <name>" (obj.zig's
+// ObjBoundMethod.toString). gopherbuzz now matches that shape instead of the
+// placeholder <fun>/<direct:...> forms, for both a user-defined object method
+// reference and a builtin (native) list method reference.
+func TestMethodReferenceStringInterpolation(t *testing.T) {
+	sess := newSession(context.Background())
+	src := `
+object Foo {
+    fun bar() > int {
+        return 42;
+    }
+}
+
+final f = Foo{};
+final objMsg = "value: {f.bar}";
+
+final xs = [1, 2, 3];
+final listMsg = "built {xs.len} files";
+`
+	require.NoError(t, sess.Exec(context.Background(), src))
+	wantStr(t, sess.GetGlobal("objMsg"), "value: bound method: Foo{} to Foo.bar")
+	wantStr(t, sess.GetGlobal("listMsg"), "built bound method: list.len files")
 }
 
 // promoteOpts is SharedGlobals with top-level slot promotion enabled — the mode

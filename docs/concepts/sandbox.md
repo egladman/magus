@@ -25,7 +25,7 @@ This page is the model. The [MGS2xxx codes](../reference/codes/sandbox/README.md
 
 A build tool runs other people's code. A spell dispatches `gofmt`, `prettier`, `golangci-lint`, `cargo`, and whatever else a workspace declares, and a magusfile is arbitrary Buzz. Some of that is first-party and trusted; much of it is transitively pulled from package registries and extension marketplaces. The sandbox treats **tool invocations as untrusted-ish**: not assumed malicious, but not granted the ambient authority of the invoking user either.
 
-The concrete class it defends against is the **supply-chain credential attack** that has repeatedly appeared on npm and the VS Code marketplace: a compromised package or extension reads a credential from disk (`~/.aws/credentials`, `~/.ssh/id_rsa`, `~/.npmrc`) and exfiltrates it, or writes a persistence hook into a shell startup file. The sandbox is built to make that attack fail by default, without the operator having to notice the package was compromised.
+The concrete class it defends against is the **supply-chain credential attack** that has repeatedly appeared on npm and the VS Code marketplace: a compromised package or extension reads a credential from disk (`~/.aws/credentials`, `~/.ssh/id_rsa`, `~/.npmrc`) and exfiltrates it, or writes a persistence hook into a shell startup file. The sandbox is built to make that attack fail once it is enabled, without the operator having to notice the package was compromised. Enabling it is not automatic: a workspace opts in with `sandbox.enabled: true` or `MAGUS_SANDBOX_ENABLED=1` (see [The allowlist is the policy](#the-allowlist-is-the-policy)); "fail by default" describes the enabled sandbox's behavior toward the attack, not the tool's own out-of-the-box posture.
 
 Four design intents follow from that:
 
@@ -112,11 +112,32 @@ This holds **regardless of `sandbox.enabled`**, and that distinction matters bec
 
 The one case that keeps the vars is a **recursive `magus` invocation**: the same trusted binary re-executing itself, which genuinely needs daemon coordination. For that case magus re-injects the two vars as explicit overrides on the child (also logged under [MGS2008](../reference/codes/sandbox/MGS2008.md)). The socket stays hidden from ordinary spell subprocesses; it is handed only to nested magus processes.
 
-## How a target's declared footprint becomes the allowlist
+## The allowlist is project-grained, not needs-grained
 
-The sandbox and the operation model meet here: **a target's declared needs are its footprint, and the footprint is the allowlist.**
+The sandbox and the operation model meet here, but at a coarser grain than the
+cache uses: **the allowlist is the project subtree a target belongs to, plus
+the caches and system paths in the default footprint, plus whatever the
+workspace has explicitly widened** via `sandbox.allow` / `sandbox.env.passthrough`,
+never the `needs` globs a target declares for the cache (see
+[needs, provides, claims](cache.md#needs-provides-claims-a-targets-cache-footprint)).
 
-A target runs a spell with `cwd = project.Dir` and may only walk **down** from there (see [operations.md](operations.md) and the workspace-scope rule). Its legitimate reach is: the project subtree it owns, the caches and system paths in the default footprint, and whatever the workspace has explicitly widened via `sandbox.allow` / `sandbox.env.passthrough`. Anything a target reaches for beyond that set is, by construction, something it did not declare - which is exactly the signal a denial carries. A denied read is not just "access failed"; it is "this tool tried to touch something outside its declared footprint," and that is the supply-chain tell the model is designed to surface.
+A target runs a spell with `cwd = project.Dir` and may only walk **down** from
+there (see [operations.md](operations.md) and the workspace-scope rule). That
+reach is honest about what it does *not* narrow: a target can read any file
+inside its own project tree, including one its `needs` globs never matched,
+and the sandbox allows it - the read never reaches the cache key, so an
+under-declared input is invisible to it and a stale hit can slip through
+exactly as [cache.md](cache.md#design-intent) warns. The sandbox is a
+supply-chain boundary around the whole project, not an enforcement mechanism
+for the declaration contract the cache depends on; the two are complementary,
+not the same guarantee.
+
+Anything a target reaches for beyond the project subtree, the default
+footprint, and the workspace's explicit widening is, by construction, outside
+the workspace's grant - which is exactly the signal a denial carries. A denied
+read is not just "access failed"; it is "this tool tried to touch something
+outside the sandbox's allowlist." It is not a signal that the tool touched
+only what it declared as inputs; the allowlist has no visibility that fine.
 
 One boundary sits adjacent to but outside the sandbox policy: **descendant project scope.** A spell dispatched on a parent project must stop at the boundary of any registered descendant project nested inside it. When a write-mode dispatch crosses into a descendant's tree (typically a recursive glob like `prettier --write '**/*.md'` reaching into `api/docs/`), the auditor raises [MGS3001](../reference/codes/sandbox/MGS3001.md) and fails the target. The audit happens after the tool writes, so it cannot roll the change back; it prevents the run from succeeding. Landlock cannot enforce this boundary beforehand because both trees are inside the workspace allowlist. That is why MGS3001 lives on the MGS3xxx (audit) rail rather than the MGS2xxx (sandbox) rail.
 
@@ -134,7 +155,7 @@ On **macOS, Windows, or Linux older than 5.13** (or with the LSM disabled), `App
 What that degradation means precisely:
 
 - **Filesystem and env confinement through the documented bindings still hold.** Every spell magus ships and every magusfile written against the `fs.*` / `sh.*` / `env.*` API is still blocked from out-of-workspace paths and secret env vars. Env scrubbing in particular is pure Go and always applies.
-- **What is lost is the kernel backstop.** A spell that bypassed the binding layer - native code, a Go plugin, embedded cgo - could not be confined by user-space checks alone. No such spell type exists today; the spell API routes everything through the bindings. If one is ever added it must require landlock or be rejected up front.
+- **What is lost is the kernel backstop, and the common case it protects is not exotic.** The interpreter layer confines the Buzz bindings themselves, but it cannot see into a dispatched subprocess's own file I/O - and nearly every spell dispatches one: `go`, `prettier`, `golangci-lint`, or a compromised npm postinstall running underneath any of them. On Linux, landlock confines those children too, for free, because the restriction is inherited across `fork+exec` at the kernel level rather than intercepted by the interpreter. On macOS there is no equivalent backstop: **the filesystem sandbox confines magus's own bindings, not the tools magus dispatches.** A spell bypassing the binding layer entirely - native code, a Go plugin, embedded cgo - is a narrower instance of the same gap; the wide instance is any ordinary subprocess a spell already runs today, on every platform without landlock.
 
 ### The daemon and policy immutability
 

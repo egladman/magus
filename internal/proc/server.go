@@ -427,6 +427,22 @@ func (s *service) run(req RunRequest, reply *RunReply) error {
 		return ErrVersionMismatch
 	}
 
+	// A multi-workspace daemon (Mode "daemon", the detached `magus server start`
+	// process; workspaceLister is what status() keys the mode on) executes an
+	// adopted run in ITS process: the report renders through the workspace's cache
+	// logger into the daemon's stderr - a log file nobody is watching - and
+	// RunReply carries only an exit code. The invoking client would print nothing
+	// at all: no [fail] line, no inspect/reproduce breadcrumbs, not even on a
+	// nonzero exit. Until the protocol can carry the run's output back, decline
+	// the run; the client falls back to local execution (quietly, like a version
+	// mismatch) where the report lands on its own terminal. A per-process pool
+	// (Mode "proc") shares the invoking terminal with its children, so it adopts
+	// as before, and background jobs (submitJob) still run here - their output
+	// belongs to the daemon's journal by design.
+	if s.workspaceLister != nil {
+		return ErrOutputUndeliverable
+	}
+
 	ctx, cancel := context.WithCancel(s.parentCtx)
 	defer cancel()
 

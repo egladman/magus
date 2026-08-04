@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/volatility"
@@ -25,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/versionpin"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -222,6 +225,31 @@ func (m *Magus) load(ctx context.Context) error {
 	// root is only present on the run path (Magus.Run), so preload-time resolution
 	// (describe, affected, ls) could not walk spell imports up to the root.
 	ctx = types.WithWorkspace(ctx, m)
+	// A magusfile's top level is arbitrary Buzz and runs unconditionally in
+	// preloadMagusfiles below - the same top-level code Run later dispatches
+	// targets from. When the workspace opts into the sandbox, confine that
+	// top-level evaluation too, not only the eventual run: without this, a
+	// load-time fs\writeFile to an out-of-workspace path succeeds unconfined
+	// regardless of sandbox.enabled, and only an actual `magus run` was ever
+	// confined. applySandbox is idempotent (internal/sandbox/apply keys the
+	// kernel-level apply on a process-wide sync.Once, keyed by policy
+	// fingerprint), so Run's own call later in the same process is a no-op
+	// repeat of the same policy, not a second kernel-level apply.
+	if m.cfg.Sandbox.Enabled {
+		var err error
+		ctx, err = m.applySandbox(ctx)
+		if err != nil {
+			return err
+		}
+	}
+	// A workspace may declare the minimum magus version it expects
+	// (magus.yaml's requires_magus); warn once at load when the running binary
+	// is older, so a version mismatch is reported here instead of surfacing
+	// later as an unrelated failure. See internal/versionpin for the "nothing
+	// to report" cases (no pin, unparseable pin, a dev build).
+	if msg := versionpin.Check(types.MagusVersionFromContext(ctx), m.cfg.RequiresMagus); msg != "" {
+		slog.WarnContext(ctx, types.FormatDiagnostic(types.MagusVersionTooOld, msg))
+	}
 	customTargets, err := preloadMagusfiles(ctx, m)
 	if err != nil {
 		return err
@@ -326,6 +354,19 @@ func loadConfig(root string, opts ...Option) (config.Config, error) {
 	return cfg, nil
 }
 
+// magusfileLoadHeartbeat bounds how long preloadMagusfiles waits before warning
+// that load is still running. A magusfile's top level is arbitrary Buzz with no
+// cooperative cancellation at load time (unlike a dispatched target, which the
+// pool can time out - config.TargetTimeout), so a top-level infinite loop hangs
+// every command in the workspace with nothing printed to explain why. This does
+// not abort the load - that would change what a magusfile is allowed to do at
+// its top level - it only names what is hanging, once, so a stuck command is
+// distinguishable from a slow one.
+//
+// A var, not a const, so a test can shrink it rather than block for the real
+// threshold.
+var magusfileLoadHeartbeat = 10 * time.Second
+
 // preloadMagusfiles parses magusfiles in each project so magus.project() calls
 // populate m.wsReg, and returns each project's custom (export fun) target names,
 // keyed by project path — used afterward by validateTargetPolicies to confirm a
@@ -339,19 +380,32 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
+
+	// current names the magusfile the loop below is evaluating right now, read
+	// by the heartbeat timer if it fires mid-evaluation. Best-effort: it is
+	// stale by however long the current file takes past the threshold, which
+	// is fine for a one-line "still here, still on this one" warning.
+	var current atomic.Pointer[string]
+	stop := startLoadHeartbeat(ctx, magusfileLoadHeartbeat, &current)
+	defer stop()
+
 	for _, p := range m.All() {
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+			return nil, types.WrapDiagnostic(types.MagusfileLoadFailed, err,
+				"project %q: magusfile load failed: %s", p.Path, err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
+			label := magusfileLoadLabel(src)
+			current.Store(&label)
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+				return nil, types.WrapDiagnostic(types.MagusfileLoadFailed, err,
+					"project %q: magusfile load failed: %s", p.Path, err)
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
@@ -359,6 +413,47 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 		}
 	}
 	return customTargets, nil
+}
+
+// magusfileLoadLabel names the file the load heartbeat should point at when it
+// fires mid-evaluation: the single source file, or the source directory when a
+// project's magusfiles/ holds more than one.
+func magusfileLoadLabel(src *interp.Source) string {
+	if len(src.Files) == 1 {
+		return src.Files[0]
+	}
+	return src.Dir
+}
+
+// startLoadHeartbeat starts a one-shot timer that, if it fires before the
+// returned stop func is called, logs one warn line naming whatever label
+// current holds at that moment - "still here, still on this one" for a
+// magusfile top level that runs past threshold. It never aborts the load
+// (config.TargetTimeout is the escape hatch for a dispatched target; a
+// magusfile's top level has no equivalent, deliberately - see
+// preloadMagusfiles), so a caller MUST call stop once the guarded work
+// finishes, successfully or not, or the timer's goroutine and its warn fire
+// regardless.
+func startLoadHeartbeat(ctx context.Context, threshold time.Duration, current *atomic.Pointer[string]) (stop func()) {
+	done := make(chan struct{})
+	timer := time.AfterFunc(threshold, func() {
+		select {
+		case <-done:
+			return // the guarded work finished before the timer fired; nothing to warn about
+		default:
+		}
+		label := "unknown magusfile"
+		if p := current.Load(); p != nil {
+			label = *p
+		}
+		slog.WarnContext(ctx, "magus: workspace load is still evaluating a magusfile; "+
+			"this hangs the command if the magusfile's top level never returns",
+			"file", label, "elapsed", threshold)
+	})
+	return func() {
+		close(done)
+		timer.Stop()
+	}
 }
 
 // validateTargetPolicies errors when a project's per-target policy table
@@ -672,10 +767,14 @@ func (m *Magus) baseStep(p *types.Project) cache.Step {
 		}
 	}
 	return cache.Step{
-		ProjectPath:     p.Path,
-		Sources:         sources,
-		IgnoreDirs:      ignoreDirs,
-		Outputs:         outputs,
+		ProjectPath: p.Path,
+		Sources:     sources,
+		IgnoreDirs:  ignoreDirs,
+		Outputs:     outputs,
+		// EnvPassthrough is a workspace-wide policy, not a per-target one (unlike
+		// EnvAllow, which buildStep folds in per target from p.TargetEnvAllow), so it
+		// belongs on the shared base step every target's cache.Step derives from.
+		EnvPassthrough:  m.cfg.Sandbox.Env.Passthrough,
 		WorkspaceRoot:   m.ws.Root,
 		SpellDefVersion: spellruntime.BuiltinsHash(),
 		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
@@ -719,12 +818,35 @@ func (m *Magus) ExpandPath(t types.Target) ([]types.Target, error) {
 		return nil, fmt.Errorf("magus: expand: unknown project %q: use \":\" for all projects", path)
 	}
 	if m.Get(path) == nil {
+		// Fall back to a DECLARED project name (magus.project's "name" key) before
+		// giving up. `magus ls` prints exactly that name - "magus (go)" for the root
+		// project in this repo - so a name copied from there is the obvious thing to
+		// pass back in, and rejecting it while accepting only the path it happens to
+		// share ("." here) surprised a reader who had no way to know the two were not
+		// interchangeable. A real path always wins first (checked above), so a project
+		// whose declared name collides with another project's path is never ambiguous.
+		if p := m.getByName(path); p != nil {
+			return []types.Target{{Path: p.Path, Name: t.Name}}, nil
+		}
 		if hint := m.suggestProjectPath(path); hint != "" {
 			return nil, fmt.Errorf("magus: expand: %w: %q; did you mean %q?", types.ErrUnknownProject, path, hint)
 		}
 		return nil, fmt.Errorf("magus: expand: %w: %q", types.ErrUnknownProject, path)
 	}
 	return []types.Target{{Path: path, Name: t.Name}}, nil
+}
+
+// getByName returns the project whose declared name (magus.project's "name"
+// key) equals name, or nil when none do (or none declare one). First match in
+// m.All() order on a collision; two projects sharing one declared name is a
+// magusfile authoring mistake this does not attempt to diagnose.
+func (m *Magus) getByName(name string) *types.Project {
+	for _, p := range m.All() {
+		if p.Name != "" && p.Name == name {
+			return p
+		}
+	}
+	return nil
 }
 
 // suggestProjectPath returns the workspace project path closest to a typo'd path,

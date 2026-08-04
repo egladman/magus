@@ -1,0 +1,159 @@
+// linkcheck.buzz - hand-authored relative markdown links must resolve to a real file
+// in the tree, regardless of the rendered site's own alias layer.
+//
+// docs/engine/gates.buzz already gates two things about the RENDERED site: every href in
+// the written HTML resolves (assetIntegrityCheck) and every previously-shipped URL still
+// resolves (abandonedLinkCheck). Neither one catches a dead link in the SOURCE markdown,
+// because frontmatter `aliases:` lets the site route around a renamed page before either
+// gate ever looks at the raw ".md" path. A reader following the same link on GitHub sees
+// the literal relative path on disk, not the site's alias - and gets a 404 the site build
+// never notices. This checks the source tree the same way those checks prove the output.
+namespace linkcheck;
+
+import "std";
+import "fs";
+
+// exemptDir reports whether path (project-relative, no leading "./") sits under a
+// directory this check must not descend into: generated output (gen/) or vendored
+// dependencies (node_modules/), neither of which is hand-authored.
+fun exemptDir(path: str) > bool {
+    if (path.startsWith("gen/") or path.indexOf("/gen/") != null) { return true; }
+    if (path.indexOf("node_modules/") != null) { return true; }
+    return false;
+}
+
+// stripInlineCode drops every `...`-delimited inline code span from text, so a
+// literal ](path) shown as inline syntax is never mistaken for a real link.
+fun stripInlineCode(text: str) > str {
+    var buf = "";
+    var inSpan = false;
+    foreach (part in text.split("`")) {
+        if (inSpan == false) { buf = buf + part; }
+        inSpan = (inSpan == false);
+    }
+    return buf;
+}
+
+// stripCode removes fenced code blocks (```...```) and inline code spans from markdown
+// source, so an example link shown as sample syntax never counts as a real one.
+fun stripCode(md: str) > str {
+    var buf = "";
+    var inFence = false;
+    foreach (part in md.split("```")) {
+        if (inFence == false) { buf = buf + stripInlineCode(part); }
+        inFence = (inFence == false);
+    }
+    return buf;
+}
+
+// dirOf returns the directory portion of a relative path ("" for a top-level file).
+fun dirOf(rel: str) > str {
+    final parts = rel.split("/");
+    if (parts.len() <= 1) { return ""; }
+    return parts.sub(0, parts.len() - 1).join("/");
+}
+
+// resolveRelative resolves link (possibly carrying ".." segments) against fromDir, a
+// slash-joined relative path, normalizing "." and ".." by segment. A ".." that runs
+// past fromDir (a link from a nested file escaping above the check's own cwd, e.g. up
+// to the repo root README) is kept as a leading ".." rather than dropped, so the
+// result still names a real, checkable relative path. Pure string-segment math - no
+// symlink awareness, which the tree does not use for markdown targets.
+fun resolveRelative(fromDir: str, link: str) > str {
+    var segs: [str] = mut [<str>];
+    if (fromDir != "") { foreach (s in fromDir.split("/")) { segs.append(s); } }
+    foreach (part in link.split("/")) {
+        if (part == "" or part == ".") { continue; }
+        if (part == "..") {
+            if (segs.len() > 0 and segs[segs.len() - 1] != "..") {
+                var nw: [str] = mut [<str>];
+                var i = 0;
+                while (i < segs.len() - 1) { nw.append(segs[i]); i = i + 1; }
+                segs = nw;
+            } else {
+                segs.append("..");
+            }
+        } else {
+            segs.append(part);
+        }
+    }
+    return segs.join("/");
+}
+
+// extractMdLinks pulls every markdown "](target)" out of body (code spans already
+// stripped), keeping only relative targets that end in ".md" once a trailing
+// `"title"`, "#anchor", or "?query" is dropped. Absolute (leading "/"), external
+// (http/https/mailto/tel), and pure-fragment targets are out of scope: a leading "/"
+// resolves against the deployed site base, which this check - reading the raw
+// tree, not a served site - has no way to know.
+fun extractMdLinks(body: str) > [str] {
+    var links: [str] = mut [<str>];
+    var rest = body;
+    while (true) {
+        final open = rest.indexOf("](");
+        if (open == null) { return links; }
+        rest = rest.sub(open + 2);
+        final close = rest.indexOf(")");
+        if (close == null) { return links; }
+        var raw = rest.sub(0, close);
+        rest = rest.sub(close + 1);
+        final sp = raw.indexOf(" ");
+        if (sp != null) { raw = raw.sub(0, sp); }
+        if (raw == "") { continue; }
+        if (raw.startsWith("http://") or raw.startsWith("https://") or raw.startsWith("//")
+            or raw.startsWith("#") or raw.startsWith("mailto:") or raw.startsWith("tel:")
+            or raw.startsWith("/")) { continue; }
+        var target = raw;
+        final hash = target.indexOf("#");
+        if (hash != null) { target = target.sub(0, hash); }
+        final q = target.indexOf("?");
+        if (q != null) { target = target.sub(0, q); }
+        if (target.endsWith(".md") == false) { continue; }
+        links.append(target);
+    }
+    return links;
+}
+
+// strLess is lexicographic byte ordering; buzz has no `<` on str.
+fun strLess(a: str, b: str) > bool {
+    final n = a.len();
+    final m = b.len();
+    var i = 0;
+    while (i < n and i < m) {
+        if (a.byte(i) != b.byte(i)) { return a.byte(i) < b.byte(i); }
+        i = i + 1;
+    }
+    return n < m;
+}
+
+// check walks README.md and docs/**/*.md (excluding generated/vendored trees) from the
+// repo root, resolving every relative .md link against the file that names it and
+// throwing on any target that does not exist on disk. Runs from the docs project (cwd
+// docs/), so paths are docs-relative; the root README is named explicitly since it
+// sits one level up.
+export fun check() > void {
+    var files: [str] = mut [<str>];
+    files.append("../README.md");
+    foreach (f in fs\glob("**/*.md")) {
+        if (exemptDir(f)) { continue; }
+        files.append(f);
+    }
+
+    var dead: [str] = mut [<str>];
+    foreach (rel in files) {
+        if (fs\exists(rel) == false) { continue; }
+        final body = stripCode(fs\readFile(rel));
+        final fromDir = dirOf(rel);
+        foreach (target in extractMdLinks(body)) {
+            final resolved = resolveRelative(fromDir, target);
+            if (fs\exists(resolved) == false) {
+                dead.append(rel + " -> " + target + " (resolves to " + resolved + ")");
+            }
+        }
+    }
+    if (dead.len() > 0) {
+        final sorted = dead.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+        throw "linkcheck: " + "{sorted.len()}" + " relative markdown link(s) do not resolve to a file in the tree: " + sorted.join("; ");
+    }
+    std\print("linkcheck: all relative markdown links resolve");
+}

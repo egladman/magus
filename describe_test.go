@@ -390,9 +390,12 @@ func TestListProjects_Manifests(t *testing.T) {
 
 func TestEvaluateTarget_FanOut(t *testing.T) {
 	t.Parallel()
-	// A bare target ":build" should fan out to every project.
+	// A bare target ":ci" should fan out to every project. "ci" (not "build") is
+	// the canonical anchor - the one name EvaluateTarget resolves everywhere
+	// without any project declaring it, so the fixture's empty magusfiles still
+	// exercise the fan-out itself rather than the unknown-target validation.
 	ws := newWorkspace(t)
-	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "build"})
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "ci"})
 	require.NoError(t, err, "EvaluateTarget")
 	wantProjects := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
 	assert.Len(t, out, len(wantProjects), "EvaluateTarget: one entry per project")
@@ -403,7 +406,8 @@ func TestEvaluateTarget_FanOut(t *testing.T) {
 	for _, p := range wantProjects {
 		e, ok := byProject[p]
 		require.Truef(t, ok, "EvaluateTarget: project %q missing from output", p)
-		assert.Equalf(t, "build", e.Target, "EvaluateTarget: project %q target", p)
+		assert.Equalf(t, "ci", e.Target, "EvaluateTarget: project %q target", p)
+		assert.Equalf(t, "canonical", e.Kind, "EvaluateTarget: project %q kind", p)
 		assert.NotEmptyf(t, e.Dir, "EvaluateTarget: project %q Dir is empty", p)
 	}
 }
@@ -411,12 +415,47 @@ func TestEvaluateTarget_FanOut(t *testing.T) {
 func TestEvaluateTarget_SingleProject(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)
-	out, err := ws.EvaluateTarget(context.Background(), types.Target{Path: "api", Name: "test"})
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Path: "api", Name: "ci"})
 	require.NoError(t, err, "EvaluateTarget")
 	require.Len(t, out, 1, "EvaluateTarget: one entry")
 	e := out[0]
 	assert.Equal(t, "api", e.Project, "EvaluateTarget: Project")
-	assert.Equal(t, "test", e.Target, "EvaluateTarget: Target")
+	assert.Equal(t, "ci", e.Target, "EvaluateTarget: Target")
+}
+
+// TestEvaluateTarget_UnknownTarget pins the fix for a name no project
+// declares: it used to build a full, fabricated dispatch plan (sources,
+// depends_on, a spell entry per resolved spell) for every project in the
+// workspace, none of it backed by anything the name actually names. It must
+// now error instead, naming the target and listing the registered ones.
+func TestEvaluateTarget_UnknownTarget(t *testing.T) {
+	t.Parallel()
+	ws := newWorkspace(t)
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "zzz-fake-target-zzz"})
+	require.Error(t, err, "EvaluateTarget: expected error for a target no project declares")
+	assert.Nil(t, out, "EvaluateTarget: entries")
+	assert.ErrorIs(t, err, types.UnknownTarget, "EvaluateTarget: error code")
+	assert.ErrorContains(t, err, `"zzz-fake-target-zzz"`)
+	assert.ErrorContains(t, err, "registered:")
+}
+
+// TestEvaluateTarget_SpellOpLabeled pins that a target resolved only through a
+// bound spell's op (no magusfile in the project exports it) still evaluates,
+// but is labeled "spell" rather than looking identical to a declared target.
+func TestEvaluateTarget_SpellOpLabeled(t *testing.T) {
+	const spellName = "zzz-spell-op-spell"
+	spell := spells.NewSpell(spellName, spells.WithTargets("zzz-spell-op"))
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
+
+	out, err := ws.EvaluateTarget(context.Background(), types.Target{Name: "zzz-spell-op"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, out, 1, "EvaluateTarget: one entry")
+	assert.Equal(t, "spell", out[0].Kind, "EvaluateTarget: Kind")
 }
 
 func TestEvaluateTarget_UnknownProject(t *testing.T) {
@@ -766,13 +805,16 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 		{
 			name: "EvaluateTarget",
 			cancelled: func(t *testing.T) {
-				out, err := ws.EvaluateTarget(cancelledCtx, types.Target{Name: "build"})
+				// "ci" (not "build"): the canonical anchor resolves everywhere without
+				// any project declaring it, so this exercises the ctx-cancellation
+				// path rather than the unknown-target validation.
+				out, err := ws.EvaluateTarget(cancelledCtx, types.Target{Name: "ci"})
 				require.Error(t, err, "EvaluateTarget")
 				assert.ErrorIs(t, err, context.Canceled, "EvaluateTarget error")
 				assert.Nil(t, out, "EvaluateTarget entries")
 			},
 			live: func(t *testing.T) {
-				out, err := ws.EvaluateTarget(liveCtx, types.Target{Name: "build"})
+				out, err := ws.EvaluateTarget(liveCtx, types.Target{Name: "ci"})
 				require.NoError(t, err, "EvaluateTarget")
 				assert.NotEmpty(t, out)
 			},

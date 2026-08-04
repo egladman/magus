@@ -62,6 +62,15 @@ type Config struct {
 	// `magus affected` does not apply them, so CI stays read-only unless explicit.
 	DefaultCharms []string `json:"default_charms" yaml:"default_charms"`
 
+	// RequiresMagus declares the minimum magus version this workspace expects, as a
+	// plain semver string (e.g. "0.4.0"; a leading "v" is optional). A running binary
+	// older than this warns at load time (MGS3004) and again as a `magus doctor`
+	// check, so a magusfile that already assumes a feature the binary predates is
+	// reported at load rather than surfacing later as an unrelated failure. Empty
+	// (the default) declares no pin. Skipped for a locally built dev binary, which
+	// carries no reliable version to compare.
+	RequiresMagus string `json:"requires_magus" yaml:"requires_magus"`
+
 	// Sandbox confines subprocesses and spells to the workspace + allowlist using Linux landlock (≥5.13)
 	// when available, with binding-level fallback. See SandboxConfig for allowlist and env knobs.
 	Sandbox SandboxConfig `json:"sandbox" yaml:"sandbox"`
@@ -410,6 +419,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
+		{"MAGUS_DAEMON_ENABLED", "daemon.enabled", "true", "Enabled uses a shared, persistent daemon; false runs each invocation self-contained"},
 		{"MAGUS_DAEMON_SOCKET", "daemon.socket", "", "Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path"},
 		{"MAGUS_CI_MAX_SHARDS", "ci.max_shards", "8", "Maximum number of parallel CI shards; -1 means unlimited"},
 		{"MAGUS_CI_RUNNER_POOL_BUDGET", "ci.runner_pool_budget", "0", "Cross-shard concurrency cap at the GHA matrix level; 0 means unlimited"},
@@ -430,6 +440,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DAEMON_WORKSPACES", "daemon.workspaces", "", "Colon-separated list of workspace roots the daemon will serve; non-empty list triggers eager union of sandbox policies and rejection of out-of-list workspaces (MGS2010)"},
 		{"MAGUS_MCP_ENABLED", "mcp.enabled", "true", "When 0 or false, refuse to start the MCP server"},
 		{"MAGUS_MCP_ADDRESS", "mcp.address", "127.0.0.1:7391", "host:port for the MCP Streamable HTTP server started alongside the daemon"},
+		{"MAGUS_CONSOLE_ENABLED", "console.enabled", "true", "Default true when MCP is up; when 0 or false, refuse to start the console"},
 		{"MAGUS_HINTS_ENABLED", "hints.enabled", "true", "When false, suppress all hint messages printed to stderr"},
 		{"MAGUS_VOLATILITY_ENABLED", "volatility.enabled", "true", "Master switch for volatility detection and auto-retry; false disables all retry logic"},
 		{"MAGUS_VOLATILITY_BOOTSTRAP_SAMPLES", "volatility.bootstrap_samples", "20", "Number of outcomes below which all failures are retried once (bootstrap phase)"},
@@ -469,7 +480,8 @@ func Defaults() Config {
 			AnnotateGHA:      true,
 		},
 		Hints:     Hints{Enabled: boolPtr(true)},
-		Console:   Console{URL: DefaultConsoleURL},
+		MCP:       MCP{Enabled: boolPtr(true)},
+		Console:   Console{Enabled: boolPtr(true), URL: DefaultConsoleURL},
 		Knowledge: Knowledge{VCS: VCSConfig{Authorship: boolPtr(true)}},
 		Telemetry: Telemetry{
 			Protocol:    "grpc",

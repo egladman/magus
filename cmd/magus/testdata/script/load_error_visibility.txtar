@@ -1,0 +1,21 @@
+# A magusfile's top level is arbitrary Buzz and runs unconditionally at workspace
+# load - before `magus ls` (or any other command) even picks a target. A failure
+# there used to reach the reader as whatever the underlying cause happened to say;
+# this pins that every load failure is now a coded, pointable MGS1023 diagnostic
+# naming the failing project, on both `magus ls` and `magus doctor`.
+
+! exec magus ls
+stderr 'MGS1023'
+stderr 'boom'
+! stdout .
+
+# doctor's "workspace" check runs the SAME load ls does (not a parse-only pass),
+# so it fails with the coded diagnostic too instead of reporting the workspace
+# healthy on a magusfile that never actually loaded.
+! exec magus doctor
+stdout 'workspace: \[MGS1023\]'
+stdout 'boom'
+! stdout 'magusfile syntax'
+
+-- magusfile.buzz --
+throw "boom";

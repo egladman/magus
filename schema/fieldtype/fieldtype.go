@@ -22,6 +22,7 @@ const (
 	KindBoolPtr                 // *bool (env-only; three-state nil/true/false)
 	KindDuration                // time.Duration
 	KindStringSlice             // []string (env-only; comma-separated)
+	KindStringMap               // map[string]string (yaml-only; no env var, no CLI flag)
 )
 
 // String returns the name of the kind constant (e.g. "KindBool"), matching the
@@ -42,6 +43,8 @@ func (k Kind) String() string {
 		return "KindDuration"
 	case KindStringSlice:
 		return "KindStringSlice"
+	case KindStringMap:
+		return "KindStringMap"
 	default:
 		return fmt.Sprintf("Kind(%d)", uint8(k))
 	}
@@ -63,6 +66,7 @@ type Field struct {
 	Flag     FlagNames // long + optional short; Long empty means env-only
 	Kind     Kind
 	Usage    string // one-line description for flag.Usage
+	Default  string // human-readable default value; empty means no static default (computed at runtime, or unset)
 }
 
 // String returns a single-line summary suitable for log output and %v

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -104,6 +105,149 @@ func TestForwardCycleDetection(t *testing.T) {
 	code, err := Forward(context.Background(), args, "", "")
 	require.NoError(t, err, "second Forward")
 	assert.Equal(t, 1, code, "cycle: expected exit code 1")
+}
+
+// TestDaemonModeDeclinesForegroundRun pins the fix for daemon-swallowed client output:
+// a multi-workspace daemon renders an adopted run's report into its own log while
+// RunReply carries only an exit code, so the invoking client printed NOTHING - not even
+// on failure. Until the protocol can carry output back, the daemon must decline the run
+// before dispatching it, and the client must classify the refusal as a quiet local
+// fallback that is NOT ErrNotAdoptable (so it unsets the socket and hosts its own pool).
+func TestDaemonModeDeclinesForegroundRun(t *testing.T) {
+	var called atomic.Bool
+	srv, err := New(Options{
+		Handler:         func(context.Context, []string) error { called.Store(true); return nil },
+		WorkspaceLister: func() []Workspace { return nil }, // what makes this server Mode "daemon"
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	_, err = Forward(context.Background(), []string{"run", "test"}, "", "")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrOutputUndeliverable)
+	assert.True(t, NotAdopted(err), "refusal must read as not-adopted so the client falls back quietly")
+	assert.NotErrorIs(t, err, ErrNotAdoptable, "must stay distinct so the client hosts its own per-process pool")
+	assert.False(t, called.Load(), "the daemon must decline before dispatching the run")
+}
+
+// TestDaemonModeStillAcceptsJobs verifies the refusal is scoped to foreground runs:
+// a background job's output belongs to the daemon's journal by design, so submitJob
+// must keep adopting on a daemon-mode server.
+func TestDaemonModeStillAcceptsJobs(t *testing.T) {
+	done := make(chan error, 1)
+	srv, err := New(Options{
+		Handler:         func(context.Context, []string) error { return nil },
+		WorkspaceLister: func() []Workspace { return nil },
+		OnJobDone:       func(_ context.Context, _ []string, _ time.Duration, jobErr error) { done <- jobErr },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	inv, err := SubmitJob(context.Background(), srv.Addr(), []string{"graph", "sync"}, "")
+	require.NoError(t, err)
+	assert.NotEmpty(t, inv, "accepted job carries its invocation id")
+
+	select {
+	case jobErr := <-done:
+		require.NoError(t, jobErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("background job did not run on the daemon-mode server")
+	}
+}
+
+// TestForwardPrintsCycleCause pins the invariant that a nonzero exit lands at least one
+// actionable line on the client: the cycle cause used to live only in reply.Err, which
+// no side rendered, so the recursion guard fired as a bare silent exit 1.
+func TestForwardPrintsCycleCause(t *testing.T) {
+	var out bytes.Buffer
+	old := clientStderr
+	clientStderr = &out
+	defer func() { clientStderr = old }()
+
+	block := make(chan struct{})
+	started := make(chan struct{})
+	srv, err := New(Options{
+		Concurrency: 4,
+		Handler: func(_ context.Context, args []string) error {
+			close(started)
+			<-block
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	defer close(block)
+	require.NoError(t, srv.Start())
+
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	args := []string{"run", "build", "cycle-project"}
+	go func() { _, _ = Forward(context.Background(), args, "", "") }()
+	<-started
+
+	code, err := Forward(context.Background(), args, "", "")
+	require.NoError(t, err)
+	require.Equal(t, 1, code)
+	assert.Equal(t, "magus: "+ErrCycleDetected.Error()+"\n", out.String())
+}
+
+// TestForwardStableDaemonFallbackLines covers the version-skew window where an OLDER
+// stable daemon (one without the decline) still adopts a run and swallows its report:
+// the client must say where the report went and hand over the local rerun. Simulated by
+// a per-process-mode server bound to the stable daemon socket name.
+func TestForwardStableDaemonFallbackLines(t *testing.T) {
+	var out bytes.Buffer
+	old := clientStderr
+	clientStderr = &out
+	defer func() { clientStderr = old }()
+
+	dir, err := os.MkdirTemp("", "magus-proc")
+	require.NoError(t, err)
+	defer os.RemoveAll(dir)
+	srv, err := New(Options{
+		Address: "unix://" + filepath.Join(dir, StableSocketName()),
+		Handler: func(context.Context, []string) error { return errors.New("silent exit") },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	code, err := Forward(context.Background(), []string{"run", "test", "."}, "", "")
+	require.NoError(t, err)
+	require.Equal(t, 1, code)
+	want := "magus: the daemon ran this command, but its report went to the daemon log, not this terminal (exit 1)\n" +
+		"magus: rerun locally to see the report: MAGUS_DAEMON_ENABLED=false magus run test .\n"
+	assert.Equal(t, want, out.String())
+}
+
+// TestForwardPerProcessFailurePrintsNothing guards the no-noise side of the invariant:
+// a per-process pool shares the invoking terminal, so a failed adopted run already
+// printed its report there - Forward must not add lines on top.
+func TestForwardPerProcessFailurePrintsNothing(t *testing.T) {
+	var out bytes.Buffer
+	old := clientStderr
+	clientStderr = &out
+	defer func() { clientStderr = old }()
+
+	srv, err := New(Options{
+		Handler: func(context.Context, []string) error { return errors.New("build failed") },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+
+	code, err := Forward(context.Background(), []string{"run", "build", "broken"}, "", "")
+	require.NoError(t, err)
+	require.Equal(t, 1, code)
+	assert.Zero(t, out.Len(), "per-process failures must stay silent in Forward: %q", out.String())
 }
 
 func TestQueryStatus(t *testing.T) {

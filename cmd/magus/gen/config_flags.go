@@ -40,6 +40,7 @@ var ConfigFlags = []ConfigFlag{
 	{"telemetry-insecure", "MAGUS_TELEMETRY_INSECURE", "bool"},
 	{"telemetry-service-name", "MAGUS_TELEMETRY_SERVICE_NAME", "string"},
 	{"telemetry-sample-ratio", "MAGUS_TELEMETRY_SAMPLE_RATIO", "float64"},
+	{"", "", "stringmap"},
 	{"daemon-enabled", "MAGUS_DAEMON_ENABLED", "bool"},
 	{"daemon-address", "MAGUS_DAEMON_ADDRESS", "string"},
 	{"daemon-idle-ttl", "MAGUS_DAEMON_IDLE_TTL", "duration"},
@@ -76,6 +77,7 @@ var ConfigFlags = []ConfigFlag{
 	{"history-path", "MAGUS_HISTORY_PATH", "string"},
 	{"dry-run", "MAGUS_DRY_RUN", "bool"},
 	{"", "MAGUS_DEFAULT_CHARMS", "stringslice"},
+	{"requires-magus", "MAGUS_REQUIRES_MAGUS", "string"},
 	{"sandbox-enabled", "MAGUS_SANDBOX_ENABLED", "bool"},
 	{"", "MAGUS_SANDBOX_ENV_PASSTHROUGH", "stringslice"},
 }
@@ -135,5 +137,6 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.TargetTimeout, "target-timeout", cfg.TargetTimeout, "MAGUS_TARGET_TIMEOUT: TargetTimeout bounds how long any single target may run before magus")
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
+	fs.StringVar(&cfg.RequiresMagus, "requires-magus", cfg.RequiresMagus, "MAGUS_REQUIRES_MAGUS: RequiresMagus declares the minimum magus version this workspace expects, as a")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
 }

@@ -81,6 +81,10 @@ default and, when enabled, ships to _your_ OTLP collector, not a magus-operated
 backend. The [remote cache](../concepts/cache/remote.md) is your storage. See
 [telemetry.md](../concepts/telemetry.md).
 
+magus executes locally only. The remote cache layer moves artifacts between
+machines, never work: there is no remote execution mode, so nothing you run
+leaves the machine it ran on.
+
 ## How do I see what a target will actually run before running it?
 
 `magus describe target <path:target>` renders the fully-resolved command (charms
@@ -92,6 +96,11 @@ stop plan. See [charms.md](../concepts/charms.md#previewing-the-rendered-command
 
 `magus.yaml` at the workspace root. `magus config view` prints the resolved
 configuration; every key is documented in the [config reference](config.md).
+
+## Is there a paid tier, or will there be?
+
+No. magus will never be monetized: no paid tier, no hosted plan, no open-core
+split, no license key gating the cache or any other feature.
 
 ## See also
 

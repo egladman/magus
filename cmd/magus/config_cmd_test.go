@@ -72,6 +72,31 @@ func TestRunConfigSet_Global(t *testing.T) {
 	assert.Equal(t, "json", cfg.Log.Format)
 }
 
+// TestGlobalConfigPathHelp locks that the --global flag help shows the RESOLVED
+// path for the current environment, not the literal $XDG_CONFIG_HOME string: with
+// XDG_CONFIG_HOME set, that directory; unset, the platform default (config.UserConfigDir's
+// os.UserConfigDir fallback), which on macOS is Library/Application Support, not
+// $XDG_CONFIG_HOME - the whole point of the fix.
+func TestGlobalConfigPathHelp(t *testing.T) {
+	t.Run("XDG_CONFIG_HOME set", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", "/custom/xdg")
+		got := globalConfigPathHelp()
+		assert.Equal(t, "/custom/xdg/magus/magus.yaml (XDG_CONFIG_HOME)", got)
+	})
+
+	t.Run("XDG_CONFIG_HOME unset falls back to the platform default", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", "")
+		dir, err := config.UserConfigDir()
+		require.NoError(t, err)
+		got := globalConfigPathHelp()
+		assert.Equal(t, filepath.Join(dir, "magus", config.Filename)+" (XDG_CONFIG_HOME)", got)
+		if runtime.GOOS == "darwin" {
+			assert.Contains(t, got, "Library/Application Support",
+				"macOS default must be the resolved path, not the literal $XDG_CONFIG_HOME string")
+		}
+	})
+}
+
 func TestRunConfigSet_UnknownKey(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

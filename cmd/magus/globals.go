@@ -1,7 +1,11 @@
 package main
 
 import (
+	"errors"
 	"flag"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -58,6 +62,15 @@ func bindDisplayFlags(fs *flag.FlagSet) {
 }
 
 // cmdParse binds config/display flags, runs local registration, parses args, and returns positionals.
+//
+// On a bad flag (not -h/--help), it prints the error first, then the subcommand's own
+// usage text, then a single pointer to where the global flags are documented - not
+// fs.PrintDefaults()'s full dump of every config flag (~50), display flag, and local
+// flag on this FlagSet. Left to stdlib's default behavior, that dump prints between
+// the raw error text (written automatically, during Parse) and a second, differently
+// formatted copy of the same error further downstream in exitCodeOf, so the usage that
+// answers the mistake lands 100+ lines away from the error announcing it. An explicit
+// -h/--help still gets the unabridged dump: that path is unchanged.
 func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, error) {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	gen.BindFlags(fs, &globalCfg)
@@ -68,11 +81,66 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 	// Reorder so a flag may follow a positional (`magus run build --explain`);
 	// stdlib flag otherwise stops at the first positional. Done after binding so the
 	// full flag set (config + display + local) is known for value detection.
-	if err := fs.Parse(reorderFlagsFirst(fs, expandVerbosityArgs(args))); err != nil {
-		return nil, err
+	expanded := reorderFlagsFirst(fs, expandVerbosityArgs(args))
+	helpRequested := requestsHelp(fs, expanded)
+	richUsage := fs.Usage
+	if !helpRequested {
+		// fs.PrintDefaults() (called from richUsage, if the subcommand's own Usage
+		// ends with one) writes through fs.Output(); discarding it here silences
+		// just that dump when we call richUsage ourselves below. Replacing fs.Usage
+		// with a no-op stops flag.Parse's OWN automatic call to it on a bad flag,
+		// so richUsage runs exactly once, in the order we choose, instead of once
+		// automatically (mid-Parse) and again here.
+		fs.SetOutput(io.Discard)
+		fs.Usage = func() {}
+	}
+	if err := fs.Parse(expanded); err != nil {
+		if helpRequested {
+			return nil, err
+		}
+		if errors.Is(err, flag.ErrHelp) {
+			// stdlib flag also treats -help, --h, and --help=<value> as help
+			// requests; the pre-scan above only recognizes -h/--help, so by the
+			// time Parse tells us, the usage dump has already been discarded.
+			// Restore the output and print it once, matching the -h path.
+			fs.SetOutput(os.Stderr)
+			if richUsage != nil {
+				richUsage()
+			}
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "[error] %v\n\n", err)
+		if richUsage != nil {
+			richUsage()
+		}
+		fmt.Fprintln(os.Stderr, "\nGlobal flags are documented by `magus -h`.")
+		return nil, errSilent{exitCode: exitUsage}
 	}
 	applyDisplay()
 	return fs.Args(), nil
+}
+
+// requestsHelp reports whether args explicitly invoke -h/--help as a flag (not as
+// another flag's value), stopping at "--". flag.Parse special-cases these tokens to
+// print the FULL usage and return flag.ErrHelp; cmdParse needs to know ahead of Parse
+// which case it is in, since a bad-flag error gets the compact treatment instead (see
+// cmdParse's doc comment).
+func requestsHelp(fs *flag.FlagSet, args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return false
+		}
+		if a == "-h" || a == "--help" {
+			return true
+		}
+		if len(a) > 1 && a[0] == '-' && !strings.Contains(a, "=") {
+			if f := fs.Lookup(strings.TrimLeft(a, "-")); f != nil && !flagIsBool(f) {
+				i++ // skip the value this flag consumes
+			}
+		}
+	}
+	return false
 }
 
 // reorderFlagsFirst moves recognized flags (and their values) ahead of positional

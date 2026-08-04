@@ -151,8 +151,10 @@ func ParseTarget(s string) (Target, error) {
 		return Target{}, fmt.Errorf("magus: target string is empty")
 	}
 	target := s
+	hadColon := false
 	var charms, declaredCharms []string
 	if i := strings.IndexByte(s, ':'); i >= 0 {
+		hadColon = true
 		target = s[:i]
 		charmPart := s[i+1:]
 		if charmPart == "" {
@@ -169,6 +171,14 @@ func ParseTarget(s string) (Target, error) {
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {
+		if hadColon {
+			// The part before ':' failed target-name validation - the classic
+			// misdirect is typing a "path:target" pair here (e.g. ".:build"), because
+			// that is what the colon looks like it should mean. It never does: ':'
+			// always introduces a charm list, and the project is a separate,
+			// trailing argument, not part of this string.
+			return Target{}, fmt.Errorf("magus: target %q: %w (':' introduces a charm list, e.g. \"build:rw\" - it is never a project path; pass the project as a separate, trailing argument)", s, err)
+		}
 		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 	}
 	var declared string

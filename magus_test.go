@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"bytes"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
@@ -24,6 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"log/slog"
+	"sync/atomic"
 )
 
 // TestContainsAll covers the StreamAllSentinel detection used by the
@@ -607,6 +610,46 @@ func TestExpand_UnknownPath_Suggestion(t *testing.T) {
 	assert.Contains(t, err.Error(), `did you mean "api"`)
 }
 
+// TestExpand_ByDeclaredName resolves a project by its DECLARED name
+// (magus.project's "name" key), not only its path. `magus ls` prints exactly
+// that name ("magus (go)" for this repo's root project), so a name copied
+// from there must resolve the same project instead of failing with "unknown
+// project" - only the path used to.
+func TestExpand_ByDeclaredName(t *testing.T) {
+	t.Parallel()
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", func(p *types.Project) error { p.Name = "magus"; return nil })
+	ws := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
+
+	targets, err := ws.ExpandPath(types.Target{Path: "magus", Name: "build"})
+	require.NoError(t, err, "ExpandPath")
+	require.Len(t, targets, 1, "ExpandPath: targets")
+	assert.Equal(t, ".", targets[0].Path, "ExpandPath: resolved Path")
+	assert.Equal(t, "build", targets[0].Name, "ExpandPath: Name")
+}
+
+// TestExpand_PathWinsOverDeclaredName verifies a real project path is
+// resolved directly and never shadowed by the declared-name fallback, even
+// when another project's declared name happens to equal it.
+func TestExpand_PathWinsOverDeclaredName(t *testing.T) {
+	t.Parallel()
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", func(p *types.Project) error { p.Name = "api"; return nil })
+	root := t.TempDir()
+	for _, rel := range []string{"magusfile.buzz", "api/magusfile.buzz"} {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	targets, err := ws.ExpandPath(types.Target{Path: "api", Name: "build"})
+	require.NoError(t, err, "ExpandPath")
+	require.Len(t, targets, 1, "ExpandPath: targets")
+	assert.Equal(t, "api", targets[0].Path, "ExpandPath: the real \"api\" project path wins over \".\"'s declared name")
+}
+
 // TestParseTarget covers the canonical "target[:charm,...]" parsing cases.
 func TestParseTarget(t *testing.T) {
 	t.Parallel()
@@ -948,4 +991,166 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 		}))
 	assert.Equal(t, []string{types.MagusfileSpellName}, ran,
 		"the magusfile target must run alone; the shadowed spell op must not also run")
+}
+
+// writeMagusfile creates a one-project workspace at t.TempDir() whose
+// magusfile.buzz body is src, and returns the workspace root. The interp/Buzz
+// backend is deliberately NOT linked into this package's test binary (see
+// doc.go and register_test.go's init comment), so src is never actually
+// executed by these tests - real magusfile-execution coverage (a sandbox
+// denial, a top-level throw) lives in cmd/magus's testscript suite, where the
+// real interpreter is linked. These tests cover the parts of load() that do
+// not depend on interp: the version-pin warn and the load heartbeat.
+func writeMagusfile(t *testing.T, src string) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(src), 0o644))
+	return root
+}
+
+// captureWarnLog redirects slog's default logger to a buffer for the
+// duration of the test, restoring it on cleanup. slog.SetDefault mutates
+// global state, so a test using this must not run in t.Parallel().
+func captureWarnLog(t *testing.T) *syncBuffer {
+	t.Helper()
+	buf := &syncBuffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+// syncBuffer guards the capture buffer: the load heartbeat logs from its own
+// timer goroutine, so the test's Len/String polls race a bare bytes.Buffer.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Len()
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestLoad_VersionPinWarnsOnceWhenRunningIsOlder covers item 4: a workspace
+// declaring requires_magus warns (does not fail) when the running binary,
+// stamped on ctx via types.WithMagusVersion, is older than the pin.
+func TestLoad_VersionPinWarnsOnceWhenRunningIsOlder(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	root := writeMagusfile(t, "")
+	ctx := types.WithMagusVersion(context.Background(), "v0.3.0")
+	cfg := config.Config{RequiresMagus: "0.4.0"}
+
+	_, err := Inspect(ctx, root, WithLoadedConfig(cfg))
+	require.NoError(t, err, "a version-pin mismatch warns; it must not fail the load")
+
+	out := buf.String()
+	assert.Contains(t, out, string(types.MagusVersionTooOld))
+	assert.Contains(t, out, "v0.3.0")
+	assert.Contains(t, out, "0.4.0")
+}
+
+// TestLoad_VersionPinSilentWhenSatisfied is the control: a running version
+// that already satisfies requires_magus emits no warning.
+func TestLoad_VersionPinSilentWhenSatisfied(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	root := writeMagusfile(t, "")
+	ctx := types.WithMagusVersion(context.Background(), "v0.5.0")
+	cfg := config.Config{RequiresMagus: "0.4.0"}
+
+	_, err := Inspect(ctx, root, WithLoadedConfig(cfg))
+	require.NoError(t, err)
+	assert.NotContains(t, buf.String(), string(types.MagusVersionTooOld))
+}
+
+// TestLoad_VersionPinSilentWhenUnset is the other control: no requires_magus
+// at all emits no warning regardless of the running version.
+func TestLoad_VersionPinSilentWhenUnset(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	root := writeMagusfile(t, "")
+	ctx := types.WithMagusVersion(context.Background(), "v0.1.0")
+	_, err := Inspect(ctx, root)
+	require.NoError(t, err)
+	assert.Empty(t, buf.String())
+}
+
+// TestStartLoadHeartbeat_FiresAfterThreshold covers F3: startLoadHeartbeat
+// warns, naming whatever label is current, when the guarded work runs past
+// the threshold and stop has not yet been called.
+func TestStartLoadHeartbeat_FiresAfterThreshold(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	var current atomic.Pointer[string]
+	label := "myproj/magusfile.buzz"
+	current.Store(&label)
+
+	stop := startLoadHeartbeat(context.Background(), 10*time.Millisecond, &current)
+	defer stop()
+
+	require.Eventually(t, func() bool {
+		return buf.Len() > 0
+	}, time.Second, time.Millisecond, "expected the heartbeat to fire")
+
+	out := buf.String()
+	assert.Contains(t, out, "still evaluating a magusfile")
+	assert.Contains(t, out, "myproj/magusfile.buzz")
+}
+
+// TestStartLoadHeartbeat_StopBeforeThresholdSuppressesWarn is the control: a
+// caller that finishes and calls stop before the threshold elapses (the
+// common, fast-load case) sees no warning at all - no kill-timeout, no
+// changed semantics, just silence when nothing is actually hanging.
+func TestStartLoadHeartbeat_StopBeforeThresholdSuppressesWarn(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	var current atomic.Pointer[string]
+	label := "myproj/magusfile.buzz"
+	current.Store(&label)
+
+	stop := startLoadHeartbeat(context.Background(), 50*time.Millisecond, &current)
+	stop()
+
+	time.Sleep(100 * time.Millisecond)
+	assert.Empty(t, buf.String(), "stop before the threshold must suppress the warning entirely")
+}
+
+// TestStartLoadHeartbeat_LabelReflectsLatestValue confirms the timer reads
+// current at fire time, not at start time - so a heartbeat firing partway
+// through a multi-project load names whichever magusfile is running then.
+func TestStartLoadHeartbeat_LabelReflectsLatestValue(t *testing.T) {
+	buf := captureWarnLog(t)
+
+	var current atomic.Pointer[string]
+	first := "first/magusfile.buzz"
+	current.Store(&first)
+
+	stop := startLoadHeartbeat(context.Background(), 30*time.Millisecond, &current)
+	defer stop()
+
+	second := "second/magusfile.buzz"
+	current.Store(&second)
+
+	require.Eventually(t, func() bool {
+		return buf.Len() > 0
+	}, time.Second, time.Millisecond, "expected the heartbeat to fire")
+
+	out := buf.String()
+	assert.Contains(t, out, "second/magusfile.buzz")
+	assert.NotContains(t, out, "first/magusfile.buzz")
 }

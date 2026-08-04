@@ -1,6 +1,15 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
 // `run -h` / `affected -h` / bare `affected` bug: a usage-only invocation of an
@@ -100,4 +109,38 @@ func TestIsUsageOnlyInvocation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBareHelpPrintsUsageOnce is the regression guard for a bare `magus --help`
+// (or `-h`) printing the whole usage() block twice: fs.Parse itself calls
+// fs.Usage() (== usage) for the special-cased help flag, and the len(rest)==0
+// branch used to call usage() again on the fallthrough. See the comment above
+// the fs.Parse call in startup().
+func TestBareHelpPrintsUsageOnce(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module usagetest\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.tl"), nil, 0o644))
+	t.Chdir(dir)
+	t.Setenv("MAGUS_DAEMON_SOCKET", "")
+
+	previous := os.Stderr
+	read, write, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = write
+	t.Cleanup(func() { os.Stderr = previous })
+
+	resetStartupSingletons()
+	res, exitCode := startup(context.Background(), []string{"--help"})
+	if res.cleanup != nil {
+		res.cleanup()
+	}
+
+	require.NoError(t, write.Close())
+	content, err := io.ReadAll(read)
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, exitCode)
+	const marker = "Usage: magus [flags] <subcommand> [args]"
+	assert.Equal(t, 1, strings.Count(string(content), marker),
+		"usage() must print exactly once for a bare --help, got:\n%s", content)
 }

@@ -56,12 +56,26 @@ func mergeDriverUsage() error {
 // installMergeDriverForInit wires the VCS merge driver during `magus init`.
 // Missing workspace, no declared outputs, aborted picker, or no --vcs in non-interactive shell
 // are all non-fatal: init still succeeds.
+//
+// It opens its own Magus handle rather than going through the process-wide loadMagus
+// singleton. main.go's startup preloads that singleton (to decide whether to host a proc
+// server) before init has written magus.yaml/magusfile.buzz, so on a bare directory the
+// preload fails and memoizes the error; reusing loadMagus here would return that stale
+// failure and warn "workspace load failed" two lines after init just reported writing
+// the very files it claims are missing. A fresh Open re-walks the filesystem after the
+// write and sees them.
 func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
-	m, err := loadMagus(ctx, root)
+	wsRoot, err := magus.FindRoot(root)
 	if err != nil {
 		slog.WarnContext(ctx, "init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
 		return nil
 	}
+	m, err := magus.Open(ctx, wsRoot, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		slog.WarnContext(ctx, "init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
+		return nil
+	}
+	defer func() { _ = m.Close() }()
 
 	globs := workspaceOutputGlobs(m)
 	if len(globs) == 0 {

@@ -83,8 +83,9 @@ type LoadedWorkspace struct {
 }
 
 type options struct {
-	cfg        config.Config
-	daemonInfo *DaemonInfo
+	cfg            config.Config
+	daemonInfo     *DaemonInfo
+	runningVersion string
 }
 
 // Option configures a [Run] call.
@@ -92,6 +93,12 @@ type Option func(*options)
 
 // WithConfig sets the resolved workspace config.
 func WithConfig(c config.Config) Option { return func(o *options) { o.cfg = c } }
+
+// WithRunningVersion sets the executing magus binary's stamped version (main.version,
+// linker-injected), for the version-pin check (checkVersionPin). Doctor lives in
+// internal/ and cannot read the CLI's version variable itself, so the caller supplies
+// it - the same value the CLI stamps onto ctx via types.WithMagusVersion.
+func WithRunningVersion(v string) Option { return func(o *options) { o.runningVersion = v } }
 
 // WithDaemonInfo passes live daemon state for the daemon-related checks.
 // Pass a nil-pointer-equivalent (empty DaemonInfo with Reachable=false) when
@@ -183,6 +190,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkCharmTargetCollision(projects),
 		r.checkHasCharmTypos(projects),
 		r.checkStaleShadowAcks(),
+		r.checkVersionPin(),
 		r.checkVCSBaseRef(),
 		r.checkMergePreflight(),
 		r.checkWorkspaceRegistration(),

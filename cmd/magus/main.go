@@ -423,9 +423,15 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	fs.Usage = usage
-	// Parse until first non-flag arg (the subcommand).
-	if err := fs.Parse(args); err != nil && !errors.Is(err, flag.ErrHelp) {
+	// Parse until first non-flag arg (the subcommand). flag.Parse already prints
+	// usage() itself for -h/--help (fs.Usage == usage), so return here instead of
+	// falling through: the len(rest)==0 branch below also calls usage() and would
+	// print the whole block twice for a bare `magus --help`.
+	if err := fs.Parse(args); err != nil {
 		stopFlags()
+		if errors.Is(err, flag.ErrHelp) {
+			return startupResult{cleanup: cleanup}, 0
+		}
 		slog.Error("flag parse failed", slog.String("error", err.Error()))
 		return startupResult{cleanup: cleanup}, 1
 	}

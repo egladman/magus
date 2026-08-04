@@ -84,6 +84,25 @@ func TestParseTarget_Errors(t *testing.T) {
 	}
 }
 
+// TestParseTarget_ColonFormExplainsGrammar pins the fix for a misdirecting
+// error: typing a "path:target" pair (the classic footgun once documented as
+// the describe target grammar) fails target-name validation on the part
+// before ':' with no hint that ':' means something else entirely. The error
+// must now say so.
+func TestParseTarget_ColonFormExplainsGrammar(t *testing.T) {
+	_, err := ParseTarget(".:build")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `target name "."`)
+	assert.ErrorContains(t, err, "introduces a charm list")
+	assert.ErrorContains(t, err, "never a project path")
+
+	// No colon: the plain ValidateTargetName message carries no such caveat -
+	// there is no charm-vs-path ambiguity to explain.
+	_, err = ParseTarget("web/studio")
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "charm list")
+}
+
 func TestValidateTargetName(t *testing.T) {
 	for _, n := range []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"} {
 		assert.NoErrorf(t, ValidateTargetName(n), "ValidateTargetName(%q)", n)

@@ -608,10 +608,18 @@ func (h *PrettyHandler) printRef(colorize bool, ref string) {
 	if ref == "" {
 		return
 	}
+	// Labeled like the failure path's "output:" line: a bare hex token at the
+	// end of a passing run reads as debris, and nothing in-band connects it to
+	// the command that expands it. The inspect hint is suppressed on CI for the
+	// same reason as in printFailure: the ref addresses this machine's cache.
+	line := "output: " + ref
+	if !h.onCI {
+		line += " - inspect: " + clihint.QueryOutput.With(ref)
+	}
 	if colorize {
-		h.printf("\x1b[2m%s\x1b[0m\n", ref)
+		h.printf("\x1b[2m%s\x1b[0m\n", line)
 	} else {
-		h.printf("%s\n", ref)
+		h.printf("%s\n", line)
 	}
 }
 
