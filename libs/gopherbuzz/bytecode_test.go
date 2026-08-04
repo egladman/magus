@@ -1703,9 +1703,10 @@ func TestJITDeoptsOnRuntimeError(t *testing.T) {
 // a backend file must report a backend, on every OS. Without it the tag expressions
 // are only ever checked by whether the package compiles, and a stub silently
 // selected on an arch that has real codegen looks identical to a pass - every JIT
-// test would skip and the suite would go green having run nothing. That matters most on
-// the CI legs added for Windows, where a silently-selected stub would leave the
-// whole suite skipping and the job green having run nothing.
+// test would skip and the suite would go green having run nothing. It matters most on
+// a platform nobody runs the suite on by habit: Windows selects a different
+// executable-memory half (jit_mem_windows.go), so a tag mistake there would go
+// unnoticed until a user hit it.
 func TestJITBackendPresence(t *testing.T) {
 	// Keep in sync with the //go:build lines on vm/jit_{amd64,arm64}.go.
 	backends := map[string]bool{"amd64": true, "arm64": true}
