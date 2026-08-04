@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2451,
-  "edge_count": 5549,
+  "node_count": 2467,
+  "edge_count": 5572,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1448,7 +1448,7 @@
       "source": "docs/tour",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "19",
+        "dir_files": "22",
         "dir_languages": "buzz"
       }
     },
@@ -6098,6 +6098,33 @@
       }
     },
     {
+      "id": "file:docs/tour/20-footprints.buzz",
+      "kind": "file",
+      "label": "docs/tour/20-footprints.buzz",
+      "source": "docs/tour/20-footprints.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/21-cache-identity.buzz",
+      "kind": "file",
+      "label": "docs/tour/21-cache-identity.buzz",
+      "source": "docs/tour/21-cache-identity.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/tour/22-service-adoption.buzz",
+      "kind": "file",
+      "label": "docs/tour/22-service-adoption.buzz",
+      "source": "docs/tour/22-service-adoption.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:evals/magusfile.buzz",
       "kind": "file",
       "label": "evals/magusfile.buzz",
@@ -10559,8 +10586,8 @@
       "id": "function:docs/tour/19-error-handling.buzz:gate",
       "kind": "function",
       "label": "gate",
-      "doc": "The judgment a real language buys you. A scanner answers \"does a problem match?\" with an exit code, but a gate needs \"is there something I can do about it right now?\" - and those come apart constantly. Fail on what is actionable; report the rest and carry on, so the gate never fails on something nobody can fix. A gate that does gets muted, and a muted gate is `|| true` with extra steps.",
-      "source": "docs/tour/19-error-handling.buzz:64",
+      "doc": "The judgment a real language buys you. A scanner reports whether a problem matches; a gate has to decide whether you can do anything about it today. Fail on what is actionable, report the rest, and carry on. Fail on what nobody can fix and someone will mute the gate within a week.",
+      "source": "docs/tour/19-error-handling.buzz:63",
       "attrs": {
         "exported": "true"
       }
@@ -10581,6 +10608,124 @@
       "label": "tools",
       "doc": "Branching on the CODE, not the wording. MGS3003 is \"tool not on PATH\"; anything else is a failure this target has no answer for, so it is re-thrown rather than swallowed. Catching everything and continuing is how a gate stops being a gate.",
       "source": "docs/tour/19-error-handling.buzz:45",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/20-footprints.buzz:inject",
+      "kind": "function",
+      "label": "inject",
+      "doc": "Editing rather than producing. This page is hand-written and only a region of it is generated, so it is NOT an output magus owns - declaring it with writesFiles would let `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.",
+      "source": "docs/tour/20-footprints.buzz:62",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/20-footprints.buzz:report",
+      "kind": "function",
+      "label": "report",
+      "doc": "Narrow on purpose. readsFiles replaces the project baseline for this target, so editing something outside data/ does not re-run it. Name every input the target reads: a glob you forget is a file whose change magus cannot see, and a stale hit is the result.",
+      "source": "docs/tour/20-footprints.buzz:38",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/20-footprints.buzz:stamp",
+      "kind": "function",
+      "label": "stamp",
+      "doc": "THE CONTRADICTION. This target claims the same output as `report`. Nothing stops both from running, so whichever finishes last wins and the other's drift gate fails against a file it did not write - a failure that points at the wrong target and wastes an afternoon.  `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has one owner. If two targets both need to contribute, they write separate files and a third target combines them.",
+      "source": "docs/tour/20-footprints.buzz:53",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/21-cache-identity.buzz:a",
+      "kind": "function",
+      "label": "a",
+      "source": "docs/tour/21-cache-identity.buzz:75",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/21-cache-identity.buzz:b",
+      "kind": "function",
+      "label": "b",
+      "source": "docs/tour/21-cache-identity.buzz:80",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/21-cache-identity.buzz:both",
+      "kind": "function",
+      "label": "both",
+      "doc": "Both a and b need prep. prep runs once.",
+      "source": "docs/tour/21-cache-identity.buzz:86",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/21-cache-identity.buzz:prep",
+      "kind": "function",
+      "label": "prep",
+      "doc": "ctx.needs DEDUPES within a run: a needed target executes ONCE per invocation, however many targets need it. This is why `ci` fanning out to lint, build and test does not run `format` three times - and why a shared setup step is safe to name from every target that depends on it, instead of being hoisted somewhere awkward to avoid repetition.  It is per-INVOCATION, not per-machine: it is the dispatcher deduping a dependency graph, not the cache replaying a previous run. Run `both` and count the prep line - on",
+      "source": "docs/tour/21-cache-identity.buzz:71",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/21-cache-identity.buzz:report",
+      "kind": "function",
+      "label": "report",
+      "doc": "Declares a charm so `report:loud` is a legal invocation. The body does not even read the charm - the point is that the KEY differs regardless, because the charm is part of the run's identity whether or not this target's code branches on it.",
+      "source": "docs/tour/21-cache-identity.buzz:53",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/22-service-adoption.buzz:db",
+      "kind": "function",
+      "label": "db",
+      "doc": "The baseline. Everything in this command that the fingerprint covers - image, tag, port, env - is part of what makes it THIS service rather than another one.",
+      "source": "docs/tour/22-service-adoption.buzz:30"
+    },
+    {
+      "id": "function:docs/tour/22-service-adoption.buzz:db_other_port",
+      "kind": "function",
+      "label": "db_other_port",
+      "doc": "DOES NOT ADOPT db. One port differs, so the fingerprint differs, so this is a second container. That is correct rather than unfortunate: a dependent connecting on 5433 needs something listening on 5433, and silently handing it the 5432 instance would fail later and further away. If you meant to share, match the config; if you meant two databases, this is how you get them.",
+      "source": "docs/tour/22-service-adoption.buzz:61"
+    },
+    {
+      "id": "function:docs/tour/22-service-adoption.buzz:db_same",
+      "kind": "function",
+      "label": "db_same",
+      "doc": "ADOPTS db. Same image and tag, same port, same env - only the flag ORDER differs, and order is normalized before hashing. One container serves both.",
+      "source": "docs/tour/22-service-adoption.buzz:44"
+    },
+    {
+      "id": "function:docs/tour/22-service-adoption.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "docs/tour/22-service-adoption.buzz:26",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/22-service-adoption.buzz:mgs_listTargets",
+      "kind": "function",
+      "label": "mgs_listTargets",
+      "doc": "One map of op name to handler, same as any spell: a handler returning a Service is what makes the op long-running and shared, rather than a separate kind of declaration.",
+      "source": "docs/tour/22-service-adoption.buzz:75",
       "attrs": {
         "exported": "true"
       }
@@ -18276,7 +18421,7 @@
       "kind": "function",
       "label": "audit",
       "doc": "audit scans the current project and fails ONLY on findings that are actionable today. Everything else is printed and carried. Throws to fail the calling target.",
-      "source": "tools/audit.buzz:91",
+      "source": "tools/audit.buzz:89",
       "attrs": {
         "exported": "true"
       }
@@ -18285,15 +18430,15 @@
       "id": "function:tools/audit.buzz:hasInstallablePatch",
       "kind": "function",
       "label": "hasInstallablePatch",
-      "doc": "hasInstallablePatch reports whether any published version of pkg satisfies the advisory's patched range AND is old enough to clear the cooling period - that is, whether a fix could actually land today.  `pnpm view \u003cpkg\u003e time --json` returns a version -\u003e ISO-8601 map plus the non-version keys \"created\" and \"modified\", which are skipped. A version that fails to parse is skipped rather than fatal: an odd tag upstream must not take a build down.",
-      "source": "tools/audit.buzz:56"
+      "doc": "hasInstallablePatch reports whether any published version of pkg satisfies the advisory's patched range AND is old enough to clear the cooling period - that is, whether a fix could land today.  `pnpm view \u003cpkg\u003e time --json` returns a version -\u003e ISO-8601 map plus the non-version keys \"created\" and \"modified\", which are skipped. A version that fails to parse is skipped rather than fatal: an odd tag upstream must not take a build down.",
+      "source": "tools/audit.buzz:54"
     },
     {
       "id": "function:tools/audit.buzz:isBlockingSeverity",
       "kind": "function",
       "label": "isBlockingSeverity",
       "doc": "isBlockingSeverity reports whether a severity is worth failing over at all. moderate and low are reported and never fatal: the noise floor of a dependency tree lives there, and a gate that cries about it teaches people to stop reading it.",
-      "source": "tools/audit.buzz:45"
+      "source": "tools/audit.buzz:43"
     },
     {
       "id": "import:../../badge",
@@ -25725,6 +25870,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/20-footprints.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/21-cache-identity.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "dir:docs/tour",
+      "target": "file:docs/tour/22-service-adoption.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
     },
     {
       "source": "dir:evals/fixtures",
@@ -43549,6 +43718,142 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/tour/19-error-handling.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
+      "target": "function:docs/tour/20-footprints.buzz:inject",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
+      "target": "function:docs/tour/20-footprints.buzz:report",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
+      "target": "function:docs/tour/20-footprints.buzz:stamp",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "function:docs/tour/21-cache-identity.buzz:a",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "function:docs/tour/21-cache-identity.buzz:b",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "function:docs/tour/21-cache-identity.buzz:both",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "function:docs/tour/21-cache-identity.buzz:prep",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "function:docs/tour/21-cache-identity.buzz:report",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/21-cache-identity.buzz",
+      "target": "import:magus",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/21-cache-identity.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "function:docs/tour/22-service-adoption.buzz:db",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "function:docs/tour/22-service-adoption.buzz:db_other_port",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "function:docs/tour/22-service-adoption.buzz:db_same",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "function:docs/tour/22-service-adoption.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "function:docs/tour/22-service-adoption.buzz:mgs_listTargets",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/22-service-adoption.buzz"
+    },
+    {
+      "source": "file:docs/tour/22-service-adoption.buzz",
+      "target": "import:magus/spell",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/tour/22-service-adoption.buzz"
     },
     {
       "source": "file:evals/magusfile.buzz",
@@ -66134,6 +66439,30 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/tour/19-error-handling.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/20-footprints.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/21-cache-identity.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/tour/22-service-adoption.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

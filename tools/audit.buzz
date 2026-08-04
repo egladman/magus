@@ -1,8 +1,7 @@
-// audit.buzz - advisory scanning that fails only on findings you can actually act on.
+// audit.buzz - advisory scanning that fails only on findings you can act on today.
 //
-// THE PROBLEM THIS EXISTS TO FIX. `pnpm audit` answers one question with an exit code:
-// "does a known advisory match this tree?" That is not the question a build gate needs to
-// ask. The useful question is "is there anything I can do about it right now?", and the
+// `pnpm audit` answers "does a known advisory match this tree?" with an exit code. A build
+// gate needs a different answer: "is there anything I can do about it right now?" Those
 // two come apart constantly:
 //
 //   - An advisory drops and the maintainer publishes a patch the same day. Every .npmrc
@@ -12,9 +11,8 @@
 //   - The advisory sits in a transitive dev dependency four levels down with no patched
 //     release at all.
 //
-// A gate that fails on something nobody can fix does not get fixed. It gets muted, and a
-// muted gate is a `|| true` with extra steps. Six stale skip_cache workarounds in this
-// repo started exactly that way.
+// A gate that fails on something nobody can fix gets muted rather than fixed. Six stale
+// skip_cache workarounds in this repo started that way.
 //
 // So this splits the findings:
 //   BLOCKING - a patched version exists AND is old enough for our own policy to install
@@ -48,7 +46,7 @@ fun isBlockingSeverity(severity: str) > bool {
 
 // hasInstallablePatch reports whether any published version of pkg satisfies the
 // advisory's patched range AND is old enough to clear the cooling period - that is,
-// whether a fix could actually land today.
+// whether a fix could land today.
 //
 // `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version
 // keys "created" and "modified", which are skipped. A version that fails to parse is

@@ -56,11 +56,10 @@ export fun tools(ctx: magus\Context, args: [str]) > void {
     }
 }
 
-// The judgment a real language buys you. A scanner answers "does a problem match?" with an
-// exit code, but a gate needs "is there something I can do about it right now?" - and those
-// come apart constantly. Fail on what is actionable; report the rest and carry on, so the
-// gate never fails on something nobody can fix. A gate that does gets muted, and a muted
-// gate is `|| true` with extra steps.
+// The judgment a real language buys you. A scanner reports whether a problem matches; a
+// gate has to decide whether you can do anything about it today. Fail on what is
+// actionable, report the rest, and carry on. Fail on what nobody can fix and someone will
+// mute the gate within a week.
 export fun gate(ctx: magus\Context, args: [str]) > void {
     var blocking = mut [<str>];
     var deferred = mut [<str>];
@@ -69,7 +68,7 @@ export fun gate(ctx: magus\Context, args: [str]) > void {
         try {
             os\which(tool);
         } catch (e) {
-            // A tool the project pins is actionable: install it. One it merely prefers is
+            // A tool the project pins is actionable: install it. One it prefers is
             // not, so it is reported and the build continues.
             if (tool == "sh") {
                 blocking.append(tool + ": " + e["message"]);

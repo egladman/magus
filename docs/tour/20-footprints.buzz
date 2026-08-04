@@ -33,7 +33,7 @@ magus\project({
 });
 
 // Narrow on purpose. readsFiles replaces the project baseline for this target, so editing
-// something outside data/ does not re-run it. Name every input the target actually reads:
+// something outside data/ does not re-run it. Name every input the target reads:
 // a glob you forget is a file whose change magus cannot see, and a stale hit is the result.
 export fun report(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("data/**");
@@ -48,7 +48,7 @@ export fun report(ctx: magus\Context, args: [str]) > void {
 // file it did not write - a failure that points at the wrong target and wastes an afternoon.
 //
 // `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has
-// exactly one owner; if two targets genuinely need to contribute, they write separate files
+// one owner. If two targets both need to contribute, they write separate files
 // and a third target combines them.
 export fun stamp(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/report.txt");
