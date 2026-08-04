@@ -107,9 +107,9 @@ a silent no-op. See [targets.md](concepts/targets.md#the-target-name).
 
 ### Output reference
 
-A short, shareable id (`ref1a2b3c`, "ref" for short) for one target execution's
+A short, shareable id (`out1a2b3c`, "ref" for short) for one target execution's
 captured output; it appears on each target's line, and
-`magus query output ref1a2b3c` prints those exact bytes. In OpenTelemetry terms
+`magus query output out1a2b3c` prints those exact bytes. In OpenTelemetry terms
 it corresponds to a **span** (one target execution) within its **trace** (the
 whole `magus` invocation). See [output-refs.md](concepts/output-refs.md).
 

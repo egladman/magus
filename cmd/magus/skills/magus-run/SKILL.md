@@ -152,10 +152,10 @@ composition, so the full composition is what has to pass{{end}}.
 
 ## When a target fails
 
-Each target's result line mints an output reference id (`ref1a2b3c`).
+Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
+   `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.

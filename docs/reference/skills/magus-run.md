@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `0a72e9e76c60` |
+| `skill-content` | `afc388218214` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -186,10 +186,10 @@ composition, so the full composition is what has to pass.
 
 ## When a target fails
 
-Each target's result line mints an output reference id (`ref1a2b3c`).
+Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI. Do this instead of re-running the
+   `magus query output out1a2b3c` on the CLI. Do this instead of re-running the
    target to see the error again.
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.
@@ -320,10 +320,10 @@ Re-run the top-level target before you call the work done.
 
 ## When a target fails
 
-Each target's result line mints an output reference id (`ref1a2b3c`).
+Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
-   `magus query output ref1a2b3c` on the CLI. Never re-run just to see the error again.
+   `magus query output out1a2b3c` on the CLI. Never re-run just to see the error again.
 2. `magus_tail_log` {project} returns the most recent captured log for a project
    when you have no ref.
 3. `magus doctor` validates the workspace itself (config, cache, tool

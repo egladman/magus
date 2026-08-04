@@ -141,7 +141,7 @@ Rules:
 
 magus's cross-link discipline: every surface mints a stable, resolvable ID -
 tool names (toolref.go constants), CLI paths (clihint), output refs
-(ref1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that
+(out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that
 points at another surface goes through one of those IDs so a rename breaks
 the build or a test, never an agent at 2am. Hints stay terse and earned: one
 line, only on an error or a result that mints something chainable. A weaker
