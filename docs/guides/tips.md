@@ -261,7 +261,7 @@ Two things to keep straight while you do:
 
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
-- **`magus buzz --workspace`** - standalone shell with magusfile bindings preloaded.
+- **`magus buzz`** - standalone shell with the magusfile loaded.
 - **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz

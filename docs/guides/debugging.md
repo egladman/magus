@@ -18,14 +18,14 @@ tags:
 
 Magus has two entry points into an interactive debugging REPL:
 
-- [`magus buzz --workspace`](#interactive-repl): standalone shell with magusfile bindings preloaded.
+- [`magus buzz`](#interactive-repl): standalone shell with the magusfile loaded.
 - [`magus\pry()`](#maguspry-breakpoint-in-a-magusfile): `binding.pry`-style breakpoint, opens the same REPL mid-target with frame context attached.
 
 Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL surface. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
 
 ## Interactive REPL
 
-`magus buzz --workspace` opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available.
+`magus buzz` with no arguments opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available. There is no flag for this and none is needed - magus reads the workspace from the directory you are in, the same way `magus run` and `magus ls` do. Outside a workspace there is simply nothing to load.
 
 The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).
 
@@ -49,7 +49,7 @@ Skip executing the magusfile on start. Useful when you want a blank environment 
 Set the working directory for `import` resolution (default: cwd).
 
 ```sh
-magus buzz --workspace -C internal/auth
+magus buzz -C internal/auth
 ```
 
 ## `magus\pry()`: breakpoint in a magusfile
@@ -96,7 +96,7 @@ The prompt is `pry>` at the innermost frame; `pry[N]>` after `.up`/`.down` to fr
 | `.next`                 |      |  ✓  | Step over the current line                             |
 | `.finish`               |      |  ✓  | Run until the current frame returns                    |
 
-Pry history is persisted at `$XDG_STATE_HOME/magus/pry_history` (or `~/.local/state/magus/pry_history`) and is shared across pry sessions. The standalone `magus buzz --workspace` REPL does not record to or read from this file.
+Pry history is persisted at `$XDG_STATE_HOME/magus/pry_history` (or `~/.local/state/magus/pry_history`) and is shared across pry sessions. The standalone `magus buzz` REPL does not record to or read from this file.
 
 Color output is enabled when stdout is a TTY; set `NO_COLOR=1` to disable. The continuation prompt (`>>` / `pry>>`) is green-tinted on color terminals.
 

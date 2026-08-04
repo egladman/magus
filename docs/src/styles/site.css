@@ -2217,37 +2217,112 @@ a code {
   text-decoration: underline;
 }
 
-/* Glossary page: the "referenced on" list injected under each term by the render
-   pass (injectBacklinks) from the whole-corpus cross-reference set. A wrapping list
-   of chips, not a run-on sentence: the busiest terms are referenced on ~70 pages,
-   and comma-joining those produced a paragraph of prose where the reader wanted a
-   scannable index. Square, not rounded, and no uppercasing - the site's chip
-   vocabulary. */
+/* Glossary page: the "referenced on" set injected under each term by the render pass
+   (glossaryBacklinkFragments) from the whole-corpus cross-reference set. A collapsed
+   <details> whose summary carries the count, opening onto chips grouped by docs
+   section - and each part of that answers a way the flat version failed.
+
+   Closed by default because the corpus links these terms 927 times across 40 of them:
+   expanded inline, every one-line definition on the page sat under a slab of its own
+   metadata, and the page ran to 17000px. The count lives in the summary because it is
+   the part a reader wants without opening anything - it says how central the term is.
+   The section label (Concepts, Reference, Guides, ...) is the hierarchy the flat list
+   had none of; the busiest term lists 85 pages, and the question a reader brings to
+   that many is "concept page or CLI page", not one title in a run of eighty-five.
+
+   Element choice is load-bearing: this must NOT be a <nav>. Classless Pico styles every
+   <nav> as a `justify-content: space-between` flexbox and pads every <nav> <li> with the
+   nav element spacing (~17px vertical), which is what pinned the old heading into a
+   narrow left column and blew each chip row apart. Square chips, no uppercasing - the
+   site's chip vocabulary. */
 .glossary-backlinks {
-  margin: 0.5rem 0 0;
+  margin: 0.4rem 0 0;
 }
-.glossary-backlinks h4 {
-  margin: 0 0 0.35rem;
+/* The summary is the only affordance the closed state has, so it has to read as a
+   control, not as a caption. Muted text alone did not: it looked like a static label
+   nobody would think to click. It gets the site's chip shape - square, outlined, same
+   size as the links it reveals - so it announces itself as the thing you press. */
+.glossary-backlinks > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: fit-content;
+  margin: 0;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  cursor: pointer;
+  user-select: none;
+  list-style: none; /* Firefox: drop the default disclosure triangle */
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.glossary-backlinks > summary::-webkit-details-marker { display: none; } /* Safari/Chrome */
+.glossary-backlinks > summary::after { content: none; } /* kill Pico's own chevron */
+/* Same caret as .charm-patch: points right when closed, down when open. */
+.glossary-backlinks > summary::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+.glossary-backlinks[open] > summary::before { transform: rotate(90deg); }
+.glossary-backlinks > summary:hover,
+.glossary-backlinks > summary:focus-visible {
+  color: var(--pico-primary);
+  border-color: var(--pico-primary);
+}
+/* Pico's `details[open] > summary` re-adds a bottom margin at a specificity the base
+   rule above cannot reach, so cancel it here or the first group floats away. */
+.glossary-backlinks[open] > summary { margin-bottom: 0; }
+/* One group per docs section: label in a fixed-width first column so the chip rows of
+   every group start on the same gutter and the labels read as one list down the left. */
+.glossary-backlinks > div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--pico-muted-border-color);
+}
+.glossary-backlinks > div > b {
+  flex: none;
+  width: 7rem;
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
   color: var(--pico-muted-color);
 }
+/* `flex: 1` and `min-width: 0` are both load-bearing. As a plain flex ITEM the list sized
+   to min-content - the width of one chip - so all 55 chips of the busiest group stacked
+   into a single narrow column that ran down over the terms below it. Growing it and
+   letting it shrink past its content's intrinsic width is what lets the chips wrap
+   against the real column edge. */
 .glossary-backlinks ul {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3rem;
+  gap: 0.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* Pico marks up `li` directly, so clearing list-style on the `ul` alone left every chip
+   with a square bullet floating to its left. */
 .glossary-backlinks li {
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
+.glossary-backlinks li::marker { content: none; }
 .glossary-backlinks a {
   display: inline-block;
-  padding: 0.1rem 0.4rem;
-  font-size: 0.78rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.76rem;
   color: var(--pico-muted-color);
   border: 1px solid var(--pico-muted-border-color);
   text-decoration: none;
@@ -2255,6 +2330,17 @@ a code {
 .glossary-backlinks a:hover {
   color: var(--pico-primary);
   border-color: var(--pico-primary);
+}
+/* Narrow viewports have no room for a label column beside a wrapping chip row. */
+@media (max-width: 40rem) {
+  .glossary-backlinks > div {
+    display: block;
+  }
+  .glossary-backlinks > div > b {
+    display: block;
+    width: auto;
+    margin-bottom: 0.25rem;
+  }
 }
 
 /* Charm JSON-Patch disclosure (spell docs). The default Pico <details> reads as

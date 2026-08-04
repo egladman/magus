@@ -50,10 +50,95 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// Cross-project handle registry for this session: project imports register
 	// each handle they bind, ctx.needs matches passed functions against it.
 	ext := &externalHandles{}
+	sess.SetGlobal("magus", buildMagusNS(ctx, sess, obs, parseMode, magusfileSurface))
+
+	// A target declares its dependencies and cache footprint through the magus.Context
+	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
+	// magus.* global: the signature is the contract magus reads statically to build the
+	// graph, so the declaration surface lives only on the context. The value is stashed
+	// under a session-global name execBuzzSrc fetches to prepend at dispatch; it closes
+	// over the same targets/exports/ext so ctx.needs dispatches deps through the pool.
+	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(obs, targets, exports, ext))
+
+	// The host utilities are reached under the same bare names as Buzz's own stdlib:
+	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
+	// selects methods off each module directly (os.exec, fs.glob, vcs.shortHash).
+	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
+	// superset surface) and is shared with spell-loading, so a magusfile and a handler
+	// op spell see the same modules.
+	registerMagusModules(ctx, sess)
+	// Built-in spells follow the same import idiom as std modules: each spell is
+	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
+	// its basename.
+	builtins := spellruntime.Builtins()
+	for name := range builtins {
+		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
+	}
+	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
+	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
+	// loop above doesn't reach them; expose each under the same import idiom. The
+	// handle carries only the name; magus.project resolves the spec by name from the
+	// host registry.
+	for _, sp := range project.DefaultSpellRegistry().All() {
+		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
+			continue
+		}
+		sess.SetNativeModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
+	}
+	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
+	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),
+	// registering by value when bound via magus.project.
+	// Cross-project target imports: `import "project/<path>" as <alias>` binds a
+	// module whose members are the other project's targets as callable handles,
+	// so `ctx.needs(<alias>.<target>)` declares a target-level dependency across
+	// the project boundary (a typo in the target name fails at load, not at run
+	// time), and `<alias>.<target>()` dispatches it directly.
+	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
+		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
+			return v, true
+		}
+		return resolveLocalSpellImport(ctx, importPath)
+	})
+}
+
+// magusSurface names the two places the magus.* namespace is installed. They share
+// every member: a member reachable from a magusfile is reachable from a `magus buzz`
+// script, and only the ones listed in buildMagusNS's withhold block differ.
+type magusSurface int
+
+const (
+	// magusfileSurface is a magusfile being loaded or run: every member is live.
+	magusfileSurface magusSurface = iota
+	// scriptSurface is a standalone `magus buzz` script, snippet, test file, or REPL.
+	// There is no workspace being loaded, so the members that DECLARE into one raise
+	// MGS1022 instead.
+	scriptSurface
+)
+
+// RegisterMagusNamespace installs the magus.* namespace into a standalone Buzz
+// session, so `import "magus"` resolves in a `magus buzz` script the way it does in
+// a magusfile and the members that need no magusfile (magus\describe, magus\cmd,
+// magus\run, magus\insight, magus\doctor, the log levels, magus\module[s]) work
+// there.
+//
+// It is a SEPARATE call from RegisterModuleSurface rather than part of it, because
+// the magusfile engine installs its own richer namespace (registerAllBuzz) and must
+// not have this one layered over it. The two are built by the same buildMagusNS, so
+// they cannot drift.
+func RegisterMagusNamespace(ctx context.Context, sess *buzz.Session) {
+	sess.SetGlobal("magus", buildMagusNS(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
+}
+
+// buildMagusNS assembles the magus.* namespace object for one surface. The
+// magusfile engine and `magus buzz` share it so the surfaces stay in lock-step, the
+// same reason RegisterModuleSurface is shared for the host modules.
+func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface) vm.Value {
 	magus := vm.NewMap()
+	cacheNS := buildCacheNS(ctx, obs)
+	ciNS := buildCINS(ctx, obs)
 	magus.MapSet("project", buildProject(ctx, obs))
-	magus.MapSet("cache", buildCacheNS(ctx, obs))
-	magus.MapSet("ci", buildCINS(ctx, obs))
+	magus.MapSet("cache", cacheNS)
+	magus.MapSet("ci", ciNS)
 	magus.MapSet("secret", buildSecretNS(ctx, obs))
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
@@ -126,54 +211,28 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 		types.CaptureExit(ctx, 1)
 		return vm.Null, types.ExitError{Code: 1}
 	}))
-	sess.SetGlobal("magus", magus)
 
-	// A target declares its dependencies and cache footprint through the magus.Context
-	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
-	// magus.* global: the signature is the contract magus reads statically to build the
-	// graph, so the declaration surface lives only on the context. The value is stashed
-	// under a session-global name execBuzzSrc fetches to prepend at dispatch; it closes
-	// over the same targets/exports/ext so ctx.needs dispatches deps through the pool.
-	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(obs, targets, exports, ext))
+	// The members that DECLARE into the workspace magus is loading: each records onto
+	// the per-Open registry (or the CI provider selection) that only a magusfile
+	// evaluation has. On the script surface the real member would find no registry and
+	// return null - a silent no-op the caller reads as success - so it is replaced by
+	// an MGS1022 guard that names the constraint. The rest of the namespace stays,
+	// which is the point: withholding the whole `import "magus"` for these three read
+	// as "the module does not exist".
+	if surface == scriptSurface {
+		magus.MapSet("project", magusfileOnly(obs, `magus\project`))
+		cacheNS.MapSet("remote", magusfileOnly(obs, `magus\cache.remote`))
+		ciNS.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
+	}
+	return magus
+}
 
-	// The host utilities are reached under the same bare names as Buzz's own stdlib:
-	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
-	// selects methods off each module directly (os.exec, fs.glob, vcs.shortHash).
-	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
-	// superset surface) and is shared with spell-loading, so a magusfile and a handler
-	// op spell see the same modules.
-	registerMagusModules(ctx, sess)
-	// Built-in spells follow the same import idiom as std modules: each spell is
-	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
-	// its basename.
-	builtins := spellruntime.Builtins()
-	for name := range builtins {
-		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
-	}
-	// Host-registered spells (the magusfile spell in internal/interp/magusfile.go,
-	// and any spell a plugin registers at runtime) aren't compiled built-ins, so the
-	// loop above doesn't reach them; expose each under the same import idiom. The
-	// handle carries only the name; magus.project resolves the spec by name from the
-	// host registry.
-	for _, sp := range project.DefaultSpellRegistry().All() {
-		if _, isBuiltin := builtins[sp.Name()]; isBuiltin {
-			continue
-		}
-		sess.SetNativeModule(spells.ModulePath(sp.Name()), buzzSpellObject(sp.Name()))
-	}
-	// Workspace-local spells are imported by path: `import "spells/hello"` resolves
-	// ./spells/hello.buzz on demand and binds its handle under the basename (hello),
-	// registering by value when bound via magus.project.
-	// Cross-project target imports: `import "project/<path>" as <alias>` binds a
-	// module whose members are the other project's targets as callable handles,
-	// so `ctx.needs(<alias>.<target>)` declares a target-level dependency across
-	// the project boundary (a typo in the target name fails at load, not at run
-	// time), and `<alias>.<target>()` dispatches it directly.
-	sess.SetModuleResolver(func(importPath string) (vm.Value, bool) {
-		if v, ok := resolveProjectImport(ctx, importPath, ext); ok {
-			return v, true
-		}
-		return resolveLocalSpellImport(ctx, importPath)
+// magusfileOnly returns a stand-in for a magus.* member that only a magusfile can
+// call, raising MGS1022 with the member's name.
+func magusfileOnly(obs buzz.DirectObserver, member string) vm.Value {
+	return directVal(obs, member, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.Null, types.DiagnosticErrorf(types.MagusfileOnlyMember,
+			"%s: only callable from a magusfile, not a magus buzz script - it declares into the workspace magus is loading, and a script has none", member)
 	})
 }
 
