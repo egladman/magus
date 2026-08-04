@@ -65,4 +65,5 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
 	fs.BoolVar(&cfg.DryRun, "u", cfg.DryRun, "Short for --dry-run")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
+	fs.StringVar(&cfg.RequiredVersion, "required-version", cfg.RequiredVersion, "MAGUS_REQUIRED_VERSION: RequiredVersion is the oldest magus that can run this workspace, as a semver")
 }
