@@ -127,6 +127,13 @@ A charm cannot touch `secrets`. Charms patch `args` - the argv a run prints and 
 compares - and a charm silently changing which credential a command receives would be the
 one kind of edit a diff of the command line could never show.
 
+A **service op** cannot declare secrets, and magus refuses the spell at load rather
+than accepting the declaration: a supervised service is started by the daemon's
+supervisor, which does not carry a per-op environment yet, so the same op would get
+its credential when foregrounded and silently lose it when supervised. Refusing at
+load keeps the one rule that matters here: a declared secret is always injected, or
+the load fails saying why.
+
 ## Providers
 
 Where a secret comes from is a provider's job. magus ships one and treats everything

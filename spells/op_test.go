@@ -1,9 +1,9 @@
 package spells
 
 import (
-	"github.com/egladman/magus/internal/json"
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

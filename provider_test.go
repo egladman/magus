@@ -20,7 +20,9 @@ func init() {
 	// A spell whose ci op stands in for a provider-driven toolchain's own composed
 	// pipeline (e.g. `nx run project:ci`) - the RunCI anchor tests below need a
 	// registered spell with a ci op, and a provided project has no magusfile to
-	// declare one in.
+	// declare one in. Registered for the WHOLE package (the registry is a process
+	// singleton with no scoped teardown), so every test in package magus sees this
+	// phantom spell; a test enumerating registered spells must account for it.
 	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("ci-capable", spells.WithTargets("ci")))
 }
 
@@ -192,23 +194,4 @@ func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	err = m.RunCI(ctx, []types.Target{{Path: "libs/foo", Name: "ci"}})
 	assert.True(t, errors.Is(err, types.NoCITarget),
 		"a provided project with no ci-declaring spell must still hit the anchor, got: %v", err)
-}
-
-// TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject pins the existing rule as
-// unchanged: for a magusfile project the magusfile is the definition, so a bound
-// spell's ci op must NOT satisfy the anchor - only counting it for provided
-// projects, which have no magusfile to shadow.
-func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
-	root := makeWorkspaceRoot(t, "magusfile.buzz")
-	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell("ci-capable"))
-
-	ctx := context.Background()
-	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
-	require.NoError(t, err, "Open")
-	defer func() { _ = m.Close() }()
-
-	err = m.RunCI(ctx, []types.Target{{Path: ".", Name: "ci"}})
-	assert.True(t, errors.Is(err, types.NoCITarget),
-		"a spell ci op must not satisfy the anchor for a magusfile project, got: %v", err)
 }

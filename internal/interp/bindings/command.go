@@ -28,6 +28,7 @@ import (
 // distinguishes "no args key" (fall back to project.ExtraArgs) from an explicit empty
 // list; consulted only on the Buzz path.
 type commandOpts struct {
+	op      string // the op name, for error attribution; "" only on paths with no name to give
 	cwd     string
 	args    []string
 	env     map[string]string
@@ -67,6 +68,18 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	args = append(args, opts.args...)
+	// Secrets resolve HERE, in the one function every command spawn funnels through,
+	// so `magus run publish` (dispatchOp) and a magusfile body's `npm.publish(ctx)`
+	// (runBuzzCommand) inject the same env. Resolving in dispatchOp alone made the
+	// same op spawn with its secret on one path and silently without it on the
+	// other. Service ops never reach this: decode rejects secrets on them.
+	if len(tgt.Secrets) > 0 {
+		env, err := resolveSecretEnv(ctx, opts.op, tgt.Secrets, opts.env)
+		if err != nil {
+			return run.ExecResult{}, err
+		}
+		opts.env = env
+	}
 	// A service op reached as a dependency is supervised in the background (started,
 	// readiness-gated, deduped by fingerprint) instead of forked to completion, which
 	// would block the run forever. A directly-run service (no supervisor active) falls

@@ -43,6 +43,9 @@ func (m mapObj) Strs(key string) []string {
 }
 
 func (m mapObj) StrMap(key string) (map[string]string, error) {
+	// Returns the map RAW, empty included: absent-vs-empty normalization is
+	// decodeCommand's job, and a double that pre-normalized would test itself
+	// rather than production.
 	v, ok := m[key]
 	if !ok {
 		return nil, nil
@@ -50,9 +53,6 @@ func (m mapObj) StrMap(key string) (map[string]string, error) {
 	sm, ok := v.(map[string]string)
 	if !ok {
 		return nil, fmt.Errorf("%q must be a map[string]string", key)
-	}
-	if len(sm) == 0 {
-		return nil, nil
 	}
 	return sm, nil
 }
@@ -146,7 +146,7 @@ func TestDecode_CommandOp(t *testing.T) {
 }
 
 // TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
-// provider reference) decodes onto Op.Secrets untouched — no resolution happens at
+// provider reference) decodes onto Op.Secrets untouched  -  no resolution happens at
 // decode time, only at spawn.
 func TestDecode_CommandSecrets(t *testing.T) {
 	src := mapObj{
@@ -267,7 +267,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 }
 
 // TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)
-// is rejected — element-level only.
+// is rejected  -  element-level only.
 func TestDecode_CharmRootRejected(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",

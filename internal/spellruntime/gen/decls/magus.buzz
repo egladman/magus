@@ -261,6 +261,7 @@ export object InsightReport {
 export object ProjectEntry {
     path: str = "",
     name: str = "",
+    origin: str = "",
     dir: str = "",
     spell: str = "",
     spells: [str] = [],

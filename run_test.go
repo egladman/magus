@@ -539,3 +539,22 @@ func TestRedactError(t *testing.T) {
 		assert.NoError(t, m.redactError(nil))
 	})
 }
+
+// TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject pins the existing rule as
+// unchanged: for a magusfile project the magusfile is the definition, so a bound
+// spell's ci op must NOT satisfy the anchor - only counting it for provided
+// projects, which have no magusfile to shadow.
+func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell("ci-capable"))
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	err = m.RunCI(ctx, []types.Target{{Path: ".", Name: "ci"}})
+	assert.True(t, errors.Is(err, types.NoCITarget),
+		"a spell ci op must not satisfy the anchor for a magusfile project, got: %v", err)
+}

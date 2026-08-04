@@ -259,10 +259,11 @@ func (o buzzSpellObj) Bool(key string) bool {
 
 func (o buzzSpellObj) Strs(key string) []string { return mapStrSlice(o.v, key) }
 
-// StrMap reads key as a string-to-string map (a Command's `secrets`). Buzz's map
-// backing store only ever holds string keys (see vm.Value.MapKeys), so the only
-// reachable type error is a wrong-typed VALUE - checked here so a mistyped secrets
-// entry fails loudly at load rather than resolving nothing at spawn.
+// StrMap reads key as a string-to-string map. Buzz's map backing store only ever
+// holds string keys (see vm.Value.MapKeys), so the only reachable type error is a
+// wrong-typed VALUE - checked here so a mistyped entry fails loudly at load rather
+// than silently zeroing. Absent-vs-empty is NOT this method's problem: decodeCommand
+// normalizes both to nil once, for every Obj implementation.
 func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
 	x, ok := o.v.MapGet(key)
 	if !ok {
@@ -273,9 +274,6 @@ func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
 		return nil, fmt.Errorf("%q must be a map", key)
 	}
 	keys := mv.MapKeys()
-	if len(keys) == 0 {
-		return nil, nil //nolint:nilnil // empty map and absent key must decode identically (one cache entry, not two)
-	}
 	out := make(map[string]string, len(keys))
 	for _, k := range keys {
 		v, _ := mv.MapGet(k)
