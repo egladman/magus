@@ -36,6 +36,42 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 | [mise](download/package-managers.md)                | you already manage tool versions with mise                  |
 | [Build from source](download/package-managers.md#build-from-source) | you want a local build, or a `noselfupdate` build |
 
+## Platform support
+
+Every platform below gets a signed release archive built by the same pipeline. They
+do not all get the same amount of testing, and it is more useful to say so than to
+imply otherwise.
+
+CI runs the full test suite on **linux/amd64 only**. Every other platform is built
+by the release pipeline but not tested by it.
+
+| Platform | Testing |
+| --- | --- |
+| linux/amd64 | Full test suite on every CI run. The only continuously tested platform. |
+| darwin/arm64 | Not covered by CI, but it is the primary development platform, so the suite runs against it constantly by hand. |
+| linux/arm64 | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
+| linux/armv7, linux/armv6 | Not covered by CI. Cross-compiled; binaries executed under emulation (`version`, a Buzz workload, and the interpreter test suites) but **never on physical hardware**. |
+| darwin/amd64 | Not covered by CI. Cross-compiled from the arm64 runner, static only - no Intel Mac is in the loop anywhere. |
+| windows/amd64 | Not covered by CI. Built natively by the release pipeline (so it compiles and links, including the cgo variant), but **never executed**. |
+| windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target. |
+
+Two consequences worth knowing before you pick a build:
+
+- On **both Windows targets** nothing has run the binary end to end. windows/amd64
+  has shipped for several releases and so has field use behind it; windows/arm64 is
+  new and has none. If something behaves oddly there, that is worth reporting
+  rather than working around.
+- On **all Windows builds**, the Buzz JIT is newly enabled (it used to be disabled
+  on Windows entirely) and its machine-code path has not executed on any Windows
+  machine here. If a magusfile produces a result that looks wrong on Windows, set
+  `BUZZ_JIT=0` and re-run: if the answer changes, that is a JIT bug and a very
+  valuable report. See the [gopherbuzz JIT
+  notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
+  for the full matrix.
+
+The 32-bit ARM builds run the interpreter rather than the JIT, which is 64-bit
+only, so they are slower on numeric workloads but do not carry that risk.
+
 ## Next steps
 
 - **[Verify the release](download/verify.md)** before first run. Every build ships an Ed25519-signed `SHA256SUMS`; on a first install, verify it by hand rather than with the binary you just downloaded.

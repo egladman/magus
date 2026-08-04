@@ -375,8 +375,10 @@ Three mutually exclusive `Value` representations; one is compiled at a time.
 The default build has **zero GC write barriers** on the push/arith/pop path (the
 operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower,
 which lets CI validate the fast build. The [JIT](#baseline-jit) is built with the
-default rep on amd64 and arm64; every other config (safe/unsafe, other arches,
-wasm) uses a no-op stub.
+default rep on amd64 and arm64 (on every OS, including Windows); every other
+config (safe/unsafe, other arches, wasm) uses a no-op stub. See
+[which platforms this has actually run on](#which-platforms-this-has-actually-run-on)
+before trusting a JIT result on a platform CI does not cover.
 
 ```sh
 go test -tags buzz_safe ./...
@@ -445,9 +447,9 @@ flowchart TD
 
 ## Baseline JIT
 
-On **amd64**, a hot top-level chunk whose body is the numeric loop/arithmetic
-opcode subset is compiled to native code, deleting interpreter dispatch. On by
-default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
+On **amd64 and arm64**, a hot top-level chunk whose body is the numeric
+loop/arithmetic opcode subset is compiled to native code, deleting interpreter
+dispatch. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
 
 - The pointerless `[]uint64` stack lets native code run with no GC cooperation; every value sits at a static slot offset at each opcode boundary, so interpreter state is always materialized.
 - Each op has an int and a double (SSE) fast path. Anything else (mixed
@@ -457,6 +459,41 @@ default; disable with `BUZZ_JIT=0` or `vm.SetJIT(false)`.
 Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same machine code (so same runtime speed) as a hand emitter, but toolchain-verified.
 Only the trampolines (`vm/jit_<arch>.s`) are hand asm. Not yet JIT'd: calls,
 non-top-level frames, strings.
+
+### Which platforms this has actually run on
+
+This is hand-written machine code, so "it compiles" and "it produces the right
+answer" are different claims. Only the second one matters, and it is only earned
+by executing the differential suite (`TestJITMatchesInterpreter`,
+`TestJITComputesNatively`, `TestJITDeoptsOnRuntimeError`) on the platform in
+question. Where each stands:
+
+| Platform | Backend | Executable memory | Status |
+| --- | --- | --- | --- |
+| linux/amd64 | `jit_amd64.go` | mmap | **Exercised every CI run** - the only platform CI covers. |
+| darwin/arm64 | `jit_arm64.go` | mmap | **Exercised continuously** by hand - primary development platform, not covered by CI. |
+| linux/arm64 | `jit_arm64.go` | mmap | **Verified by hand** - suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
+| darwin/amd64 | `jit_amd64.go` | mmap | Not executed here. Same backend and mapping as linux/amd64; only the OS differs. |
+| windows/amd64 | `jit_amd64.go` | `VirtualAlloc` | **NEVER EXECUTED.** Compiled and reviewed only. |
+| windows/arm64 | `jit_arm64.go` | `VirtualAlloc` | **NEVER EXECUTED.** Compiled and reviewed only. |
+
+The two Windows rows are the honest gap, and they are new: the JIT was excluded
+on Windows (`!windows` in every build tag) until it was enabled alongside the
+windows/arm64 release build. They share the two backends above, which are
+well-exercised elsewhere, but they are the only platforms using
+`jit_mem_windows.go` (`VirtualAlloc` + `VirtualProtect` +
+`FlushInstructionCache` instead of `mmap` + `mprotect`), and nothing executes
+them: CI runs on linux/amd64 only, and no Windows machine is in the loop.
+
+What that does and does not mean:
+
+- `safeCompileJIT` recovers a codegen panic and falls back to the interpreter,
+  so an _unencodable_ instruction degrades to slow, not wrong.
+- It does **not** catch a miscompile. If the Windows mapping handed back memory
+  that was subtly wrong, the failure mode is a wrong answer, not a crash.
+- `BUZZ_JIT=0` disables the JIT entirely and is the mitigation if a Windows
+  result is ever suspect. Reporting that `BUZZ_JIT=0` changes an answer is the
+  single most useful bug report this component can receive.
 
 ## Performance design
 

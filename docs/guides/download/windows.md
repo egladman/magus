@@ -28,6 +28,25 @@ To fill in `$ARCH` from the machine rather than by hand, `$Env:PROCESSOR_ARCHITE
 $ARCH = if ($Env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
 ```
 
+## Testing status
+
+Windows binaries are built by the release pipeline but are **not executed by CI**,
+which runs on Linux only. windows/amd64 has shipped for several releases and has
+field use behind it; **windows/arm64 is new and has never been run end to end**.
+
+The Buzz JIT is also newly enabled on Windows - it was disabled there until this
+release line - and its generated machine code has not executed on any Windows
+machine during development. If a magusfile gives a result that looks wrong, re-run
+with the JIT off:
+
+```powershell
+$Env:BUZZ_JIT = "0"
+magus run <target>
+```
+
+If the answer changes, that is a JIT bug rather than a magusfile bug, and it is a
+very useful thing to report. See [Platform support](../download.md#platform-support).
+
 ## Which archive
 
 The unsuffixed archive above is the static build, and it is what both architectures ship. amd64 additionally has a `-cgo` archive on each [GitHub release](https://github.com/egladman/magus/releases): that is the build to take if a magusfile calls Buzz FFI (`zdef()`), which the static build compiles out. There is no arm64 `-cgo` archive, so Buzz FFI is unavailable on Windows on ARM.
