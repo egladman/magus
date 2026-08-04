@@ -238,13 +238,11 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		// persistence just opens without them.
 		var keyDigests string
 		if lines, lerr := m.OutputKeyLines(ref); lerr == nil {
-			d := cache.ClassDigests(lines)
-			classes := make([]string, len(d))
-			digests := make([]string, len(d))
-			for i, c := range d {
-				classes[i], digests[i] = c.Class, c.Digest
+			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
+			for _, c := range cache.ClassDigests(lines) {
+				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
 			}
-			keyDigests = console.KeyDigestsParam(classes, digests)
+			keyDigests = console.KeyDigestsParam(pairs)
 		}
 		return openOutputInViewer(desc, events, inv, keyDigests, o)
 	}

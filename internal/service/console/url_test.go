@@ -100,7 +100,10 @@ func TestKnownSurfaces(t *testing.T) {
 // carries only class digests (never key content), and is omitted entirely when the run
 // recorded no key lines - so an old ref's link is byte-identical to the pre-key form.
 func TestLogViewerURLWithKey(t *testing.T) {
-	digests := KeyDigestsParam([]string{"src", "env"}, []string{"aabbccddeeff", "112233445566"})
+	digests := KeyDigestsParam([]KeyClassDigest{
+		{Class: "src", Digest: "aabbccddeeff"},
+		{Class: "env", Digest: "112233445566"},
+	})
 	assert.Equal(t, "src:aabbccddeeff,env:112233445566", digests)
 
 	withKey, err := LogViewerURLWithKey("https://example.test/logs/", "out1a2b3c4d5e6f", nil, journal.Invocation{}, digests)
@@ -116,9 +119,8 @@ func TestLogViewerURLWithKey(t *testing.T) {
 	assert.Equal(t, plain, empty, "no digests must reproduce the plain link exactly")
 }
 
-// TestKeyDigestsParamMismatchedLengths: a short digest list truncates rather than
-// panicking or emitting a half-formed pair.
-func TestKeyDigestsParamMismatchedLengths(t *testing.T) {
-	assert.Equal(t, "src:aabb", KeyDigestsParam([]string{"src", "env"}, []string{"aabb"}))
-	assert.Empty(t, KeyDigestsParam(nil, nil))
+// TestKeyDigestsParamEmpty: no digests renders empty, which is what suppresses the
+// key directive entirely rather than emitting a bare "key=".
+func TestKeyDigestsParamEmpty(t *testing.T) {
+	assert.Empty(t, KeyDigestsParam(nil))
 }

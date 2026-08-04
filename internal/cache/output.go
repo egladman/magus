@@ -750,23 +750,33 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 	stems := make(map[string]bool, len(files)) // stem -> has a blob
 	for _, f := range files {
 		if stem, ok := strings.CutSuffix(f.Name(), descExt); ok {
-			stems[stem] = stems[stem]
+			if _, seen := stems[stem]; !seen {
+				stems[stem] = false // a descriptor alone; a blob may still turn up
+			}
 			continue
 		}
 		if stem, ok := strings.CutSuffix(f.Name(), outExt); ok {
 			stems[stem] = true
 		}
 	}
+	orphans := make([]string, 0, len(stems))
 	for stem, hasBlob := range stems {
-		if hasBlob {
-			continue
+		if !hasBlob {
+			orphans = append(orphans, stem)
 		}
-		if os.WriteFile(filepath.Join(dir, stem+outExt), output, 0o644) != nil {
-			return "", false
-		}
-		return PortableRef(cacheKey), true
 	}
-	return "", false
+	if len(orphans) == 0 {
+		return "", false
+	}
+	// Sorted, so which attempt gets completed never depends on map iteration order.
+	// More than one orphan means two imports landed descriptors for this key; either
+	// is a correct home for these bytes (the log replayed is the entry's, shared by
+	// both), and picking deterministically keeps repeated runs identical.
+	sort.Strings(orphans)
+	if os.WriteFile(filepath.Join(dir, orphans[0]+outExt), output, 0o644) != nil {
+		return "", false
+	}
+	return PortableRef(cacheKey), true
 }
 
 // newestDescriptor returns the newest stored execution's descriptor for cacheKey -

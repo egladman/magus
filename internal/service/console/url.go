@@ -59,15 +59,22 @@ func LogViewerURLWithKey(base, ref string, events []journal.Event, inv journal.I
 	return u + "&data=" + encoded, nil
 }
 
+// KeyClassDigest is one cache-key component class and the digest of its key lines.
+// A pair type rather than two parallel slices, so a caller cannot hand the renderer
+// mismatched lists.
+type KeyClassDigest struct {
+	Class  string
+	Digest string
+}
+
 // KeyDigestsParam renders per-class key digests as one compact fragment value:
 // "class:digest,class:digest", in the classes' key order. The rendering is
 // deliberately trivial to parse in the browser (split on "," then ":") and carries no
 // key CONTENT - a digest names that a class differs, never what is in it.
-func KeyDigestsParam(classes []string, digests []string) string {
-	n := min(len(classes), len(digests))
-	parts := make([]string, 0, n)
-	for i := range n {
-		parts = append(parts, classes[i]+":"+digests[i])
+func KeyDigestsParam(digests []KeyClassDigest) string {
+	parts := make([]string, 0, len(digests))
+	for _, d := range digests {
+		parts = append(parts, d.Class+":"+d.Digest)
 	}
 	return strings.Join(parts, ",")
 }
