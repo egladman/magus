@@ -54,6 +54,7 @@ func RequiredVersion(constraint, running string) *types.DiagnosticError {
 		// A running version this ward cannot parse is not the workspace's fault, and
 		// refusing to load over it would strand the user with no way forward. Nothing
 		// to compare, so nothing to report.
+		//nolint:nilerr // an unparseable running version means no comparison to make, not a failure to report
 		return nil
 	}
 	// Compare on the release alone. A prerelease of the version that satisfies the
