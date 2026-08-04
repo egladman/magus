@@ -591,6 +591,82 @@ func checkVCSBaseRef(root string, opts types.VCSOptions) Check {
 	return Check{Name: "vcs base ref", Status: StatusOK, Message: fmt.Sprintf("%s %q resolves", res.Name, res.Base)}
 }
 
+// checkMergePreflight predicts the conflicts merging the configured base would
+// produce, so the first conflict signal is here rather than a hosting service's
+// banner after the push - the service computes mergeability with a plain 3-way
+// merge and never runs a merge driver, so generated-file conflicts look scary
+// there and settle locally in seconds.
+//
+// Only predicted conflicts in files magus does NOT generate fail the check:
+// those are the ones a human must read. Generated-only conflicts pass with a
+// message naming the resolver, because `magus vcs resolve` settles them and a
+// doctor that failed on routine generated collisions would be tuned out.
+// Everything uncertain - a non-git workspace, a git without merge-tree
+// --write-tree (< 2.38), an unresolvable base - skips as OK; the base itself
+// is already checkVCSBaseRef's subject.
+func (r *runner) checkMergePreflight() Check {
+	const name = "merge preflight"
+	res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil || res.Source == types.VCSSourceDisabled {
+		return Check{Name: name, Status: StatusOK, Message: "no vcs; skipped"}
+	}
+	predictor, ok := res.VCS.(types.ConflictPredictor)
+	if !ok {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("%s cannot predict; skipped", res.Name)}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conflicts, err := predictor.PredictConflicts(ctx, r.root, res.Base)
+	if err != nil {
+		// An old git, an unreachable base, a shallow clone: not a workspace
+		// defect, and failing here would bury the checks that are.
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("prediction unavailable; skipped (%v)", err)}
+	}
+	if len(conflicts) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("no conflicts predicted against %q", res.Base)}
+	}
+
+	paths := make([]string, len(conflicts))
+	for i, c := range conflicts {
+		paths[i] = c.Path
+	}
+	// The runner holds the narrow WorkspaceReader role; classification is the
+	// Inspector's. Degrade rather than widen every caller for one check.
+	inspector, ok := r.ws.(types.Inspector)
+	if !ok {
+		return Check{Name: name, Status: StatusOK, Message: "classification unavailable; skipped"}
+	}
+	files, err := inspector.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return Check{Name: name, Status: StatusOK, Message: fmt.Sprintf("classification unavailable; skipped (%v)", err)}
+	}
+	var manual []string
+	generated := 0
+	for _, f := range files {
+		if f.Role == "output" {
+			generated++
+			continue
+		}
+		manual = append(manual, f.Path)
+	}
+	if len(manual) == 0 {
+		return Check{
+			Name:   name,
+			Status: StatusOK,
+			Message: fmt.Sprintf("%d generated file(s) would conflict with %q; `magus vcs resolve` settles them after the merge stops",
+				generated, res.Base),
+		}
+	}
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf("merging %q would conflict in %d file(s) magus does not generate; see `magus vcs resolve --base %s`",
+			res.Base, len(manual), res.Base),
+		Details: manual,
+	}
+}
+
 func (*runner) checkEnvVars() Check {
 	var unknown []string
 	for _, kv := range os.Environ() {

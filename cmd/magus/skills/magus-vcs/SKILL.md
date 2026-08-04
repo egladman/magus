@@ -51,25 +51,35 @@ CORRECT: note that `docs/gen/**` is a declared output of
   hand. Do not reach for the merge driver instead: a VCS invokes a driver once per
   conflicted path and never invokes one at all for a file one side deleted, so the
   driver alone cannot finish the job.{{end}}
+- Before pushing, or before starting a merge or rebase, `magus vcs resolve
+  --base <rev>` PREDICTS the conflicts against that revision without touching
+  the tree and says which are generated.{{if .Full}} A hosting service computes
+  mergeability with a plain 3-way merge and never runs a merge driver, so a
+  conflicted PR banner full of generated files is normal - the preflight shows
+  the same collision locally first, where resolve settles it in seconds. It
+  exits non-zero only when conflicts a human must read are predicted.{{end}}
 - `magus clean` removes declared outputs when you want a provably fresh
   regeneration.
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+`magus vcs add` does steps 1-2 below in one call and EMITS the staging
+selection; git performs the staging. The pipe is the sanctioned replacement for
+`git add -A`:
 
 ```sh
-magus vcs add --dry-run   # classify the dirty tree, stage nothing
-magus vcs add             # stage declared sources AND the outputs they produced
-magus vcs add <path>...   # narrow it
+magus vcs add                                             # classify the dirty tree, report the selection
+magus vcs add -o name | git add --pathspec-from-file=-    # stage exactly that selection
+magus vcs add -o name <path>... | git add --pathspec-from-file=-   # narrow it
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
+It selects sources and generated outputs together (they belong in one commit) and
 REPORTS every undeclared path instead of sweeping it in{{if .Full}}, which is the one thing
-`git add -A` cannot do{{end}}. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+`git add -A` cannot do{{end}}. magus never writes the index: the emitted selection is
+plain paths, and `--pathspec-from-file=-` is git consuming them as its own
+contract. Pass `--untracked` when one of those undeclared paths is genuinely a
+new source file. Staging specific paths by hand stays fine; the long form below
+is what the emitter automates, and what to fall back to.
 
 For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
 use one inline Buzz evaluation:

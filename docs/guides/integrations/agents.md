@@ -404,10 +404,11 @@ see the rule above - and says nothing on any uncertainty, since an advisory
 fired on a guess trains the reader to ignore it. Wire it to your host's
 file-editing tool, not its shell tool.
 
-That verdict is the whole contract. The command arrives however your host can
-produce it: as arguments, as raw stdin, or extracted from a JSON event on
-stdin as plain command text. The verdict leaves through the standard
-output arm: `-o json` (a schema-versioned envelope), `-o yaml`, `-o name` (the
+That verdict is the whole contract. The command arrives on STDIN - raw, or
+extracted from the host's JSON event by your wrapper (`jq -r
+'.tool_input.command'`). `magus hook` takes no positional arguments, so the
+payload is never re-tokenized by a shell on the way in. The verdict leaves
+through the standard output arm: `-o json` (a schema-versioned envelope), `-o yaml`, `-o name` (the
 bare decision word), or `-o template=<go-template>` to render your host's
 response dialect directly. Bare `-o template` lists the fields. A host
 integration is therefore a few lines of configuration you own, with no
@@ -434,15 +435,18 @@ the stable fields Magus needs for usage analysis:
   "host": "claude-code",
   "session": "abc123",
   "event": "PreToolUse",
-  "tool": "Bash",
+  "tool": "shell.command",
   "command": "magus run test ."
 }
 ```
 
-For a file-edit hook, `path` replaces `command`. The response contains the
+For a file-edit hook, `tool` is `file.write` and `path` replaces `command`.
+The `tool` field is magus's normalized surface name, not the host's tool name -
+hosts spell their shell tool differently, and the trail groups by what was
+observed rather than by who observed it. The response contains the
 same schema version plus `decision` (`pass`, `advise`, or `deny`) and, where
-applicable, the guard's `reason` or `context`. The Activity event uses the
-host's tool name as `action`, a host-provided agent/session identifier as
+applicable, the guard's `reason` or `context`. The Activity event uses that
+normalized tool as `action`, a host-provided agent/session identifier as
 `actor` when one exists, and the workspace root. The command itself remains in
 the request blob rather than the list row, so the Activity view can group and
 scan safely while an operator can inspect the exact invocation when needed.
@@ -539,10 +543,12 @@ are examples, not a fixed list of supported hosts. Any host that can run a
 command and read its output fits.
 
 ```sh
-magus hook -- git stash                 # deny: whole-tree git stash destroys ...
-echo "go test ./..." | magus hook -     # advise: a magus target covers this ...
-magus hook -o template                  # list the fields -o json / -o template see
+echo "git stash" | magus hook           # deny: whole-tree git stash destroys ...
+echo "go test ./..." | magus hook       # deny: magus run test covers this
+magus hook -o template </dev/null       # list the fields -o json / -o template see
 ```
+
+The input always travels on stdin; `magus hook` takes no positional arguments.
 
 ### Claude Code
 
@@ -891,6 +897,9 @@ Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `ope
 // step with the other hosts' templates. `--host opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
+// The command or path travels on STDIN: `magus hook` takes no positional
+// arguments, so nothing here is ever re-tokenized by a shell on the way in.
+//
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules (deny; advise surfaced to the human)
 //   edit | write  the declared-output rule (deny only)
@@ -958,10 +967,14 @@ export const MagusGuard: Plugin = async () => {
    * call and make the session unusable - worse than no guard. The failure is
    * logged rather than swallowed, so an unguarded session stays visible.
    */
-  const judge = async (args: readonly string[]): Promise<Verdict | null> => {
+  const judge = async (input: string, flags: readonly string[]): Promise<Verdict | null> => {
     let stdout: string;
     try {
-      const proc = Bun.spawn([magus, ...args], { stdout: "pipe", stderr: "ignore" });
+      const proc = Bun.spawn([magus, "hook", ...flags, "--host", "opencode", "-o", "json"], {
+        stdin: new Blob([input]),
+        stdout: "pipe",
+        stderr: "ignore",
+      });
       stdout = await new Response(proc.stdout).text();
       await proc.exited;
     } catch {
@@ -1016,7 +1029,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["agent", "hook", "--host", "opencode", "-o", "json", "--", command]));
+        apply(await judge(command, []));
         return;
       }
 
@@ -1025,9 +1038,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(
-          await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]),
-        );
+        apply(await judge(path, ["--path"]));
       }
     },
   };
@@ -1089,8 +1100,9 @@ shell-command hook config, but a plugin gets Bun's `$` shell handle to call the
 binary. Throwing from `tool.execute.before` reliably blocks the command. Note
 that OpenCode's docs confirm the throw blocks but do not promise the `reason`
 reaches the model, so treat this as a hard stop whose explanation is
-best-effort. Bun's `$` escapes the interpolated command, so passing it as one
-argument is injection-safe:
+best-effort. The command travels on stdin - `magus hook` takes no positional
+arguments - and redirecting from a `Response` keeps the payload byte-exact,
+with no shell re-tokenization on the way in:
 
 ```ts
 import type { Plugin } from "@opencode-ai/plugin"
@@ -1099,7 +1111,7 @@ export const MagusGuard: Plugin = async ({ $ }) => ({
   "tool.execute.before": async (input, output) => {
     if (input.tool !== "bash") return
     const command = output.args.command ?? ""
-    const res = await $`magus hook -o json -- ${command}`.nothrow()
+    const res = await $`magus hook -o json < ${new Response(command)}`.nothrow()
     // Fail closed: a missing binary, a non-zero exit, or unparsable output
     // must block, not wave the command through. `.nothrow()` keeps Bun from
     // throwing on exit status so this decision stays ours to make.

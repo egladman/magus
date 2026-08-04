@@ -47,7 +47,7 @@ stdin command.txt
 exec magus hook -o 'template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}'
 stdout 'permissionDecision'
 
-# arguments work without stdin, and a benign command passes
+# a benign command passes through the same stdin contract
 stdin pass-command.txt
 exec magus hook
 stdout 'pass'

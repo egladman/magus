@@ -878,6 +878,84 @@ func parseConflicts(out, prefix string) []types.Conflict {
 	return conflicts
 }
 
+// PredictConflicts implements types.ConflictPredictor via `git merge-tree
+// --write-tree`, which performs a real 3-way merge in memory: no working-tree
+// write, no index write, no ref update. That is the same merge a hosting
+// service runs to decide a pull request's mergeability, so its answer predicts
+// the banner the push would produce.
+//
+// Requires git >= 2.38 (where --write-tree landed); older gits get a plain
+// error naming the requirement rather than a flag-parse failure.
+func (v gitVCS) PredictConflicts(ctx context.Context, root, base string) ([]types.Conflict, error) {
+	// HEAD first: stage 2 is "ours" in the output, matching how an actual merge
+	// of base into the current branch would assign sides.
+	cmd := gitExec(ctx, "-C", root, "merge-tree", "--write-tree", "-z", "HEAD", base)
+	out, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		// Exit 1 is merge-tree's "merged with conflicts" - the answer, not a failure.
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			stderr := ""
+			if exitErr != nil {
+				stderr = strings.TrimSpace(string(exitErr.Stderr))
+			}
+			if strings.Contains(stderr, "--write-tree") || strings.Contains(stderr, "usage: git merge-tree") {
+				return nil, fmt.Errorf("git merge-tree --write-tree needs git >= 2.38: %w", err)
+			}
+			return nil, fmt.Errorf("git merge-tree HEAD %s: %w\n%s", base, err, stderr)
+		}
+	}
+	return parsePredictedConflicts(string(out), gitPathPrefix(ctx, root)), nil
+}
+
+// parsePredictedConflicts reads `git merge-tree --write-tree -z` output: the
+// merged tree OID, then one `<mode> <oid> <stage>\t<path>` entry per conflicted
+// index stage, the section closed by an empty field (informational messages
+// follow it and are ignored). Stage 1 is the merge base, 2 ours, 3 theirs; a
+// path missing stage 2 or 3 has no content on that side, which is
+// ConflictKindDeleted. Both-deleted cannot appear: two sides agreeing to delete
+// is not a conflict.
+//
+// prefix rebases top-level-relative paths into the workspace, exactly as
+// parseConflicts does.
+func parsePredictedConflicts(out, prefix string) []types.Conflict {
+	fields := strings.Split(out, "\x00")
+	stages := map[string]map[byte]bool{}
+	var order []string
+	for _, entry := range fields[1:] {
+		if entry == "" {
+			break
+		}
+		info, path, ok := strings.Cut(entry, "\t")
+		if !ok || len(info) == 0 {
+			continue
+		}
+		stage := info[len(info)-1]
+		if prefix != "" {
+			rel, found := strings.CutPrefix(path, prefix)
+			if !found {
+				continue
+			}
+			path = rel
+		}
+		path = filepath.ToSlash(path)
+		if stages[path] == nil {
+			stages[path] = map[byte]bool{}
+			order = append(order, path)
+		}
+		stages[path][stage] = true
+	}
+	conflicts := make([]types.Conflict, 0, len(order))
+	for _, path := range order {
+		kind := types.ConflictKindContent
+		if !stages[path]['2'] || !stages[path]['3'] {
+			kind = types.ConflictKindDeleted
+		}
+		conflicts = append(conflicts, types.Conflict{Path: path, Kind: kind})
+	}
+	return conflicts
+}
+
 // KeepIncoming implements types.ConflictResolver, taking git's `--theirs`: during a
 // rebase, the commit being replayed.
 //

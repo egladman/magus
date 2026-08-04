@@ -11,6 +11,21 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 
 ### Added
 
+- `magus vcs resolve --base <rev>` predicts the conflicts a merge with that revision
+  would produce - an in-memory 3-way merge (git >= 2.38), nothing in the tree or index
+  is touched - and classifies each predicted conflict the way a real resolve would:
+  settled-for-you generated files versus conflicts a human must read. Hosting services
+  compute pull-request mergeability with exactly that merge and never run a merge
+  driver, so this is the conflict banner before the push instead of after it. It exits
+  non-zero only when human-owned conflicts are predicted, so it composes as a push
+  gate. `magus doctor` gained a `merge preflight` check on the same probe, failing only
+  on predicted conflicts in files magus does not generate.
+- The guard advises on `git merge`, `git rebase`, and `git cherry-pick` - naming
+  `magus vcs resolve` and the `--base` preflight at the moment a conflict-capable
+  operation starts - and, in `--path` mode, on editing a file that is currently
+  conflicted in a stopped merge. Compound commands now take the strongest verdict on
+  the line: a git advisory no longer short-circuits a raw-tool deny later in the same
+  command.
 - A magusfile can read a credential through a declared provider.
   `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
   reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
@@ -35,8 +50,29 @@ https://github.com/egladman/magus/compare/v0.2.1...main
 - [MGS1020](docs/reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
   an output by more than one target, and documents the one-owner rule for generated files.
 
+### Changed
+
+- `magus vcs add` no longer writes the index: it classifies and EMITS the selection
+  worth staging, and git performs the staging (`magus vcs add -o name | git add
+  --pathspec-from-file=-`). magus's knowledge here is exactly a list of paths, so it
+  emits the list; the recorded state is mutated only where the action is not
+  expressible as one (`vcs resolve`). This also makes `vcs add` work on hg and jj,
+  which previously errored, and the guard's `git add -A` deny and staging advisory now
+  teach the pipe form. `--dry-run` is gone from `vcs add` (the whole command is now
+  read-only); `--untracked` still includes undeclared files in the selection.
+
 ### Fixed
 
+- The OpenCode guard plugin invoked the removed `magus agent hook` form with a
+  positional argument, so every judgement errored and the plugin's fail-open path
+  allowed EVERY call - an unguarded session unless someone read the console. It now
+  pipes the command to `magus hook` on stdin, and a test pins every hook template to
+  the stdin contract.
+- `magus vcs resolve` in a git worktree left the root project's other regenerated
+  outputs unstaged (the rebuilt-set lookup keyed on the display label, which renders a
+  root project as the checkout directory's basename), which is exactly the leftover
+  dirty tree that makes `git rebase --continue` refuse. The decision layer
+  (classification, deletion handling, rebuild grouping) is now covered by tests.
 - The container images build again. Both Dockerfiles copied only `go.mod` and `go.sum`
   before `go mod download`, but the root `go.mod` `replace`s two in-repo modules and the
   download reads each replacement's own `go.mod` to build the module graph. It failed with

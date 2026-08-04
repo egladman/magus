@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -16,6 +17,16 @@ import (
 // change shared.txt, and side deletes gone.txt that main changed. Both shapes matter -
 // a VCS invokes a merge driver only for the first.
 func conflictRepo(t *testing.T) string {
+	t.Helper()
+	dir := divergedRepo(t)
+	// Expected to exit non-zero: that IS the conflict.
+	_ = exec.Command("git", "-C", dir, "merge", "side").Run()
+	return dir
+}
+
+// divergedRepo builds the same two histories WITHOUT starting the merge: what a
+// branch looks like before push, when prediction is the only conflict signal.
+func divergedRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "-C", dir, "init", "-b", "main").CombinedOutput(); err != nil {
@@ -50,10 +61,55 @@ func conflictRepo(t *testing.T) string {
 	write("gone.txt", "main\n")
 	git("add", "-A")
 	git("commit", "-m", "main")
-
-	// Expected to exit non-zero: that IS the conflict.
-	_ = exec.Command("git", "-C", dir, "merge", "side").Run()
 	return dir
+}
+
+// TestGitPredictConflicts pins prediction against the same two shapes the real
+// merge produces (TestGitConflicts): content and one-side-deleted - while
+// touching neither the working tree nor the index.
+func TestGitPredictConflicts(t *testing.T) {
+	dir := divergedRepo(t)
+
+	got, err := gitVCS{}.PredictConflicts(context.Background(), dir, "side")
+	require.NoError(t, err)
+	byPath := map[string]types.ConflictKind{}
+	for _, c := range got {
+		byPath[c.Path] = c.Kind
+	}
+	assert.Equal(t, map[string]types.ConflictKind{
+		"shared.txt": types.ConflictKindContent,
+		"gone.txt":   types.ConflictKindDeleted,
+	}, byPath, "prediction reports the conflicts the real merge would produce")
+
+	status, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(string(status)), "prediction must leave no trace in the tree or index")
+
+	clean, err := gitVCS{}.PredictConflicts(context.Background(), dir, "HEAD")
+	require.NoError(t, err)
+	assert.Empty(t, clean, "a merge with no divergence predicts no conflicts")
+}
+
+// TestParsePredictedConflicts pins the -z stream shape: OID first, one entry per
+// index stage, the section closed by an empty field with informational messages
+// after it. Stage presence is the kind signal: a path with no stage 2 or 3 has
+// no content on that side.
+func TestParsePredictedConflicts(t *testing.T) {
+	out := "oid\x00" +
+		"100644 aaa 1\tdel.txt\x00100644 bbb 2\tdel.txt\x00" +
+		"100644 ccc 1\tf.txt\x00100644 ddd 2\tf.txt\x00100644 eee 3\tf.txt\x00" +
+		"\x00" + "CONFLICT (contents)\x00ignored message tail"
+	assert.Equal(t, []types.Conflict{
+		{Path: "del.txt", Kind: types.ConflictKindDeleted},
+		{Path: "f.txt", Kind: types.ConflictKindContent},
+	}, parsePredictedConflicts(out, ""))
+
+	assert.Empty(t, parsePredictedConflicts("oid\x00", ""), "a clean merge is just the tree OID")
+
+	prefixed := parsePredictedConflicts(
+		"oid\x00100644 aaa 2\tsub/x.txt\x00100644 bbb 3\tsub/x.txt\x00100644 ccc 1\toutside.txt\x00", "sub/")
+	assert.Equal(t, []types.Conflict{{Path: "x.txt", Kind: types.ConflictKindContent}}, prefixed,
+		"paths are rebased into the workspace and ones outside it are skipped")
 }
 
 func TestGitConflicts(t *testing.T) {

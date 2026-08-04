@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -329,10 +330,15 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	verdict := guardVerdict{SchemaVersion: guardSchemaVersion, Decision: "pass"}
 	if *asPath {
 		if hasInput {
-			// The generated-output rule is definitive (it reads declared globs), so it
-			// speaks first; the memory nudge is a heuristic on the filename and only
-			// fills the silence it leaves.
-			context := adviseGeneratedWrite(ctx, input.Value)
+			// Rank by urgency and certainty: a conflicted file means an edit is
+			// about to hand-merge what resolve would settle, so it speaks first;
+			// the generated-output rule is definitive (it reads declared globs)
+			// and comes next; the memory nudge is a heuristic on the filename and
+			// only fills the silence the others leave.
+			context := adviseConflictedWrite(ctx, input.Value)
+			if context == "" {
+				context = adviseGeneratedWrite(ctx, input.Value)
+			}
 			if context == "" {
 				context = adviseMemoryWrite(input.Value)
 			}
@@ -376,6 +382,27 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guardVerdict) 
 		return nil
 	}
 	return writeFormatted(out, opts, verdict)
+}
+
+// adviseConflictedWrite fires when path is an unmerged entry of an in-progress
+// merge, rebase, or cherry-pick - the moment an agent starts hand-editing
+// conflict markers that `magus vcs resolve` may settle wholesale.
+//
+// `git ls-files -u -- <path>` is the probe: cheap, definitive, and empty
+// everywhere outside a stopped merge, so the advisory cannot fire on a guess.
+// Every failure mode - no git, not a repository, a non-git workspace - is
+// silence, per the guard's silent-on-uncertainty rule.
+func adviseConflictedWrite(ctx context.Context, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	out, err := exec.CommandContext(ctx, "git", "-C", filepath.Dir(path),
+		"ls-files", "-u", "--", filepath.Base(path)).Output()
+	if err != nil || len(strings.TrimSpace(string(out))) == 0 {
+		return ""
+	}
+	return "magus workspace: this file is CONFLICTED in an in-progress merge/rebase/cherry-pick. Before hand-editing conflict markers, run `magus vcs resolve`: it settles every conflicted GENERATED file at once (regenerating rather than merging) and stages the result, leaving only real source conflicts to edit. `magus describe file <path>` says whether this one is generated. Load the magus-vcs skill if not already loaded."
 }
 
 // adviseGeneratedWrite explains why editing path is wasted effort, or "" when
@@ -1046,6 +1073,10 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			return bashGuardVerdict{Context: vcsGuardContext}, true
 		case "commit":
 			return bashGuardVerdict{Context: vcsGuardContext}, true
+		case "merge", "rebase", "cherry-pick":
+			// Legitimate ops; what goes wrong is what happens AFTER one stops on
+			// conflicts, so the recovery path is taught at the moment it starts.
+			return bashGuardVerdict{Context: conflictGuardContext}, true
 		case "checkout":
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
@@ -1083,6 +1114,8 @@ func gitGuardFallback(command string) (bashGuardVerdict, bool) {
 		return bashGuardVerdict{Deny: denyStageAll}, true
 	case guardStageRe.MatchString(command):
 		return bashGuardVerdict{Context: vcsGuardContext}, true
+	case guardConflictOpRe.MatchString(command):
+		return bashGuardVerdict{Context: conflictGuardContext}, true
 	case guardScopedRevertRe.MatchString(command):
 		return bashGuardVerdict{Context: revertGuardContext}, true
 	}
@@ -1126,6 +1159,10 @@ var (
 	// reminder earns its place - and it stays an advise, because a push can
 	// legitimately carry a work-in-progress branch.
 	guardPushRe = regexp.MustCompile(`\bgit\s+push\b`)
+	// Merge, rebase, cherry-pick: the operations that can stop on conflicts. The
+	// trailing (\s|$) is what keeps `git merge-base` and `git merge-tree` - read-only
+	// plumbing - out of an advisory about conflict recovery.
+	guardConflictOpRe = regexp.MustCompile(`\bgit\s+(merge|rebase|cherry-pick)(\s|$)`)
 	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
 	// whole-tree forms above already deny; this one is legitimate often enough
 	// that it only advises, but it is the shape of the most common wrong reflex
@@ -1164,7 +1201,7 @@ var (
 )
 
 const (
-	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs skill for the commit checklist if not already loaded."
+	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`, or let magus compute the selection: `magus vcs add -o name | git add --pathspec-from-file=-` stages sources with the outputs they produced and leaves residue out. Load the magus-vcs skill for the commit checklist if not already loaded."
 	// An explicit ladder, because the old text ended with "if no target covers
 	// this work, proceed" - which reads as permission to go straight to the raw
 	// binary. There is a rung between the two, and naming it is the whole point:
@@ -1224,7 +1261,14 @@ const (
 		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's; do not conclude the graph is empty. If refs reports no symbol index, build it once with `magus graph build` (the daemon keeps it current while `magus server start` runs).\n" +
 		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
 
-	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."
+	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. `magus vcs resolve --base <rev>` predicts whether this branch conflicts with its base BEFORE the hosting service's banner reports it (the service never runs a merge driver, so generated-file conflicts look scary there and settle locally in seconds). If you are pushing deliberate work-in-progress, or you already ran the gate, push. Load the magus-run skill if not already loaded."
+
+	// Merge, rebase, and cherry-pick are ordinary operations; what goes wrong is
+	// what happens AFTER one stops on conflicts - hand-merging generated files
+	// hunk by hunk (PR #8: 84 conflicted files, most of them generated). The
+	// advisory teaches the recovery path at the moment the operation starts, plus
+	// the preflight that predicts the collision surface before it does.
+	conflictGuardContext = "magus workspace: if this stops on conflicts, do not hand-merge generated files. `magus vcs resolve` classifies every conflicted path, settles the generated ones (regenerating rather than merging - including files one side deleted, which no merge driver is ever called for), and stages the result, leaving only real source conflicts for you. To see the collision surface before starting, `magus vcs resolve --base <rev>` predicts the conflicts without touching the tree. Load the magus-vcs skill if not already loaded."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -1234,7 +1278,7 @@ const (
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
 	denyStageAll = "staging everything is denied because it sweeps unrelated sources, generated outputs, and residue into one commit. First classify the dirty tree: `magus describe file $(git diff --name-only)`. Then stage only the reviewed source files and the generated outputs they require: `git add -- <paths>`.\n" +
-		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs skill if not already loaded."
+		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. `magus vcs add` computes the right selection from the declared globs without touching the index - `magus vcs add -o name | git add --pathspec-from-file=-` stages sources together with the outputs they produced and leaves residue out. Confirm the selection with `git diff --cached --stat` BEFORE committing. Load the magus-vcs skill if not already loaded."
 
 	outputGuardContext = "magus workspace: do not pipe or redirect magus output to trim it - magus already has output control, and a pipe discards the parts you then have to guess at. Use -s/--silent (progress suppressed; a failure prints only its likely diagnostics plus the full-log path), -o json / -o name / -o template=<go-template> for machine-readable output, and `magus query output <ref>` for a failing target's complete captured log. Exit status is the pass/fail signal; 2>&1 is never needed because magus already writes diagnostics where you are reading. The one command you MAY pipe into a filter is `magus query output <ref>`: that returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
 )
@@ -1282,12 +1326,19 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// because they are about the SHAPE of the line - a pipe, a redirect, a cd
 	// before a magus call - rather than about which program runs.
 	cmds, parsed := parseGuardCommands(command)
+	var gitVerdict bashGuardVerdict
+	var gitMatched bool
 	if parsed {
-		if v, matched := gitGuard(cmds); matched {
-			return v
-		}
-	} else if v, matched := gitGuardFallback(command); matched {
-		return v
+		gitVerdict, gitMatched = gitGuard(cmds)
+	} else {
+		gitVerdict, gitMatched = gitGuardFallback(command)
+	}
+	// A git ADVISORY must not short-circuit a deny from another rule family:
+	// `git add cmd/x.go && go test ./...` is a deny (the raw tool), not an
+	// advise. Denies return immediately from wherever they match; the strongest
+	// verdict on the line wins, then advisories rank git first.
+	if gitMatched && gitVerdict.Deny != "" {
+		return gitVerdict
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(command)
@@ -1297,6 +1348,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContextFor(match))}
 	case magusPipedToFilter(command):
 		return bashGuardVerdict{Deny: outputGuardContext}
+	}
+	if gitMatched {
+		return gitVerdict
+	}
+	switch {
 	case guardMagusRedirRe.MatchString(command):
 		return bashGuardVerdict{Context: outputGuardContext}
 	case guardCdMagusRe.MatchString(command):

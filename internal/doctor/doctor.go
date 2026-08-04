@@ -184,6 +184,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkHasCharmTypos(projects),
 		r.checkStaleShadowAcks(),
 		r.checkVCSBaseRef(),
+		r.checkMergePreflight(),
 		r.checkWorkspaceRegistration(),
 		r.checkBridgeReachability(),
 	)

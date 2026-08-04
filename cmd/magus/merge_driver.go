@@ -222,7 +222,10 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	// untouched IS the resolution - there is nothing to write.
 	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
 		slog.String("path", relPath),
-		slog.String("regenerate", "magus run "+target+" "+types.ProjectLabel(p.Path, p.Dir)))
+		// projectRunArg, not the label: this string is pasted back into `magus run`,
+		// and the label renders a root project as the checkout's directory basename,
+		// which is not a project the workspace knows.
+		slog.String("regenerate", "magus run "+target+" "+projectRunArg(p)))
 	return nil
 }
 

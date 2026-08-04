@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -281,6 +282,22 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Deliberate staging is still only advised - that IS the replacement.
 		{command: "git add cmd/magus/agent.go", context: "magus-vcs"},
 		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs"},
+		// ORDERING: a git ADVISORY earlier in a compound line must not
+		// short-circuit a deny later in it - the strongest verdict on the line
+		// wins. Before this rule, `git add <path> && go test` advised.
+		{command: "git add cmd/x.go && go test ./...", deny: true},
+		{command: "git commit -m x && gofmt -w y.go", deny: true},
+		{command: "git push && magus run test | head", deny: true},
+		// The git advisory still outranks the shape advisories when nothing denies.
+		{command: "git add cmd/x.go && grep -rn TODO .", context: "magus-vcs"},
+		// Merge/rebase/cherry-pick advise the conflict recovery path at the moment
+		// the operation starts - not a deny; the operations are ordinary.
+		{command: "git merge origin/main", context: "magus vcs resolve"},
+		{command: "git rebase main", context: "magus vcs resolve"},
+		{command: "git rebase --continue", context: "magus vcs resolve"},
+		{command: "git cherry-pick abc123", context: "magus vcs resolve"},
+		// Read-only merge plumbing is not conflict recovery.
+		{command: "git merge-base --is-ancestor a b"},
 		// A raw tool denies only when a registered spell renders that exact base
 		// command and verb. Unsupported runners remain available: a guard funnels
 		// capability Magus has, never removes capability it does not.
@@ -719,12 +736,17 @@ func TestGuardKnownHoles(t *testing.T) {
 	}
 }
 
-func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
+// TestStageEverythingDenialNamesTheReplacements pins that the deny teaches both
+// sanctioned paths: direct staging, and the emitter pipe. The pipe form matters
+// because `magus vcs add` computes the selection WITHOUT writing the index - a
+// deny that named an index-writing wrapper would trade one sweep-it-all reflex
+// for another.
+func TestStageEverythingDenialNamesTheReplacements(t *testing.T) {
 	verdict := evaluateBashGuard("git add -A")
 	require.NotEmpty(t, verdict.Deny)
 	assert.Contains(t, verdict.Deny, "magus describe file $(git diff --name-only)")
 	assert.Contains(t, verdict.Deny, "git add -- <paths>")
-	assert.NotContains(t, verdict.Deny, "magus vcs add")
+	assert.Contains(t, verdict.Deny, "magus vcs add -o name | git add --pathspec-from-file=-")
 }
 
 // TestHookCmd covers the stdin-only guard boundary, the standard output arm,
@@ -961,6 +983,37 @@ func TestHookPathMode(t *testing.T) {
 // and to a capture-not-replication wording: it must name the journal WITHOUT
 // telling the reader not to write the file, since host instructions belong
 // exactly where they are being written.
+// TestAdviseConflictedWrite pins the probe against a real stopped merge: the
+// advisory fires only for a path with unmerged index entries, and every
+// uncertainty - a clean file, no repository at all - is silence.
+func TestAdviseConflictedWrite(t *testing.T) {
+	dir := initGitRepo(t)
+	write := func(name, body string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+	write("f.txt", "base\n")
+	runGit(t, dir, "add", "f.txt")
+	runGit(t, dir, "commit", "-m", "base")
+	runGit(t, dir, "checkout", "-b", "side")
+	write("f.txt", "side\n")
+	runGit(t, dir, "commit", "-am", "side")
+	runGit(t, dir, "checkout", "-")
+	write("f.txt", "main\n")
+	runGit(t, dir, "commit", "-am", "main")
+	// Expected to exit non-zero: that IS the conflict.
+	_ = exec.Command("git", "-C", dir, "merge", "side").Run()
+
+	got := adviseConflictedWrite(context.Background(), filepath.Join(dir, "f.txt"))
+	assert.Contains(t, got, "magus vcs resolve", "an unmerged path advises the bulk resolver")
+
+	write("clean.txt", "x\n")
+	assert.Empty(t, adviseConflictedWrite(context.Background(), filepath.Join(dir, "clean.txt")),
+		"a clean file in the same stopped merge is not conflicted")
+	assert.Empty(t, adviseConflictedWrite(context.Background(), filepath.Join(t.TempDir(), "no-repo.txt")),
+		"outside any repository the probe is silence, never an error")
+}
+
 func TestAdviseMemoryWrite(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "claude.md", "/repo/nested/AGENTS.md", "  AGENTS.md  "} {

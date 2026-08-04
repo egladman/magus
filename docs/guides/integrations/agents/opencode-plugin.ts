@@ -10,6 +10,9 @@
 // step with the other hosts' templates. `--host opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
+// The command or path travels on STDIN: `magus hook` takes no positional
+// arguments, so nothing here is ever re-tokenized by a shell on the way in.
+//
 // Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules (deny; advise surfaced to the human)
 //   edit | write  the declared-output rule (deny only)
@@ -77,10 +80,14 @@ export const MagusGuard: Plugin = async () => {
    * call and make the session unusable - worse than no guard. The failure is
    * logged rather than swallowed, so an unguarded session stays visible.
    */
-  const judge = async (args: readonly string[]): Promise<Verdict | null> => {
+  const judge = async (input: string, flags: readonly string[]): Promise<Verdict | null> => {
     let stdout: string;
     try {
-      const proc = Bun.spawn([magus, ...args], { stdout: "pipe", stderr: "ignore" });
+      const proc = Bun.spawn([magus, "hook", ...flags, "--host", "opencode", "-o", "json"], {
+        stdin: new Blob([input]),
+        stdout: "pipe",
+        stderr: "ignore",
+      });
       stdout = await new Response(proc.stdout).text();
       await proc.exited;
     } catch {
@@ -135,7 +142,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["agent", "hook", "--host", "opencode", "-o", "json", "--", command]));
+        apply(await judge(command, []));
         return;
       }
 
@@ -144,9 +151,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(
-          await judge(["agent", "hook", "--path", "--host", "opencode", "-o", "json", "--", path]),
-        );
+        apply(await judge(path, ["--path"]));
       }
     },
   };

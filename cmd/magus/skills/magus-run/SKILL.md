@@ -116,8 +116,10 @@ instead: `-o template='{{"{{.Field}}"}}'` for a field, `-o name` for bare identi
 contract, not scraped text.{{end}}
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`).{{if .Full}} These are contracts on both
-ends, so they are the opposite of the antipattern above:{{end}}
+`--stdin`; to also keep a copy of structured output on disk, `--tee <file>`
+mirrors `-o json|yaml|jsonl|template` output to a file without a shell
+redirect.{{if .Full}} These are contracts on both ends, so they are the opposite of the
+antipattern above:{{end}}
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set

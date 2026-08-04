@@ -447,7 +447,7 @@
         },
         {
           "name": "lint",
-          "doc": "Formats first, then golangci-lint, go vet, markdownlint, and shellcheck.",
+          "doc": "Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck.",
           "dependencies": [
             "format"
           ],
@@ -456,7 +456,8 @@
               "spell": "go",
               "ops": [
                 "golangci-lint",
-                "go-vet"
+                "go-vet",
+                "govulncheck"
               ]
             },
             {
@@ -469,18 +470,6 @@
               "spell": "bash",
               "ops": [
                 "shellcheck"
-              ]
-            }
-          ]
-        },
-        {
-          "name": "security",
-          "doc": "govulncheck consults the live Go vulndb - a new CVE flips its verdict with no tree change - so it is the canonical `security` target, not a lint step, and its target policy above declares skip_cache for the same reason image-scan does.",
-          "spells": [
-            {
-              "spell": "go",
-              "ops": [
-                "govulncheck"
               ]
             }
           ],
@@ -509,7 +498,6 @@
           "doc": "Runs the CI gates through their declared dependencies.",
           "dependencies": [
             "lint",
-            "security",
             "build",
             "test"
           ]

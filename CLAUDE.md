@@ -184,9 +184,11 @@ deliberately instead:
   otherwise GREEN as of 2026-08-02 - the "pre-existing lint findings" this file
   used to warn about are gone, so treat a lint failure as yours rather than
   assuming it is background noise.
-- The agent guard denies piping or redirecting magus output (`| head`,
-  `2>&1`, `> file`). Use `-s/--silent`, `-o json|name|template=`, or `--tee
-<file>` instead; `magus query output <ref>` is the one command you may pipe.
+- The agent guard denies piping magus output into a text filter (`| head`,
+  `| grep`) and advises against `2>&1`. Use `-s/--silent`, `-o
+json|name|template=`, or `--tee <file>` instead; `magus query output <ref>` is
+  the one command you may pipe, and piping magus INTO magus (`--stdin`) or into
+  `git add --pathspec-from-file=-` is composition, not filtering.
 
 ## Rules
 

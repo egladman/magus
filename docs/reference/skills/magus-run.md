@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 8912
-skill_simple_bytes: 5141
+skill_full_bytes: 9020
+skill_simple_bytes: 5249
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `23` |
+| `agent-skill-version` | `24` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `0a72e9e76c60` |
+| `skill-content` | `dda9599a90ae` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -150,8 +150,10 @@ Replace the filter with the flag that already does it:
 prohibition is on text filters standing in for an output format.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`). These are contracts on both
-ends, so they are the opposite of the antipattern above:
+`--stdin`; to also keep a copy of structured output on disk, `--tee <file>`
+mirrors `-o json|yaml|jsonl|template` output to a file without a shell
+redirect. These are contracts on both ends, so they are the opposite of the
+antipattern above:
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set
@@ -298,7 +300,9 @@ instead: `-o template='{{.Field}}'` for a field, `-o name` for bare identifiers,
 contract, not scraped text.
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
-`--stdin`, not a tee flag (there is no `--tee`).
+`--stdin`; to also keep a copy of structured output on disk, `--tee <file>`
+mirrors `-o json|yaml|jsonl|template` output to a file without a shell
+redirect.
 
 ```sh
 magus watch | magus affected --stdin        # changed paths -> affected set

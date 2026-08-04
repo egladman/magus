@@ -21,12 +21,17 @@ import (
 // vcsCmd implements `magus vcs <subcommand>`.
 //
 // All three verbs rest on one fact git does not have: which files are generated, and
-// which target rebuilds them. `add` classifies paths before staging, `resolve` settles a
-// conflicted merge, `merge-driver` is the per-file callback git invokes.
+// which target rebuilds them. `add` classifies paths and emits the ones worth staging,
+// `resolve` settles a conflicted merge (and predicts one with --base), `merge-driver` is
+// the per-file callback git invokes.
 //
-// `add` is the replacement for the `git add -A` the agent guard denies. The guard reads a
-// command STRING and infers intent; a magus verb gets the paths as arguments and
-// classifies them against the declared globs before touching the index.
+// `add` replaces the `git add -A` the agent guard denies by computing the selection
+// rather than performing it: magus's knowledge here IS a list of paths, so it emits the
+// list and git writes its own index (`magus vcs add -o name | git add
+// --pathspec-from-file=-`). The line that separates it from `resolve`: magus mutates the
+// recorded state only where the action is NOT expressible as a path list - resolve must
+// regenerate between clearing markers and recording, and what regeneration touches
+// cannot be known in advance.
 //
 // Not a general git proxy: wrapping every VCS verb would put magus on the critical path
 // of operations it has no opinion about.
@@ -69,8 +74,8 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus vcs <subcommand> [args]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  add            stage a change the way this workspace's declarations say it should be staged")
-	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
+	fmt.Fprintln(w, "  add            classify a change and emit the paths worth staging (pipe into `git add --pathspec-from-file=-`)")
+	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once; --base predicts conflicts before one starts")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")
@@ -91,14 +96,23 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "every path first and regenerating once is both faster and the only way to")
 	fmt.Fprintln(w, "settle a file one side deleted, which no VCS calls a merge driver for.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With --base, nothing has to be in progress: the conflicts merging that")
+	fmt.Fprintln(w, "revision would produce are PREDICTED (an in-memory 3-way merge; the tree is")
+	fmt.Fprintln(w, "not touched) and classified the same way. A hosting service computes a pull")
+	fmt.Fprintln(w, "request's mergeability with exactly that merge and never runs a merge")
+	fmt.Fprintln(w, "driver, so this is the conflict banner before the push instead of after.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --dry-run   classify and report; touch nothing (global flag)")
+	fmt.Fprintln(w, "  --base <rev>  predict the conflicts a merge with <rev> would produce; run nothing")
+	fmt.Fprintln(w, "  --dry-run     classify and report; touch nothing (global flag)")
 }
 
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
+	var base string
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&base, "base", "", "Predict the conflicts a merge with this revision would produce, without touching the tree")
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -125,6 +139,9 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	resolver, ok := res.VCS.(types.ConflictResolver)
 	if !ok {
 		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
+	}
+	if base != "" {
+		return vcsPreflight(ctx, m, res, resolver, base)
 	}
 
 	conflicts, err := resolver.Conflicts(ctx, m.Root())
@@ -270,18 +287,7 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 			continue
 		}
 		plan.keep = append(plan.keep, c.Path)
-		// The project PATH, not its display label: this string becomes an argument to
-		// `magus run <target> <project>`, and ProjectRef.Display renders the root as its
-		// directory BASENAME so a bare "." never reaches a human-facing log. In a git
-		// worktree that basename is the worktree's own directory name, which is not a
-		// project any workspace knows - so resolve regenerated nothing and died with
-		// `unknown project: "<worktree-dir>"`. Display's own doc draws this line: labels
-		// for reading, the path for anything the user (or this code) feeds back to magus.
-		proj := p.Path
-		if proj == "" {
-			proj = "."
-		}
-		if !slices.Contains(plan.rebuild[target], proj) {
+		if proj := projectRunArg(p); !slices.Contains(plan.rebuild[target], proj) {
 			plan.rebuild[target] = append(plan.rebuild[target], proj)
 		}
 	}
@@ -290,6 +296,23 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 	slices.Sort(plan.rederive)
 	slices.Sort(plan.manual)
 	return plan, nil
+}
+
+// projectRunArg is the string this code feeds back to `magus run <target> <project>`
+// for p, and the key rebuiltProjects/settledPaths agree on: the project PATH, with
+// the root spelled ".". NOT the display label: ProjectRef.Display renders the root
+// project as its directory BASENAME so a bare "." never reaches a human-facing log,
+// and in a git worktree that basename is the worktree's own directory name - not a
+// project any workspace knows. Feeding the label back to magus made resolve die with
+// `unknown project: "<worktree-dir>"`, and using it as the rebuilt-set lookup key made
+// settledPaths silently skip every OTHER regenerated root-project output, which is
+// exactly the leftover dirty tree that blocks `git rebase --continue`. Display's own
+// doc draws this line: labels for reading, the path for anything fed back to magus.
+func projectRunArg(p *types.Project) string {
+	if p.Path == "" {
+		return "."
+	}
+	return p.Path
 }
 
 // runRebuildTargets runs each target ONCE over every project that needs it. Grouping by
@@ -331,7 +354,7 @@ func settledPaths(ctx context.Context, m *magus.Magus, driver types.VCSDriver, p
 			continue
 		}
 		producer := m.FindOutputProducer(filepath.Join(m.Root(), filepath.FromSlash(path)))
-		if producer == nil || !rebuilt[types.ProjectLabel(producer.Path, producer.Dir)] {
+		if producer == nil || !rebuilt[projectRunArg(producer)] {
 			continue
 		}
 		settled[path] = true
@@ -379,7 +402,56 @@ func unresolvedError(plan resolutionPlan) error {
 	if len(plan.manual) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `magus vcs add` and continue", len(plan.manual))
+	return fmt.Errorf("%d conflict(s) still need you; resolve them, `git add` them, and continue", len(plan.manual))
+}
+
+// vcsPreflight predicts the conflicts merging base would produce and classifies
+// them exactly as resolve would classify the real thing. Read-only by
+// construction: the prediction is an in-memory merge and the plan is never
+// applied. The value is timing - a hosting service runs the same 3-way merge to
+// decide mergeability and never runs a merge driver, so without this the first
+// conflict signal is the service's banner, after the push.
+func vcsPreflight(ctx context.Context, m *magus.Magus, res types.VCSResolution, resolver types.ConflictResolver, base string) error {
+	predictor, ok := res.VCS.(types.ConflictPredictor)
+	if !ok {
+		return fmt.Errorf("vcs resolve: %s cannot predict conflicts; merge or rebase, then resolve as usual", res.Name)
+	}
+	conflicts, err := predictor.PredictConflicts(ctx, m.Root(), base)
+	if err != nil {
+		return fmt.Errorf("vcs resolve --base: %w", err)
+	}
+	if len(conflicts) == 0 {
+		fmt.Printf("vcs resolve: merging %s would produce no conflicts\n", base)
+		return nil
+	}
+	plan, err := planResolution(ctx, m, resolver, conflicts)
+	if err != nil {
+		return err
+	}
+	reportPreflight(plan, base)
+	if len(plan.manual) == 0 {
+		return nil
+	}
+	// Non-zero mirrors unresolvedError: only conflicts a human must read fail the
+	// preflight, so `magus vcs resolve --base <rev> && git push` gates on exactly them.
+	return fmt.Errorf("%d predicted conflict(s) would need you; the rest settle with `magus vcs resolve` once the merge or rebase stops", len(plan.manual))
+}
+
+func reportPreflight(plan resolutionPlan, base string) {
+	total := len(plan.keep) + len(plan.gone) + len(plan.rederive) + len(plan.manual)
+	fmt.Printf("merging %s would conflict on %d path(s)\n", base, total)
+	if settled := slices.Sorted(slices.Values(slices.Concat(plan.keep, plan.rederive))); len(settled) > 0 {
+		fmt.Printf("settled for you by `magus vcs resolve` once the merge stops - generated, so regenerated rather than merged (%d):\n", len(settled))
+		printPaths(settled)
+	}
+	if len(plan.gone) > 0 {
+		fmt.Printf("recorded as deletions (%d):\n", len(plan.gone))
+		printPaths(plan.gone)
+	}
+	if len(plan.manual) > 0 {
+		fmt.Printf("left for you - conflicts magus cannot settle (%d):\n", len(plan.manual))
+		printPaths(plan.manual)
+	}
 }
 
 // -------------------------------------------------------------------- vcs add
@@ -387,60 +459,73 @@ func unresolvedError(plan resolutionPlan) error {
 func vcsAddUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus vcs add [<path>...] [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Stage a change the way this workspace's declarations say it should be")
-	fmt.Fprintln(w, "staged: sources and the generated outputs a source change produced go")
-	fmt.Fprintln(w, "together, and anything undeclared is reported rather than swept in.")
+	fmt.Fprintln(w, "Classify a change and emit the selection worth staging: sources and the")
+	fmt.Fprintln(w, "generated outputs a source change produced go together, and anything")
+	fmt.Fprintln(w, "undeclared is reported rather than swept in. magus computes the selection;")
+	fmt.Fprintln(w, "your VCS stages it:")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "With no paths, the whole dirty tree is classified. This is the safe")
-	fmt.Fprintln(w, "replacement for `git add -A`, which stages undeclared files silently.")
+	fmt.Fprintln(w, "  magus vcs add -o name | git add --pathspec-from-file=-")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With no paths, the whole dirty tree is classified. This replaces the")
+	fmt.Fprintln(w, "`git add -A` reflex - which stages undeclared files silently - without")
+	fmt.Fprintln(w, "magus ever writing the index itself.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --dry-run    classify and report; touch nothing (global flag)")
-	fmt.Fprintln(w, "  --untracked  also stage undeclared files (the ones add -A would sweep in)")
+	fmt.Fprintln(w, "  -o name      emit the selection as bare paths, one per line (the pipe form)")
+	fmt.Fprintln(w, "  --untracked  include undeclared files in the selection (the ones add -A would sweep in)")
 }
 
-// vcsAddCmd classifies the paths, stages what is declared, and reports the rest.
+// vcsAddCmd classifies the paths and emits what is worth staging; it never
+// writes the index. The classification is magus's knowledge (declared globs);
+// the staging is git's job, reached through the pipe the usage text shows.
 func vcsAddCmd(ctx context.Context, root string, args []string) error {
-	// --dry-run is the GLOBAL config flag, not a local one: it already means
-	// "show me what would happen" on every other command, and redefining it here
-	// panics the FlagSet anyway.
 	var untracked bool
 	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&untracked, "untracked", false, "Also stage undeclared files")
+		fs.BoolVar(&untracked, "untracked", false, "Include undeclared files in the emitted selection")
 		fs.Usage = func() { vcsAddUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
+	}
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format != outputText && opts.Format != outputName {
+		return usagef("vcs add: -o %s is not supported (text reports, name emits the selection)", opts.Format)
+	}
+	// In the pipe form stdout is the selection and nothing else; the human-facing
+	// report moves to stderr so `| git add --pathspec-from-file=-` reads paths only.
+	report := os.Stdout
+	if opts.Format == outputName {
+		report = os.Stderr
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return err
 	}
-	res, err := vcs.Resolve(ctx, root, "", ws.VCSOptions())
+	// The --root flag is "" by default; every path comparison below needs the
+	// RESOLVED root, or relative-path math silently keys off the CWD.
+	wsRoot := ws.Root()
+	res, err := vcs.Resolve(ctx, wsRoot, "", ws.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return fmt.Errorf("vcs add: no VCS resolved for this workspace")
 	}
-	// The write goes through the capability `vcs resolve` uses, so a backend that cannot
-	// record paths is refused up front rather than part-way through.
-	recorder, ok := res.VCS.(types.ConflictResolver)
-	if !ok {
-		return fmt.Errorf("vcs add: %s cannot record paths through magus; stage with %s directly", res.Name, res.Name)
-	}
 
-	paths, err := workspaceRelPaths(root, pos)
+	paths, err := workspaceRelPaths(wsRoot, pos)
 	if err != nil {
 		return err
 	}
 	if len(pos) == 0 {
-		lines, err := res.VCS.DirtyFiles(ctx, root, nil)
+		lines, err := res.VCS.DirtyFiles(ctx, wsRoot, nil)
 		if err != nil {
 			return fmt.Errorf("vcs add: list dirty files: %w", err)
 		}
 		paths = statusPaths(lines)
 	}
 	if len(paths) == 0 {
-		fmt.Println("vcs add: nothing to stage; the tree is clean")
+		fmt.Fprintln(report, "vcs add: nothing to stage; the tree is clean")
 		return nil
 	}
 
@@ -452,17 +537,52 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 	sources, outputs, undeclared := classifyForStaging(files)
 
-	stage := slices.Concat(sources, outputs)
+	selection := slices.Concat(sources, outputs)
 	if untracked {
-		stage = append(stage, undeclared...)
+		selection = append(selection, undeclared...)
 	}
-	slices.Sort(stage)
+	slices.Sort(selection)
+	// A declared path that is gone from disk AND unknown to the VCS would abort
+	// git's whole staging call; filter it out of the selection here so the emitted
+	// list is always safe to feed to `git add`.
+	selection, dropped, err := filterStageable(ctx, wsRoot, res.Name, selection)
+	if err != nil {
+		return err
+	}
 
-	reportStaging(sources, outputs, undeclared, untracked, globalCfg.DryRun)
-	if globalCfg.DryRun || len(stage) == 0 {
+	reportStaging(report, sources, outputs, undeclared, untracked)
+	for _, p := range dropped {
+		fmt.Fprintf(report, "left out %s: declared but missing from disk and not tracked\n", p)
+	}
+	if opts.Format == outputName {
+		for _, p := range selection {
+			fmt.Println(p)
+		}
 		return nil
 	}
-	return stagePaths(ctx, root, res.Name, recorder, stage)
+	if len(selection) > 0 {
+		fmt.Printf("\nstage this selection: %s\n", stagePipeHint(wsRoot, untracked, pos))
+	}
+	return nil
+}
+
+// stagePipeHint reconstructs the exact pipe that stages what this invocation
+// reported, preserving the caller's own path arguments and flags. When the
+// caller is not at the workspace root, git is pointed there with -C so the
+// emitted workspace-relative paths resolve as pathspecs.
+func stagePipeHint(root string, untracked bool, pos []string) string {
+	emit := "magus vcs add -o name"
+	if untracked {
+		emit += " --untracked"
+	}
+	for _, p := range pos {
+		emit += " " + p
+	}
+	gitCmd := "git add --pathspec-from-file=-"
+	if cwd, err := os.Getwd(); err == nil && cwd != root {
+		gitCmd = fmt.Sprintf("git -C %s add --pathspec-from-file=-", root)
+	}
+	return emit + " | " + gitCmd
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.
@@ -595,48 +715,44 @@ func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []s
 	return sources, outputs, undeclared
 }
 
-func reportStaging(sources, outputs, undeclared []string, untracked, dryRun bool) {
-	verb := "staged"
-	if dryRun {
-		verb = "would stage"
-	}
+func reportStaging(w io.Writer, sources, outputs, undeclared []string, untracked bool) {
 	if len(sources) > 0 {
-		fmt.Printf("%s %d source file(s):\n", verb, len(sources))
+		fmt.Fprintf(w, "%d source file(s) to stage:\n", len(sources))
 		for _, p := range sources {
-			fmt.Printf("  %s\n", p)
+			fmt.Fprintf(w, "  %s\n", p)
 		}
 	}
 	if len(outputs) > 0 {
-		fmt.Printf("%s %d generated output(s), which belong with the source change that produced them:\n", verb, len(outputs))
+		fmt.Fprintf(w, "%d generated output(s) to stage - they belong with the source change that produced them:\n", len(outputs))
 		for _, p := range outputs {
-			fmt.Printf("  %s\n", p)
+			fmt.Fprintf(w, "  %s\n", p)
 		}
 	}
 	if len(undeclared) == 0 {
 		return
 	}
 	if untracked {
-		fmt.Printf("%s %d undeclared file(s) (--untracked):\n", verb, len(undeclared))
+		fmt.Fprintf(w, "%d undeclared file(s) in the selection (--untracked):\n", len(undeclared))
 		for _, p := range undeclared {
-			fmt.Printf("  %s\n", p)
+			fmt.Fprintf(w, "  %s\n", p)
 		}
 		return
 	}
 	maintained, unclaimed := splitMaintained(undeclared)
 	if len(unclaimed) > 0 {
-		fmt.Printf("skipped %d undeclared file(s) - no target claims them:\n", len(unclaimed))
+		fmt.Fprintf(w, "left out %d undeclared file(s) - no target claims them:\n", len(unclaimed))
 		for _, p := range unclaimed {
-			fmt.Printf("  %s\n", p)
+			fmt.Fprintf(w, "  %s\n", p)
 		}
-		fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
-		fmt.Println("  if it is build residue, add it to your VCS ignore rules")
+		fmt.Fprintln(w, "  if one is a new source file, name it explicitly or pass --untracked;")
+		fmt.Fprintln(w, "  if it is build residue, add it to your VCS ignore rules")
 	}
 	if len(maintained) > 0 {
-		fmt.Printf("skipped %d file(s) magus itself maintains outside any target's declared outputs:\n", len(maintained))
+		fmt.Fprintf(w, "left out %d file(s) magus itself maintains outside any target's declared outputs:\n", len(maintained))
 		for _, p := range maintained {
-			fmt.Printf("  %s\n", p)
+			fmt.Fprintf(w, "  %s\n", p)
 		}
-		fmt.Println("  these are not residue - name them explicitly or pass --untracked to stage them")
+		fmt.Fprintln(w, "  these are not residue - name them explicitly or pass --untracked to include them")
 	}
 }
 
@@ -668,46 +784,21 @@ func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
 	return maintained, unclaimed
 }
 
-// stagePaths shells out to git for the index write itself.
+// filterStageable separates paths git add can actually act on from ones that
+// would abort the whole `git add` call.
 //
 // A declared output (or source) whose path no longer exists on disk - a
 // directory renamed out from under it, a stale declaration nobody updated -
 // makes `git add` fail on that ONE pathspec with "did not match any files".
 // `git add` does not skip the bad pathspec and keep going: it aborts the whole
 // invocation before staging anything, so one stale path silently loses every
-// other path handed to the same call. filterStageable splits paths first so
-// that never happens: a path that exists on disk is always staged; a path
-// that is gone from disk but still known to git is ALSO staged, because that
-// is precisely how a deletion or a rename gets recorded - dropping it would
-// make `vcs add` unable to ever commit a removal. Only a path that is neither
-// on disk nor tracked - a declaration that no longer corresponds to anything
-// real - is dropped, and reported rather than silently discarded.
-//
-// Paths are passed after `--` so one that begins with a dash, or collides with a
-// revision name, is unambiguously a path.
-func stagePaths(ctx context.Context, root, vcsName string, recorder types.ConflictResolver, paths []string) error {
-	stageable, dropped, err := filterStageable(ctx, root, vcsName, paths)
-	if err != nil {
-		return err
-	}
-	for _, p := range dropped {
-		fmt.Printf("skipping %s: declared but missing from disk and not tracked\n", p)
-	}
-	if len(stageable) == 0 {
-		return nil
-	}
-	// MarkResolved batches the pathspecs, which matters here: `vcs add` over a whole
-	// dirty tree is the largest path list these commands hand to the VCS.
-	if err := recorder.MarkResolved(ctx, root, stageable); err != nil {
-		return fmt.Errorf("vcs add: %w", err)
-	}
-	fmt.Println("\nreview before committing: git diff --cached --stat")
-	return nil
-}
-
-// filterStageable separates paths git add can actually act on from ones that
-// would abort the whole `git add` call. See stagePaths for why a missing-but-
-// tracked path (a deletion or the old half of a rename) must still be staged.
+// other path handed to the same call. The emitted selection must never carry
+// one: a path that exists on disk is always kept; a path that is gone from
+// disk but still known to git is ALSO kept, because that is precisely how a
+// deletion or a rename gets recorded - dropping it would make the selection
+// unable to ever carry a removal. Only a path that is neither on disk nor
+// tracked - a declaration that no longer corresponds to anything real - is
+// dropped, and reported rather than silently discarded.
 func filterStageable(ctx context.Context, root, vcsName string, paths []string) (stageable, dropped []string, err error) {
 	var maybeGone []string
 	for _, p := range paths {

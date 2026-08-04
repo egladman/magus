@@ -155,10 +155,12 @@ pass. It parses the shell rather than pattern-matching it, so a command cannot
 evade the guard by adding an environment prefix or a shell indirection:
 
 ```sh
-magus hook -- go test ./...                 # deny: magus run test covers this
-magus hook -- env -u GOROOT go test ./...   # deny: same command, prefix peeled
-magus hook -- magus run test                # pass
+echo "go test ./..." | magus hook                 # deny: magus run test covers this
+echo "env -u GOROOT go test ./..." | magus hook   # deny: same command, prefix peeled
+echo "magus run test" | magus hook                # pass
 ```
+
+The command travels on stdin; `magus hook` takes no positional arguments.
 
 It denies on three triggers: what cannot be undone (whole-tree VCS operations),
 what WRITES into the working tree (codegen, formatters, build output), and what

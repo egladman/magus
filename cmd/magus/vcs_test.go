@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -195,8 +197,10 @@ func TestFilterStageableNonGit(t *testing.T) {
 	assert.Empty(t, dropped)
 }
 
-// TestStagePathsSurvivesStalePath proves the end-to-end fix: one nonexistent, untracked
-// path in the batch must not abort the rest. The field failure:
+// TestEmittedSelectionSurvivesStalePath proves the end-to-end property the filter
+// exists for: the selection `vcs add -o name` emits must be safe to feed to git in
+// ONE call, even when a declared path no longer corresponds to anything real. The
+// field failure this pins, from the era when vcs add staged directly:
 //
 //	staged 3 undeclared file(s) (--untracked):
 //	  .gitattributes
@@ -205,28 +209,122 @@ func TestFilterStageableNonGit(t *testing.T) {
 //	fatal: pathspec 'libs/diag/MAGUS.md' did not match any files
 //	[error] vcs add: git add: exit status 128
 //
-// where every one of the first three paths was silently left unstaged.
-func TestStagePathsSurvivesStalePath(t *testing.T) {
+// where every one of the first three paths was silently left unstaged. The emitter
+// keeps the guarantee by dropping the stale path BEFORE it reaches the pipe.
+func TestEmittedSelectionSurvivesStalePath(t *testing.T) {
 	dir := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
 
-	err := stagePaths(context.Background(), dir, "git", gitConflictResolver(t, dir), []string{"present.txt", "stale.txt"})
+	selection, dropped, err := filterStageable(context.Background(), dir, "git", []string{"present.txt", "stale.txt"})
 	require.NoError(t, err)
+	assert.Equal(t, []string{"stale.txt"}, dropped)
 
-	out, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
+	// The documented pipe, verbatim: the emitted selection through
+	// `git add --pathspec-from-file=-`.
+	cmd := exec.Command("git", "-C", dir, "add", "--pathspec-from-file=-")
+	cmd.Stdin = strings.NewReader(strings.Join(selection, "\n") + "\n")
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git add --pathspec-from-file=-: %s", out)
+
+	staged, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
 	require.NoError(t, err)
-	assert.Equal(t, "present.txt\n", string(out),
-		"present.txt must be staged even though stale.txt was handed to the same call")
+	assert.Equal(t, "present.txt\n", string(staged),
+		"present.txt must be staged even though stale.txt was in the classified set")
 }
 
-// gitConflictResolver returns the git driver as the capability staging uses.
-func gitConflictResolver(t *testing.T, dir string) types.ConflictResolver {
+// resolveWorkspace opens a real root-project workspace whose generate target
+// declares gen/** as its output - the shape settleTarget requires - mirroring
+// mergeDriverWorkspace but returning the Magus itself for the decision layer.
+func resolveWorkspace(t *testing.T) (*magus.Magus, string) {
 	t.Helper()
-	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
+	root := t.TempDir()
+	magusfile := `import "magus";
+import "fs";
+
+magus.project({})
+
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+    fs\writeFile("gen/regenerated.txt", "regenerated");
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err, "fixture workspace must open")
+	return m, root
+}
+
+// stubResolver satisfies types.ConflictResolver for planResolution, which only
+// calls IgnoredPaths.
+type stubResolver struct{ ignored map[string]bool }
+
+func (s stubResolver) Conflicts(context.Context, string) ([]types.Conflict, error) { return nil, nil }
+func (s stubResolver) KeepIncoming(context.Context, string, []string) error        { return nil }
+func (s stubResolver) MarkResolved(context.Context, string, []string) error        { return nil }
+func (s stubResolver) RemoveConflicts(context.Context, string, []string) error     { return nil }
+func (s stubResolver) IgnoredPaths(context.Context, string, []string) (map[string]bool, error) {
+	return s.ignored, nil
+}
+
+// TestPlanResolutionDecisions pins the whole decision table in one plan: every
+// conflict shape lands in exactly one bucket, and the rebuild map is keyed by
+// the string `magus run` accepts - the root project is ".", never the checkout
+// directory's basename (a git worktree's basename names no known project, which
+// is how resolve once regenerated nothing and died with `unknown project`).
+func TestPlanResolutionDecisions(t *testing.T) {
+	m, _ := resolveWorkspace(t)
+	conflicts := []types.Conflict{
+		{Path: "gen/kept.txt", Kind: types.ConflictKindContent},
+		{Path: "gen/ignored.txt", Kind: types.ConflictKindDeleted},
+		{Path: "gen/deleted.txt", Kind: types.ConflictKindDeleted},
+		{Path: "gen/both.txt", Kind: types.ConflictKindBothDeleted},
+		{Path: "main.go", Kind: types.ConflictKindContent},
+		{Path: ".gitattributes", Kind: types.ConflictKindContent},
+	}
+
+	plan, err := planResolution(context.Background(), m,
+		stubResolver{ignored: map[string]bool{"gen/ignored.txt": true}}, conflicts)
 	require.NoError(t, err)
-	cr, ok := res.VCS.(types.ConflictResolver)
-	require.True(t, ok, "the git driver must implement types.ConflictResolver")
-	return cr
+
+	assert.Equal(t, resolutionPlan{
+		keep:     []string{"gen/kept.txt"},
+		gone:     []string{"gen/both.txt", "gen/ignored.txt"},
+		rederive: []string{".gitattributes"},
+		manual:   []string{"gen/deleted.txt", "main.go"},
+		rebuild:  map[string][]string{"generate": {"."}},
+	}, plan,
+		"content output -> keep; deleted+ignored and both-deleted -> gone; deleted-but-tracked and undeclared -> manual; the driver registration -> rederive")
+}
+
+// TestSettledPathsIncludesRootProjectOutputs pins the regression where the
+// rebuilt-set lookup used the display label (the checkout dir basename for a
+// root project) against keys built from the run arg ".": every OTHER
+// regenerated root-project output was silently left unstaged, which is exactly
+// the leftover dirty tree that makes `git rebase --continue` refuse.
+func TestSettledPathsIncludesRootProjectOutputs(t *testing.T) {
+	m, root := resolveWorkspace(t)
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "other.txt"), []byte("old"), 0o644))
+	runGit(t, root, "add", "gen/other.txt")
+	runGit(t, root, "commit", "-m", "seed")
+	// The regeneration rewrote a declared output that was never itself conflicted.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "other.txt"), []byte("new"), 0o644))
+
+	res, err := vcs.Resolve(context.Background(), root, "", types.VCSOptions{})
+	require.NoError(t, err)
+	plan := resolutionPlan{
+		keep:    []string{"gen/kept.txt"},
+		rebuild: map[string][]string{"generate": {"."}},
+	}
+
+	settled, err := settledPaths(context.Background(), m, res.VCS, plan)
+	require.NoError(t, err)
+	assert.Contains(t, settled, "gen/kept.txt", "the conflicted path itself is always recorded")
+	assert.Contains(t, settled, "gen/other.txt",
+		"a rebuilt root project's other dirty outputs must be recorded; the lookup key is the run arg \".\"")
 }
 
 // initGitRepo creates a temp git repo with an identity, so a commit can be made in it.

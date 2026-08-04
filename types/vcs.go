@@ -379,6 +379,23 @@ type ConflictResolver interface {
 	IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error)
 }
 
+// ConflictPredictor is an optional capability (sibling of ConflictResolver) for
+// VCSDriver implementations that can predict the conflicts merging a base revision
+// would produce, WITHOUT touching the working tree or the recorded state.
+//
+// Hosting services compute a pull request's mergeability with a plain 3-way merge
+// and never run a per-clone merge driver, so the first conflict signal a user gets
+// is the service's banner - after pushing. Prediction moves that signal to before
+// the push, where a resolver can say which conflicts are generated and settle in
+// seconds. Callers type-assert for it and degrade when a backend lacks it.
+type ConflictPredictor interface {
+	// PredictConflicts returns the paths that would be unresolved after merging
+	// base into the current revision. A clean predicted merge returns none.
+	// ConflictKindBothDeleted never appears: both sides agreeing to delete is not
+	// a conflict in a real merge either.
+	PredictConflicts(ctx context.Context, root, base string) ([]Conflict, error)
+}
+
 // RevisionExporter is an optional capability for VCSDriver implementations that can
 // materialize a revision's tracked files into a directory (a "checkout to a throwaway
 // tree" without touching the working copy). Callers type-assert for it and degrade

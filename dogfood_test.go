@@ -102,6 +102,36 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	}
 }
 
+// TestHookTemplatesUseTheStdinContract pins the invocation shape the binary
+// accepts: `magus hook` reads its input from STDIN, takes no positional
+// arguments, and is a top-level verb - `magus agent hook` no longer exists.
+//
+// The OpenCode plugin shipped the dead form once (`["agent", "hook", ..., "--",
+// command]`): magus exited non-zero with empty stdout, JSON.parse("") threw,
+// and the plugin's fail-open path allowed EVERY call - a guard hole invisible
+// unless someone read the console. Text-mirroring alone
+// (TestHookTemplatesAreEmbeddedInTheGuide) cannot catch that class: the guide
+// faithfully embedded the broken invocation.
+func TestHookTemplatesUseTheStdinContract(t *testing.T) {
+	for _, name := range hookTemplates {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "every template in hookTemplates must exist")
+		text := string(body)
+
+		assert.NotContains(t, text, "agent hook",
+			"%s: `magus agent hook` was replaced by top-level `magus hook`", name)
+		assert.NotContains(t, text, `"agent", "hook"`,
+			"%s: `magus agent hook` was replaced by top-level `magus hook`", name)
+	}
+
+	// The plugin is the one template that spawns magus without a shell, so the
+	// stdin wiring is code rather than a pipe: pin that it exists.
+	plugin, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
+	require.NoError(t, err)
+	assert.Contains(t, string(plugin), "stdin:",
+		"the OpenCode plugin must hand the guard its input on stdin; hookCmd rejects positional arguments")
+}
+
 // TestHookTemplatesAreEmbeddedInTheGuide keeps the docs site explorable without
 // a transclusion feature: every template is embedded verbatim, and an edit to
 // one that is not mirrored into the guide fails here.
