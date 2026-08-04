@@ -284,9 +284,6 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		}
 		cfg.Sandbox.Env.Passthrough = out
 	}
-	if v := getenv("MAGUS_REQUIRED_VERSION"); v != "" {
-		cfg.RequiredVersion = v
-	}
 }
 
 // parseBoolEnv mirrors the helper in package config so this generated file

@@ -79,7 +79,17 @@ type Config struct {
 	// why Terraform's required_version, Go's `go` directive, and npm's engines all
 	// take this shape. Checked before any magusfile is evaluated, since the
 	// magusfile is what explodes; see MGS1021.
-	RequiredVersion string `json:"required_version" yaml:"required_version"`
+	//
+	// cli:"-" - magus.yaml ONLY, deliberately. Every other config field takes a flag
+	// and a MAGUS_* env var because the config layering exists to let a caller
+	// override the workspace. A floor is the one field where that is backwards: it
+	// is the workspace protecting the caller from a binary too old to read it, so an
+	// override is a way to switch off a check whose entire job is to stop you. The
+	// env var would be worse than the flag - one MAGUS_REQUIRED_VERSION exported in
+	// a shell or a CI environment silently disables the floor for every workspace
+	// that session touches, and nothing would report it. If the binary is too old,
+	// the fix is to upgrade the binary or lower the floor in the file.
+	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 }
 
 // SpellsConfig holds workspace-level spell settings.

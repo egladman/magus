@@ -78,7 +78,6 @@ var ConfigFlags = []ConfigFlag{
 	{"", "MAGUS_DEFAULT_CHARMS", "stringslice"},
 	{"sandbox-enabled", "MAGUS_SANDBOX_ENABLED", "bool"},
 	{"", "MAGUS_SANDBOX_ENV_PASSTHROUGH", "stringslice"},
-	{"required-version", "MAGUS_REQUIRED_VERSION", "string"},
 }
 
 // BindConfigFlags registers one CLI flag per config field on fs, storing
@@ -137,5 +136,4 @@ func BindConfigFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.HistoryPath, "history-path", cfg.HistoryPath, "MAGUS_HISTORY_PATH: HistoryPath is the path to the runtime-history JSON used by volatility detection,")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "MAGUS_DRY_RUN: DryRun prints what would run without executing. Equivalent to MAGUS_DRY_RUN=1.")
 	fs.BoolVar(&cfg.Sandbox.Enabled, "sandbox-enabled", cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED")
-	fs.StringVar(&cfg.RequiredVersion, "required-version", cfg.RequiredVersion, "MAGUS_REQUIRED_VERSION: RequiredVersion is the oldest magus that can run this workspace, as a semver")
 }

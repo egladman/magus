@@ -53,7 +53,6 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `default_charms` | `MAGUS_DEFAULT_CHARMS` | _(env only)_ | list _(comma-separated, env only)_ |
 | `dry_run` | `MAGUS_DRY_RUN` | `-u`, `--dry-run` | bool |
 | `history_path` | `MAGUS_HISTORY_PATH` | `--history-path` | string |
-| `required_version` | `MAGUS_REQUIRED_VERSION` | `--required-version` | string |
 | `target_timeout` | `MAGUS_TARGET_TIMEOUT` | `--target-timeout` | duration |
 
 ## graph

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2401,
-  "edge_count": 5413,
+  "edge_count": 5411,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -27169,22 +27169,6 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "CONTRIBUTING.md"
-    },
-    {
-      "source": "doc:CONTRIBUTING.md",
-      "target": "doc:docs/concepts/compatibility.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CONTRIBUTING.md"
-    },
-    {
-      "source": "doc:CONTRIBUTING.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
       "provenance": "CONTRIBUTING.md"
     },
     {

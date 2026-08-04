@@ -484,12 +484,4 @@ var Fields = []fieldtype.Field{
 		Kind:     fieldtype.KindStringSlice,
 		Usage:    "MAGUS_SANDBOX_ENV_PASSTHROUGH: Passthrough adds names/globs (e.g. 'MISE_*') to the built-in env allowlist.",
 	},
-	{
-		GoPath:   "RequiredVersion",
-		YamlPath: "required_version",
-		EnvVar:   "MAGUS_REQUIRED_VERSION",
-		Flag:     fieldtype.FlagNames{Long: "required-version"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_REQUIRED_VERSION: RequiredVersion is the oldest magus that can run this workspace, as a semver",
-	},
 }
