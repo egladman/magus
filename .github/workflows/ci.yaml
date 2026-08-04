@@ -266,6 +266,13 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
+      # The docs render drives the content generators through `go run`, which compiles
+      # internal/codec with cgo and needs liblzma/libzstd present. The `ci` job installs
+      # the same pair (plus webkit, which this job has no use for). This was latent while
+      # the job failed earlier for other reasons; the render never got far enough to link.
+      - name: Install codec build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+
       # deploy-generate throws when either tree lacks its index.html, so it is the
       # assertion. Nothing is uploaded: this proves the build, it does not publish.
       - name: Render the docs site
