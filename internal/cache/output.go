@@ -742,6 +742,11 @@ func (s *OutputStore) removeForProject(project string) {
 // when the key has no orphan descriptor to complete (nothing imported, or already
 // completed), leaving the caller to persist its own attempt.
 func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, bool) {
+	if len(output) == 0 {
+		// Nothing to complete the record with (an absent or quiet log). A zero-byte
+		// blob would advertise the ref as resolvable and then answer with nothing.
+		return "", false
+	}
 	dir := filepath.Join(s.outputsDir(), cacheKey)
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -765,18 +770,30 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 			orphans = append(orphans, stem)
 		}
 	}
-	if len(orphans) == 0 {
+	// Exactly one orphan, or none of this is safe: several descriptors without blobs
+	// means something other than a fresh import produced them (a half-finished prune,
+	// two imports), and guessing which execution these bytes belong to would file one
+	// run's output under another run's identity and timestamps.
+	if len(orphans) != 1 {
 		return "", false
 	}
-	// Sorted, so which attempt gets completed never depends on map iteration order.
-	// More than one orphan means two imports landed descriptors for this key; either
-	// is a correct home for these bytes (the log replayed is the entry's, shared by
-	// both), and picking deterministically keeps repeated runs identical.
-	sort.Strings(orphans)
-	if os.WriteFile(filepath.Join(dir, orphans[0]+outExt), output, 0o644) != nil {
+	// The descriptor must actually claim this key's ref. A producer on a different
+	// keyVersion writes a descriptor whose Ref disagrees with what this machine
+	// resolves by, and adopting it would make the ref and its record contradict.
+	ref := PortableRef(cacheKey)
+	if d, err := readDescriptor(filepath.Join(dir, orphans[0]+descExt)); err != nil || (d.Ref != "" && d.Ref != ref) {
 		return "", false
 	}
-	return PortableRef(cacheKey), true
+	// Temp + rename, so a concurrent reader never sees a half-written blob.
+	tmp := filepath.Join(dir, orphans[0]+outExt+".adopt.tmp")
+	if os.WriteFile(tmp, output, 0o644) != nil {
+		return "", false
+	}
+	if os.Rename(tmp, filepath.Join(dir, orphans[0]+outExt)) != nil {
+		_ = os.Remove(tmp)
+		return "", false
+	}
+	return ref, true
 }
 
 // newestDescriptor returns the newest stored execution's descriptor for cacheKey -

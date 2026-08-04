@@ -35,9 +35,9 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	require.NoError(t, err, "newVerifier")
 
 	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
-	sig, err := s.sign(manifest, nil)
+	sig, err := s.sign(domainArtifact, manifest, nil)
 	require.NoError(t, err, "sign")
-	assert.NoError(t, v.verify(sig, manifest, nil), "verify valid signature")
+	assert.NoError(t, mustVerify(v, sig, manifest), "verify valid signature")
 	assert.Equal(t, s.keyid, keyID(pub), "signer keyid must match derived keyid")
 }
 
@@ -50,8 +50,8 @@ func TestVerifyRejectsUntrustedKey(t *testing.T) {
 	v, _ := newVerifier([][]byte{pubB}) // trusts B, not A
 
 	manifest := []byte(`{"hash":"x"}`)
-	sig, _ := s.sign(manifest, nil)
-	assert.Error(t, v.verify(sig, manifest, nil), "verify accepted a signature from an untrusted key")
+	sig, _ := s.sign(domainArtifact, manifest, nil)
+	assert.Error(t, mustVerify(v, sig, manifest), "verify accepted a signature from an untrusted key")
 }
 
 // TestVerifyRejectsTamperedManifest: the bytes presented at verify time must be
@@ -62,9 +62,9 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 	v, _ := newVerifier([][]byte{pub})
 
 	manifest := []byte(`{"hash":"original"}`)
-	sig, _ := s.sign(manifest, nil)
+	sig, _ := s.sign(domainArtifact, manifest, nil)
 	tampered := []byte(`{"hash":"poisoned"}`)
-	assert.Error(t, v.verify(sig, tampered, nil), "verify accepted a signature over different manifest bytes")
+	assert.Error(t, mustVerify(v, sig, tampered), "verify accepted a signature over different manifest bytes")
 }
 
 // TestVerifyRejectsBadAlg: only ed25519 envelopes are accepted.
@@ -72,7 +72,7 @@ func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
 	env, _ := json.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
-	assert.Error(t, v.verify(env, []byte("m"), nil), "verify accepted a non-ed25519 algorithm")
+	assert.Error(t, mustVerify(v, env, []byte("m")), "verify accepted a non-ed25519 algorithm")
 }
 
 // TestKeyMaterialValidation: malformed key material is rejected at construction.
@@ -315,4 +315,57 @@ func TestHashStepKeysExtraArgs(t *testing.T) {
 	// Order is significant: `-run X` is not `X -run`, so args are never sorted.
 	assert.NotEqual(t, hashOf(step("-run", "X")), hashOf(step("X", "-run")), "arg ORDER must key")
 	assert.NotEqual(t, hashOf(step("a", "b")), hashOf(step("ab")), "args must not be concatenated")
+}
+
+// mustVerify adapts verify's (legacy, error) result for the assertions above, which
+// only care whether the envelope authenticates.
+func mustVerify(v *verifier, sigBytes, manifestBytes []byte) error {
+	_, err := v.verify(domainArtifact, sigBytes, manifestBytes, nil)
+	return err
+}
+
+// TestVerifyRejectsCrossDomainSignature is the type-confusion guard: an output
+// bundle's signature must never authenticate the same bytes as a cache artifact.
+// Without domain separation a published FAILING run could be re-tarred as an
+// artifact and replayed as a teammate's cached pass.
+func TestVerifyRejectsCrossDomainSignature(t *testing.T) {
+	pub, seed := mustKeypair(t)
+	s, _ := newSigner(seed)
+	v, _ := newVerifier([][]byte{pub})
+
+	meta := []byte(`{"schema":1,"descriptor":{"ref":"outdeadbeefcafe"}}`)
+	sig, err := s.sign(domainBundle, meta, nil)
+	require.NoError(t, err)
+
+	_, err = v.verify(domainBundle, sig, meta, nil)
+	assert.NoError(t, err, "a bundle signature verifies in its own domain")
+
+	_, err = v.verify(domainArtifact, sig, meta, nil)
+	assert.Error(t, err, "a bundle signature must NOT verify as a cache artifact")
+}
+
+// TestVerifyAcceptsLegacyEnvelopeAndReportsIt: an artifact signed by a released
+// magus (bare signature over the manifest, no members) still verifies - rejecting it
+// would turn every existing remote entry into a miss - and reports legacy so the
+// caller drops the extras the signature never covered.
+func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
+	pub, seed := mustKeypair(t)
+	s, _ := newSigner(seed)
+	v, _ := newVerifier([][]byte{pub})
+
+	manifest := []byte(`{"projectPath":"p","hash":"abc"}`)
+	sum := sha256.Sum256(manifest)
+	legacyEnv, err := json.Marshal(sigEnvelope{
+		Alg:            sigAlg,
+		KeyID:          s.keyid,
+		ManifestSHA256: hex.EncodeToString(sum[:]),
+		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, manifest)),
+	})
+	require.NoError(t, err)
+
+	// Extras arrived, but the legacy signature covers none of them: accepted as
+	// legacy rather than rejected outright.
+	legacy, err := v.verify(domainArtifact, legacyEnv, manifest, map[string]string{"logs/p/abc.log": "deadbeef"})
+	require.NoError(t, err, "a legacy artifact must still verify")
+	assert.True(t, legacy, "the caller must be told to drop the unauthenticated extras")
 }

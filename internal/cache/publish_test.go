@@ -59,7 +59,42 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 
 	lines, err := cB.outputs.KeyLinesByRef(rA.Ref)
 	require.NoError(t, err, "the key lines travel too, so B can diff its key against A's")
-	assert.Equal(t, rA.Hash, hashOfLines(lines), "the imported lines re-derive the shared key")
+	assert.Equal(t, rA.Hash, hashOfLines(MaskKeyLines(lines)), "the imported lines re-derive the shared key")
+
+	// Ref equality alone proves nothing - refs are key-derived, so B would compute
+	// A's ref even if the artifact shipped no sidecars at all. Assert what actually
+	// crossed the wire.
+	names := tarMemberNames(t, findBackendArtifact(t, remote, "test__pkg"))
+	assert.Contains(t, names, "outputs/"+rA.Hash+"/"+keyLinesName, "the artifact must carry the key lines")
+	hasDescriptor := false
+	for _, n := range names {
+		if strings.HasPrefix(n, "outputs/"+rA.Hash+"/") && strings.HasSuffix(n, descExt) {
+			hasDescriptor = true
+		}
+	}
+	assert.True(t, hasDescriptor, "the artifact must carry the run's descriptor, got %v", names)
+}
+
+// tarMemberNames lists the member names of a gzip-tar artifact.
+func tarMemberNames(t *testing.T, path string) []string {
+	t.Helper()
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	defer f.Close()
+	gzr, err := gzip.NewReader(f)
+	require.NoError(t, err)
+	defer gzr.Close()
+	var names []string
+	tr := tar.NewReader(gzr)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		names = append(names, hdr.Name)
+	}
+	return names
 }
 
 // TestImportRejectsTamperedLog: the signature now covers every non-manifest member,
@@ -83,7 +118,7 @@ func TestImportRejectsTamperedLog(t *testing.T) {
 	require.NoError(t, os.WriteFile(stored, poisoned, 0o644))
 
 	_, cB := openSigned(t, remote, nil, trusted)
-	err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned))
+	err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), "test/pkg", rA.Hash)
 	require.Error(t, err, "a tampered log must fail verification")
 	assert.Contains(t, err.Error(), "signature")
 
@@ -143,6 +178,15 @@ func TestPublishedBundleResolvesRemotely(t *testing.T) {
 	assert.Contains(t, string(data), "FAIL: assertion failed on machine A")
 	assert.True(t, desc.Failed)
 	assert.Equal(t, "test/pkg", desc.Project)
+
+	// The fetched bundle is kept, so the foreign ref now behaves like a local one:
+	// it resolves without the network, and its key lines are there to explain it.
+	local, _, err := cB.outputs.ByRef(ref)
+	require.NoError(t, err, "the fetched bundle must be filed into the local store")
+	assert.Contains(t, string(local), "FAIL: assertion failed on machine A")
+	lines, err := cB.outputs.KeyLinesByRef(ref)
+	require.NoError(t, err, "the published key lines must be usable by --against")
+	assert.NotEmpty(t, lines)
 }
 
 // TestPublishRequiresSigningKey: an unsigned bundle would be refused by every

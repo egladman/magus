@@ -1,6 +1,6 @@
 ---
 title: Target output references
-description: Every target that runs gets a short reference id (ref1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
+description: Every target that runs gets a short reference id (out1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
 tags: [output, ref, logs, query, failure, debugging, clipboard, mcp, agent]
 aliases: [concepts/output-refs]
 ---
@@ -17,13 +17,13 @@ for its captured output, printed on its own line:
 
 ```text
 [pass] docs test (1.2s)
-ref1a2b3c
+out1a2b3c
 ```
 
 Retrieve that exact output at any time with `magus query output`:
 
 ```sh
-magus query output ref1a2b3c
+magus query output out1a2b3c
 ```
 
 It writes the raw bytes to stdout and nothing else, so it pipes cleanly anywhere.
@@ -39,23 +39,23 @@ A failing target adds two hints, the exact commands ready to copy:
 
 ```text
 [fail] docs test (1.2s): tsc exit 2
-refcc49db1f
-  full output: magus query output refcc49db1f
-  open in browser: magus query output refcc49db1f --open
+outcc49db1f
+  full output: magus query output outcc49db1f
+  open in browser: magus query output outcc49db1f --open
 ```
 
 ## Retrieval: `magus query output <ref>`
 
 `magus query` doubles as the retrieval verb through an explicit `output` subcommand.
-`magus query output ref1a2b3c` prints that execution's captured output instead of
+`magus query output out1a2b3c` prints that execution's captured output instead of
 searching the [knowledge graph](../knowledge.md). It is a subcommand, not a shape-routed
 positional, so a free-text search term can never collide with a ref id - `magus query
 refactor` always searches the graph.
 
-- `magus query output ref1a2b3c` - print the exact output to stdout.
-- `magus query output ref1a2b3c -o json` - the descriptor (ref, project, target,
+- `magus query output out1a2b3c` - print the exact output to stdout.
+- `magus query output out1a2b3c -o json` - the descriptor (ref, project, target,
   status, duration) plus the output as one record; `-o yaml` too.
-- `magus query output ref1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
+- `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
 - `magus query output out1a2b3c --attempts` - list the ref's stored executions.
 - `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
   cache key, and per-class key digests.
@@ -155,7 +155,13 @@ checked, so a never-published ref is distinguishable from a typo.
 
 Everything the signature covers grew with this: it now authenticates the build log
 and the sidecars, not just the manifest. An artifact whose log was altered in transit
-is rejected outright instead of having that log written to your cache.
+is rejected outright instead of having that log written to your cache, and imported
+extras are staged until the signature clears, so a rejected artifact leaves nothing
+behind. A signature is also bound to the KIND of object it was made over and to the
+`(project, cache key)` it is served for, so a published output can never be re-served
+as a cache entry, and an entry can never file itself under a different key. Artifacts
+from an older magus still verify; magus simply ignores the extras their signature did
+not cover.
 
 ## Tips and tricks
 
@@ -163,27 +169,27 @@ Copy-paste-ready one-liners:
 
 ```sh
 # To the clipboard (macOS)
-magus query output ref1a2b3c | pbcopy
+magus query output out1a2b3c | pbcopy
 # Linux
-magus query output ref1a2b3c | wl-copy            # Wayland
-magus query output ref1a2b3c | xclip -selection clipboard
+magus query output out1a2b3c | wl-copy            # Wayland
+magus query output out1a2b3c | xclip -selection clipboard
 
 # Just the failing lines
-magus query output ref1a2b3c | grep -iE "error|fail"
+magus query output out1a2b3c | grep -iE "error|fail"
 
 # Straight into Claude Code (reads piped stdin in print mode)
-magus query output ref1a2b3c | claude -p "why did this fail and how do I fix it?"
+magus query output out1a2b3c | claude -p "why did this fail and how do I fix it?"
 
 # Into a PR or issue comment
-magus query output ref1a2b3c | gh pr comment 42 --body-file -
+magus query output out1a2b3c | gh pr comment 42 --body-file -
 
 # The descriptor and output together as one JSON record
-magus query output ref1a2b3c -o json
+magus query output out1a2b3c -o json
 ```
 
 ## The log viewer
 
-`magus query output ref1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
+`magus query output out1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
 a standalone browser page that renders the captured output with collapsible sections,
 status badges, in-page search, ANSI color, and copy. A "Copy command" button hands back
 a `magus query output` one-liner (per section too), so you can pass an exact slice to an agent,
@@ -193,14 +199,14 @@ and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 fragment is never sent to any server, so nothing about the run - not even its ref - ever
 leaves your machine.
 
-For a very large log, print it instead (`magus query output ref1a2b3c`) and pipe it - a URL
+For a very large log, print it instead (`magus query output out1a2b3c`) and pipe it - a URL
 fragment is bounded by the browser's address-bar length.
 
 `--open` follows the `BROWSER` environment variable (the freedesktop convention) to
 choose which browser to launch, so you can override your desktop default per command:
 
 ```sh
-BROWSER=firefox magus query output ref1a2b3c --open
+BROWSER=firefox magus query output out1a2b3c --open
 ```
 
 `BROWSER` may be a colon-separated list of commands, each optionally containing `%s`
@@ -211,7 +217,7 @@ equivalent).
 ## For agents and MCP
 
 The [MCP](../../guides/mcp.md) `magus_output` tool is the agent analog of `magus query output`:
-pass a `ref` (`ref1a2b3c`, or a unique prefix) and it returns that execution's exact
+pass a `ref` (`out1a2b3c`, or a unique prefix) and it returns that execution's exact
 bytes plus its descriptor. An agent that saw a ref in a run fetches the full output
 directly, instead of re-reading a wall of text or asking you to paste it. It is a
 dedicated tool, not a mode of `magus_query`, so a free-text graph query never

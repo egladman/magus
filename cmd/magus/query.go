@@ -64,7 +64,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&publish, "publish", false, "with `output <ref>`, upload this run's output to the remote cache as a signed bundle so a teammate can resolve the same ref (failing runs are never shared automatically)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta] [--publish]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -213,7 +213,11 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		published, perr := m.PublishOutput(ctx, ref)
 		if perr != nil {
 			if errors.Is(perr, fs.ErrNotExist) {
-				return reportRefLookupError(ref, perr)
+				// Not the generic lookup path: its hint suggests --publish, which is
+				// the command that just failed.
+				msg := fmt.Sprintf("no stored output for ref %q to publish; it may have aged out of the cache, or the ref is mistyped", ref)
+				fmt.Fprintf(os.Stderr, "magus query output: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
+				return errSilent{exitCode: 2}
 			}
 			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
 		}
@@ -415,7 +419,7 @@ func reportRefLookupError(ref string, err error) error {
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
 func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, keyDigests string, o outputRefOpts) error {
-	openURL, err := console.LogViewerURLWithKey(o.viewerBase, desc.Ref, events, inv, keyDigests)
+	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv, keyDigests)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -28,8 +29,13 @@ import (
 const (
 	// sigFileName is the artifact-tar member holding the detached signature envelope.
 	sigFileName = "signature.json"
-	// sigAlg is the only signature algorithm magus produces or accepts.
+	// sigAlg is the pre-domain scheme: a bare ed25519 signature over the manifest
+	// bytes alone. Still ACCEPTED (artifacts signed by an older magus keep
+	// verifying, minus their unauthenticated extras), never produced.
 	sigAlg = "ed25519"
+	// sigAlgV2 is what magus produces now: ed25519 over signedPayload - a domain tag,
+	// the length-prefixed manifest, and the extra members' digests.
+	sigAlgV2 = "ed25519-domain-v2"
 	// keyIDLen is the hex length of a derived keyid (first 8 bytes of SHA-256(pubkey)).
 	keyIDLen = 16
 )
@@ -53,21 +59,33 @@ type sigEnvelope struct {
 	Sig            string            `json:"sig"` // base64(ed25519 signature over signedPayload)
 }
 
-// signedPayload renders the exact bytes a signature covers: the manifest, then each
-// extra member as "path\x00sha256\n" in sorted path order. Sorting makes the payload
-// independent of tar order, and the NUL separator keeps a crafted path from forging a
-// different (path, hash) split. Empty members reproduce the pre-Members payload
-// byte-for-byte, so an old signature still verifies against this function.
-func signedPayload(manifestBytes []byte, members map[string]string) []byte {
-	if len(members) == 0 {
-		return manifestBytes
-	}
+// Signing domains. A signature is only meaningful for the KIND of object it was made
+// over: without this, a signed output bundle (metadata + captured bytes) could be
+// re-tarred as a cache artifact, since the bundle's metadata JSON unmarshals into a
+// Manifest as an all-zero value and would then replay as a successful entry. That
+// turns a published FAILING run into a teammate's cached "pass". The domain string is
+// the first thing hashed, so a signature made in one domain can never verify in the
+// other.
+const (
+	domainArtifact = "magus-cache-artifact-v1\x00"
+	domainBundle   = "magus-output-bundle-v1\x00"
+)
+
+// signedPayload renders the exact bytes a signature covers: the domain tag, the
+// manifest's length and bytes, then each extra member as "path\x00sha256\n" in sorted
+// path order. Sorting makes the payload independent of tar order; the NUL separator
+// and the explicit manifest length keep the (manifest, members) split injective, so a
+// crafted member path cannot be re-read as trailing manifest bytes.
+func signedPayload(domain string, manifestBytes []byte, members map[string]string) []byte {
 	paths := make([]string, 0, len(members))
 	for p := range members {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
-	buf := make([]byte, 0, len(manifestBytes)+len(paths)*80)
+	buf := make([]byte, 0, len(domain)+24+len(manifestBytes)+len(paths)*80)
+	buf = append(buf, domain...)
+	buf = strconv.AppendInt(buf, int64(len(manifestBytes)), 10)
+	buf = append(buf, '\n')
 	buf = append(buf, manifestBytes...)
 	for _, p := range paths {
 		buf = append(buf, p...)
@@ -160,15 +178,18 @@ func newSigner(seed []byte) (*signer, error) {
 }
 
 // sign returns a signature.json envelope authenticating manifestBytes plus every
-// extra member (path -> content sha256) the artifact ships.
-func (s *signer) sign(manifestBytes []byte, members map[string]string) ([]byte, error) {
+// extra member (path -> content sha256) the object ships, within domain. The alg
+// records the SCHEME, not just the curve: an older magus reading a v2 envelope says
+// "unsupported alg" instead of the misleading "verification failed" it would report
+// for a payload shape it cannot construct.
+func (s *signer) sign(domain string, manifestBytes []byte, members map[string]string) ([]byte, error) {
 	sum := sha256.Sum256(manifestBytes)
 	env := sigEnvelope{
-		Alg:            sigAlg,
+		Alg:            sigAlgV2,
 		KeyID:          s.keyid,
 		ManifestSHA256: hex.EncodeToString(sum[:]),
 		Members:        members,
-		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, signedPayload(manifestBytes, members))),
+		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, signedPayload(domain, manifestBytes, members))),
 	}
 	return json.Marshal(env)
 }
@@ -202,49 +223,66 @@ func newVerifier(pubkeys [][]byte) (*verifier, error) {
 // keyid resolves to a trusted key, the envelope commits to this exact manifest,
 // and the Ed25519 signature verifies. Every other path is an error, so a caller
 // that treats any error as "reject and fall back to a local build" fails closed.
-// Extra artifact members are authenticated by the same call: the caller passes the
-// (path -> content sha256) map it actually received, and it must match the signed
-// Members map exactly - a tampered, added, or dropped log is a verification failure,
-// not a silently-trusted file. It returns the set of member paths the signature
-// covers so the caller can commit exactly those.
-func (v *verifier) verify(sigBytes, manifestBytes []byte, gotMembers map[string]string) error {
+// Extra members are authenticated by the same call: the caller passes the (path ->
+// content sha256) map it actually received, and it must match the signed Members map
+// exactly - a tampered, added, or dropped log is a verification failure, not a
+// silently-trusted file. domain separates object KINDS, so a signature over an output
+// bundle can never verify as a cache artifact.
+//
+// It returns legacy=true for a pre-domain envelope, whose signature covers ONLY the
+// manifest: the caller must then discard every extra member it received, because
+// nothing authenticates them.
+func (v *verifier) verify(domain string, sigBytes, manifestBytes []byte, gotMembers map[string]string) (legacy bool, err error) {
 	var env sigEnvelope
 	if err := json.Unmarshal(sigBytes, &env); err != nil {
-		return fmt.Errorf("signature: parse: %w", err)
+		return false, fmt.Errorf("signature: parse: %w", err)
 	}
-	if env.Alg != sigAlg {
-		return fmt.Errorf("signature: unsupported alg %q", env.Alg)
-	}
-	if err := verifyMembers(env.Members, gotMembers); err != nil {
-		return err
+	switch env.Alg {
+	case sigAlgV2:
+		// The signed set must match exactly what arrived.
+		if err := verifyMembers(env.Members, gotMembers); err != nil {
+			return false, err
+		}
+	case sigAlg:
+		// Pre-domain producer: it signed the manifest alone, so any extras that came
+		// with it are unauthenticated and the caller drops them. Rejecting the
+		// artifact instead would turn every release-built entry into a miss.
+		legacy = true
+		env.Members = nil
+	default:
+		return false, fmt.Errorf("signature: unsupported alg %q", env.Alg)
 	}
 	// Diagnostic pre-check, not a trust factor: the Ed25519 verify below already
 	// binds the signature to manifestBytes. This just yields a clearer error when
 	// the shipped manifest isn't the one the envelope names.
 	sum := sha256.Sum256(manifestBytes)
 	if env.ManifestSHA256 != hex.EncodeToString(sum[:]) {
-		return errors.New("signature: manifest digest mismatch")
+		return false, errors.New("signature: manifest digest mismatch")
 	}
 	pub, ok := v.keys[env.KeyID]
 	if !ok {
-		return fmt.Errorf("signature: keyid %q not in trust set", env.KeyID)
+		return false, fmt.Errorf("signature: keyid %q not in trust set", env.KeyID)
 	}
 	sig, err := base64.StdEncoding.DecodeString(env.Sig)
 	if err != nil {
-		return fmt.Errorf("signature: decode: %w", err)
+		return false, fmt.Errorf("signature: decode: %w", err)
 	}
-	if !ed25519.Verify(pub, signedPayload(manifestBytes, env.Members), sig) {
-		return errors.New("signature: verification failed")
+	// A legacy envelope's signature is over the bare manifest, exactly as the older
+	// magus produced it; a v2 one is over the domain-tagged payload.
+	payload := signedPayload(domain, manifestBytes, env.Members)
+	if legacy {
+		payload = manifestBytes
 	}
-	return nil
+	if !ed25519.Verify(pub, payload, sig) {
+		return false, errors.New("signature: verification failed")
+	}
+	return legacy, nil
 }
 
 // verifyMembers reports whether the extra members received match the signed set
 // exactly. Both directions matter: an extra file the signature does not cover is
 // unauthenticated content smuggled into a trusted artifact, and a missing one means
-// the artifact was truncated. A pre-Members envelope (signed empty) is accepted only
-// when nothing extra arrived - the caller drops the unauthenticated extras first, so
-// an old producer keeps working without its log ever being trusted.
+// the artifact was truncated.
 func verifyMembers(want, got map[string]string) error {
 	for path, wantSum := range want {
 		gotSum, ok := got[path]

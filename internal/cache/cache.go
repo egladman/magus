@@ -513,16 +513,24 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			return result, fmt.Errorf("magus/cache: snapshot %q: %w", s.ProjectPath, err)
 		}
 		result.Outputs = outs
-		if c.remote != nil {
-			c.pushToRemote(ctx, s, hash)
-		}
-		c.evictOldest(ctx, c.sizeCap())
 	}
 
 	result.Duration = time.Since(start)
 	c.misses.Add(1)
 	ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, nil)
 	result.Ref = ref
+
+	// Push AFTER recordOutput, never before: the artifact ships this run's output
+	// descriptor and key lines, and recordOutput is what writes them. Pushing first
+	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
+	// attempt's), so a consumer could not resolve the producer's ref - the whole
+	// point of shipping them.
+	if c.mutable && !s.NoCache {
+		if c.remote != nil {
+			c.pushToRemote(ctx, s, hash)
+		}
+		c.evictOldest(ctx, c.sizeCap())
+	}
 	c.log.InfoContext(ctx,
 		"cache.miss",
 		append(netAttrs(netRec),

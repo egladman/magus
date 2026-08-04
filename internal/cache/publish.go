@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	json "github.com/egladman/magus/internal/json"
@@ -134,7 +136,7 @@ func writeBundle(s *signer, w io.Writer, meta, output []byte) error {
 		return err
 	}
 	sum := sha256.Sum256(output)
-	sig, err := s.sign(meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
+	sig, err := s.sign(domainBundle, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
 	if err != nil {
 		return err
 	}
@@ -148,16 +150,16 @@ func writeBundle(s *signer, w io.Writer, meta, output []byte) error {
 // signature before returning anything. It is the remote half of ByRef: consulted only
 // when the local store has no such ref. A ref must be exact here - a remote store
 // cannot be scanned for prefixes the way a local directory can.
-func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputDescriptor, error) {
+func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBundle, error) {
 	if c.remote == nil || !c.remote.Active(ctx) {
-		return nil, OutputDescriptor{}, fs.ErrNotExist
+		return nil, OutputBundle{}, fs.ErrNotExist
 	}
 	r, err := c.remote.GetArtifact(ctx, bundleProject, ref)
 	if err != nil {
-		return nil, OutputDescriptor{}, err
+		return nil, OutputBundle{}, err
 	}
 	if r == nil {
-		return nil, OutputDescriptor{}, fs.ErrNotExist
+		return nil, OutputBundle{}, fs.ErrNotExist
 	}
 	defer r.Close()
 	return c.readBundle(r)
@@ -165,15 +167,16 @@ func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputDesc
 
 // readBundle parses and authenticates a bundle stream. Nothing is returned unless the
 // signature verifies against the trust set and covers the output bytes received.
-func (c *Cache) readBundle(r io.Reader) ([]byte, OutputDescriptor, error) {
+func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return nil, OutputDescriptor{}, fmt.Errorf("output bundle: gzip: %w", err)
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: gzip: %w", err)
 	}
 	defer gz.Close()
 
 	var meta, output, sigBytes []byte
 	budget := c.importLimit()
+	members := 0
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -181,14 +184,19 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputDescriptor, error) {
 			break
 		}
 		if err != nil {
-			return nil, OutputDescriptor{}, fmt.Errorf("output bundle: tar: %w", err)
+			return nil, OutputBundle{}, fmt.Errorf("output bundle: tar: %w", err)
 		}
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
+		// Zero-byte members draw nothing from the byte budget, so cap the COUNT too:
+		// the store is untrusted and this loop runs before the signature gate.
+		if members++; members > maxImportMembers {
+			return nil, OutputBundle{}, fmt.Errorf("output bundle: too many members (>%d)", maxImportMembers)
+		}
 		buf, err := readCapped(tr, &budget)
 		if err != nil {
-			return nil, OutputDescriptor{}, err
+			return nil, OutputBundle{}, err
 		}
 		switch path.Clean(hdr.Name) {
 		case bundleManifestName:
@@ -200,23 +208,37 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputDescriptor, error) {
 		}
 	}
 	if meta == nil {
-		return nil, OutputDescriptor{}, errors.New("output bundle: no metadata member")
+		return nil, OutputBundle{}, errors.New("output bundle: no metadata member")
 	}
 	if c.verifier == nil {
-		return nil, OutputDescriptor{}, errors.New("output bundle: no trust set configured; refusing to read an unauthenticated bundle")
+		return nil, OutputBundle{}, errors.New("output bundle: no trust set configured; refusing to read an unauthenticated bundle")
 	}
 	if sigBytes == nil {
-		return nil, OutputDescriptor{}, errors.New("output bundle: unsigned; refusing")
+		return nil, OutputBundle{}, errors.New("output bundle: unsigned; refusing")
 	}
 	sum := sha256.Sum256(output)
-	if err := c.verifier.verify(sigBytes, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])}); err != nil {
-		return nil, OutputDescriptor{}, fmt.Errorf("output bundle: %w", err)
+	legacy, err := c.verifier.verify(domainBundle, sigBytes, meta, map[string]string{bundleOutputName: hex.EncodeToString(sum[:])})
+	if err != nil {
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: %w", err)
+	}
+	if legacy {
+		// A pre-domain envelope covers only the metadata, leaving the captured bytes
+		// unauthenticated - and the bytes are the entire point of a bundle. There are
+		// no such bundles in the wild (the format is new), so refuse rather than
+		// invent a degraded mode.
+		return nil, OutputBundle{}, errors.New("output bundle: signature predates domain separation; refusing")
 	}
 	var b OutputBundle
 	if err := json.Unmarshal(meta, &b); err != nil {
-		return nil, OutputDescriptor{}, fmt.Errorf("output bundle: parse: %w", err)
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: parse: %w", err)
 	}
-	return output, b.Descriptor, nil
+	if b.Schema != bundleSchema {
+		return nil, OutputBundle{}, fmt.Errorf("output bundle: unsupported schema %d (this magus reads %d)", b.Schema, bundleSchema)
+	}
+	if b.Descriptor.Ref == "" {
+		return nil, OutputBundle{}, errors.New("output bundle: descriptor carries no ref")
+	}
+	return output, b, nil
 }
 
 // OutputByRef resolves a ref to its captured bytes and descriptor, consulting the
@@ -239,16 +261,46 @@ func (c *Cache) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDesc
 		}
 	}
 	if c.remote == nil {
-		return nil, OutputDescriptor{}, fs.ErrNotExist
+		// Name the one store that was consulted rather than a bare not-exist, so the
+		// message never implies a remote lookup that could not have happened.
+		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{"local cache"}}
 	}
-	data, desc, err := c.fetchBundle(ctx, ref)
+	data, bundle, err := c.fetchBundle(ctx, ref)
 	if err == nil {
-		return data, desc, nil
+		// Keep what arrived: the ref now resolves locally, and `--meta` /
+		// `describe target --cache --against` can explain a foreign run's key
+		// without a second network round trip.
+		c.storeFetchedBundle(ctx, data, bundle)
+		return data, bundle.Descriptor, nil
 	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{"local cache", "remote published outputs"}}
 	}
 	return nil, OutputDescriptor{}, err
+}
+
+// storeFetchedBundle files a verified remote bundle into the local output store, so a
+// foreign ref behaves like a local one from then on. Best-effort: the caller already
+// holds the bytes, and failing to cache them is not a retrieval failure.
+func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBundle) {
+	if c.outputs == nil || b.Descriptor.Key == "" || b.Descriptor.Attempt == "" {
+		return
+	}
+	dir := filepath.Join(c.outputs.outputsDir(), b.Descriptor.Key)
+	if os.MkdirAll(dir, 0o755) != nil {
+		return
+	}
+	if os.WriteFile(filepath.Join(dir, b.Descriptor.Attempt+outExt), data, 0o644) != nil {
+		return
+	}
+	if meta, err := json.Marshal(b.Descriptor); err == nil {
+		_ = os.WriteFile(filepath.Join(dir, b.Descriptor.Attempt+descExt), secret.Redact(ctx, meta), 0o644)
+	}
+	if len(b.KeyLines) > 0 {
+		// Already masked and redacted by the publisher; PersistKeyLines is idempotent
+		// over an already-masked set.
+		_ = c.outputs.PersistKeyLines(ctx, b.Descriptor.Key, b.KeyLines)
+	}
 }
 
 // RefNotFoundError reports a ref that resolved in none of the stores consulted, and

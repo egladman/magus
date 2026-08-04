@@ -139,7 +139,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 		return false // remote miss
 	}
 	defer r.Close()
-	if err := c.importArtifact(ctx, r); err != nil {
+	if err := c.importArtifact(ctx, r, projectPath, hash); err != nil {
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
@@ -312,7 +312,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	// one signature authenticates the whole artifact. No signing key -> unsigned,
 	// which no verifying consumer will accept.
 	if c.signer != nil {
-		sig, err := c.signer.sign(manifestBytes, members)
+		sig, err := c.signer.sign(domainArtifact, manifestBytes, members)
 		if err != nil {
 			return fmt.Errorf("exportArtifact: sign: %w", err)
 		}
@@ -337,7 +337,12 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 //
 // Authenticity (that a trusted producer made this artifact) is the signature gate
 // below; these checks only guarantee what lands on disk is internally consistent.
-func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
+// wantProject and wantHash are the (project, key) the artifact was REQUESTED for.
+// Every path it writes is checked against them, and the parsed manifest must name
+// them too, so a signed artifact fetched for one key can never file itself under
+// another - the check that makes a signature mean "this entry", not merely "some
+// trusted producer signed something".
+func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wantHash string) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return fmt.Errorf("importArtifact: gzip: %w", err)
@@ -433,7 +438,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 				return fmt.Errorf("importArtifact: blob %s content hashes to %s", want, sum)
 			}
 			seenBlobs[sum] = struct{}{}
-		case strings.HasPrefix(rel, "manifests/"):
+		case rel == path.Join("manifests", flattenPath(wantProject), wantHash+".json"):
 			// Buffer + stage the manifest; commit is deferred until its blobs verify.
 			// One per artifact — a duplicate would shadow the first (leaking its temp
 			// file) and muddy "one signature authenticates the whole artifact".
@@ -450,17 +455,23 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 			if err := os.WriteFile(manifestTmp, buf, 0o644); err != nil {
 				return fmt.Errorf("importArtifact: stage manifest: %w", err)
 			}
-		default:
-			// The build log and the portable-ref sidecars. Staged beside their final
-			// path and committed only after the signature covers them, so an
-			// unsigned or tampered extra never lands where a later run would read it.
-			tmp := clean + ".import.tmp"
+		case rel == path.Join("logs", flattenPath(wantProject), wantHash+".log") ||
+			strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
+			// The build log and the portable-ref sidecars, both scoped to the entry
+			// being imported so an artifact cannot write over another key's records.
+			// Staged beside their final path and committed only after the signature
+			// covers them, so an unsigned or tampered extra never lands where a later
+			// run would read it. The staging suffix carries the member index, so two
+			// members can never contend for one temp path.
+			tmp := fmt.Sprintf("%s.import-%d.tmp", clean, len(extras))
 			sum, err := c.writeCacheFile(tr, tmp, &budget)
 			if err != nil {
 				return err
 			}
 			extras = append(extras, stagedMember{tmp: tmp, final: clean})
 			extraDigest[rel] = sum
+		default:
+			return fmt.Errorf("importArtifact: artifact carries an out-of-scope member %q", rel)
 		}
 	}
 
@@ -474,8 +485,15 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 		if sigBytes == nil {
 			return errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
 		}
-		if err := c.verifier.verify(sigBytes, manifestBytes, extraDigest); err != nil {
+		legacy, err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest)
+		if err != nil {
 			return fmt.Errorf("importArtifact: %w", err)
+		}
+		if legacy {
+			// A pre-domain producer signed only the manifest, so its log is
+			// unauthenticated: keep the entry (it still replays) and drop the extras
+			// rather than reject an artifact every released magus produces.
+			extras = nil
 		}
 	} else {
 		// No trust set (an explicitly insecure remote): nothing authenticates the
@@ -486,6 +504,15 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader) error {
 	var m Manifest
 	if err := json.Unmarshal(manifestBytes, &m); err != nil {
 		return fmt.Errorf("importArtifact: parse manifest: %w", err)
+	}
+	// Bind the signed bytes to the identity they are being filed under. Without this
+	// a signature only says "a trusted key signed some JSON": an output bundle's
+	// metadata, re-tarred as a manifest, unmarshals to an all-zero Manifest with no
+	// outputs, passes every remaining check, and replays as a successful entry - so a
+	// published FAILING run would become a teammate's cached pass.
+	if m.ProjectPath != wantProject || m.Hash != wantHash {
+		return fmt.Errorf("importArtifact: manifest names %q/%s but was served for %q/%s",
+			m.ProjectPath, shortHash(m.Hash), wantProject, shortHash(wantHash))
 	}
 	for _, out := range m.Outputs {
 		if out.Blob == "" {
