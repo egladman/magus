@@ -220,14 +220,10 @@ jobs:
           installation-strategy: source
           source-path: .
 
-      - name: Advise on generated-file conflicts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BASE: ${{ github.event.pull_request.base.ref }}
-        run: |
-          git config user.email ci@example.com && git config user.name ci
-          magus buzz hack/merge-conflict-advice.buzz
+      # Every advisor, each silent unless it has something to say. They live in the
+      # action so other workspaces get them with one `uses:` line; turn one off by name
+      # (merge-conflicts: 'false') rather than by editing this step.
+      - uses: ./.github/actions/advice
 
   deploy-build:
     name: deploy build

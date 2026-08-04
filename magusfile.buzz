@@ -1131,8 +1131,27 @@ fun total_coverage(func_out: str) > str {
     return cell;
 }
 
+// Runs the PR advisors' `test "..." {}` blocks.
+//
+// They are the only .buzz sources in this tree that parse standalone: everything else
+// imports magus/magus\spell and uses embedding-only constructs, which is why the old
+// standalone-Buzz test targets were deleted rather than repointed. The advisors run
+// under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need
+// checked, and `-t` is the runner.
+//
+// Through magus\cmd rather than os\exec("magus", ...): same process family, no PATH
+// lookup, no version skew between the magus running the target and the one running the
+// script - and os\exec on the magus binary warns for precisely that reason.
+export fun advice_test(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(".github/actions/advice/*.buzz");
+    foreach (advisor in fs\glob(".github/actions/advice/*.buzz")) {
+        magus\cmd(["buzz", "-t", advisor]);
+    }
+}
+
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(advice_test);
     // Declared because this target WRITES the badge below and gates on its drift.
     // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
     // it being stale - the workspace's account of itself disagreeing with what a

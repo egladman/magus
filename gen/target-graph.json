@@ -404,9 +404,21 @@
           ]
         },
         {
+          "name": "advice-test",
+          "declared": "advice_test",
+          "doc": "Runs the PR advisors' `test \"...\" {}` blocks.",
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": ".github/actions/advice/*.buzz"
+            }
+          ]
+        },
+        {
           "name": "test",
           "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
           "dependencies": [
+            "advice-test",
             "format"
           ],
           "charms": [

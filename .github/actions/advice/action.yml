@@ -1,0 +1,58 @@
+name: magus advice
+description: >
+  Post non-blocking review nudges on a pull request. Each advisor is silent unless it
+  has something to say, and each is one input you can turn off by name; every one is on
+  by default, so a new advisor arrives without a workflow edit.
+
+  Named for doctor's [advice] level, so the CI surface and the tool share one word for
+  "worth knowing, never a gate".
+
+  Requires magus on PATH - run egladman/magus/.github/actions/setup-magus first. Each
+  advisor runs against the caller's checkout, so check out before this step. The
+  advisors never mutate the checkout: the conflict advisor merges in memory with
+  `git merge-tree`, so there is no merge to abort and no half-merge to strand.
+
+inputs:
+  merge-conflicts:
+    description: >
+      Comment when this PR's merge conflicts land in files the workspace declares as
+      generated. Those cannot be resolved in the web editor - the correct merge of build
+      output is whatever regenerating produces - so the comment names the files and the
+      command that settles them.
+    required: false
+    default: 'true'
+  pr-number:
+    description: The pull request to comment on.
+    required: false
+    default: ${{ github.event.pull_request.number }}
+  base-ref:
+    description: The branch to test the merge against.
+    required: false
+    default: ${{ github.event.pull_request.base.ref }}
+  head-sha:
+    description: >
+      The PR's head commit. Passed explicitly because actions/checkout resolves a
+      pull_request event to the ephemeral merge commit, which is the base already merged
+      with the head - testing that against the base would find nothing.
+    required: false
+    default: ${{ github.event.pull_request.head.sha }}
+  token:
+    description: >
+      Token used to post the comment. Needs `pull-requests: write`, which the default
+      GITHUB_TOKEN does NOT have on a pull request from a fork - the comment step fails
+      there, by design of the platform rather than of this action.
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Advise on generated-file conflicts
+      if: inputs.merge-conflicts == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
