@@ -1,12 +1,18 @@
 name: Setup workspace
 description: >
-  Check out the repo, install the mise-pinned toolchain, install magus, and put
-  mise's Go back in front of the one setup-magus's source build provisions.
+  Install the mise-pinned toolchain, install magus, and put mise's Go back in front
+  of the one setup-magus's source build provisions.
 
-  The five-step preamble every magus CI job needs, in one step. A composite action
+  The setup preamble every magus CI job needs, in one step. A composite action
   rather than a setup JOB because each GitHub Actions job gets a fresh runner:
   `needs:` sequences jobs, it does not share a filesystem, so nothing a setup job
   installed would still be there.
+
+  The checkout is the caller's, not this action's, and cannot move in here: the
+  runner loads a local action from the checked-out repo, so a checkout inside it
+  can never have run yet. Every caller starts with actions/checkout at
+  `fetch-depth: 0` and `filter: blob:none` - affected needs a merge base and the
+  docs footers walk the commit graph, and blob:none keeps that affordable.
 
   setup-magus stays its own action underneath - it has its own supply-chain gate and
   outputs, and callers outside this repo use it directly.
@@ -24,12 +30,6 @@ inputs:
     description: Passed through to setup-magus; the caller's own checkout for a source build.
     required: false
     default: ''
-  fetch-depth:
-    description: >
-      Checkout depth. 0 (the default) because affected needs a merge base and the docs
-      footers walk the commit graph; blob:none keeps that affordable either way.
-    required: false
-    default: '0'
   mise:
     description: >
       Install the mise-pinned toolchain. Set false for a job that only drives magus and
@@ -57,11 +57,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      with:
-        fetch-depth: ${{ inputs.fetch-depth }}
-        filter: blob:none
-
     - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
       if: inputs.mise == 'true'
       with:

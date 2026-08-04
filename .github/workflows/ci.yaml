@@ -95,6 +95,11 @@ jobs:
       max-parallel: ${{ fromJSON(needs.preflight.outputs.max_parallel) }}
       matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
 
@@ -158,6 +163,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       - uses: ./.github/actions/setup-workspace
         id: magus
         with:
@@ -200,6 +210,11 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       - uses: ./.github/actions/setup-workspace
         with:
           installation-strategy: source
@@ -234,6 +249,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       # Matches the publish workflow: page footers read `git log`, so a shallow clone would
       # exercise a different render than the one that ships.
       # A source build, matching publish-site.yaml. This mirrored the publish workflow on
@@ -277,6 +297,11 @@ jobs:
       packages: write # push to GHCR
       id-token: write # cosign keyless (OIDC) signing
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       # Full history + tags: the image bakes version()/commit()/build_date() in via
       # ldflags, and git describe has to be able to reach the nearest tag.
       # Full history + tags (the composite's default): the image bakes
@@ -325,6 +350,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       - uses: ./.github/actions/setup-workspace
         with:
           installation-strategy: source
@@ -344,6 +374,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
       - uses: ./.github/actions/setup-workspace
         with:
           installation-strategy: source
