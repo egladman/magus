@@ -48,15 +48,19 @@ func Decode(src Obj) (spells.Descriptor, error) {
 		return spells.Descriptor{}, fmt.Errorf("spell: name is required")
 	}
 	language, _ := src.Str("language")
+	pmBin, _ := src.Str("package_manager_bin")
 	m := spells.Descriptor{
-		Name:        name,
-		Claims:      src.Strs("claims"),
-		IgnoreDirs:  src.Strs("ignore_dirs"),
-		Manifests:   src.Strs("manifests"),
-		VersionCmd:  src.Strs("version_cmd"),
-		VersionCmds: decodeVersionCmds(src),
-		Language:    language,
-		Opaque:      src.Bool("opaque"),
+		Name:              name,
+		Claims:            src.Strs("claims"),
+		IgnoreDirs:        src.Strs("ignore_dirs"),
+		Manifests:         src.Strs("manifests"),
+		VersionCmd:        src.Strs("version_cmd"),
+		VersionCmds:       decodeVersionCmds(src),
+		UnprobedBins:      decodeStrMap(src, "unprobed_bins"),
+		InstallHints:      decodeStrMap(src, "install_hints"),
+		Language:          language,
+		PackageManagerBin: pmBin,
+		Opaque:            src.Bool("opaque"),
 	}
 
 	needs, err := src.CallStrs("needs")
@@ -235,6 +239,32 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 // never run: a spell naming a tool it cannot version is a declaration bug, and
 // carrying it would put a permanent "UNPROBED" into every cache key for that
 // project - noise that never resolves.
+// decodeStrMap reads a flat str->str declaration (unprobed_bins, install_hints)
+// via Obj/Keys/Str only, so a second authoring backend gets both fields for free.
+//
+// An entry with an empty value is dropped, for the same reason decodeVersionCmds
+// drops an empty argv: an unprobed bin without a reason is an undeclared opt-out
+// (doctor keeps flagging the bin, which is the point of requiring the reason),
+// and an install hint with no command could never help anyone.
+func decodeStrMap(src Obj, key string) map[string]string {
+	rec, ok := src.Obj(key)
+	if !ok {
+		return nil
+	}
+	var out map[string]string
+	for _, k := range rec.Keys() {
+		v, ok := rec.Str(k)
+		if !ok || v == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[k] = v
+	}
+	return out
+}
+
 func decodeVersionCmds(src Obj) map[string][]string {
 	rec, ok := src.Obj("version_cmds")
 	if !ok {

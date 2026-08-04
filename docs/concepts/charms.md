@@ -83,7 +83,7 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
-**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` is the only charm with this strip status; the other built-in (`cd`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
+**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` is the only charm with this strip status; the other built-ins (`cd` and `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
 
 ## Defaulting charms per workspace (`default_charms`)
 
@@ -117,15 +117,15 @@ The patches of all active charms are **concatenated in sorted charm-name order a
 - **Deterministic.** `lint:rw,debug` and `lint:debug,rw` produce the same result; duplicates are insignificant.
 - **Composable.** Charms edit individual argv elements, so edits on disjoint positions compose freely. Edits targeting the _same_ position resolve by sorted charm-name order, so one charm silently wins and the other has no effect. Because that winner is an alphabetical accident rather than a declared precedence, magus treats it as a mistake: it warns at run time and flags the overridden charm in `magus describe target ...:a,b`. Two charms that must both apply should edit different arguments, or one should own the position.
 
-Example with base `go tool golangci-lint run ./...`:
+Example with base `golangci-lint run ./...`:
 
 ```text
-rw    : add "--fix" at /3      → go tool golangci-lint run --fix ./...
+rw    : add "--fix" at /1      → golangci-lint run --fix ./...
 debug : add "-v"   at /-       → ... -v
 ```
 
 ```sh
-magus run go::golangci-lint:rw,debug    # → go tool golangci-lint run --fix ./... -v
+magus run go::golangci-lint:rw,debug    # → golangci-lint run --fix ./... -v
 ```
 
 ## Previewing the rendered command

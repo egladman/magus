@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -159,6 +160,97 @@ func TestCheckSpellDocs_Details(t *testing.T) {
 	assert.Equal(t, []string{"local:lint", "local:test"}, got.Details)
 }
 
+func TestProbeCoverageFindings(t *testing.T) {
+	t.Run("bin covered by the primary probe", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name:       "go",
+			VersionCmd: []string{"go", "version"},
+			Ops:        map[string]spells.Op{"go-build": {Command: spells.Command{Bin: "go", Args: []string{"build"}}}},
+		})
+		assert.Empty(t, got)
+	})
+	t.Run("bin covered by a named probe", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name:        "go",
+			VersionCmds: map[string][]string{"golangci-lint": {"golangci-lint", "--version"}},
+			Ops:         map[string]spells.Op{"golangci-lint": {Command: spells.Command{Bin: "golangci-lint", Args: []string{"run"}}}},
+		})
+		assert.Empty(t, got)
+	})
+	t.Run("bin covered by a declared opt-out", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name:         "go",
+			VersionCmd:   []string{"go", "version"},
+			UnprobedBins: map[string]string{"gofmt": "ships with the go toolchain"},
+			Ops:          map[string]spells.Op{"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}}}},
+		})
+		assert.Empty(t, got)
+	})
+	t.Run("sh wrapper is skipped", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name: "buzz",
+			Ops:  map[string]spells.Op{"buzz-check": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "buzz --check"}}}},
+		})
+		assert.Empty(t, got)
+	})
+	t.Run("package-manager bins are skipped for a pm spell", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name:              "typescript",
+			PackageManagerBin: "pnpm",
+			Ops: map[string]spells.Op{
+				"eslint":    {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "eslint", "."}}},
+				"node-test": {Command: spells.Command{Bin: "node", Args: []string{"--test"}}},
+			},
+		})
+		assert.Empty(t, got)
+	})
+	t.Run("uncovered bin is a finding naming spell, op, bin, and both fixes", func(t *testing.T) {
+		got := probeCoverageFindings(spells.Descriptor{
+			Name:       "go",
+			VersionCmd: []string{"go", "version"},
+			Ops:        map[string]spells.Op{"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}}}},
+		})
+		require.Len(t, got, 1)
+		assert.Contains(t, got[0], "spell go op go-fmt")
+		assert.Contains(t, got[0], `bin "gofmt"`)
+		assert.Contains(t, got[0], "mgs_getVersionCommands")
+		assert.Contains(t, got[0], "mgs_listUnprobedBins")
+	})
+}
+
+// TestBuiltinsProbeCoverage is the rail itself: every built-in ships with each op
+// bin either probed or opted out with a reason. A failure here means a built-in
+// gained an op whose bin no cache key can see; fix the SPELL (add the probe or
+// the declared opt-out), never this test.
+func TestBuiltinsProbeCoverage(t *testing.T) {
+	for name, spec := range spellruntime.Builtins() {
+		assert.Emptyf(t, probeCoverageFindings(spec), "built-in %q has unprobed op bins", name)
+	}
+}
+
+func TestCheckSpellProbeCoverage(t *testing.T) {
+	r := &runner{}
+
+	t.Run("no projects is clean", func(t *testing.T) {
+		got := r.checkSpellProbeCoverage(nil)
+		assert.Equal(t, StatusOK, got.Status, got.Message)
+	})
+	t.Run("workspace-local spell is out of scope", func(t *testing.T) {
+		got := r.checkSpellProbeCoverage([]*types.Project{{Spell: "my-local-spell"}})
+		assert.Equal(t, StatusOK, got.Status, got.Message)
+	})
+	t.Run("all bound built-ins are clean", func(t *testing.T) {
+		// The zero-findings assertion over the real registry, reached through the
+		// check itself: bind every built-in and expect silence.
+		var projects []*types.Project
+		for name := range spellruntime.Builtins() {
+			projects = append(projects, &types.Project{Spell: name})
+		}
+		got := r.checkSpellProbeCoverage(projects)
+		assert.Equal(t, StatusOK, got.Status, strings.Join(got.Details, "\n"))
+	})
+}
+
 func TestCheckTargetNameConventions(t *testing.T) {
 	// run writes files into a fresh project dir and returns the check result.
 	run := func(files map[string]string) Check {
@@ -219,14 +311,17 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, StatusFail, got.Status, got.Message)
 	})
-	t.Run("vet audit security style prettify all flagged", func(t *testing.T) {
+	t.Run("vet audit style prettify all flagged", func(t *testing.T) {
 		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun audit(ctx: magus\\Context, _a: [str]) > void {}\n" +
-			"export fun security(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, StatusFail, got.Status, got.Message)
-		assert.Len(t, got.Details, 5)
+		assert.Len(t, got.Details, 4)
+	})
+	t.Run("security is canonical, not flagged", func(t *testing.T) {
+		got := run(map[string]string{"magusfile.buzz": "export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		assert.Equal(t, StatusOK, got.Status, got.Message)
 	})
 }
 

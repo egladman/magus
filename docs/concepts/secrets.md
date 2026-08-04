@@ -122,13 +122,17 @@ final token = magus\secret.read("Private/DockerHub/token");
 ```
 
 ```buzz
-// spells/onepassword/spell.buzz
+// spells/onepassword/spell.buzz (abridged - the shipped spell also classifies failures)
 export fun mgs_getName() > str { return "onepassword"; }
 
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);
-    return os\exec("op", args: ["read", "op://" + ("" + io["ref"])]).stdout;
+    // Guard before coercing: `"" + null` is the string "null" in Buzz, so a
+    // missing ref would otherwise reach `op read op://null`.
+    if (io["ref"] == null) { throw "no reference given"; }
+    final res = os\exec("op", args: ["read", "op://" + ("" + io["ref"])], dir: ".", opts: {});
+    return "" + res["stdout"];
 }
 ```
 
@@ -168,6 +172,31 @@ The spell classifies its own failures rather than surfacing an exit status:
 For CI or any unattended run, a 1Password service account token avoids the interactive
 signin entirely - but note that on a CI runner the platform's own secret store is usually
 the simpler answer, and the built-in provider already reads it.
+
+#### Credentials and the sandbox
+
+The sandbox scrubs the environment of every child process down to a small
+allowlist (HOME, USER, PATH, locale, and friends), and provider subprocesses are
+children like any other. The variables 1Password authentication rides on -
+`OP_SERVICE_ACCOUNT_TOKEN` for unattended runs, the `OP_SESSION_*` variables
+`eval $(op signin)` exports - are NOT on that allowlist, so exporting them in
+your shell is not enough: the `op` child never sees them, and the failure reads
+as "not signed in" even though you are. Pass them through explicitly in
+`magus.yaml`:
+
+```yaml
+sandbox:
+  env:
+    passthrough:
+      - OP_SERVICE_ACCOUNT_TOKEN
+      - "OP_SESSION_*"
+```
+
+The same applies to any spell that authenticates through the environment - a
+cosign signing run needs its `COSIGN_*` variables (and, for keyless OIDC in
+GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`)
+declared the same way. If a credentialed tool works in your shell and fails
+under magus, the scrub is the first thing to rule out.
 
 There is deliberately **no URI scheme**. `op://`-style references exist in tools that
 resolve providers per secret, with no selection step; magus selects once, explicitly, so
@@ -215,9 +244,11 @@ provider's job**:
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);
+    if (io["ref"] == null) { throw "no reference given"; }
     final ref = "" + io["ref"];               // "dockerhub-token"
-    return os\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
-        dir: ".", opts: {}).stdout;
+    final res = os\exec("op", args: ["read", "op://Engineering/" + ref + "/credential"],
+        dir: ".", opts: {});
+    return "" + res["stdout"];
 }
 ```
 

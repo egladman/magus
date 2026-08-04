@@ -1,9 +1,38 @@
 import "magus/spell";
+// charm constructors derive argv patches from an anchor arg, not a counted index.
+import "magus/charm";
 
 export fun mgs_getName() > str { return "bash"; }
 
+// Extension globs only, which is a known limit: an extensionless `#!/bin/bash`
+// script (a bin/ helper, a git hook) is neither hashed nor found by the op's
+// walk below. Extension-based discovery cannot see a shebang; a project with
+// such scripts lists them explicitly (op args) and adds its own source glob.
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.sh"}, Path{value = "**/*.bash"}, Path{value = ".shellcheckrc"}];
+}
+
+// shellcheck, shfmt, and bats are PATH binaries pinned by no manifest, each a
+// verdict decider: upgrading one changes which scripts pass while every cache
+// entry replays the old verdict (the docker spell's hadolint note is the long
+// version). Named probes record UNPROBED when absent, so a workspace binding
+// only shellcheck pays nothing for the others.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {
+        "shellcheck": ["shellcheck", "--version"],
+        "shfmt": ["shfmt", "--version"],
+        "bats": ["bats", "--version"],
+    };
+}
+
+// One-line install commands for the PATH tools this spell drives, appended to
+// the error when an op's bin is absent.
+export fun mgs_listInstallHints() > {str: str} {
+    return {
+        "shellcheck": "mise use -g shellcheck # or: brew install shellcheck",
+        "shfmt": "mise use -g shfmt # or: brew install shfmt",
+        "bats": "mise use -g bats # or: brew install bats-core",
+    };
 }
 
 // mgs_listIgnoreDirs names non-source dirs that carry third-party shell, pruned from
@@ -32,6 +61,26 @@ fun shellcheck(target: Target) > Command {
         "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"]};
 }
 
+// shfmt is the shell FORMATTER, giving `format` a meaning for shell projects
+// (shellcheck alone left the lint/format divide one-sided: rw had nothing to
+// write). Base -d prints a diff and exits non-zero on drift; the rw charm swaps
+// it for -w to rewrite in place. shfmt walks directories itself and skips
+// non-shell files, so it takes `.` rather than a find pipeline - which also
+// keeps its argv reachable by charms (a sh -c string is not).
+fun shfmt(target: Target) > Command {
+    final args = ["-d", "."];
+    return Command{bin = "shfmt", args = args, charms = {
+        "rw": set(args, "-d", "-w"),
+    }};
+}
+
+// bats runs Bash Automated Testing System suites - the mainstream shell test
+// framework. The test directory is the caller's fact ({"args": ["test/"]});
+// bats errors clearly without one.
+fun bats(target: Target) > Command {
+    return Command{bin = "bats", args = [<str>]};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"shellcheck": shellcheck};
+    return {"shellcheck": shellcheck, "shfmt": shfmt, "bats": bats};
 }

@@ -12,14 +12,16 @@ The `buzz` spell checks and tests Buzz sources. Each op finds every `.buzz` file
 
 **Version probe:** none
 
+**Named probes:** `buzz` (`buzz --version`) - each records UNPROBED when the tool is absent, and moves the cache key when installed.
+
 ## Passing arguments to ops
 
 Every op is invoked as `buzz["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
 | Key | Type | Description | Source |
 |-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `buzz["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L170) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L174) |
+| `args` | `[str]` | Extra arguments appended to the resolved command. Omit it and a bare `buzz["<op>"]()` forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L187) |
+| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L191) |
 
 
 Working directory and environment are NOT options: they ride the context, as `buzz["<op>"](ctx.withCwd("sub"))` and `buzz["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise - passing either as an option is an error.
@@ -28,9 +30,9 @@ Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patc
 
 ## buzz-check
 
-check type-checks every Buzz source without running it (buzz --check). buzz takes one script per invocation, so find feeds xargs one file at a time (-n1; -print0 pairs with -0 for safe paths, and -r skips an empty set - the same -print0 | xargs pattern the bash spell uses for shellcheck.
+check type-checks every Buzz source without running it (buzz --check). buzz takes one script per invocation, so find feeds xargs one file at a time (-n1; -print0 pairs with -0 for safe paths, and -r skips an empty set - the same -print0 | xargs pattern the bash spell uses for shellcheck). The prunes match mgs_listIgnoreDirs above, for the same reason the bash spell prunes its find: a declared ignore dir shapes what magus treats as sources, but this op's find is its own walk, and without the prunes a stale .claude/worktrees copy fails buzz-check for code the project does not own (the MGS1002 hazard).
 
-**Command:** `sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check`
+**Command:** `sh -c find . \( -name node_modules -o -path './.claude/worktrees' \) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check`
 
 ### Example
 
@@ -51,7 +53,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 
 test runs each source's Buzz `test {}` blocks (buzz --test).
 
-**Command:** `sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test`
+**Command:** `sh -c find . \( -name node_modules -o -path './.claude/worktrees' \) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test`
 
 ### Example
 
@@ -72,7 +74,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz engine. It has no check-only mode - executing a file compiles, type-checks, and runs it - so this is the runtime sibling of `buzz-check`. It invokes "$MAGUS": magus exports MAGUS (the running binary's path, à la GNU Make's $(MAKE)) into every spell subprocess, so this resolves to the current magus even uninstalled / under `go run`, with no dependence on PATH. (A bare $MAGUS, not ${MAGUS:-magus}: Buzz reads {...} in a string as interpolation, and MAGUS is always set here anyway.)
 
-**Command:** `sh -c find . -name '*.buzz' -print0 | xargs -0 -r -n1 "$MAGUS" buzz`
+**Command:** `sh -c find . \( -name node_modules -o -path './.claude/worktrees' \) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 "$MAGUS" buzz`
 
 ### Example
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/egladman/magus/spells"
 )
@@ -94,6 +95,69 @@ func ExplainCharms(argv []string, charms map[string]spells.Charm, activeNames []
 		steps = append(steps, spells.CharmTraceStep{Charm: name, Command: slices.Clone(cur)})
 	}
 	return steps, nil
+}
+
+// DescribeCharm renders a one-sentence, human summary of a charm's JSON-Patch ops
+// against the op's base argv (args), so a reader sees what the charm does without
+// reading JSON Patch. It resolves each patch's target index back to the original
+// argument (e.g. "replaces `-l` with `-w`") when it can. It handles only the shapes
+// the built-ins use (add/remove/replace on argv indices); anything unusual falls
+// back to naming the op count. Shared by the spell-docs generator and `magus
+// describe spell`, so both surfaces describe a charm in the same words.
+func DescribeCharm(c spells.Charm, args []string) string {
+	parts := make([]string, 0, len(c.Ops))
+	for _, p := range c.Ops {
+		switch p.Op {
+		case spells.OpAdd:
+			if strings.HasSuffix(p.Path, "/-") {
+				parts = append(parts, "appends `"+p.Value+"`")
+			} else {
+				parts = append(parts, "inserts `"+p.Value+"`")
+			}
+		case spells.OpRemove:
+			if orig := argAt(args, p.Path); orig != "" {
+				parts = append(parts, "drops `"+orig+"`")
+			} else {
+				parts = append(parts, "drops an argument")
+			}
+		case spells.OpReplace:
+			if orig := argAt(args, p.Path); orig != "" {
+				parts = append(parts, "replaces `"+orig+"` with `"+p.Value+"`")
+			} else {
+				parts = append(parts, "sets an argument to `"+p.Value+"`")
+			}
+		case spells.OpMove:
+			parts = append(parts, "moves an argument")
+		case spells.OpCopy:
+			parts = append(parts, "copies an argument")
+		}
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("A %d-op argv patch.", len(c.Ops))
+	}
+	return capitalize(strings.Join(parts, ", ")) + "."
+}
+
+// argAt resolves a JSON Pointer path ("/1") to the base argv element it targets, or
+// "" when the path is not a plain in-range index (e.g. "/-" append, or out of
+// range). Used to name the argument a replace/remove charm acts on.
+func argAt(args []string, path string) string {
+	if !strings.HasPrefix(path, "/") {
+		return ""
+	}
+	i, err := strconv.Atoi(path[1:])
+	if err != nil || i < 0 || i >= len(args) {
+		return ""
+	}
+	return args[i]
+}
+
+// capitalize upper-cases the first byte of s (ASCII), leaving the rest unchanged.
+func capitalize(s string) string {
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		return s
+	}
+	return string(s[0]-'a'+'A') + s[1:]
 }
 
 // Conflicts returns the active charms whose effect is clobbered by another active

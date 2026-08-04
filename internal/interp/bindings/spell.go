@@ -40,7 +40,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops)),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.PackageManagerBin, spec.InstallHints)),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
@@ -60,6 +60,15 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.Language != "" {
 			opts = append(opts, spells.WithLanguage(spec.Language))
+		}
+		if spec.PackageManagerBin != "" {
+			opts = append(opts, spells.WithPackageManagerBin(spec.PackageManagerBin))
+		}
+		if len(spec.UnprobedBins) > 0 {
+			opts = append(opts, spells.WithUnprobedBins(spec.UnprobedBins))
+		}
+		if len(spec.InstallHints) > 0 {
+			opts = append(opts, spells.WithInstallHints(spec.InstallHints))
 		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
@@ -233,14 +242,18 @@ func noResult() (any, error) {
 // declared command as a subprocess. An unknown target is a no-op, matching the
 // fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
 // backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, req spells.InvokeRequest) (any, error) {
+// pmBin is the spell's declared package-manager bin ("" = no substitution); it
+// rides to runCommand so a recorded pnpm forks as the project's real manager.
+// installHints (bin -> install command) ride the same way, surfaced when the
+// op's bin is absent from PATH.
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, pmBin string, installHints map[string]string, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
 	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
-	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
+	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx), pmBin: pmBin, installHints: installHints}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
 	// (`... --output "$MAGUS_SYMBOL_INDEX"`) needs no knowledge of where the cache is.
@@ -281,10 +294,12 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]spells.Op) func(context.Context, spells.InvokeRequest) (any, error) {
+// are command-only (cmd/args/charms data, no script body). pmBin is the spell's
+// declared package-manager bin ("" = no substitution); installHints are its
+// bin -> install-command hints (nil = none declared).
+func newSpellInvoker(targets map[string]spells.Op, pmBin string, installHints map[string]string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, req)
+		return dispatchOp(ctx, targets, pmBin, installHints, req)
 	}
 }
 
@@ -380,6 +395,15 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Language != "" {
 		opts = append(opts, spells.WithLanguage(m.Language))
 	}
+	if m.PackageManagerBin != "" {
+		opts = append(opts, spells.WithPackageManagerBin(m.PackageManagerBin))
+	}
+	if len(m.UnprobedBins) > 0 {
+		opts = append(opts, spells.WithUnprobedBins(m.UnprobedBins))
+	}
+	if len(m.InstallHints) > 0 {
+		opts = append(opts, spells.WithInstallHints(m.InstallHints))
+	}
 	if len(m.VersionCmd) > 0 {
 		opts = append(opts, spells.WithVersionProbe(newVersionProbe(m.VersionCmd)))
 	}
@@ -395,7 +419,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.PackageManagerBin, m.InstallHints)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 

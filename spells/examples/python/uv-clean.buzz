@@ -1,9 +1,0 @@
-// Wire uv-clean into a clean target: magus run clean forks uv clean.
-import "magus";
-import "magus/spell/python";
-
-magus\project({ "spells": [python] });
-
-export fun clean(ctx: magus\Context, args: [str]) > void {
-    python["uv-clean"](ctx);
-}

@@ -1,6 +1,6 @@
 // tsc is static analysis, so it composes into the canonical `lint` target
 // (alongside eslint) rather than a bespoke `typecheck` target. `magus run lint`
-// forks `pnpm exec tsc`.
+// forks `pnpm exec tsc --noEmit` - the type-only check; emitting is tsc-build.
 import "magus";
 import "magus/spell/typescript";
 

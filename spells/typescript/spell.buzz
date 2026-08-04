@@ -1,7 +1,11 @@
-// Opaque (mgs_isOpaque) because pnpm manages its own dependency graph:
-// magus treats the project as a black box rather than tracking per-file inputs.
-// It claims a broad set of web-asset globs so sibling single-file spells (json,
-// css, markdown, ...) don't also claim files inside a TS project.
+// Opaque (mgs_isOpaque) because the package manager manages its own dependency
+// graph: magus treats the project as a black box rather than tracking per-file
+// inputs. It claims a broad set of web-asset globs so sibling single-file
+// spells (json, css, markdown, ...) don't also claim files inside a TS project.
+//
+// Every op records pnpm as its bin, but that is a default, not a choice: the
+// engine substitutes each project's detected package manager (npm, yarn, bun)
+// at fork time - see mgs_getPackageManagerBin below for the mechanism.
 //
 // eslint+prettier or Biome: this one spell offers both toolchains as separate
 // ops (eslint/prettier vs biome-check/biome-format) rather than shipping a
@@ -19,10 +23,23 @@ export fun mgs_getName() > str { return "typescript"; }
 export fun mgs_listRequiredGlobs() > [Path] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below
     // already matches it - self-documenting rather than riding along by accident.
+    //
+    // Claimed implies required: every glob in mgs_listClaimedGlobs below is also
+    // here, because claiming shuts the sibling spell out of these files - so if
+    // they feed no cache key here, they feed one nowhere (a css edit in a web
+    // project changed no key at all). The dotfile configs are listed because the
+    // extension globs do not match dotfiles: .eslintrc*/.prettierrc* change tool
+    // verdicts, .nvmrc/.node-version change which node the probe would report on
+    // another machine, and .yarnrc.yml/pnpm-workspace.yaml change resolution.
+    // bun.lock is the current text lockfile; bun.lockb the legacy binary one.
     return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"},
-            Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
+            Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "**/*.jsonc"}, Path{value = "**/*.md"}, Path{value = "**/*.mdx"},
+            Path{value = "**/*.yaml"}, Path{value = "**/*.yml"}, Path{value = "**/*.css"}, Path{value = "**/*.scss"}, Path{value = "**/*.html"},
+            Path{value = "tsconfig*.json"}, Path{value = "package.json"},
             Path{value = ".npmrc"}, Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
-            Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
+            Path{value = "yarn.lock"}, Path{value = "bun.lock"}, Path{value = "bun.lockb"},
+            Path{value = ".eslintrc*"}, Path{value = ".eslintignore"}, Path{value = ".prettierrc"}, Path{value = ".prettierrc.*"}, Path{value = ".prettierignore"},
+            Path{value = ".nvmrc"}, Path{value = ".node-version"}, Path{value = ".yarnrc.yml"}, Path{value = "pnpm-workspace.yaml"}];
 }
 
 export fun mgs_listClaimedGlobs() > [Path] {
@@ -48,15 +65,45 @@ export fun mgs_listProvidedGlobs() > [Path] { return [<Path>]; }
 
 export fun mgs_getVersionCommand() > [str] { return ["node", "--version"]; }
 
+// pnpm is the recorded launcher (a project may fork a substituted manager
+// instead - see mgs_getPackageManagerBin), pinned by no manifest - its
+// resolution behavior (lockfile format, minimum-release-age) changes across
+// releases while `node --version` implies nothing about it. The tools it runs (tsc, eslint,
+// biome, vitest) need no probe of their own: they resolve from the project's
+// lockfile, which is already a required glob, so upgrading one moves the cache
+// key through the lockfile.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {"pnpm": ["pnpm", "--version"]};
+}
+
+// mgs_getPackageManagerBin declares that these ops' recorded bin IS the project
+// package manager, not a tool choice. Op handlers are reduced to static
+// {cmd,args} at resolve time, so the swap has to happen engine-side: the ops
+// record pnpm, and at fork time the engine replaces it with the project's
+// detected manager - the magusfile's "package_manager" option first, then
+// package.json's packageManager field (corepack), then lockfile presence
+// (pnpm-lock.yaml, yarn.lock, bun.lock/bun.lockb, package-lock.json/
+// npm-shrinkwrap.json), then pnpm as recorded here. run/audit/install are
+// spelled identically across all four managers; bun spells exec as x, so the
+// engine rewrites that one verb when bun is resolved.
+export fun mgs_getPackageManagerBin() > str { return "pnpm"; }
+
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the TypeScript files and symbols SCIP ingests. It
 // lets `magus query language:typescript` reach this adapter alongside the code it builds.
 export fun mgs_getLanguage() > str { return "typescript"; }
 
-// mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned
-// from the input-hashing walk. dist is already excluded as a declared output, and
-// .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
-export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
+// mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates,
+// pruned from the input-hashing walk. dist/build/out/coverage are here because
+// mgs_listProvidedGlobs is deliberately empty (above): nothing else excludes a
+// project's emit dir unless the project declares outputs itself, and without
+// the prune tsc-build's own output feeds the next input hash. .turbo/.next/
+// .pnpm-store and friends are dot-dirs skipped structurally.
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "node_modules", isDir = true}, Path{value = "dist", isDir = true},
+            Path{value = "build", isDir = true}, Path{value = "out", isDir = true},
+            Path{value = "coverage", isDir = true}];
+}
 
 // mgs_listManifests names the file that carries this project's OWN version - not
 // the toolchain's (that's mgs_getVersionCommand) and not a cache input (package.json
@@ -95,7 +142,31 @@ fun eslint(target: Target) > Command {
         "gha": after(args, "eslint", ["--format=unix"]),
     }};
 }
-// preflight is a no-op marker op (no command).
+// audit scans the lockfile's dependency tree against the npm advisory database.
+// The op name is the subcommand every package manager spells identically (npm
+// audit, pnpm audit, yarn audit, bun audit), not a tool name. It composes into
+// the canonical `security` target; advisory verdicts track the database, not
+// the tree, so pair that target with skip_cache (see targets.md).
+fun audit(target: Target) > Command { return Command{bin = "pnpm", args = ["audit"]}; }
+// install syncs node_modules from the lockfile - the real op behind a preflight
+// target (this repo's own magusfiles shelled out to raw `pnpm install` before it
+// existed). Base --frozen-lockfile is CI-strict: it fails on a stale lockfile
+// rather than rewriting it; rw drops the flag so a local install may update it.
+// The verb and flag are spelled identically by npm/pnpm/yarn (bun accepts
+// --frozen-lockfile as an alias), so the PM substitution needs no rewrite here.
+fun install(target: Target) > Command {
+    final args = ["install", "--frozen-lockfile"];
+    return Command{bin = "pnpm", args = args, charms = {
+        "rw": drop(args, "--frozen-lockfile"),
+    }};
+}
+// run-script runs a package.json script by name ({"args": ["typecheck"]}) - the
+// escape hatch that keeps bundler-specific ops (vite, next, esbuild) out of this
+// spell: in practice those run through scripts, so the spell needs the generic
+// verb, not one op per bundler. `run` is spelled identically by all four PMs.
+fun runScript(target: Target) > Command { return Command{bin = "pnpm", args = ["run"]}; }
+// preflight is a no-op marker op (no command); compose install (above) into a
+// preflight target when the project wants dependencies synced there.
 fun preflight(target: Target) > Command { return Command{}; }
 fun prettier(target: Target) > Command {
     final args = ["exec", "prettier", "--check", "."];
@@ -103,7 +174,11 @@ fun prettier(target: Target) > Command {
         "rw": set(args, "--check", "--write"),
     }};
 }
-fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc"]}; }
+// tsc is the type-only check: --noEmit, because bare `tsc` EMITS unless the
+// project's tsconfig says otherwise, and this op's documented composition is
+// `lint` - a read-only stage that must not write JS into the tree without the
+// rw charm. Emitting is tsc-build's job.
+fun tsc(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc", "--noEmit"]}; }
 // tsc-build uses TypeScript's project-references incremental build mode (works
 // even without declared references, via its own .tsbuildinfo cache), emitting per
 // tsconfig outDir - see mgs_listProvidedGlobs.
@@ -111,11 +186,22 @@ fun tscBuild(target: Target) > Command { return Command{bin = "pnpm", args = ["e
 // tsc-clean mirrors tsc-build's project-references mode: --clean removes the
 // declared outputs and the incremental .tsbuildinfo cache.
 fun tscClean(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "tsc", "--build", "--clean"]}; }
+// gha keeps the default reporter alongside the annotations one: vitest REPLACES
+// its default when --reporter is given, so annotations-only would strip the
+// human-readable run summary from the CI log. cover mirrors go-test's coverage
+// charm (vitest's --coverage needs the @vitest/coverage-v8 dev dependency).
 fun vitest(target: Target) > Command {
     return Command{bin = "pnpm", args = ["exec", "vitest", "run"], charms = {
-        "gha": append(["--reporter=github-actions"]),
+        "gha": append(["--reporter=default", "--reporter=github-actions"]),
+        "cover": append(["--coverage"]),
     }};
 }
+// jest and node-test are the other mainstream runners, offered per the
+// eslint-vs-biome pattern - the magusfile picks which composes into test.
+// node-test is the zero-dependency built-in (`node --test`); it forks node
+// directly, not the package manager, so PM substitution does not apply to it.
+fun jest(target: Target) > Command { return Command{bin = "pnpm", args = ["exec", "jest"]}; }
+fun nodeTest(target: Target) > Command { return Command{bin = "node", args = ["--test"]}; }
 // dev-server runs the project's package.json "dev" script via the package
 // manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No
 // readiness probe is declared: the port and startup signal vary by framework,
@@ -137,8 +223,10 @@ fun scip(target: Target) > Command {
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
 export fun mgs_listTargets() > any {
-    return {"biome-check": biomeCheck, "biome-format": biomeFormat,
-            "eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
-            "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
+    return {"audit": audit, "biome-check": biomeCheck, "biome-format": biomeFormat,
+            "eslint": eslint, "install": install, "run-script": runScript,
+            "preflight": preflight, "prettier": prettier, "tsc": tsc,
+            "tsc-build": tscBuild, "tsc-clean": tscClean,
+            "vitest": vitest, "jest": jest, "node-test": nodeTest,
             "dev-server": devServer, "scip": scip};
 }

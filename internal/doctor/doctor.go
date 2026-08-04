@@ -166,6 +166,7 @@ func (r *runner) run(wsErr error) Report {
 		r.checkEnvVars(),
 		r.checkTargetNameConventions(projects),
 		r.checkBespokePhaseFragmentTargets(projects),
+		r.checkSpellProbeCoverage(projects),
 		r.checkUnreachedFootprintDecls(projects),
 		r.checkRedundantFootprintGlobs(projects),
 		r.checkDeadOutputGlobs(projects),

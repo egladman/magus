@@ -4,16 +4,66 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "markdown"; }
 
+// **/*.mdx is required, not just claimed: both ops explicitly lint/format .mdx,
+// so an .mdx edit must move the cache key and the affected set. The tool configs
+// are inputs because they change verdicts - _typos.toml is where typos reads its
+// exclusions, the .markdownlint.* spellings cover markdownlint-cli's config
+// search, and .prettierrc*/.prettierignore change what prettier accepts - each
+// without touching a .md file, so without them here the cached verdict replays.
+//
+// **/*.MD and **/*.markdown are cache inputs but the ops lint only the
+// mainstream .md/.mdx spellings: markdownlint errors on a glob that matches
+// nothing, so feeding it the rare extensions would fail every project without
+// them. Over-inclusion on the input side is safe (an edit invalidates, worst
+// case needlessly); a magusfile with real .markdown files passes them to the
+// ops explicitly.
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}];
+    return [Path{value = "**/*.md"}, Path{value = "**/*.MD"}, Path{value = "**/*.markdown"}, Path{value = "**/*.mdx"},
+            Path{value = ".markdownlint.json"}, Path{value = ".markdownlint.yaml"}, Path{value = ".markdownlint.yml"},
+            Path{value = ".markdownlint.jsonc"}, Path{value = ".markdownlintrc"},
+            Path{value = ".prettierrc"}, Path{value = ".prettierrc.*"}, Path{value = ".prettierignore"},
+            Path{value = "_typos.toml"}];
 }
 
 export fun mgs_listClaimedGlobs() > [Path] {
     return [Path{value = "**/*.md"}, Path{value = "**/*.mdx"}];
 }
 
+// mgs_listIgnoreDirs: a docs project routinely sits beside a package.json (this
+// repo's own docs/ does), and node_modules holds thousands of third-party
+// README.md files that would otherwise feed the input hash.
+export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
+
+// All three tools are PATH binaries pinned by no manifest - the docker spell's
+// hadolint note is the long version: upgrading one changes which files pass
+// while every cache entry replays the old verdict. Named probes record UNPROBED
+// when a tool is absent, so a workspace binding only markdownlint pays nothing
+// for the others.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {
+        "markdownlint": ["markdownlint", "--version"],
+        "prettier": ["prettier", "--version"],
+        "typos": ["typos", "--version"],
+    };
+}
+
+// One-line install commands for the PATH tools this spell drives, appended to
+// the error when an op's bin is absent.
+export fun mgs_listInstallHints() > {str: str} {
+    return {
+        "markdownlint": "mise use -g markdownlint-cli # or: brew install markdownlint-cli",
+        "prettier": "mise use -g prettier # or: brew install prettier",
+        "typos": "mise use -g typos # or: brew install typos-cli",
+    };
+}
+
 fun markdownlint(target: Target) > Command {
-    return Command{bin = "markdownlint", args = ["**/*.md", "**/*.mdx"]};
+    // The `rw` charm enables markdownlint's autofix, so `format:rw` (or lint:rw)
+    // repairs the fixable findings the same way prettier and typos do - without
+    // it, the write pass fixed their findings while markdownlint's still failed.
+    return Command{bin = "markdownlint", args = ["**/*.md", "**/*.mdx"], charms = {
+        "rw": append(["--fix"]),
+    }};
 }
 fun prettier(target: Target) > Command {
     // --no-error-on-unmatched-pattern: the claimed globs include **/*.mdx, but a

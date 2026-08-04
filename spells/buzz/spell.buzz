@@ -25,25 +25,40 @@ export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.buzz"}];
 }
 
-// No mgs_getVersionCommand: there's no useful Buzz-toolchain version to probe here.
-// `magus buzz` only reports magus's own version, and the upstream `buzz` toolchain
-// isn't reliably on PATH - a missing `buzz` would make every run that touches a
-// buzz-bound project warn on a failed probe. The toolchain version isn't mixed into
-// the cache key yet anyway.
+// mgs_listIgnoreDirs mirrors the bash spell: vendored trees and stale agent
+// worktrees carry .buzz copies that are not this project's sources.
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "node_modules", isDir = true}, Path{value = ".claude/worktrees", isDir = true}];
+}
+
+// No mgs_getVersionCommand: `magus buzz` only reports magus's own version, and the
+// upstream `buzz` toolchain isn't reliably on PATH - a failing PRIMARY probe warns
+// on every run. The upstream toolchain is a NAMED probe instead: a named probe
+// records UNPROBED when the binary is absent (see the go spell's golangci-lint
+// note), so workspaces without upstream buzz pay nothing, and where it is
+// installed an upgrade moves the cache key for buzz-check/buzz-test verdicts.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {"buzz": ["buzz", "--version"]};
+}
 
 // check type-checks every Buzz source without running it (buzz --check). buzz takes
 // one script per invocation, so find feeds xargs one file at a time (-n1; -print0
 // pairs with -0 for safe paths, and -r skips an empty set - the same -print0 | xargs
-// pattern the bash spell uses for shellcheck.
+// pattern the bash spell uses for shellcheck).
+//
+// The prunes match mgs_listIgnoreDirs above, for the same reason the bash spell
+// prunes its find: a declared ignore dir shapes what magus treats as sources, but
+// this op's find is its own walk, and without the prunes a stale .claude/worktrees
+// copy fails buzz-check for code the project does not own (the MGS1002 hazard).
 fun buzzCheck(target: Target) > Command {
     return Command{bin = "sh", args = ["-c",
-        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"]};
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"]};
 }
 
 // test runs each source's Buzz `test {}` blocks (buzz --test).
 fun buzzTest(target: Target) > Command {
     return Command{bin = "sh", args = ["-c",
-        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"]};
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"]};
 }
 
 // magus-buzz executes each source through `magus buzz`, magus's own embedded Buzz
@@ -55,7 +70,7 @@ fun buzzTest(target: Target) > Command {
 // reads {...} in a string as interpolation, and MAGUS is always set here anyway.)
 fun magusBuzz(target: Target) > Command {
     return Command{bin = "sh", args = ["-c",
-        "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]};
+        "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"]};
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {

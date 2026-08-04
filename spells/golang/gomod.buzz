@@ -61,9 +61,16 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
     }
 
     var existing: {str: [str]} = mut {};
+    // A replace may pin its OLD side to a version (`old v1.2.3 => ...`), and
+    // -dropreplace must repeat that pin as path@version - the bare-path form
+    // leaves a versioned directive in place, where it then conflicts with the
+    // unversioned -replace added below.
+    var existingOldVersion: {str: str} = mut {};
     foreach (replace in parsed.q("Replace").listValue()) {
         final oldPath = replace.q(["Old", "Path"]).stringValue();
         if (byPath[oldPath] == null) { continue; }
+        final oldVersion = replace.q(["Old", "Version"]).stringValue();
+        if (oldVersion != "") { existingOldVersion[oldPath] = oldVersion; }
         var paths = existing[oldPath];
         if (paths == null) { paths = mut [<str>]; }
         paths.append(replace.q(["New", "Path"]).stringValue());
@@ -81,7 +88,11 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] {
         final found = existing[name];
         final correct = wanted != null and found != null and found.len() == 1
             and same_replace_path(module_dir(current), got: found[0], want: wanted);
-        if (found != null and correct == false) { drops.append("-dropreplace=" + name); }
+        if (found != null and correct == false) {
+            var spec = name;
+            if (existingOldVersion[name] != null) { spec = name + "@" + existingOldVersion[name]; }
+            drops.append("-dropreplace=" + spec);
+        }
         if (wanted != null and correct == false) { replacements.append("-replace=" + name + "=" + wanted); }
     }
     return drops + replacements;
@@ -95,6 +106,16 @@ test "derives a replacement and removes a stale workspace replacement" {
         {"dir": "/repo/libs/lib", "json": lib},
     ]);
     std\assert(got.join("|") == "-dropreplace=example.com/lib|-replace=example.com/lib=./libs/lib", message: "reconcile workspace replacement");
+}
+
+test "drops a versioned old-side replacement as path@version" {
+    final root = `{"Module":{"Path":"example.com/root"},"Require":[{"Path":"example.com/lib"}],"Replace":[{"Old":{"Path":"example.com/lib","Version":"v1.2.3"},"New":{"Path":"./stale"}}]}`;
+    final lib = `{"Module":{"Path":"example.com/lib"}}`;
+    final got = replaceArgs(root, modules: [
+        {"dir": "/repo", "json": root},
+        {"dir": "/repo/libs/lib", "json": lib},
+    ]);
+    std\assert(got.join("|") == "-dropreplace=example.com/lib@v1.2.3|-replace=example.com/lib=./libs/lib", message: "versioned old side repeats the pin");
 }
 
 test "keeps a correct parent replacement and ignores third-party replacements" {

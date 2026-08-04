@@ -4,12 +4,29 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "python"; }
 
+// The standalone tool-config files are inputs because they change verdicts: a
+// ruff.toml edit changes what passes ruff-check, .python-version changes which
+// interpreter uv resolves - without them here, the cached pass replays. Projects
+// configuring tools inside pyproject.toml were already covered.
+// requirements*.txt (not requirements-*.txt): the unhyphenated wildcard also
+// matches requirements.txt itself and requirements_dev.txt.
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.py"}, Path{value = "pyproject.toml"}, Path{value = "requirements.txt"}, Path{value = "requirements-*.txt"},
-            Path{value = "Pipfile"}, Path{value = "Pipfile.lock"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}, Path{value = "uv.lock"}, Path{value = "poetry.lock"}];
+    return [Path{value = "**/*.py"}, Path{value = "pyproject.toml"}, Path{value = "requirements*.txt"},
+            Path{value = "Pipfile"}, Path{value = "Pipfile.lock"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}, Path{value = "uv.lock"}, Path{value = "poetry.lock"},
+            Path{value = "ruff.toml"}, Path{value = ".ruff.toml"}, Path{value = "pytest.ini"}, Path{value = "mypy.ini"}, Path{value = "tox.ini"}, Path{value = ".python-version"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
+
+// uv is the launcher every op forks, pinned by no manifest - it is whatever is on
+// PATH, and its resolution behavior changes across releases. The tools it runs
+// (pytest, ruff) need no probe of their own: they resolve from the project's
+// locked environment, and uv.lock is already a required glob, so upgrading one
+// moves the cache key through the lockfile - the same reasoning as the
+// typescript spell's pnpm-locked tools.
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {"uv": ["uv", "--version"]};
+}
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the Python files and symbols SCIP ingests. It lets
@@ -17,9 +34,14 @@ export fun mgs_getVersionCommand() > [str] { return ["python3", "--version"]; }
 export fun mgs_getLanguage() > str { return "python"; }
 
 // mgs_listIgnoreDirs names non-source dirs the python toolchain generates, pruned
-// from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache) are
-// dot-dirs skipped structurally, so only __pycache__ belongs here.
-export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", isDir = true}]; }
+// from the input-hashing walk. The cache dirs (.pytest_cache, .mypy_cache, .venv)
+// are dot-dirs skipped structurally. build/ and dist/ are build-backend output
+// whose .py copies would poison the input hash; venv/ is the common non-dot
+// virtualenv name, whose site-packages would do the same at scale.
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "__pycache__", isDir = true}, Path{value = "build", isDir = true},
+            Path{value = "dist", isDir = true}, Path{value = "venv", isDir = true}];
+}
 
 // mgs_listManifests names the file that carries this project's OWN version - not
 // the toolchain's (that's mgs_getVersionCommand) and not a cache input (these three
@@ -29,10 +51,43 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", i
 // this is ORDERED and the first candidate present in a project directory wins.
 export fun mgs_listManifests() > [Path] { return [Path{value = "pyproject.toml"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}]; }
 
-// build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
-// so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.
+// build/sync/publish are uv's own subcommands; pytest, ruff, mypy, pyright, and
+// black are tools uv merely runs, so they are named after the tool (pytest,
+// ruff-check), not the `uv run` wrapper.
+//
+// There is deliberately no clean op. uv has no clean verb (`uv clean` is not a
+// subcommand; `uv cache clean` clears the GLOBAL cache, not project artifacts),
+// and where build output lands is the build backend's choice, not this spell's
+// to guess - the same lesson as typescript's empty provided globs. A magusfile
+// that wants `magus run clean` composes its own removal of the dirs its backend
+// actually writes.
 fun uvBuild(target: Target) > Command { return Command{bin = "uv", args = ["build"]}; }
-fun uvClean(target: Target) > Command { return Command{bin = "uv", args = ["clean"]}; }
+// uv-sync installs the locked environment - the real op behind a preflight
+// target. Base --frozen fails when uv.lock is stale (CI-strict); rw drops it so
+// a local sync may update the lockfile.
+fun uvSync(target: Target) > Command {
+    final args = ["sync", "--frozen"];
+    return Command{bin = "uv", args = args, charms = {
+        "rw": drop(args, "--frozen"),
+    }};
+}
+// uv-publish uploads dist/ artifacts to the configured index; credentials and
+// index selection are the caller's args/environment.
+fun uvPublish(target: Target) > Command { return Command{bin = "uv", args = ["publish"]}; }
+// mypy and pyright are the two mainstream type checkers - the magusfile picks
+// which composes into lint (ruff does not type-check). Both resolve from the
+// locked environment like pytest and ruff.
+fun mypy(target: Target) > Command { return Command{bin = "uv", args = ["run", "mypy", "."]}; }
+fun pyright(target: Target) > Command { return Command{bin = "uv", args = ["run", "pyright"]}; }
+// black is the mainstream formatter alternative to ruff-format, offered per the
+// eslint-vs-biome pattern; the magusfile picks one. Base --check is read-only;
+// rw drops it to write, mirroring ruffFormat.
+fun black(target: Target) > Command {
+    final args = ["run", "black", "--check", "."];
+    return Command{bin = "uv", args = args, charms = {
+        "rw": drop(args, "--check"),
+    }};
+}
 fun pytest(target: Target) > Command {
     return Command{bin = "uv", args = ["run", "pytest"], charms = {
         "debug": append(["-v"]),
@@ -52,6 +107,14 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
+// pip-audit scans the project's dependencies against the PyPI advisory database.
+// It resolves from the locked environment like pytest and ruff (add it as a dev
+// dependency), and composes into the canonical `security` target - its verdict
+// tracks the advisory database, not the tree, so pair the target with
+// skip_cache (see targets.md).
+fun pipAudit(target: Target) > Command {
+    return Command{bin = "uv", args = ["run", "pip-audit"]};
+}
 // scip is the reserved op that runs the Python SCIP indexer for the knowledge graph.
 // The indexer is a PATH binary (install it with mise, not as a project dep), so the op
 // forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
@@ -62,5 +125,7 @@ fun scip(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat, "scip": scip};
+    return {"uv-build": uvBuild, "uv-sync": uvSync, "uv-publish": uvPublish,
+            "pytest": pytest, "pip-audit": pipAudit, "mypy": mypy, "pyright": pyright,
+            "ruff-check": ruffCheck, "ruff-format": ruffFormat, "black": black, "scip": scip};
 }

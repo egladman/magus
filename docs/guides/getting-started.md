@@ -100,11 +100,17 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](ctx); }
 
-// go-vet, golangci-lint, and govulncheck are all static analysis, so they
-// compose into the canonical `lint` target, not bespoke targets.
+// go-vet and golangci-lint are static analysis, so they compose into the
+// canonical `lint` target, not bespoke targets.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     go["go-vet"](ctx);
     go["golangci-lint"](ctx);
+}
+
+// govulncheck consults a live advisory database - its verdict changes with a
+// new CVE, not just with your code - so it composes into the canonical
+// `security` target, not lint.
+export fun security(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"](ctx);
 }
 
@@ -118,7 +124,8 @@ Now the canonical targets run the real toolchain:
 
 ```sh
 magus run format    # gofmt -l . (check only)
-magus run lint      # go vet, golangci-lint, govulncheck
+magus run lint      # go vet, golangci-lint
+magus run security  # govulncheck
 magus run build     # go build
 magus run test      # go test ./...
 ```

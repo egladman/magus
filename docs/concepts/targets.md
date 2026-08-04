@@ -86,27 +86,28 @@ Two consequences:
 
 ## The target name
 
-A target name is typically one of the seven canonical operations (see below); custom names are allowed for work with no canonical home. The type is `project.Target` (a `string` alias).
+A target name is typically one of the eight canonical operations (see below); custom names are allowed for work with no canonical home. The type is `project.Target` (a `string` alias).
 
-| Name        | Meaning                                          |
-| ----------- | ------------------------------------------------ |
-| `preflight` | pre-run checks (workspace health, missing tools) |
-| `build`     | compile / produce artifacts                      |
-| `test`      | run the test suite                               |
-| `lint`      | static analysis, type-check                      |
-| `format`    | format source files                              |
-| `clean`     | remove local build artifacts                     |
-| `generate`  | run code generators                              |
+| Name        | Meaning                                              |
+| ----------- | ---------------------------------------------------- |
+| `preflight` | pre-run checks (workspace health, missing tools)     |
+| `build`     | compile / produce artifacts                          |
+| `test`      | run the test suite                                   |
+| `lint`      | static analysis, type-check                          |
+| `format`    | format source files                                  |
+| `security`  | security scanners (vulnerability/dependency audits)  |
+| `clean`     | remove local build artifacts                         |
+| `generate`  | run code generators                                  |
 
 There is also `ci`: an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
-Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - and security scanning (`govulncheck`) belong under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `security` target. A slow security scan can instead be gated in `ci`. Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
+Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet` or `typecheck` target. Security scanners (`govulncheck`, `pip-audit`, `cargo-audit`, `pnpm audit`, `trivy`) compose into `security` - a phase of its own, not a lint fragment, because its verdict is not a pure function of the tree: a scanner consults a live advisory database, so a newly published CVE flips the result with no input change. That time dependence is exactly what makes it wrong to cache under `lint`'s rules; a `security` target typically declares `skip_cache` (see [cache.md](cache.md#opting-out-and-busting)). `audit` is the same phase under another name - declare it as `security` (MGS1003 warns on `audit`). Reserve custom target names for genuinely distinct work with no canonical home (a `deploy` or `release`), not for fragmenting a canonical phase.
 
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
 ### When does a name earn canonical status?
 
-The seven names above are a closed, deliberate set, not a starting point. A new
+The eight names above are a closed, deliberate set, not a starting point. A new
 name earns a place in it only if it passes all four:
 
 1. **Universality** - the phase must mean something in every toolchain magus
@@ -114,9 +115,10 @@ name earns a place in it only if it passes all four:
    `typecheck` is universal-sounding but Go and Rust type-check as part of
    `build`, not as a separate phase, so it does not earn a canonical slot.
 2. **Distinctness** - it must be a genuine phase, not a subset of an existing
-   one. `vet`, `audit`, `security`, and `typecheck` are all static analysis or
-   formatting fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
-   not phases of their own.
+   one. `vet`, `audit`, `style`, and `typecheck` are all static analysis or
+   formatting fragments of `lint`/`format` - or synonyms of an existing name
+   (see [MGS1003](../reference/codes/magusfile/MGS1003.md)) - not phases of
+   their own.
 3. **Pipeline membership** - `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
    has no claim on the canonical vocabulary.
@@ -125,7 +127,16 @@ name earns a place in it only if it passes all four:
    [operations.md](operations.md)) precisely because they are canonical, not
    custom.
 
-The v1 decision: this set is frozen at the seven above plus `ci`. `deploy`,
+`security` is the worked example of a name that passed: every ecosystem magus
+adapts has a mainstream scanner (universality), its advisory-database verdict
+is time-dependent rather than a pure function of the tree - which is what
+disqualifies it as a `lint` fragment and pairs it with `skip_cache`
+(distinctness, tooling weight) - and a release pipeline must order it against
+`build` and `test` (membership). It was carved out of `lint` for v1; earlier
+docs composed scanners into `lint`, and that composition still works but is no
+longer the guidance.
+
+The v1 decision: this set is frozen at the eight above plus `ci`. `deploy`,
 `release`, and `serve` stay custom by design - they are real, common phases,
 but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
@@ -370,7 +381,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 | ---------- | -------------------------------------------------------------------------------------------------------------------------- |
 | **Target** | An addressed unit of work: `Path + Name + Charms + Files`. The `Target` struct in `types/target.go`.                       |
 | **Path**   | Project path relative to the workspace root. Empty or `/` means all projects.                                              |
-| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `clean`, `generate`.        |
+| **Name**   | The target name: the operation to run. One of: `preflight`, `build`, `test`, `lint`, `format`, `security`, `clean`, `generate`. |
 | **Charm**  | A shared execution modifier (e.g. `rw`). Carried in context; see [charms.md](charms.md).                                   |
 | **Files**  | Repo-relative changed paths within a project. Populated by `ExpandAffected`; nil for explicit targets.                     |
 | **Spell**  | A library of tool-native operations a target composes. Separate from Target; see [spells.md](spells.md).                   |

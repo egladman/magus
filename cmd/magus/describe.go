@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/render"
+	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -269,7 +270,8 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(pos) > 0 {
+	detail := len(pos) > 0
+	if detail {
 		names := namesOf(inventory, func(s types.Spell) string { return s.Name })
 		inventory = filterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
 		if len(inventory) == 0 {
@@ -340,12 +342,52 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 				fmt.Printf("      %s: %s\n", tgt, firstLine(doc))
 			}
 		}
+		// List view stays a summary; the per-op detail (resolved argv plus what
+		// each declared charm does to it) prints only in the single-spell view,
+		// mirroring describe charm's list/detail split.
+		if detail {
+			printSpellOps(t)
+		}
 		if t.Opaque {
 			fmt.Printf("    opaque: true\n")
 		}
 		printSpellVersions(t.Versions)
 	}
 	return nil
+}
+
+// printSpellOps renders the single-spell detail's op section: each op's resolved
+// base argv, then one plain-English summary line per charm the op declares
+// (shared with the spell reference docs via spellruntime.DescribeCharm). The
+// charm patches live only on the built-in descriptor, so a workspace-local
+// spell prints its ops' argv with no charm lines. Backticks are the summary's
+// Markdown code spans; describe's text output is plain, so they come off.
+func printSpellOps(t types.Spell) {
+	if len(t.OpCommands) == 0 {
+		return
+	}
+	spec := spellruntime.Builtins()[t.Name]
+	fmt.Printf("    ops:\n")
+	for _, tgt := range t.Targets {
+		argv, ok := t.OpCommands[tgt]
+		if !ok {
+			continue
+		}
+		fmt.Printf("      %s: %s\n", tgt, strings.Join(argv, " "))
+		op, ok := spec.Ops[tgt]
+		if !ok {
+			continue
+		}
+		charmNames := make([]string, 0, len(op.Charms))
+		for cn := range op.Charms {
+			charmNames = append(charmNames, cn)
+		}
+		slices.Sort(charmNames)
+		for _, cn := range charmNames {
+			summary := strings.ReplaceAll(spellruntime.DescribeCharm(op.Charms[cn], op.Args), "`", "")
+			fmt.Printf("        %s: %s\n", cn, summary)
+		}
+	}
 }
 
 // printSpellVersions EXECUTES a spell's version probes and reports what they return

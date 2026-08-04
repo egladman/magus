@@ -1,9 +1,11 @@
-// cargo-clippy lints and denies warnings (-D warnings), gating CI on a clean run.
+// cargo-clippy is static analysis, so it composes into the canonical `lint`
+// target. Denying warnings is a project policy the magusfile opts into by
+// appending the args, as here; the op itself bakes no policy in.
 import "magus";
 import "magus/spell/rust";
 
 magus\project({ "spells": [rust] });
 
-export fun clippy(ctx: magus\Context, args: [str]) > void {
-    rust["cargo-clippy"](ctx);
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    rust["cargo-clippy"](ctx, {"args": ["--", "-D", "warnings"]});
 }

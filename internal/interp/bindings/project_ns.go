@@ -48,7 +48,7 @@ func magusfileNotASpellErr(what string) error {
 // knownProjectOptionKeys are the recognized magus.project({...}) top-level keys.
 var knownProjectOptionKeys = []string{
 	"name", "depends_on", "outputs", "sources", "exclusive", "spells", "watch_ignore", "targets",
-	"no_language",
+	"no_language", "package_manager",
 }
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
@@ -163,6 +163,21 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		if ev.Bool() {
 			opts = append(opts, workspace.WithExclusive())
 		}
+	}
+	// Closed set, validated here rather than at fork time: a typo like "yarn2"
+	// would otherwise fork a nonexistent binary on every op instead of failing
+	// the load once with the valid choices.
+	if pv, ok := v.MapGet("package_manager"); ok {
+		var pm string
+		if pv.IsStr() {
+			pm = strings.TrimSpace(pv.AsString())
+		}
+		if !spellruntime.KnownPackageManager(pm) {
+			return nil, fmt.Errorf(
+				"magus.project: \"package_manager\" must be one of %s; got %q",
+				strings.Join(spellruntime.PackageManagers, ", "), pm)
+		}
+		opts = append(opts, workspace.WithPackageManager(pm))
 	}
 	// A reason, not a flag. `"no_language": true` would silence doctor's language-coverage
 	// check anonymously; requiring prose means the next reader learns why this project has

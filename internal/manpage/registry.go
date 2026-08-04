@@ -36,6 +36,7 @@ var CommonTargets = []Target{
 	{Name: "test", Short: "Test selected projects"},
 	{Name: "lint", Short: "Lint selected projects (read-only)"},
 	{Name: "format", Short: "Format source files in selected projects"},
+	{Name: "security", Short: "Run security scanners over selected projects (read-only)"},
 	{Name: "clean", Short: "Remove build artifacts from selected projects"},
 	{Name: "generate", Short: "Run code generation for selected projects"},
 	{Name: "ci", Short: "Run the magusfile's ci target read-only (affected-set anchor)"},

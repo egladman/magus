@@ -1,0 +1,14 @@
+// docker-scout is Docker's own image scanner (`docker scout cves`) - trivy's
+// vendor-tool sibling; a workspace picks one for its `security` target. The
+// image reference comes from the magusfile, and the advisory verdict tracks
+// the scanner's database, so skip_cache applies the same way.
+import "magus";
+import "magus/spell/docker";
+
+magus\project({ "spells": [docker], "targets": {
+    "security": {"skip_cache": "reads Docker Scout's advisory database, which changes independently of this tree"},
+} });
+
+export fun security(ctx: magus\Context, args: [str]) > void {
+    docker["docker-scout"](ctx, {"args": ["myapp:latest"]});
+}

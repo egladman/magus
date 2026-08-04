@@ -131,7 +131,14 @@ type Project struct {
 	// harness no single pack describes) from a real gap (someone forgot to import the
 	// go spell) without being told. Carrying the REASON rather than a bare bool is what
 	// keeps the opt-out honest: it has to say what it is instead of silencing a check.
-	NoLanguage     string
+	NoLanguage string
+	// PackageManager is the explicit "package_manager" option from magus.project:
+	// the npm/pnpm/yarn/bun launcher a package-manager-substituting spell (see
+	// spells.Descriptor.PackageManagerBin) forks for this project. Empty means
+	// detect - the engine reads package.json's packageManager field, then the
+	// lockfile, then falls back to the bin the spell recorded - so most projects
+	// never set it. Validated against the known set at magusfile load.
+	PackageManager string
 	WatchIgnores   []IgnorePattern
 	TargetPolicies map[string]Target // per-target execution policy; values carry only the policy fields of Target
 	// TargetInputs are per-target file inputs declared in a target body via

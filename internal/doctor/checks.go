@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -669,16 +670,19 @@ func nameConvention(name string) string {
 // existing canonical phase (see targets.md#the-target-name) rather than a phase of
 // their own: static analysis or formatting a lesser model might carve out as its
 // own target. typecheck and type-check are both listed because they normalize to
-// different kebab forms (no word boundary vs. an explicit hyphen).
+// different kebab forms (no word boundary vs. an explicit hyphen). audit is here
+// as the common synonym for the canonical `security` target - not a fragment of
+// lint anymore, but a second spelling of a phase that already has a name.
 var bespokePhaseFragmentNames = map[string]bool{
 	"typecheck": true, "type-check": true, "vet": true,
-	"audit": true, "security": true, "style": true, "prettify": true,
+	"audit": true, "style": true, "prettify": true,
 }
 
 // checkBespokePhaseFragmentTargets is MGS1003: a target whose normalized name
 // names a static-analysis or formatting subset rather than a phase of its own
-// should be composed into lint (or format) instead, so `magus affected ci`
-// covers it without a bespoke target the pipeline can silently forget to run.
+// should be composed into lint (or format) - or, for audit, declared under the
+// canonical name `security` - so `magus affected ci` covers it without a bespoke
+// target the pipeline can silently forget to run.
 // A warning, not a load error: the escape hatch of keeping the name stays.
 func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Check {
 	const name = "bespoke phase-fragment target names"
@@ -711,10 +715,106 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) Che
 		Status: StatusFail,
 		Message: fmt.Sprintf(
 			"%d target name(s) name static analysis or formatting rather than a phase of their own; "+
-				"compose the op into lint (or format) so `magus affected ci` covers it (docs/targets.md#the-target-name, see %s)",
+				"compose the op into lint (or format), or use the canonical name `security` for audit work, "+
+				"so `magus affected ci` covers it (docs/targets.md#the-target-name, see %s)",
 			len(seen), types.CodeURL(types.BespokePhaseFragmentName)),
 		Details: details,
 	}
+}
+
+// checkSpellProbeCoverage is MGS1021: it makes the version-probe policy mechanical.
+// A PATH binary whose upgrade changes verdicts must contribute a probe to the cache
+// key (see spells.Descriptor.VersionCmds); this check walks every built-in spell
+// bound to a workspace project and reports each op bin that neither a probe nor a
+// declared mgs_listUnprobedBins opt-out accounts for.
+//
+// Boundary: only BUILT-IN spells are checked. The covered/uncovered judgment needs
+// the spell's raw declaration (probe argvs, opt-out map), which lives on the
+// spells.Descriptor - reachable for built-ins via spellruntime.Builtins() - while a
+// workspace-local spell surfaces here only as its registered *spells.Spell, which
+// keeps probe argvs inside closures. Extending coverage to local spells means
+// retaining their descriptors past registration; not worth new plumbing for a
+// check whose subjects are overwhelmingly the built-ins.
+// A warning, not a load error: like MGS1003, the workspace still runs.
+func (*runner) checkSpellProbeCoverage(projects []*types.Project) Check {
+	const name = "spell probe coverage"
+	bound := map[string]bool{}
+	for _, p := range projects {
+		if p.Spell != "" {
+			bound[p.Spell] = true
+		}
+		for _, s := range p.ResolvedSpells {
+			bound[s.Name()] = true
+		}
+	}
+
+	builtins := spellruntime.Builtins()
+	var details []string
+	for spellName := range bound {
+		spec, ok := builtins[spellName]
+		if !ok {
+			continue // workspace-local: descriptor unreachable, see the boundary note above
+		}
+		details = append(details, probeCoverageFindings(spec)...)
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "every bound built-in spell's op bins carry a version probe or a declared opt-out"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d spell op bin(s) contribute no version probe to the cache key; upgrading one changes verdicts while every cache entry replays. "+
+				"Add a named probe (mgs_getVersionCommands) or declare the opt-out with a reason (mgs_listUnprobedBins) (see %s)",
+			len(details), types.CodeURL(types.UnprobedSpellBin)),
+		Details: details,
+	}
+}
+
+// probeCoverageFindings reports the ops of one spell descriptor whose bin no
+// probe or opt-out accounts for, one finding line per op. A bin is covered when
+// it is argv[0] of the primary probe, argv[0] of any named probe, a key of the
+// declared opt-outs, or - for a spell that opts in to package-manager
+// substitution - one of the substitutable managers (plus node): the recorded
+// manager bin is swapped per project at fork time, so no single probe argv can
+// name it.
+func probeCoverageFindings(spec spells.Descriptor) []string {
+	covered := map[string]bool{}
+	if len(spec.VersionCmd) > 0 {
+		covered[spec.VersionCmd[0]] = true
+	}
+	for _, argv := range spec.VersionCmds {
+		if len(argv) > 0 {
+			covered[argv[0]] = true
+		}
+	}
+	for bin := range spec.UnprobedBins {
+		covered[bin] = true
+	}
+	if spec.PackageManagerBin != "" {
+		for _, pm := range spellruntime.PackageManagers {
+			covered[pm] = true
+		}
+		covered["node"] = true
+	}
+
+	var out []string
+	for _, opName := range spec.OpNames() {
+		bin := spec.Ops[opName].Bin
+		// A sh -c wrapper's real tool lives inside the script string, so the bin
+		// is unattributable; an empty bin is a no-op marker op.
+		if bin == "" || bin == "sh" {
+			continue
+		}
+		if covered[bin] {
+			continue
+		}
+		out = append(out, fmt.Sprintf(
+			"spell %s op %s: bin %q has no version probe; add %q to mgs_getVersionCommands, or declare it in mgs_listUnprobedBins with a reason",
+			spec.Name, opName, bin, bin))
+	}
+	return out
 }
 
 // checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static

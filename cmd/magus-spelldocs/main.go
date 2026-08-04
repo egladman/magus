@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -41,6 +40,7 @@ type spellInfo struct {
 	description string   // one-sentence frontmatter description
 	intro       string   // one-paragraph page intro
 	tags        []string // extra frontmatter tags (name + "spell" are always added)
+	aliases     []string // old clean URLs that redirect here (the short spell names pre-rename)
 }
 
 // spellMeta is the authored metadata keyed by runtime spell name (Descriptor.Name).
@@ -49,38 +49,42 @@ type spellInfo struct {
 var spellMeta = map[string]spellInfo{
 	"go": {
 		dir: "golang", language: "Go",
-		description: "Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.",
-		intro:       "The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`) subcommand directly, with no shell. Lint and vulnerability scanning run as `go tool` invocations so they resolve from the module's tool block rather than PATH.",
+		description: "Go toolchain spell: build, test, vet, fmt, gofumpt, mod-tidy, golangci-lint, and govulncheck as magus ops.",
+		intro:       "The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or `gofmt`/`gofumpt`) subcommand directly, with no shell. golangci-lint and govulncheck run from PATH - pinned by whatever the workspace uses (mise, asdf, a system package) - and the spell's named version probes record which, so a linter upgrade moves the cache key.",
 		tags:        []string{"go", "golang", "build", "test", "lint"},
 	},
 	"rust": {
 		dir: "rust", language: "Rust",
-		description: "Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.",
-		intro:       "The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly; `cargo-build` builds in release mode and `cargo-clippy` denies warnings, matching a CI-gating default.",
+		description: "Rust toolchain spell: cargo build, check, test, clippy, fmt, run, doc, bench, audit, and deny as magus ops.",
+		intro:       "The `rust` spell wires Cargo into a magusfile. Each op forks a `cargo` subcommand directly with no baked-in flags: the build profile (`--release`) and lint policy (`-- -D warnings`) are the magusfile's to append through the op's args option.",
 		tags:        []string{"rust", "cargo", "build", "test"},
+		aliases:     []string{"concepts/spells/rs"},
 	},
 	"typescript": {
 		dir: "typescript", language: "TypeScript",
-		description: "TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.",
-		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager (`pnpm exec`). It is an opaque spell: `preflight` composes the individual checks into one target.",
+		description: "TypeScript toolchain spell: tsc, eslint, prettier, vitest, jest, install, and audit run through the project package manager.",
+		aliases:     []string{"concepts/spells/ts"},
+		intro:       "The `typescript` spell wires a TypeScript project's tooling into a magusfile, forking each tool through the project package manager. Its ops record `pnpm`, and the engine substitutes each project's detected manager (npm, yarn, or bun) at fork time: the project's `package_manager` option first, then `package.json`'s `packageManager` field, then the lockfile, then pnpm. It is an opaque spell: `preflight` composes the individual checks into one target.",
 		tags:        []string{"typescript", "node", "eslint", "vitest"},
 	},
 	"python": {
 		dir: "python", language: "Python",
-		description: "Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.",
-		intro:       "The `python` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), and formatting run as `uv run` subcommands so they resolve from the project's locked environment.",
+		description: "Python toolchain spell: pytest, ruff check/format, mypy, pyright, black, pip-audit, and uv build/sync as magus ops.",
+		intro:       "The `python` spell wires a Python project's tooling into a magusfile through `uv`. Tests, linting (ruff), type-checking (mypy or pyright), and formatting (ruff-format or black) run as `uv run` subcommands so they resolve from the project's locked environment; uv-sync installs that environment for a preflight target.",
 		tags:        []string{"python", "uv", "pytest", "ruff"},
+		aliases:     []string{"concepts/spells/py"},
 	},
 	"markdown": {
 		dir: "markdown", language: "Markdown",
-		description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose.",
-		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, and `prettier` checks formatting; the `rw` charm turns the check into an in-place rewrite.",
+		description: "Markdown docs spell: markdownlint, prettier, and typos for linting, formatting, and spell-checking prose.",
+		intro:       "The `markdown` spell lints and formats Markdown. `markdownlint` enforces style, `prettier` checks formatting, and `typos` catches known misspellings; the `rw` charm turns each check into an in-place fix.",
 		tags:        []string{"markdown", "docs", "prettier", "lint"},
+		aliases:     []string{"concepts/spells/md"},
 	},
 	"docker": {
 		dir: "docker", language: "Docker",
-		description: "Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.",
-		intro:       "The `docker` spell forks the `docker` CLI (and `hadolint`) to build images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image.",
+		description: "Docker spell: image build, build-check, buildx, hadolint linting, and trivy/scout image scanning.",
+		intro:       "The `docker` spell forks the `docker` CLI (and `hadolint`) to build images and lint Dockerfiles. `docker-build-check` runs the builder's `--check` preflight without producing an image, and `trivy`/`docker-scout` scan a built image for the `security` target.",
 		tags:        []string{"docker", "container", "image", "hadolint"},
 	},
 	"buf": {
@@ -91,8 +95,8 @@ var spellMeta = map[string]spellInfo{
 	},
 	"cosign": {
 		dir: "cosign", language: "",
-		description: "Cosign spell: keyless sign, attest, and verify for container artifacts.",
-		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts. Signing and attestation pass `--yes` for non-interactive (CI) use.",
+		description: "Cosign spell: sign, attest, verify, verify-attestation, and the blob pair for artifacts and images.",
+		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts - registry images and plain files (the blob pair) alike. Signing and attestation pass `--yes` for non-interactive (CI) use. Credentials ride the environment, and the sandbox scrubs it: pass `COSIGN_*` (and, for keyless OIDC in GitHub Actions, `ACTIONS_ID_TOKEN_REQUEST_URL`/`ACTIONS_ID_TOKEN_REQUEST_TOKEN`) through `sandbox.env.passthrough` in magus.yaml, or signing fails with an auth error that never names the scrub.",
 		tags:        []string{"cosign", "sigstore", "signing", "supply-chain"},
 	},
 	"buzz": {
@@ -103,8 +107,8 @@ var spellMeta = map[string]spellInfo{
 	},
 	"bash": {
 		dir: "bash", language: "Shell",
-		description: "Bash spell: shellcheck linting for shell scripts.",
-		intro:       "The `bash` spell lints shell scripts. Its single op finds every `.sh`/`.bash` file and runs `shellcheck` over the set.",
+		description: "Bash spell: shellcheck linting, shfmt formatting, and bats tests for shell scripts.",
+		intro:       "The `bash` spell covers the shell lifecycle: `shellcheck` lints every `.sh`/`.bash` file, `shfmt` formats them (diff by default, rewrite under `rw`), and `bats` runs a test suite. Extensionless shebang scripts are a known limit - list them explicitly via op args.",
 		tags:        []string{"bash", "shell", "shellcheck", "lint"},
 	},
 }
@@ -162,6 +166,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Orphan sweep: every .md in the output dir must be a page this run wrote.
+	// The dir is wholly generated, so a leftover page is a stranded artifact the
+	// drift gate cannot see (the generator no longer writes it, so it never
+	// changes) - exactly how the pre-rename ts/py/rs/md pages survived for
+	// months asserting spell names that no longer existed. A rename now fails
+	// here instead of stranding a page.
+	entries, err := os.ReadDir(*outDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus-spelldocs: read %s: %v\n", *outDir, err)
+		os.Exit(1)
+	}
+	written := make(map[string]bool, len(names))
+	for _, name := range names {
+		written[name+".md"] = true
+	}
+	var orphans []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || written[e.Name()] {
+			continue
+		}
+		orphans = append(orphans, e.Name())
+	}
+	if len(orphans) > 0 {
+		fmt.Fprintf(os.Stderr, "magus-spelldocs: %s holds page(s) no registered spell produces: %s; delete them (add an alias on the successor page if the URL should redirect)\n",
+			*outDir, strings.Join(orphans, ", "))
+		os.Exit(1)
+	}
+
 	fmt.Fprintf(os.Stderr, "magus-spelldocs: wrote %d spell docs to %s\n", len(names), *outDir)
 }
 
@@ -183,6 +215,7 @@ func renderSpell(d spells.Descriptor) string {
 	tags = append(tags, "tools")
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       d.Name + " spell",
+		Aliases:     meta.aliases,
 		Description: meta.description,
 		Tags:        dedupe(tags),
 	})
@@ -196,6 +229,21 @@ func renderSpell(d spells.Descriptor) string {
 		fmt.Fprintf(&b, "**Version probe:** `%s`\n\n", strings.Join(d.VersionCmd, " "))
 	} else {
 		fmt.Fprintf(&b, "**Version probe:** none\n\n")
+	}
+	// Named probes for the secondary tools a spell drives (hadolint, shellcheck,
+	// cargo-audit, ...). Invisible before this line existed: docker.md showed only
+	// `docker --version` while the hadolint probe silently fed the cache key.
+	if len(d.VersionCmds) > 0 {
+		names := make([]string, 0, len(d.VersionCmds))
+		for n := range d.VersionCmds {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		parts := make([]string, 0, len(names))
+		for _, n := range names {
+			parts = append(parts, fmt.Sprintf("`%s` (`%s`)", n, strings.Join(d.VersionCmds[n], " ")))
+		}
+		fmt.Fprintf(&b, "**Named probes:** %s - each records UNPROBED when the tool is absent, and moves the cache key when installed.\n\n", strings.Join(parts, ", "))
 	}
 	if len(d.Provides) > 0 {
 		fmt.Fprintf(&b, "**Provides:** %s\n\n", codeList(d.Provides))
@@ -227,7 +275,7 @@ func renderSpell(d spells.Descriptor) string {
 		for _, cn := range sortedCharmNames(op.Charms) {
 			charm := op.Charms[cn]
 			fmt.Fprintf(&b, "### %s\n\n", cn)
-			fmt.Fprintf(&b, "%s\n\n", describeCharm(charm, op.Args))
+			fmt.Fprintf(&b, "%s\n\n", spellruntime.DescribeCharm(charm, op.Args))
 			fmt.Fprintln(&b, "<details class=\"charm-patch\">")
 			fmt.Fprintln(&b, "<summary>JSON Patch</summary>")
 			fmt.Fprintln(&b)
@@ -413,62 +461,14 @@ func collectOpHandlers(fd *ast.FunDecl, out map[string]string) {
 // blank-line-separated paragraphs into one, so it drops cleanly into a Markdown
 // sentence. Plain ASCII in, plain ASCII out.
 func cleanDoc(doc string) string {
+	// Engineering notes stay in the source: a TODO block (and everything after
+	// it) is a maintainer conversation, not op reference - bash.md once carried
+	// the shellcheck op's whole internal TODO, resolve.go pointers and all.
+	if i := strings.Index(doc, "TODO"); i >= 0 {
+		doc = doc[:i]
+	}
 	fields := strings.Fields(strings.ReplaceAll(doc, "\n", " "))
 	return strings.Join(fields, " ")
-}
-
-// describeCharm renders a one-sentence, human summary of a charm's JSON-Patch ops
-// against the op's base argv (args), so a reader sees what the charm does without
-// reading JSON Patch. It resolves each patch's target index back to the original
-// argument (e.g. "replaces `-l` with `-w`") when it can. It handles only the shapes
-// the built-ins use (add/remove/replace on argv indices); anything unusual falls
-// back to naming the op count.
-func describeCharm(c spells.Charm, args []string) string {
-	parts := make([]string, 0, len(c.Ops))
-	for _, p := range c.Ops {
-		switch p.Op {
-		case "add":
-			if strings.HasSuffix(p.Path, "/-") {
-				parts = append(parts, "appends `"+p.Value+"`")
-			} else {
-				parts = append(parts, "inserts `"+p.Value+"`")
-			}
-		case "remove":
-			if orig := argAt(args, p.Path); orig != "" {
-				parts = append(parts, "drops `"+orig+"`")
-			} else {
-				parts = append(parts, "drops an argument")
-			}
-		case "replace":
-			if orig := argAt(args, p.Path); orig != "" {
-				parts = append(parts, "replaces `"+orig+"` with `"+p.Value+"`")
-			} else {
-				parts = append(parts, "sets an argument to `"+p.Value+"`")
-			}
-		case "move":
-			parts = append(parts, "moves an argument")
-		case "copy":
-			parts = append(parts, "copies an argument")
-		}
-	}
-	if len(parts) == 0 {
-		return fmt.Sprintf("A %d-op argv patch.", len(c.Ops))
-	}
-	return capitalize(strings.Join(parts, ", ")) + "."
-}
-
-// argAt resolves a JSON Pointer path ("/1") to the base argv element it targets, or
-// "" when the path is not a plain in-range index (e.g. "/-" append, or out of
-// range). Used to name the argument a replace/remove charm acts on.
-func argAt(args []string, path string) string {
-	if !strings.HasPrefix(path, "/") {
-		return ""
-	}
-	i, err := strconv.Atoi(path[1:])
-	if err != nil || i < 0 || i >= len(args) {
-		return ""
-	}
-	return args[i]
 }
 
 // charmPatchJSON renders a charm's ops as indented JSON (RFC 6902), the exact
@@ -479,14 +479,6 @@ func charmPatchJSON(c spells.Charm) string {
 		return "[]"
 	}
 	return string(data)
-}
-
-// capitalize upper-cases the first byte of s (ASCII), leaving the rest unchanged.
-func capitalize(s string) string {
-	if s == "" || s[0] < 'a' || s[0] > 'z' {
-		return s
-	}
-	return string(s[0]-'a'+'A') + s[1:]
 }
 
 func sortedCharmNames(charms map[string]spells.Charm) []string {

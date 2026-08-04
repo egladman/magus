@@ -1,10 +1,13 @@
-// go-mod-tidy checks go.mod/go.sum with --diff (CI-safe); the rw charm drops
-// --diff so `magus run tidy:rw` applies the changes.
+// go-mod-tidy composes into the canonical `format` target, exactly like go-fmt:
+// the default --diff form is the read-only drift check, and `magus run format:rw`
+// drops --diff to apply the changes. A bespoke `tidy` target would be invisible
+// to any ci that only needs the canonical phases.
 import "magus";
 import "magus/spell/go";
 
 magus\project({ "spells": [go] });
 
-export fun tidy(ctx: magus\Context, args: [str]) > void {
+export fun format(ctx: magus\Context, args: [str]) > void {
+    go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
 }

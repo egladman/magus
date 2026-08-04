@@ -4,11 +4,38 @@ import "magus/charm";
 
 export fun mgs_getName() > str { return "rust"; }
 
+// The config files are inputs because they change verdicts: a rustfmt.toml edit
+// changes what passes cargo-fmt, clippy.toml what passes cargo-clippy, and
+// rust-toolchain(.toml) switches the entire toolchain - each without touching a
+// .rs file, so without them here the cached verdict replays.
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.rs"}, Path{value = "Cargo.toml"}, Path{value = "Cargo.lock"}];
+    return [Path{value = "**/*.rs"}, Path{value = "Cargo.toml"}, Path{value = "Cargo.lock"},
+            Path{value = "rustfmt.toml"}, Path{value = ".rustfmt.toml"}, Path{value = "clippy.toml"},
+            Path{value = "rust-toolchain"}, Path{value = "rust-toolchain.toml"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["rustc", "--version"]; }
+
+// rustfmt and clippy need no probe: they ship as rustup components
+// version-locked to the toolchain, so `rustc --version` genuinely covers them -
+// unlike golangci-lint for go. cargo-audit and cargo-deny are the opposite
+// case: cargo-installed, independently versioned, and sole deciders of the
+// security verdict, so each carries a named probe (UNPROBED when absent, so a
+// workspace that never composes them pays nothing).
+export fun mgs_getVersionCommands() > {str: [str]} {
+    return {
+        "cargo-audit": ["cargo-audit", "--version"],
+        "cargo-deny": ["cargo-deny", "--version"],
+    };
+}
+
+// cargo is the one bin this spell forks with no probe of its own: rustup locks
+// it to the toolchain, so `rustc --version` (the primary probe) already moves
+// the cache key when it changes. Declared so doctor's probe-coverage check
+// reads it as a decision, not a gap.
+export fun mgs_listUnprobedBins() > {str: str} {
+    return {"cargo": "toolchain-locked with rustc; `rustc --version` covers it"};
+}
 
 // mgs_getLanguage names the source language this spell adapts, canonical and lowercase
 // so it matches the language attr on the Rust files and symbols SCIP ingests. It lets
@@ -25,9 +52,44 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "target", isDir 
 // cache key). A cargo crate has exactly one candidate.
 export fun mgs_listManifests() > [Path] { return [Path{value = "Cargo.toml"}]; }
 
-fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
+// Plain `cargo build`, no --release: profile is the magusfile's call, made by
+// appending `--release` (or `--profile <name>`) through the op's args option.
+// Baking a profile in here was an opinion the caller could not remove - op args
+// only append.
+fun cargoBuild(target: Target) > Command {
+    return Command{bin = "cargo", args = ["build"], charms = {
+        "debug": append(["--verbose"]),
+    }};
+}
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }
-fun cargoClippy(target: Target) > Command { return Command{bin = "cargo", args = ["clippy", "--", "-D", "warnings"]}; }
+// cargo-check is the fast typecheck (no codegen) - the dev-loop command - and
+// the natural lint sibling to clippy for projects that want the cheap gate.
+fun cargoCheck(target: Target) > Command {
+    return Command{bin = "cargo", args = ["check"], charms = {
+        "debug": append(["--verbose"]),
+    }};
+}
+fun cargoRun(target: Target) > Command { return Command{bin = "cargo", args = ["run"]}; }
+// Plain `cargo doc`: --no-deps is the common choice but a choice all the same,
+// appended by the magusfile, not baked in here.
+fun cargoDoc(target: Target) > Command { return Command{bin = "cargo", args = ["doc"]}; }
+fun cargoBench(target: Target) > Command { return Command{bin = "cargo", args = ["bench"]}; }
+// cargo-fetch pre-downloads the locked dependency graph - the real op behind a
+// preflight target, and the way a network-restricted build warms its cache.
+fun cargoFetch(target: Target) > Command { return Command{bin = "cargo", args = ["fetch"]}; }
+// Plain `cargo clippy`, no `-- -D warnings`: deny-by-default is a project
+// policy, not this spell's - a magusfile that wants it appends the args. The rw
+// charm needs --allow-dirty/--allow-staged alongside --fix because clippy
+// refuses to rewrite a tree with uncommitted changes, which is exactly the
+// state a local `lint:rw` runs in. No gha charm: clippy has no GitHub-native
+// output format (only --message-format=json, which needs post-processing).
+fun cargoClippy(target: Target) > Command {
+    final args = ["clippy"];
+    return Command{bin = "cargo", args = args, charms = {
+        "debug": append(["--verbose"]),
+        "rw": after(args, "clippy", ["--fix", "--allow-dirty", "--allow-staged"]),
+    }};
+}
 fun cargoFmt(target: Target) > Command {
     final args = ["fmt", "--", "--check"];
     // rw turns the check into a write by dropping --check then -- (`cargo fmt`).
@@ -38,7 +100,18 @@ fun cargoFmt(target: Target) > Command {
         "rw": Charm{ ops = drop(args, "--check").ops + drop(args, "--").ops },
     }};
 }
-fun cargoTest(target: Target) > Command { return Command{bin = "cargo", args = ["test"]}; }
+fun cargoTest(target: Target) > Command {
+    return Command{bin = "cargo", args = ["test"], charms = {
+        "debug": append(["--verbose"]),
+    }};
+}
+// cargo-audit checks Cargo.lock against the RustSec advisory database; cargo-deny
+// is the broader policy gate (advisories plus licenses/bans/sources, per its
+// deny.toml). Both are mainstream - the magusfile picks one (or both) to compose
+// into the canonical `security` target. Advisory verdicts track the database,
+// not the tree, so pair that target with skip_cache (see targets.md).
+fun cargoAudit(target: Target) > Command { return Command{bin = "cargo", args = ["audit"]}; }
+fun cargoDeny(target: Target) > Command { return Command{bin = "cargo", args = ["deny", "check"]}; }
 // scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph.
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never
 // lands in the tree; rust-analyzer's scip subcommand writes there via --output. Run
@@ -48,5 +121,8 @@ fun scip(target: Target) > Command {
 }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"cargo-build": cargoBuild, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy, "cargo-fmt": cargoFmt, "cargo-test": cargoTest, "scip": scip};
+    return {"cargo-build": cargoBuild, "cargo-check": cargoCheck, "cargo-clean": cargoClean, "cargo-clippy": cargoClippy,
+            "cargo-fmt": cargoFmt, "cargo-test": cargoTest, "cargo-run": cargoRun, "cargo-doc": cargoDoc,
+            "cargo-bench": cargoBench, "cargo-fetch": cargoFetch,
+            "cargo-audit": cargoAudit, "cargo-deny": cargoDeny, "scip": scip};
 }

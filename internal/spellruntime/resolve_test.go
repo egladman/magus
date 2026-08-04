@@ -65,6 +65,47 @@ export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor"}]; }
 	assert.ErrorContains(t, err, "mgs_listIgnoreDirs[0] must set isDir = true")
 }
 
+// The package-manager opt-in resolves through the same optional-contract loop
+// as every other scalar, landing on Descriptor.PackageManagerBin; a spell that
+// does not export the hook resolves with it empty (no substitution).
+func TestResolve_PackageManagerBin(t *testing.T) {
+	const src = `
+export fun mgs_getName() > str { return "js-spell"; }
+export fun mgs_getPackageManagerBin() > str { return "pnpm"; }
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, "pnpm", spec.PackageManagerBin)
+
+	spec, err = resolve(t, `export fun mgs_getName() > str { return "plain"; }`)
+	require.NoError(t, err)
+	assert.Empty(t, spec.PackageManagerBin)
+}
+
+// The probe opt-outs and install hints resolve through the same optional-contract
+// loop, landing on the two str->str Descriptor maps. An entry with an empty value
+// is dropped (an opt-out without a reason is a forgotten probe, not an opt-out).
+func TestResolve_UnprobedBinsAndInstallHints(t *testing.T) {
+	const src = `
+export fun mgs_getName() > str { return "hinted"; }
+export fun mgs_listUnprobedBins() > {str: str} {
+    return {"gofmt": "ships with the go toolchain", "bare": ""};
+}
+export fun mgs_listInstallHints() > {str: str} {
+    return {"shellcheck": "mise use -g shellcheck"};
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"gofmt": "ships with the go toolchain"}, spec.UnprobedBins)
+	assert.Equal(t, map[string]string{"shellcheck": "mise use -g shellcheck"}, spec.InstallHints)
+
+	spec, err = resolve(t, `export fun mgs_getName() > str { return "plain"; }`)
+	require.NoError(t, err)
+	assert.Empty(t, spec.UnprobedBins)
+	assert.Empty(t, spec.InstallHints)
+}
+
 func TestResolve_MissingGetName(t *testing.T) {
 	const src = `var x: int = 1;`
 	_, err := resolve(t, src)

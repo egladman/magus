@@ -1,0 +1,11 @@
+// shfmt is the shell formatter, composing into the canonical `format` target
+// the way gofmt does for Go: `magus run format` diffs (-d, non-zero on drift),
+// and `magus run format:rw` rewrites in place.
+import "magus";
+import "magus/spell/bash";
+
+magus\project({ "spells": [bash] });
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    bash["shfmt"](ctx);
+}

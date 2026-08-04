@@ -117,11 +117,14 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
     return true;
 }
 
-// quote_prefixes declares the line prefix that introduces a section marker, so
+// quote_prefixes declares the line prefixes that introduce a section marker, so
 // replayed subprocess output cannot close a section magus opened or forge one.
-// magus reads this once and does the per-line matching itself.
+// magus reads this once and does the per-line matching itself. The bare
+// "section_" prefix is deliberate hardening: GitLab's log renderer has not
+// documented whether the leading hide sequence is required for a marker to
+// parse, so a replayed line missing it must not slip through the quote either.
 export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
-    return [HIDE + "section_"];
+    return [HIDE + "section_", "section_"];
 }
 
 import "assert";

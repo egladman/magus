@@ -87,6 +87,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 | `exclusive`    | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
 | `watch_ignore` | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
 | `no_language`  | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                            |
+| `package_manager` | pins the JS package manager (`npm`, `pnpm`, `yarn`, or `bun`) a package-manager-substituting spell (typescript) forks for this project, overriding detection; any other value is a load error naming the valid set |
 | `targets`      | a per-target policy table (see below)                                                                                                                                                                                                                 |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
@@ -105,6 +106,17 @@ magus\project({
     "no_language": "promptfoo harness: yaml tasks, .mjs libs, .py tools; no single pack describes it",
 });
 ```
+
+`package_manager` is rarely needed, because it is only the FIRST step of a
+detection chain. A spell that opts in to substitution (the typescript spell:
+its ops record `pnpm`) forks each project's package manager resolved in this
+order: the explicit `package_manager` option, then the `packageManager` field
+in the project's `package.json` (the corepack standard, `"pnpm@9.1.0"` means
+pnpm), then lockfile presence (`pnpm-lock.yaml`, `yarn.lock`,
+`bun.lock`/`bun.lockb`, `package-lock.json`/`npm-shrinkwrap.json` - first hit
+wins), then the bin the spell recorded. A project with a lockfile or a
+`packageManager` field needs no option at all; set it only to override what
+detection would say.
 
 The `targets` sub-map keys a target name to a policy table:
 

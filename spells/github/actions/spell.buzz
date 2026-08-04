@@ -129,6 +129,13 @@ export fun put_artifact(target: Target, cb: fun(any)) > bool {
     final key = cache_key(hash);
 
     // 1. Reserve the entry → pre-signed Azure upload URL.
+    //
+    // Both early true returns are OPTIMISTIC: a 409 (another runner reserved the
+    // key) and ok=false with no URL (entry already exists) report "stored"
+    // without verifying the other runner ever finalized its upload. If it died
+    // mid-upload, this run claims a store that does not exist — the only cost is
+    // a rebuild on the next miss, which is why optimism is acceptable here, but
+    // the host-side "did not store artifact" error path is bypassed on purpose.
     final cres = rpc("CreateCacheEntry", {"key": key, "version": CACHE_VERSION});
     if (cres["status"] == 409) { return true; }   // another runner already reserved this key
     if (cres["status"] != 200) { return false; }
@@ -176,6 +183,13 @@ fun escapeProp(s: str) > str {
     return acc.replace(",", "%2C");
 }
 
+// groupOpen tracks whether group_start actually printed ::group::. Actions
+// tracks a single open group, so a bool suffices. Without it, group_end would
+// print an unmatched ::endgroup:: for every expanded (skipped) section - and an
+// unmatched end marker closes whatever fold the surrounding workflow step had
+// open, folding away output the user's own ::group:: meant to show.
+var groupOpen = false;
+
 // group_start opens a fold. Actions has no expanded section: ::group:: always
 // starts collapsed. A caller asking for an expanded one wants output the reader
 // must not have to click for, so the group is skipped and the content stays
@@ -186,13 +200,17 @@ export fun group_start(target: Target, cb: fun(any)) > bool {
     final collapsed = io["collapsed"];
     if (collapsed != true) { return true; }
     std\print("::group::" + escapeData("" + io["title"]));
+    groupOpen = true;
     return true;
 }
 
 // group_end closes the current fold. Actions tracks a single open group, so the
-// id is unused; it is in the contract for providers keyed by section name.
+// id is unused; it is in the contract for providers keyed by section name. The
+// end marker is emitted only when group_start actually opened one - see groupOpen.
 export fun group_end(target: Target, cb: fun(any)) > bool {
+    if (!groupOpen) { return true; }
     std\print("::endgroup::");
+    groupOpen = false;
     return true;
 }
 
@@ -242,4 +260,21 @@ export fun annotate(target: Target, cb: fun(any)) > bool {
 // Returned once per run; magus does the per-line matching itself.
 export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
     return ["::"];
+}
+
+import "assert";
+
+test "escapeData encodes structural characters, percent first" {
+    assert\equal(escapeData("50% done"), "50%25 done", "percent escapes");
+    assert\equal(escapeData("a\nb"), "a%0Ab", "newline escapes");
+    assert\equal(escapeData("a\rb"), "a%0Db", "carriage return escapes");
+    // Percent must be encoded before the others, or the % introduced by %0A
+    // would itself be re-encoded. A literal "%0A" in the input must survive as
+    // its escaped-percent form, distinct from an actual newline's encoding.
+    assert\equal(escapeData("%0A"), "%250A", "pre-escaped input is not double-decoded");
+}
+
+test "escapeProp additionally encodes property separators" {
+    assert\equal(escapeProp("a:b,c"), "a%3Ab%2Cc", "colon and comma escape");
+    assert\equal(escapeProp("x\ny:z"), "x%0Ay%3Az", "data escapes compose with prop escapes");
 }

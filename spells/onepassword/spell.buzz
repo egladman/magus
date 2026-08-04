@@ -29,9 +29,10 @@ import "os";
 // supply the context. `op` is the binary, not the product.
 export fun mgs_getName() > str { return "onepassword"; }
 
-// Probed so a `op` upgrade invalidates cache entries that depended on it. The op is
-// not itself cached (secret reads never are), but the probe keeps the spell honest
-// alongside every other tool-driving spell.
+// Probed for parity with every other tool-driving spell, and for `describe
+// spells --versions` visibility. Honestly a small win here: secret reads are
+// never cached, and this spell binds to no project, so the probe reaches a
+// cache key only if a project also lists the spell in its `spells:`.
 export fun mgs_getVersionCommand() > [str] { return ["op", "--version"]; }
 
 // has reports whether haystack contains needle.
@@ -63,6 +64,11 @@ final SCHEME = "op://";
 export fun resolve_secret(target: Target, cb: fun(any)) > str {
     var io = {};
     cb(io);
+    // Checked before the str coercion: `"" + null` is the string "null" in Buzz,
+    // so a missing ref would sail past an == "" guard and reach `op read op://null`.
+    if (io["ref"] == null) {
+        throw "onepassword: no reference given";
+    }
     final ref = "" + io["ref"];
     if (ref == "") {
         throw "onepassword: no reference given";

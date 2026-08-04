@@ -86,7 +86,8 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		// /1, not /3: golangci-lint runs from PATH now, so the argv lost the leading
 		// "tool", "golangci-lint" prefix and --fix inserts right after "run".
 		{"go", "golangci-lint", "rw", []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}},
-		{"go", "go-test", "cd", []spells.PatchOp{
+		// "cover", not "cd": the reserved cd charm means continuous-delivery.
+		{"go", "go-test", "cover", []spells.PatchOp{
 			{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 			{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 		}},
@@ -98,7 +99,12 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		{"python", "ruff-format", "rw", []spells.PatchOp{{Op: "remove", Path: "/3"}}},
 		// ts
 		{"typescript", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
-		{"typescript", "vitest", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+		// default reporter kept alongside the annotations one: vitest replaces its
+		// default when --reporter is given, and CI logs still need the run summary.
+		{"typescript", "vitest", "gha", []spells.PatchOp{
+			{Op: "add", Path: "/-", Value: "--reporter=default"},
+			{Op: "add", Path: "/-", Value: "--reporter=github-actions"},
+		}},
 		{"typescript", "eslint", "rw", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 		{"typescript", "eslint", "gha", []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 		{"typescript", "biome-check", "rw", []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
@@ -108,7 +114,9 @@ func TestBuiltinCharmsUnchanged(t *testing.T) {
 		{"markdown", "prettier", "rw", []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 		// buf
 		{"buf", "buf-lint", "gha", []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
-		{"buf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
+		// compound: -w replaces --exit-code (the higher index) before -d is dropped,
+		// so the concatenated ops apply without an index shifting underneath.
+		{"buf", "buf-format", "rw", []spells.PatchOp{{Op: "replace", Path: "/2", Value: "-w"}, {Op: "remove", Path: "/1"}}},
 		// rs — compound charm (two drops): the constructor concat must still yield
 		// remove /2 then remove /1, in that order.
 		{"rust", "cargo-fmt", "rw", []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},

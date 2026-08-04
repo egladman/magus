@@ -89,6 +89,31 @@ type Descriptor struct {
 	// Keyed by tool name rather than positional so the cache entry reads
 	// spell:tool:version and reordering a declaration invalidates nothing.
 	VersionCmds map[string][]string `json:"version_cmds,omitempty"`
+	// UnprobedBins are the op bins this spell deliberately ships WITHOUT a version
+	// probe, bin name to a one-line reason (declared by mgs_listUnprobedBins). The
+	// policy above - a PATH binary whose upgrade changes verdicts must contribute a
+	// probe to the cache key - has legitimate exceptions (gofmt ships version-locked
+	// with the go toolchain, so `go version` already covers it), and `magus doctor`
+	// enforces the policy mechanically, so an exception must be declared rather than
+	// implied. A reason is required, mirroring skip_cache: an opt-out without a
+	// stated why is indistinguishable from a forgotten probe.
+	UnprobedBins map[string]string `json:"unprobed_bins,omitempty"`
+	// InstallHints map an op bin to a one-line install command (declared by
+	// mgs_listInstallHints, e.g. "mise use -g shellcheck # or: brew install
+	// shellcheck"). When forking an op fails because the bin is absent from PATH,
+	// the runner appends the hint to the error, so "shellcheck exited 1" comes with
+	// the command that fixes it.
+	InstallHints map[string]string `json:"install_hints,omitempty"`
+	// PackageManagerBin is the package-manager launcher this spell's ops record
+	// as their Bin (declared by mgs_getPackageManagerBin, e.g. "pnpm"). Non-empty
+	// opts the spell in to engine-side substitution: an op whose recorded Bin is
+	// one of the known package managers is forked with the PROJECT's detected
+	// manager instead (explicit "package_manager" option, then package.json's
+	// packageManager field, then lockfile presence, then this recorded default).
+	// Op handlers cannot parameterize the bin themselves - resolution reduces
+	// each handler to a static {cmd,args} record - which is why the swap lives in
+	// the engine rather than the spell.
+	PackageManagerBin string `json:"package_manager_bin,omitempty"`
 	// Language is the canonical source language this spell adapts (e.g. "go",
 	// "typescript"), declared by mgs_getLanguage. It tags the spell node so a
 	// `language:` query groups the adapter with the files and symbols of that language;

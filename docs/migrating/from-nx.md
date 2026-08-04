@@ -21,7 +21,7 @@ plainly, and vice versa.
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | workspace (`nx.json`)                         | workspace (`magus.yaml`)                                                                                                                                                            |
 | project (`project.json` / `package.json`)     | project (a directory whose `magusfile.buzz` registers it)                                                                                                                           |
-| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](../concepts/targets.md#the-target-name))                                                       |
+| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; eight canonical names plus custom - see [targets.md](../concepts/targets.md#the-target-name))                                                       |
 | executor / plugin                             | spell op (a [spell](../concepts/spells.md) is a library of tool-native ops)                                                                                                                     |
 | `nx:run-commands`                             | `os\exec(...)` in a target body                                                                                                                                                     |
 | `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](../concepts/dependencies.md))                             |
@@ -80,10 +80,10 @@ correctly with no policy at all. See
 full set of controls and their scopes.
 
 **A canonical target vocabulary, not free-form names.** Nx targets are
-whatever string a plugin or `project.json` names them. magus has seven
-canonical names (`build`, `test`, `lint`, `format`, `clean`, `generate`,
-`preflight`) plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
-for adding an eighth - custom names are allowed, but the vocabulary is
+whatever string a plugin or `project.json` names them. magus has eight
+canonical names (`build`, `test`, `lint`, `format`, `security`, `clean`,
+`generate`, `preflight`) plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
+for adding a ninth - custom names are allowed, but the vocabulary is
 deliberately small so `magus run lint` means the same thing in every project.
 
 **Read-only by default, not mutate-by-default.** Every magus run is read-only
@@ -185,7 +185,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 ```
 
 `ts["tsc-build"]`'s `needs`/`provides` globs and `ts["eslint"]`'s claimed
-files are already declared by the spell - see the [`ts` spell reference](../concepts/spells/ts.md)
+files are already declared by the spell - see the [`typescript` spell reference](../concepts/spells/typescript.md)
 for the full op list, and [Getting started](../guides/getting-started.md) for a
 from-scratch walkthrough.
 

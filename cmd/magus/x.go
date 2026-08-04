@@ -16,7 +16,7 @@ import (
 
 // xTargets is the target set offered after the project picker. Mirrors
 // manpage.CommonSubcommands minus "ls" (no-op for the shorthand UX).
-var xTargets = []string{"build", "test", "lint", "format", "clean", "generate", "ci"}
+var xTargets = []string{"build", "test", "lint", "format", "security", "clean", "generate", "ci"}
 
 // x dispatches `magus x [filter...]`: TTY-only fuzzy project + target
 // shorthand for `magus run`.

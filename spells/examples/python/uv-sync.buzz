@@ -1,0 +1,11 @@
+// uv-sync installs the locked environment, giving `preflight` something real to
+// do: the base --frozen form fails on a stale uv.lock (CI-strict), and
+// `preflight:rw` may update the lockfile locally.
+import "magus";
+import "magus/spell/python";
+
+magus\project({ "spells": [python] });
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {
+    python["uv-sync"](ctx);
+}

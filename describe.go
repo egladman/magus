@@ -872,6 +872,13 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 					et.Name, et.Path, t.Charms, s.Name(), rerr)
 			}
 			if ok {
+				// Mirror the runner's package-manager substitution (see
+				// bindings' runCommand) so the preview shows the bin this
+				// project actually forks, not the spell's recorded default.
+				if s.PackageManagerBin() != "" && spellruntime.KnownPackageManager(cmd) {
+					pm := spellruntime.ResolvePackageManager(p.PackageManager, p.Dir, cmd)
+					cmd, args = spellruntime.SubstitutePackageManager(cmd, args, pm)
+				}
 				se.Command = append([]string{cmd}, args...)
 			}
 			// A service target is described, not just rendered: surface its readiness

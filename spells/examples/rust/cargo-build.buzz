@@ -1,4 +1,5 @@
-// cargo-build compiles in release mode: magus run build forks cargo build --release.
+// cargo-build compiles the crate: magus run build forks cargo build. The profile
+// is the magusfile's call - append {"args": ["--release"]} to build for release.
 import "magus";
 import "magus/spell/rust";
 

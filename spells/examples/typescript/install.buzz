@@ -1,0 +1,12 @@
+// install syncs node_modules from the lockfile, giving `preflight` something
+// real to do: the base --frozen-lockfile form fails on a stale lockfile
+// (CI-strict), and `preflight:rw` may update it locally. The engine substitutes
+// the project's detected package manager for the recorded pnpm.
+import "magus";
+import "magus/spell/typescript";
+
+magus\project({ "spells": [typescript] });
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {
+    typescript["install"](ctx);
+}

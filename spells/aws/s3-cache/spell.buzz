@@ -89,6 +89,9 @@ fun secret() > str { return getenv("AWS_SECRET_ACCESS_KEY"); }
 fun token() > str { return getenv("AWS_SESSION_TOKEN"); }
 fun bucket() > str { return getenv("MAGUS_S3_BUCKET"); }
 
+// The us-east-1 fallback is AWS-shaped. S3-compatible stores read the region
+// from the SigV4 scope too: Cloudflare R2 wants AWS_REGION=auto, MinIO accepts
+// anything consistent - set AWS_REGION alongside MAGUS_S3_ENDPOINT for them.
 fun region() > str {
     final r = getenv("AWS_REGION");
     if (r != "") { return r; }
@@ -188,15 +191,22 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
 }
 
 // enabled gates the backend on having credentials and a bucket. The cache probes
-// this once and skips fetch/push entirely when false — no remote calls.
+// this once and skips fetch/push entirely when false — no remote calls. Static
+// env keys are the ONLY auth surface: no profiles, no IMDS/IRSA role assumption.
+// On a runner that authenticates by role (EKS with IRSA) there are no static
+// keys, so this backend silently never activates — if you wired it and see no
+// remote traffic, export explicit AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY (and
+// pass them through the sandbox env allowlist).
 export fun enabled(target: Target, cb: fun(any)) > bool {
     return access() != "" and secret() != "" and bucket() != "";
 }
 
 // get_artifact downloads the object for io.hash into io.dest. true on a hit (200),
-// false on a miss (404) or when not configured.
+// false on a miss (404) or when not configured. The per-op guard matches
+// enabled() exactly: a missing secret would otherwise degrade to a garbage
+// signature and a 403 that reads as an auth mystery instead of "not configured".
 export fun get_artifact(target: Target, cb: fun(any)) > bool {
-    if (access() == "" or bucket() == "") { return false; }
+    if (access() == "" or secret() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
     final path = "/" + bucket() + "/" + cache_key("" + io["hash"]);
@@ -208,7 +218,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool {
 // store, false otherwise. The payload hash is the file's SHA-256 (S3 verifies it
 // against x-amz-content-sha256).
 export fun put_artifact(target: Target, cb: fun(any)) > bool {
-    if (access() == "" or bucket() == "") { return false; }
+    if (access() == "" or secret() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
     final src = "" + io["src"];
@@ -284,7 +294,7 @@ fun deleteObject(key: str) > bool {
 // true once the sweep completes; counts are reported to stdout (the host bridge
 // only learns completion).
 export fun prune(target: Target, cb: fun(any)) > bool {
-    if (access() == "" or bucket() == "") { return false; }
+    if (access() == "" or secret() == "" or bucket() == "") { return false; }
     var io = {};
     cb(io);
     final olderSecs = std\toInt(io["older_than_secs"]);
@@ -338,4 +348,18 @@ export fun prune(target: Target, cb: fun(any)) > bool {
         std\print("s3 prune: deleted " + removed + " object(s), " + artifacts.len() + " scanned");
     }
     return true;
+}
+
+import "assert";
+
+test "hostOf extracts the URL authority SigV4 signs" {
+    assert\equal(hostOf("https://s3.us-east-1.amazonaws.com"), "s3.us-east-1.amazonaws.com", "bare origin");
+    assert\equal(hostOf("https://minio.internal:9000/extra/path"), "minio.internal:9000", "port kept, path dropped");
+    assert\equal(hostOf("no-scheme.example.com/x"), "no-scheme.example.com", "scheme optional");
+}
+
+test "cache_key folds the version salt into the object key" {
+    // The emitted format is frozen: changing it would orphan every existing
+    // artifact (see the cache_key comment). This test is the freeze.
+    assert\equal(cache_key("deadbeef"), "magus-deadbeef-" + CACHE_VERSION, "key shape");
 }

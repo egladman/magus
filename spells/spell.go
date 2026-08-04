@@ -39,7 +39,10 @@ type Spell struct {
 	ignoreDirs          []string
 	outputs             []string
 	targets             []string
-	language            string          // canonical source language the spell adapts; "" when it adapts none
+	language            string            // canonical source language the spell adapts; "" when it adapts none
+	packageManagerBin   string            // recorded package-manager bin the engine substitutes per project; "" = no substitution
+	unprobedBins        map[string]string // op bins deliberately shipped without a version probe, bin -> reason
+	installHints        map[string]string // op bin -> one-line install command, appended to a bin-not-found error
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
 	opaque              bool
 	internal            bool
@@ -100,6 +103,24 @@ func (s *Spell) IgnoreDirs() []string { return s.ignoreDirs }
 // "typescript"), or "" when it adapts no single language. It tags the spell node so a
 // `language:` query groups the adapter with that language's files and symbols.
 func (s *Spell) Language() string { return s.language }
+
+// PackageManagerBin returns the package-manager launcher this spell's ops
+// record as their Bin (declared by mgs_getPackageManagerBin), or "" when the
+// spell does not opt in to per-project package-manager substitution. Preview
+// surfaces (magus describe) use it to render the same substituted command the
+// runner forks.
+func (s *Spell) PackageManagerBin() string { return s.packageManagerBin }
+
+// UnprobedBins returns the op bins this spell deliberately ships without a
+// version probe, bin name to the stated reason (declared by
+// mgs_listUnprobedBins). See Descriptor.UnprobedBins for the policy this is an
+// escape hatch from.
+func (s *Spell) UnprobedBins() map[string]string { return s.unprobedBins }
+
+// InstallHints returns the op bin to install-command map (declared by
+// mgs_listInstallHints), appended to the error when forking a bin that is
+// absent from PATH.
+func (s *Spell) InstallHints() map[string]string { return s.installHints }
 
 // IsServiceTarget reports whether target name is backed by a service op (a
 // long-running process). The runner forces such targets uncacheable.
@@ -281,6 +302,25 @@ func WithServiceTargets(names ...string) Option {
 // spell node so a `language:` query reaches the adapter alongside that language's code.
 func WithLanguage(language string) Option {
 	return func(s *Spell) { s.language = language }
+}
+
+// WithPackageManagerBin records the package-manager launcher the spell's ops
+// declare as their Bin, opting the spell in to per-project substitution (see
+// Descriptor.PackageManagerBin).
+func WithPackageManagerBin(bin string) Option {
+	return func(s *Spell) { s.packageManagerBin = bin }
+}
+
+// WithUnprobedBins records the spell's declared probe opt-outs (bin -> reason),
+// see Descriptor.UnprobedBins. The map is cloned to prevent caller mutation.
+func WithUnprobedBins(bins map[string]string) Option {
+	return func(s *Spell) { s.unprobedBins = maps.Clone(bins) }
+}
+
+// WithInstallHints records the spell's bin -> install-command hints, see
+// Descriptor.InstallHints. The map is cloned to prevent caller mutation.
+func WithInstallHints(hints map[string]string) Option {
+	return func(s *Spell) { s.installHints = maps.Clone(hints) }
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that

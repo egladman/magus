@@ -82,6 +82,15 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	if spec.Opaque {
 		extra = append(extra, spells.WithOpaque())
 	}
+	if spec.PackageManagerBin != "" {
+		extra = append(extra, spells.WithPackageManagerBin(spec.PackageManagerBin))
+	}
+	if len(spec.UnprobedBins) > 0 {
+		extra = append(extra, spells.WithUnprobedBins(spec.UnprobedBins))
+	}
+	if len(spec.InstallHints) > 0 {
+		extra = append(extra, spells.WithInstallHints(spec.InstallHints))
+	}
 	for _, o := range extra {
 		o(sp)
 	}
@@ -140,7 +149,7 @@ func spellSearchPaths(roots ...string) []string {
 func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 		if _, ok := spec.Ops[req.Target]; ok {
-			return dispatchOp(ctx, spec.Ops, req)
+			return dispatchOp(ctx, spec.Ops, spec.PackageManagerBin, spec.InstallHints, req)
 		}
 		return callBuzzSpellFunc(ctx, src, req.Target, req)
 	}

@@ -1,0 +1,12 @@
+// mypy type-checks, which is static analysis, so it composes into the canonical
+// `lint` target alongside ruff-check (ruff does not type-check). pyright is the
+// other mainstream checker - the magusfile picks one, not this spell.
+import "magus";
+import "magus/spell/python";
+
+magus\project({ "spells": [python] });
+
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    python["ruff-check"](ctx);
+    python["mypy"](ctx);
+}

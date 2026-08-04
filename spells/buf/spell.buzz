@@ -40,31 +40,48 @@ export fun mgs_getVersionCommand() > [str] { return ["buf", "--version"]; }
 
 fun bufBuild(target: Target) > Command { return Command{bin = "buf", args = ["build"]}; }
 fun bufGenerate(target: Target) > Command { return Command{bin = "buf", args = ["generate"]}; }
+// dep-update maintains the buf.lock this spell already declares as an input -
+// without it the lockfile was a file the spell could invalidate on but never
+// update. Unlike go-mod-tidy there is no read-only diff mode to default to
+// (buf dep update always writes), so compose it into an rw-gated target and
+// let the generate drift gate catch a stale lockfile.
+fun bufDepUpdate(target: Target) > Command { return Command{bin = "buf", args = ["dep", "update"]}; }
+// push publishes the module to its configured BSR; what and where come from
+// buf.yaml, credentials from `buf registry login`.
+fun bufPush(target: Target) > Command { return Command{bin = "buf", args = ["push"]}; }
 fun bufLint(target: Target) > Command {
     return Command{bin = "buf", args = ["lint"], charms = {
         "gha": append(["--error-format=github-actions"]),
     }};
 }
 
-// format checks by default (--exit-code fails CI when files would change; the
-// write charm applies the formatting in place.
+// format checks by default: -d prints a diff of what would change (without it,
+// buf dumps every formatted file in full to stdout - an unreadable CI log on
+// failure) and --exit-code fails the run when that diff is non-empty. The write
+// charm applies the formatting in place. The patch replaces --exit-code (the
+// higher index) before dropping -d, so the concatenated ops apply sequentially
+// without an index shifting out from under them.
 fun bufFormat(target: Target) > Command {
-    final args = ["format", "--exit-code"];
+    final args = ["format", "-d", "--exit-code"];
     return Command{bin = "buf", args = args, charms = {
-        "rw": set(args, "--exit-code", "-w"),
+        "rw": Charm{ ops = set(args, "--exit-code", "-w").ops + drop(args, "-d").ops },
     }};
 }
 
 // breaking checks the current schema against a baseline for backward-incompatible
-// changes (wire and JSON compatibility). It defaults to comparing against the main
-// branch, buf's standard CI pattern; point it elsewhere with a function target when
-// a repo uses a different default branch or an image baseline. This is the protobuf
-// analogue of an API-contract gate: compose it into `lint` so a breaking .proto
-// change fails the same read-only stage as go-vet and golangci-lint. The gha charm
-// swaps buf's reporter to GitHub Actions annotations.
+// changes (wire and JSON compatibility). The baseline is REQUIRED and the caller
+// names it - buf errors clearly without --against, and there is no default here on
+// purpose: a hardcoded `.git#branch=main` failed every master/trunk repo out of the
+// box, and shallow CI clones (fetch-depth: 1) cannot resolve a branch ref at all,
+// so the right baseline (a branch, a tag, a BSR image) is the magusfile's fact:
+//
+//   buf["buf-breaking"](ctx, {"args": ["--against", ".git#branch=main"]});
+//
+// This is the protobuf analogue of an API-contract gate: compose it into `lint` so
+// a breaking .proto change fails the same read-only stage as go-vet and
+// golangci-lint. The gha charm swaps buf's reporter to GitHub Actions annotations.
 fun bufBreaking(target: Target) > Command {
-    final args = ["breaking", "--against", ".git#branch=main"];
-    return Command{bin = "buf", args = args, charms = {
+    return Command{bin = "buf", args = ["breaking"], charms = {
         "gha": append(["--error-format=github-actions"]),
     }};
 }
@@ -73,6 +90,8 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "buf-build": bufBuild,
         "buf-generate": bufGenerate,
+        "buf-dep-update": bufDepUpdate,
+        "buf-push": bufPush,
         "buf-lint": bufLint,
         "buf-format": bufFormat,
         "buf-breaking": bufBreaking,

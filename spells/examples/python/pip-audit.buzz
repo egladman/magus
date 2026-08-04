@@ -1,0 +1,14 @@
+// pip-audit checks the locked dependencies against the PyPI advisory database,
+// so it composes into the canonical `security` target. The verdict tracks the
+// advisory database, not the tree - declare skip_cache on the target so a
+// replayed pass cannot hide a newly published CVE.
+import "magus";
+import "magus/spell/python";
+
+magus\project({ "spells": [python], "targets": {
+    "security": {"skip_cache": "reads the PyPI advisory database, which changes independently of this tree"},
+} });
+
+export fun security(ctx: magus\Context, args: [str]) > void {
+    python["pip-audit"](ctx);
+}

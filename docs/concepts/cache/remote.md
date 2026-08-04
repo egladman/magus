@@ -124,8 +124,19 @@ Configuration comes from the environment (standard AWS variables plus a bucket):
 | `AWS_ACCESS_KEY_ID`     | yes      | access key (gates the backend)                                                                              |
 | `AWS_SECRET_ACCESS_KEY` | yes      | secret key                                                                                                  |
 | `AWS_SESSION_TOKEN`     | no       | for temporary credentials                                                                                   |
-| `AWS_REGION`            | no       | region (falls back to `AWS_DEFAULT_REGION`, then us-east-1)                                                 |
+| `AWS_REGION`            | no       | region (falls back to `AWS_DEFAULT_REGION`, then us-east-1; Cloudflare R2 wants `auto`)                     |
 | `MAGUS_S3_ENDPOINT`     | no       | base URL incl. scheme, no trailing slash; set for MinIO/R2/B2 (default `https://s3.<region>.amazonaws.com`) |
+
+Static env keys are the only auth surface - no profiles, no IMDS/IRSA role
+assumption. On a runner that authenticates by role (EKS with IRSA) there are no
+static keys in the environment, so the backend silently never activates; export
+explicit keys (and pass them through the sandbox env allowlist) or the remote
+cache does not exist there.
+
+This backend is also the natural pairing for GitLab: GitLab has no
+runner-ambient cache API equivalent to the Actions Cache, so a GitLab pipeline
+wires the `gitlab-ci` CI provider for log structure and `aws-s3` (against
+MinIO, R2, or S3 itself) for the remote cache.
 
 Unlike the GitHub backend, S3 has no automatic eviction. Prune it on a schedule:
 

@@ -151,5 +151,5 @@ function - there is no intermediate query value.
 ## See also
 
 - [spells.md](spells.md): anatomy of a spell, the two op shapes, naming operations.
-- [targets.md](targets.md): the work-unit Target, `Path + Name`, the seven lifecycle names.
+- [targets.md](targets.md): the work-unit Target, `Path + Name`, the eight lifecycle names.
 - [charms.md](charms.md): how a charm patches an Operation's argv.

@@ -92,6 +92,34 @@ func TestParseBuzzProjectOpts_NoLanguage(t *testing.T) {
 	}
 }
 
+// package_manager is a closed set, validated at load rather than fork time so a
+// typo fails once with the valid choices instead of forking a nonexistent
+// binary on every op.
+func TestParseBuzzProjectOpts_PackageManager(t *testing.T) {
+	t.Run("a valid manager is recorded", func(t *testing.T) {
+		opts := vm.NewMap()
+		opts.MapSet("package_manager", vm.StrValue("bun"))
+		p := applyOpts(t, opts)
+		assert.Equal(t, "bun", p.PackageManager)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"an unknown manager errors", vm.StrValue("yarn2")},
+		{"empty errors", vm.StrValue("")},
+		{"a non-string errors", vm.BoolValue(true)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := vm.NewMap()
+			opts.MapSet("package_manager", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), opts)
+			assert.ErrorContains(t, err, `"package_manager" must be one of npm, pnpm, yarn, bun`)
+		})
+	}
+}
+
 // skip_cache claims that REPLAYING a target would be wrong, which is a different and much
 // stronger statement than --no-cache's "not this run". A bare true could not tell the two
 // apart, and six uses in this repo turned out to be workarounds for a snapshot error the

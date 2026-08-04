@@ -1,12 +1,14 @@
-// govulncheck scans the module's call graph for known vulnerabilities, run as a
-// `go tool` so it resolves from go.mod's tool block. Security scanning is static
-// analysis, so it composes into the canonical `lint` target - not a bespoke
-// `audit`/`security` target. (A slow scan can instead be gated in `ci`.)
+// govulncheck scans the module's call graph for known vulnerabilities, run from
+// PATH so it is pinned by whatever the workspace uses (the spell's version probe
+// records which). Its verdict consults a live advisory database - a new CVE flips
+// it with no code change - so it composes into the canonical `security` target,
+// not `lint` (whose verdicts are pure static analysis over the tree). A slow scan
+// can additionally be gated in `ci` rather than run on every local pass.
 import "magus";
 import "magus/spell/go";
 
 magus\project({ "spells": [go] });
 
-export fun lint(ctx: magus\Context, args: [str]) > void {
+export fun security(ctx: magus\Context, args: [str]) > void {
     go["govulncheck"](ctx);
 }

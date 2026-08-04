@@ -9,8 +9,16 @@ export fun mgs_getName() > str { return "go"; }
 // Without it a .txtar was unclaimed - editing one invalidated no cache key and pulled
 // no project into the affected set, so a CI run keyed on `magus affected` could not
 // see a behavior test change at all, and a stale pass would replay from cache.
+//
+// .golangci.* is here for the same reason a .txtar is: the config changes which
+// code passes `golangci-lint run`, so without it enabling a linter replayed the
+// old cached verdict. The cgo/assembly extensions (.c/.h/.s/.S/.cc/.cpp/.m/.syso)
+// are first-class `go build` inputs the extension globs otherwise miss.
 export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"}];
+    return [Path{value = "**/*.go"}, Path{value = "**/*.txtar"}, Path{value = "go.mod"}, Path{value = "go.sum"}, Path{value = "go.work"}, Path{value = "go.work.sum"},
+            Path{value = ".golangci.yml"}, Path{value = ".golangci.yaml"}, Path{value = ".golangci.toml"}, Path{value = ".golangci.json"},
+            Path{value = "**/*.c"}, Path{value = "**/*.h"}, Path{value = "**/*.s"}, Path{value = "**/*.S"}, Path{value = "**/*.cc"}, Path{value = "**/*.cpp"},
+            Path{value = "**/*.m"}, Path{value = "**/*.syso"}];
 }
 
 export fun mgs_getVersionCommand() > [str] { return ["go", "version"]; }
@@ -27,11 +35,39 @@ export fun mgs_getVersionCommands() > {str: [str]} {
     return {
         "golangci-lint": ["golangci-lint", "--version"],
         "govulncheck": ["govulncheck", "-version"],
+        "gofumpt": ["gofumpt", "--version"],
     };
 }
 
+// gofmt is the one bin this spell forks with no probe of its own: it ships
+// version-locked inside the go toolchain, so `go version` (the primary probe)
+// already moves the cache key when it changes. Declared so doctor's
+// probe-coverage check reads it as a decision, not a gap.
+export fun mgs_listUnprobedBins() > {str: str} {
+    return {"gofmt": "ships with the go toolchain; `go version` covers it"};
+}
+
+// One-line install commands for the PATH tools this spell drives, appended to
+// the error when an op's bin is absent. go/gofmt are the toolchain itself and
+// need no hint.
+export fun mgs_listInstallHints() > {str: str} {
+    return {
+        "golangci-lint": "mise use -g golangci-lint # or: brew install golangci-lint",
+        "govulncheck": "mise use -g govulncheck # or: go install golang.org/x/vuln/cmd/govulncheck@latest",
+        "gofumpt": "mise use -g gofumpt # or: brew install gofumpt",
+    };
+}
+
+// Two cache holes the extension globs above cannot close, worth knowing:
+// a //go:embed asset and a testdata/ fixture of arbitrary type (a .json golden
+// file a test reads) are real build/test inputs invisible to any extension
+// list. A project relying on either adds its own source glob for those paths.
 export fun mgs_getLanguage() > str { return "go"; }
 
+// vendor/ is pruned as a non-source dir, which is right until a repo actually
+// vendors: then vendor/ IS a build input, and a hand-patched vendored file
+// changes neither go.mod nor go.sum. A vendoring project should override this
+// by declaring vendor/** among its sources.
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
 
 // mgs_listManifests names the file that carries this project's OWN version - not
@@ -51,6 +87,15 @@ fun goFmt(target: Target) > Command {
         "rw": set(args, "-l", "-w"),
     }};
 }
+// gofumpt is the one mainstream gofmt alternative (a stricter superset); the
+// magusfile picks which composes into format, per the eslint-vs-biome pattern.
+// PATH-installed and independently versioned, so it carries a named probe below.
+fun gofumpt(target: Target) > Command {
+    final args = ["-l", "."];
+    return Command{bin = "gofumpt", args = args, charms = {
+        "rw": set(args, "-l", "-w"),
+    }};
+}
 // Invoked directly rather than through `go tool`: golangci-lint generates no code,
 // so it has none of the generator/runtime lockstep that keeps protoc-gen-go pinned
 // in go.mod. `go tool golangci-lint` also required the binary in the module's tool
@@ -65,9 +110,11 @@ fun golangCILint(target: Target) > Command {
     }};
 }
 fun goTest(target: Target) > Command {
+    // "cover", not "cd": cd is the reserved continuous-delivery charm (publish an
+    // artifact), and hanging the coverage switch on it gave one name two meanings.
     return Command{bin = "go", args = ["test", "./..."], charms = {
         "debug": append(["-v"]),
-        "cd": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
+        "cover": append(["-covermode=atomic", "-coverprofile=coverage.out"]),
     }};
 }
 fun goModTidy(target: Target) > Command {
@@ -93,7 +140,16 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
 // pinned by whatever the workspace uses, and mgs_getVersionCommands records which.
+// The version probe moves the key on a binary upgrade, but the VERDICT also
+// tracks the live Go vulndb: a newly published CVE flips it with zero input
+// change. Compose it into the `security` target with skip_cache (see the
+// example and this repo's own magusfile) so a cached pass cannot hide one.
 fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."]}; }
+// scip is the reserved op that runs the Go SCIP indexer for the knowledge graph.
+// The indexer is a PATH binary (install it with mise, not via go tool), so the op
+// forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination,
+// so the index never lands in the tree; scip-go writes there via --output. Run
+// through sh so the env var expands.
 fun scipGo(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "scip-go --output \"$MAGUS_SYMBOL_INDEX\""]};
 }
@@ -105,6 +161,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
         "go-generate": goGenerate,
         "go-run": goRun,
         "go-fmt": goFmt,
+        "gofumpt": gofumpt,
         "golangci-lint": golangCILint,
         "go-test": goTest,
         "go-mod-tidy": goModTidy,

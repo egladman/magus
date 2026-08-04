@@ -24,11 +24,22 @@ export fun mgs_getVersionCommand() > [str] { return ["cosign", "version"]; }
 fun sign(target: Target) > Command { return Command{bin = "cosign", args = ["sign", "--yes"]}; }
 fun verify(target: Target) > Command { return Command{bin = "cosign", args = ["verify"]}; }
 fun attest(target: Target) > Command { return Command{bin = "cosign", args = ["attest", "--yes"]}; }
+// verify-attestation is attest's gate: without it a pipeline can produce
+// attestations but never require them, which halves the supply-chain story.
+// The caller appends --type and the identity/key flags along with the ref.
+fun verifyAttestation(target: Target) > Command { return Command{bin = "cosign", args = ["verify-attestation"]}; }
+// The blob pair signs and verifies plain files - exactly what a build tool
+// produces (archives, binaries, manifests) - not just registry artifacts.
+fun signBlob(target: Target) > Command { return Command{bin = "cosign", args = ["sign-blob", "--yes"]}; }
+fun verifyBlob(target: Target) > Command { return Command{bin = "cosign", args = ["verify-blob"]}; }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {
         "cosign-sign": sign,
         "cosign-verify": verify,
         "cosign-attest": attest,
+        "cosign-verify-attestation": verifyAttestation,
+        "cosign-sign-blob": signBlob,
+        "cosign-verify-blob": verifyBlob,
     };
 }

@@ -25,10 +25,23 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("claims", strSliceToBuzzList(m.Claims))
 	h.MapSet("version_cmd", strSliceToBuzzList(m.VersionCmd))
 	h.MapSet("language", vm.StrValue(m.Language))
+	h.MapSet("package_manager_bin", vm.StrValue(m.PackageManagerBin))
+	h.MapSet("unprobed_bins", strMapToBuzzMap(m.UnprobedBins))
+	h.MapSet("install_hints", strMapToBuzzMap(m.InstallHints))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))
-	bindBuzzTargetDispatch(h, m.Ops)
+	bindBuzzTargetDispatch(h, m.Ops, m.PackageManagerBin, m.InstallHints)
 	return h
+}
+
+// strMapToBuzzMap marshals a flat str->str declaration (unprobed_bins,
+// install_hints) back to the map shape spellruntime.Decode reads.
+func strMapToBuzzMap(m map[string]string) vm.Value {
+	out := vm.NewMap()
+	for k, v := range m {
+		out.MapSet(k, vm.StrValue(v))
+	}
+	return out
 }
 
 // bindBuzzTargetDispatch wires a Buzz spell handle's runnable surface:
@@ -41,18 +54,20 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 // the target's base argv and overlays opts.env on the subprocess, so
 // flag-carrying and cross-compile invocations need no os.exec. With no opts.args
 // the `magus run <t> -- <extra>` args ride along via project.ExtraArgs.
-func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op) {
+func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op, pmBin string, installHints map[string]string) {
 	h.MapSet("listTargets", vm.DirectValue("spell.listTargets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return strSliceToBuzzList(commandTargetNames(targets)), nil
 	}))
 	for name, tgt := range targets {
-		bindBuzzCommandMethod(h, name, tgt)
+		bindBuzzCommandMethod(h, name, tgt, pmBin, installHints)
 	}
 }
 
 // bindBuzzCommandMethod attaches tgt as a callable method named target on h,
-// so spell.<target>(opts?) forks the target.
-func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
+// so spell.<target>(opts?) forks the target. pmBin is the spell's declared
+// package-manager bin ("" = no substitution); installHints are its
+// bin -> install-command hints.
+func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op, pmBin string, installHints map[string]string) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		// The leading magus.Context is REQUIRED, not optional. Optional would overload
 		// argument one on TYPE - f(), f(ctx), f({args:...}), f(ctx, {args:...}) - which
@@ -69,6 +84,8 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 			return vm.Null, fmt.Errorf("%s: %w", target, err)
 		}
 		opts.cwd, opts.env = base.cwd, base.env
+		opts.pmBin = pmBin
+		opts.installHints = installHints
 		res, err := runBuzzCommand(ctx, tgt, opts)
 		if err != nil {
 			return vm.Null, err
@@ -238,7 +255,7 @@ func buzzSpellObject(name string) vm.Value {
 	m.MapSet("provides", strSliceToBuzzList(spec.Provides))
 
 	// listTargets() + a callable per fork target (go.test(), docker.build()).
-	bindBuzzTargetDispatch(m, spec.Ops)
+	bindBuzzTargetDispatch(m, spec.Ops, spec.PackageManagerBin, spec.InstallHints)
 
 	return m
 }

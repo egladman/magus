@@ -49,6 +49,29 @@ func TestExplainCharms(t *testing.T) {
 	})
 }
 
+// TestDescribeCharm pins the shared plain-English charm summary (used by the
+// spell-docs generator and `magus describe spell <name>`) on the shapes the
+// built-ins use.
+func TestDescribeCharm(t *testing.T) {
+	t.Run("replace names the original argument", func(t *testing.T) {
+		c := spells.Charm{Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}}
+		assert.Equal(t, "Replaces `--check` with `--write`.", DescribeCharm(c, []string{"--check", "."}))
+	})
+	t.Run("append and insert", func(t *testing.T) {
+		c := spells.Charm{Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}}
+		assert.Equal(t, "Appends `-v`.", DescribeCharm(c, []string{"run"}))
+		c = spells.Charm{Ops: []spells.PatchOp{{Op: "add", Path: "/1", Value: "--fix"}}}
+		assert.Equal(t, "Inserts `--fix`.", DescribeCharm(c, []string{"run", "./..."}))
+	})
+	t.Run("remove names the dropped argument, ops join into one sentence", func(t *testing.T) {
+		c := spells.Charm{Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}}
+		assert.Equal(t, "Drops `--check`, drops `--`.", DescribeCharm(c, []string{"fmt", "--", "--check"}))
+	})
+	t.Run("empty charm falls back to the op count", func(t *testing.T) {
+		assert.Equal(t, "A 0-op argv patch.", DescribeCharm(spells.Charm{}, nil))
+	})
+}
+
 func TestApplyPatch(t *testing.T) {
 	// applies asserts a patch produces the expected argv.
 	applies := func(t *testing.T, argv []string, ops []spells.PatchOp, want []string) {
@@ -185,8 +208,26 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "bash",
 		Needs:      []string{"**/*.sh", "**/*.bash", ".shellcheckrc"},
 		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
+		// shellcheck/shfmt/bats are PATH-pinned verdict deciders.
+		VersionCmds: map[string][]string{
+			"shellcheck": {"shellcheck", "--version"},
+			"shfmt":      {"shfmt", "--version"},
+			"bats":       {"bats", "--version"},
+		},
+		InstallHints: map[string]string{
+			"shellcheck": "mise use -g shellcheck # or: brew install shellcheck",
+			"shfmt":      "mise use -g shfmt # or: brew install shfmt",
+			"bats":       "mise use -g bats # or: brew install bats-core",
+		},
 		Ops: map[string]spells.Op{
 			"shellcheck": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name '*.sh' -o -name '*.bash' \\) -print0 | xargs -0 -r shellcheck"}}},
+			"shfmt": {Command: spells.Command{Bin: "shfmt", Args: []string{"-d", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+			}}},
+			// The spell declares an empty args list ([<str>]), which the decoder
+			// reads as nil (valStrSlice returns nil for zero items), so the
+			// golden omits Args rather than asserting an empty non-nil slice.
+			"bats": {Command: spells.Command{Bin: "bats"}},
 		},
 	},
 	"buf": {
@@ -195,61 +236,96 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Provides:   []string{"gen/**"},
 		VersionCmd: []string{"buf", "--version"},
 		Ops: map[string]spells.Op{
-			"buf-build":    {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
-			"buf-generate": {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
+			"buf-build":      {Command: spells.Command{Bin: "buf", Args: []string{"build"}}},
+			"buf-generate":   {Command: spells.Command{Bin: "buf", Args: []string{"generate"}}},
+			"buf-dep-update": {Command: spells.Command{Bin: "buf", Args: []string{"dep", "update"}}},
+			"buf-push":       {Command: spells.Command{Bin: "buf", Args: []string{"push"}}},
 			"buf-lint": {Command: spells.Command{Bin: "buf", Args: []string{"lint"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
-			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "--exit-code"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/1", Value: "-w"}}},
+			"buf-format": {Command: spells.Command{Bin: "buf", Args: []string{"format", "-d", "--exit-code"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "-w"}, {Op: "remove", Path: "/1"}}},
 			}}},
-			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking", "--against", ".git#branch=main"}, Charms: map[string]spells.Charm{
+			"buf-breaking": {Command: spells.Command{Bin: "buf", Args: []string{"breaking"}, Charms: map[string]spells.Charm{
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--error-format=github-actions"}}},
 			}}},
 		},
 	},
 	"buzz": {
-		Name:  "buzz",
-		Needs: []string{"**/*.buzz"},
+		Name:       "buzz",
+		Needs:      []string{"**/*.buzz"},
+		IgnoreDirs: []string{"node_modules", ".claude/worktrees"},
+		// Upstream buzz is a named probe: UNPROBED when absent, key-moving when installed.
+		VersionCmds: map[string][]string{"buzz": {"buzz", "--version"}},
 		Ops: map[string]spells.Op{
-			"buzz-check": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
-			"buzz-test":  {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
-			"magus-buzz": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
+			"buzz-check": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --check"}}},
+			"buzz-test":  {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 buzz --test"}}},
+			"magus-buzz": {Command: spells.Command{Bin: "sh", Args: []string{"-c", "find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o -name '*.buzz' -print0 | xargs -0 -r -n1 \"$MAGUS\" buzz"}}},
 		},
 	},
 	"cosign": {
 		Name:       "cosign",
 		VersionCmd: []string{"cosign", "version"},
 		Ops: map[string]spells.Op{
-			"cosign-sign":   {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
-			"cosign-verify": {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}}},
-			"cosign-attest": {Command: spells.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
+			"cosign-sign":               {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
+			"cosign-verify":             {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}}},
+			"cosign-attest":             {Command: spells.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
+			"cosign-verify-attestation": {Command: spells.Command{Bin: "cosign", Args: []string{"verify-attestation"}}},
+			"cosign-sign-blob":          {Command: spells.Command{Bin: "cosign", Args: []string{"sign-blob", "--yes"}}},
+			"cosign-verify-blob":        {Command: spells.Command{Bin: "cosign", Args: []string{"verify-blob"}}},
 		},
 	},
 	"docker": {
 		Name:       "docker",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
-		// hadolint is a second binary the spell drives, pinned by no manifest, so it
-		// needs its own probe: upgrading it changes lint verdicts with nothing in any
-		// cache key to notice.
-		VersionCmds: map[string][]string{"hadolint": {"hadolint", "--version"}},
+		// hadolint/trivy/scout are second binaries the spell drives, pinned by no
+		// manifest, so each needs its own probe: upgrading one changes verdicts with
+		// nothing in any cache key to notice.
+		VersionCmds: map[string][]string{
+			"hadolint":     {"hadolint", "--version"},
+			"trivy":        {"trivy", "--version"},
+			"docker-scout": {"docker", "scout", "version"},
+		},
+		// docker itself is a platform install, so only the PATH scanners carry hints.
+		InstallHints: map[string]string{
+			"hadolint": "mise use -g hadolint # or: brew install hadolint",
+			"trivy":    "mise use -g trivy # or: brew install trivy",
+		},
 		Ops: map[string]spells.Op{
 			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
-			"hadolint":           {Command: spells.Command{Bin: "hadolint", Args: []string{"Dockerfile"}}},
+			"docker-push":        {Command: spells.Command{Bin: "docker", Args: []string{"push"}}},
+			"docker-tag":         {Command: spells.Command{Bin: "docker", Args: []string{"tag"}}},
+			"hadolint": {Command: spells.Command{Bin: "sh", Args: []string{"-c",
+				"find . \\( -name node_modules -o -path './.claude/worktrees' \\) -prune -o \\( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.dockerfile' \\) -print0 | xargs -0 -r hadolint"}}},
+			"trivy":        {Command: spells.Command{Bin: "trivy", Args: []string{"image"}}},
+			"docker-scout": {Command: spells.Command{Bin: "docker", Args: []string{"scout", "cves"}}},
 		},
 	},
 	"go": {
-		Name:       "go",
-		Needs:      []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"},
+		Name: "go",
+		Needs: []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum",
+			".golangci.yml", ".golangci.yaml", ".golangci.toml", ".golangci.json",
+			"**/*.c", "**/*.h", "**/*.s", "**/*.S", "**/*.cc", "**/*.cpp", "**/*.m", "**/*.syso"},
 		VersionCmd: []string{"go", "version"},
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.
 		VersionCmds: map[string][]string{
 			"golangci-lint": {"golangci-lint", "--version"},
 			"govulncheck":   {"govulncheck", "-version"},
+			"gofumpt":       {"gofumpt", "--version"},
+		},
+		// gofmt ships version-locked with the toolchain; the declared opt-out is
+		// what keeps doctor's probe-coverage check quiet about it.
+		UnprobedBins: map[string]string{
+			"gofmt": "ships with the go toolchain; `go version` covers it",
+		},
+		InstallHints: map[string]string{
+			"golangci-lint": "mise use -g golangci-lint # or: brew install golangci-lint",
+			"govulncheck":   "mise use -g govulncheck # or: go install golang.org/x/vuln/cmd/govulncheck@latest",
+			"gofumpt":       "mise use -g gofumpt # or: brew install gofumpt",
 		},
 		Language:   "go",
 		IgnoreDirs: []string{"vendor"},
@@ -266,6 +342,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go-fmt": {Command: spells.Command{Bin: "gofmt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
 			}}},
+			"gofumpt": {Command: spells.Command{Bin: "gofumpt", Args: []string{"-l", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}},
+			}}},
 			// Runs from PATH, not `go tool`: the module tool block never carried it, so
 			// `go tool golangci-lint` reported "no such tool" and the op could not run.
 			// Dropping the two-element prefix moves rw's insertion point from /3 to /1.
@@ -275,7 +354,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			}}},
 			"go-test": {Command: spells.Command{Bin: "go", Args: []string{"test", "./..."}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
-				"cd": {Ops: []spells.PatchOp{
+				// "cover", not the reserved delivery charm "cd".
+				"cover": {Ops: []spells.PatchOp{
 					{Op: "add", Path: "/-", Value: "-covermode=atomic"},
 					{Op: "add", Path: "/-", Value: "-coverprofile=coverage.out"},
 				}},
@@ -291,11 +371,27 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"markdown": {
-		Name:   "markdown",
-		Needs:  []string{"**/*.md", "**/*.MD", "**/*.markdown", ".markdownlint.json", ".markdownlint.yaml"},
-		Claims: []string{"**/*.md", "**/*.mdx"},
+		Name: "markdown",
+		Needs: []string{"**/*.md", "**/*.MD", "**/*.markdown", "**/*.mdx",
+			".markdownlint.json", ".markdownlint.yaml", ".markdownlint.yml", ".markdownlint.jsonc", ".markdownlintrc",
+			".prettierrc", ".prettierrc.*", ".prettierignore", "_typos.toml"},
+		Claims:     []string{"**/*.md", "**/*.mdx"},
+		IgnoreDirs: []string{"node_modules"},
+		// All three tools are PATH-pinned verdict deciders.
+		VersionCmds: map[string][]string{
+			"markdownlint": {"markdownlint", "--version"},
+			"prettier":     {"prettier", "--version"},
+			"typos":        {"typos", "--version"},
+		},
+		InstallHints: map[string]string{
+			"markdownlint": "mise use -g markdownlint-cli # or: brew install markdownlint-cli",
+			"prettier":     "mise use -g prettier # or: brew install prettier",
+			"typos":        "mise use -g typos # or: brew install typos-cli",
+		},
 		Ops: map[string]spells.Op{
-			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}}},
+			"markdownlint": {Command: spells.Command{Bin: "markdownlint", Args: []string{"**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--fix"}}},
+			}}},
 			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 			}}},
@@ -305,15 +401,27 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"python": {
-		Name:       "python",
-		Needs:      []string{"**/*.py", "pyproject.toml", "requirements.txt", "requirements-*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock"},
+		Name: "python",
+		Needs: []string{"**/*.py", "pyproject.toml", "requirements*.txt", "Pipfile", "Pipfile.lock", "setup.py", "setup.cfg", "uv.lock", "poetry.lock",
+			"ruff.toml", ".ruff.toml", "pytest.ini", "mypy.ini", "tox.ini", ".python-version"},
 		VersionCmd: []string{"python3", "--version"},
-		Language:   "python",
-		IgnoreDirs: []string{"__pycache__"},
-		Manifests:  []string{"pyproject.toml", "setup.py", "setup.cfg"},
+		// uv is the PATH-pinned launcher; the tools it runs are uv.lock-pinned.
+		VersionCmds: map[string][]string{"uv": {"uv", "--version"}},
+		Language:    "python",
+		IgnoreDirs:  []string{"__pycache__", "build", "dist", "venv"},
+		Manifests:   []string{"pyproject.toml", "setup.py", "setup.cfg"},
 		Ops: map[string]spells.Op{
 			"uv-build": {Command: spells.Command{Bin: "uv", Args: []string{"build"}}},
-			"uv-clean": {Command: spells.Command{Bin: "uv", Args: []string{"clean"}}},
+			"uv-sync": {Command: spells.Command{Bin: "uv", Args: []string{"sync", "--frozen"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/1"}}},
+			}}},
+			"uv-publish": {Command: spells.Command{Bin: "uv", Args: []string{"publish"}}},
+			"pip-audit":  {Command: spells.Command{Bin: "uv", Args: []string{"run", "pip-audit"}}},
+			"mypy":       {Command: spells.Command{Bin: "uv", Args: []string{"run", "mypy", "."}}},
+			"pyright":    {Command: spells.Command{Bin: "uv", Args: []string{"run", "pyright"}}},
+			"black": {Command: spells.Command{Bin: "uv", Args: []string{"run", "black", "--check", "."}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
+			}}},
 			"pytest": {Command: spells.Command{Bin: "uv", Args: []string{"run", "pytest"}, Charms: map[string]spells.Charm{
 				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}},
 			}}},
@@ -329,34 +437,76 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 	},
 	"rust": {
-		Name:       "rust",
-		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
+		Name: "rust",
+		Needs: []string{"**/*.rs", "Cargo.toml", "Cargo.lock",
+			"rustfmt.toml", ".rustfmt.toml", "clippy.toml", "rust-toolchain", "rust-toolchain.toml"},
 		VersionCmd: []string{"rustc", "--version"},
+		// rustfmt/clippy are toolchain-locked (rustc covers them); the cargo-installed
+		// scanners are independently versioned and carry their own probes.
+		VersionCmds: map[string][]string{
+			"cargo-audit": {"cargo-audit", "--version"},
+			"cargo-deny":  {"cargo-deny", "--version"},
+		},
+		// cargo is rustup-locked to the toolchain; the declared opt-out is what
+		// keeps doctor's probe-coverage check quiet about it.
+		UnprobedBins: map[string]string{
+			"cargo": "toolchain-locked with rustc; `rustc --version` covers it",
+		},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
 		Manifests:  []string{"Cargo.toml"},
 		Ops: map[string]spells.Op{
-			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
-			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
-			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy", "--", "-D", "warnings"}}},
+			"cargo-build": {Command: spells.Command{Bin: "cargo", Args: []string{"build"}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--verbose"}}},
+			}}},
+			"cargo-clean": {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
+			"cargo-check": {Command: spells.Command{Bin: "cargo", Args: []string{"check"}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--verbose"}}},
+			}}},
+			"cargo-run":   {Command: spells.Command{Bin: "cargo", Args: []string{"run"}}},
+			"cargo-doc":   {Command: spells.Command{Bin: "cargo", Args: []string{"doc"}}},
+			"cargo-bench": {Command: spells.Command{Bin: "cargo", Args: []string{"bench"}}},
+			"cargo-fetch": {Command: spells.Command{Bin: "cargo", Args: []string{"fetch"}}},
+			"cargo-clippy": {Command: spells.Command{Bin: "cargo", Args: []string{"clippy"}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--verbose"}}},
+				"rw": {Ops: []spells.PatchOp{
+					{Op: "add", Path: "/1", Value: "--fix"},
+					{Op: "add", Path: "/2", Value: "--allow-dirty"},
+					{Op: "add", Path: "/3", Value: "--allow-staged"},
+				}},
+			}}},
 			"cargo-fmt": {Command: spells.Command{Bin: "cargo", Args: []string{"fmt", "--", "--check"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}, {Op: "remove", Path: "/1"}}},
 			}}},
-			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}}},
-			"scip":       {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
+			"cargo-test": {Command: spells.Command{Bin: "cargo", Args: []string{"test"}, Charms: map[string]spells.Charm{
+				"debug": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--verbose"}}},
+			}}},
+			"cargo-audit": {Command: spells.Command{Bin: "cargo", Args: []string{"audit"}}},
+			"cargo-deny":  {Command: spells.Command{Bin: "cargo", Args: []string{"deny", "check"}}},
+			"scip":        {Command: spells.Command{Bin: "sh", Args: []string{"-c", "rust-analyzer scip . --output \"$MAGUS_SYMBOL_INDEX\""}}},
 		},
 	},
 	"typescript": {
-		Name:   "typescript",
-		Needs:  []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"},
+		Name: "typescript",
+		Needs: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx",
+			"**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html",
+			"tsconfig*.json", "package.json", ".npmrc", "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json",
+			"yarn.lock", "bun.lock", "bun.lockb",
+			".eslintrc*", ".eslintignore", ".prettierrc", ".prettierrc.*", ".prettierignore",
+			".nvmrc", ".node-version", ".yarnrc.yml", "pnpm-workspace.yaml"},
 		Claims: []string{"**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/*.json", "**/*.jsonc", "**/*.md", "**/*.mdx", "**/*.yaml", "**/*.yml", "**/*.css", "**/*.scss", "**/*.html"},
 		// No Provides: tsc's output location is the project's tsconfig outDir, which the spell
 		// cannot read, so it claims nothing rather than guessing "dist/**" (see MGS1018).
 		Opaque:     true,
 		VersionCmd: []string{"node", "--version"},
-		Language:   "typescript",
-		IgnoreDirs: []string{"node_modules"},
-		Manifests:  []string{"package.json"},
+		// pnpm is the PATH-pinned launcher; the tools it runs are lockfile-pinned.
+		VersionCmds: map[string][]string{"pnpm": {"pnpm", "--version"}},
+		Language:    "typescript",
+		// The recorded default the engine substitutes with each project's
+		// detected package manager (see mgs_getPackageManagerBin).
+		PackageManagerBin: "pnpm",
+		IgnoreDirs:        []string{"node_modules", "dist", "build", "out", "coverage"},
+		Manifests:         []string{"package.json"},
 		Ops: map[string]spells.Op{
 			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},
@@ -369,15 +519,26 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--fix"}}},
 				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/2", Value: "--format=unix"}}},
 			}}},
-			"preflight": {},
+			"audit": {Command: spells.Command{Bin: "pnpm", Args: []string{"audit"}}},
+			"install": {Command: spells.Command{Bin: "pnpm", Args: []string{"install", "--frozen-lockfile"}, Charms: map[string]spells.Charm{
+				"rw": {Ops: []spells.PatchOp{{Op: "remove", Path: "/1"}}},
+			}}},
+			"run-script": {Command: spells.Command{Bin: "pnpm", Args: []string{"run"}}},
+			"jest":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "jest"}}},
+			"node-test":  {Command: spells.Command{Bin: "node", Args: []string{"--test"}}},
+			"preflight":  {},
 			"prettier": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "prettier", "--check", "."}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/2", Value: "--write"}}},
 			}}},
-			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc"}}},
+			"tsc":       {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--noEmit"}}},
 			"tsc-build": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build"}}},
 			"tsc-clean": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "tsc", "--build", "--clean"}}},
 			"vitest": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "vitest", "run"}, Charms: map[string]spells.Charm{
-				"gha": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--reporter=github-actions"}}},
+				"gha": {Ops: []spells.PatchOp{
+					{Op: "add", Path: "/-", Value: "--reporter=default"},
+					{Op: "add", Path: "/-", Value: "--reporter=github-actions"},
+				}},
+				"cover": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "--coverage"}}},
 			}}},
 			"dev-server": {Kind: "service", Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}}, Service: &spells.Service{
 				Command: spells.Command{Bin: "pnpm", Args: []string{"run", "dev"}},

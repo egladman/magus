@@ -177,6 +177,17 @@ annotations, or closing a section magus opened. Providers declare their command
 prefixes via `quote_prefixes`, and magus neutralizes matching lines before replay
 by dropping the prefix's first character, leaving text a reader can still read.
 
+One consequence to know: the `gha` charm and this quoting act on the same lines
+from opposite directions. The charm asks a tool to emit `::error::` annotations
+itself (`--output-format=github`, `--reporter=github-actions`); the quote
+defangs exactly those lines when they arrive through the replayed-output path.
+Annotations a tool prints while streaming live are executed by the runner as
+intended - the quoting applies to magus's own failure replay, where any embedded
+command could as easily be forged content as a genuine annotation. If a
+charm-emitted annotation seems to vanish on a failure replay, this is why: the
+two mechanisms are alternatives for tool diagnostics, and the provider's own
+`annotate` op is the forgery-proof channel.
+
 ## One exception: concurrency
 
 magus caps build concurrency on GitHub-hosted runners, which report their host's

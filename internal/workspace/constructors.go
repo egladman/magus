@@ -62,6 +62,13 @@ func WithExclusive() ProjectOption {
 	return func(p *types.Project) error { p.Exclusive = true; return nil }
 }
 
+// WithPackageManager pins the package-manager launcher (npm/pnpm/yarn/bun) a
+// package-manager-substituting spell forks for this project, overriding
+// manifest and lockfile detection. See types.Project.PackageManager.
+func WithPackageManager(name string) ProjectOption {
+	return func(p *types.Project) error { p.PackageManager = name; return nil }
+}
+
 // WithNoLanguage records why a project binds no toolchain spell deliberately.
 func WithNoLanguage(reason string) ProjectOption {
 	return func(p *types.Project) error { p.NoLanguage = reason; return nil }

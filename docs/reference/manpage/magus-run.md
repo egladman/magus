@@ -58,6 +58,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **format**
 : Format source files in selected projects
 
+**security**
+: Run security scanners over selected projects (read-only)
+
 **clean**
 : Remove build artifacts from selected projects
 

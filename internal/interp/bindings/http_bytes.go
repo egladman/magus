@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -14,6 +15,14 @@ import (
 // 32 MiB matches the GitHub Actions Cache per-PATCH ceiling, the tightest of the
 // providers this module targets.
 const maxChunk = 32 * 1024 * 1024
+
+// byteTransferTimeout bounds one download or one upload call end to end. These
+// primitives back the remote cache, whose contract is that a dead or black-holed
+// remote degrades to a local build - an unbounded transfer on http.DefaultClient
+// (which has no Timeout) would instead stall the build forever. Generous on
+// purpose: at even 10 MB/s this covers multi-GB artifacts, far above any cache
+// entry, so a trip means the remote is sick, not the artifact large.
+const byteTransferTimeout = 10 * time.Minute
 
 // registerHTTPBytes builds the byte-level companion to the declarative http
 // module: streaming a response body to a file, reading a file's byte length, and
@@ -83,6 +92,8 @@ func registerHTTPBytes() vm.Value {
 }
 
 func httpDownload(ctx context.Context, url, dest string, headers map[string]string) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, byteTransferTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, fmt.Errorf("http.download: %w", err)
@@ -125,6 +136,8 @@ func httpDownload(ctx context.Context, url, dest string, headers map[string]stri
 }
 
 func httpUploadChunked(ctx context.Context, method, url, src string, chunkSize int64, headers map[string]string) (int, string, error) {
+	ctx, cancel := context.WithTimeout(ctx, byteTransferTimeout)
+	defer cancel()
 	f, err := os.Open(src)
 	if err != nil {
 		return 0, "", fmt.Errorf("http.upload_chunked: open: %w", err)

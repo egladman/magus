@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2468 nodes** and **5584 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2563 nodes** and **5734 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,24 +45,24 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 93 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
-| spell | 12 | `magus query kind:spell` | `go`, `markdown`, `rust` |
-| op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
-| tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| target | 94 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| spell | 12 | `magus query kind:spell` | `go`, `rust`, `typescript` |
+| op | 85 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
+| tool | 19 | `magus query kind:tool` | `sh`, `pnpm`, `cargo` |
 | charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 54 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 293 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| diagnostic | 55 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
+| doc | 290 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 171 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1209 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
+| file | 241 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1263 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 124 | `magus query kind:import` | `magus`, `std`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 34 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
+| . | 35 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 17 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
@@ -94,7 +94,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
 | `preflight` | Gates the build on workspace health by running `magus doctor`. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
-| `lint` | Formats first, then golangci-lint, go vet, govulncheck, markdownlint, and shellcheck. |
+| `lint` | Formats first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go and tidies `go.mod`. |
 | `ci` | Runs the CI gates through their declared dependencies. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
@@ -110,6 +110,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `md-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |
 | `mod-sync` | The Go spell's Buzz companion derives the flags; go-mod-edit alone renders or writes go.mod. |
+| `security` | govulncheck consults the live Go vulndb - a new CVE flips its verdict with no tree change - so it is the canonical `security` target, not a lint step, and its target policy above declares skip_cache for the same reason image-scan does. |
 
 ## Project: console
 

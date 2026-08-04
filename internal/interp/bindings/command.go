@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -33,6 +34,15 @@ type commandOpts struct {
 	env     map[string]string
 	stdin   string
 	hasArgs bool
+	// pmBin is the package-manager bin the op's spell declared via
+	// mgs_getPackageManagerBin ("" = no substitution). Carried per invocation
+	// because runCommand receives only the op, and the opt-in is a fact about
+	// the SPELL, not the op.
+	pmBin string
+	// installHints maps a bin to the spell's declared install command
+	// (mgs_listInstallHints), carried per invocation for the same reason as
+	// pmBin. Surfaced when forking the op's bin fails because it is absent.
+	installHints map[string]string
 }
 
 // runCommand runs tgt.Bin as a subprocess with the base argv as reshaped by the
@@ -67,13 +77,25 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
 	args = append(args, opts.args...)
+	// Package-manager substitution happens HERE, at fork time, because an op's
+	// recorded bin is static data (recordOp reduces every handler to {cmd,args})
+	// while the manager is a per-project fact. The cache key is unaffected by
+	// construction: hashStep never hashes the forked argv (only extra args and
+	// the target name), and every substitution determinant - the magusfile's
+	// package_manager option, package.json, the lockfiles - is already a hashed
+	// source of the project, so changing the manager misses on its own.
+	bin := tgt.Bin
+	if opts.pmBin != "" && spellruntime.KnownPackageManager(bin) {
+		pm := spellruntime.ResolvePackageManager(explicitPackageManager(ctx, dir), dir, bin)
+		bin, args = spellruntime.SubstitutePackageManager(bin, args, pm)
+	}
 	// A service op reached as a dependency is supervised in the background (started,
 	// readiness-gated, deduped by fingerprint) instead of forked to completion, which
 	// would block the run forever. A directly-run service (no supervisor active) falls
 	// through and foregrounds, blocking as intended (Ctrl-C stops it).
 	if tgt.IsService() && tgt.Service != nil {
 		svc := spells.Service{
-			Command:   spells.Command{Bin: tgt.Bin, Args: args},
+			Command:   spells.Command{Bin: bin, Args: args},
 			Readiness: tgt.Service.Readiness,
 			Stop:      tgt.Service.Stop,
 			Idle:      tgt.Service.Idle,
@@ -89,7 +111,25 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			return run.ExecResult{}, serr
 		}
 	}
-	return execCommand(ctx, dir, tgt.Bin, args, opts.env, opts.stdin, tgt.Capture)
+	return execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, opts.installHints[bin])
+}
+
+// explicitPackageManager returns the "package_manager" option of the project at
+// dir (absolute), or "" when no workspace is on ctx or no project matches.
+// Matched by directory rather than project.Where because Where deliberately
+// never answers for the root project, and a root-level TS project's explicit
+// choice must still win.
+func explicitPackageManager(ctx context.Context, dir string) string {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return ""
+	}
+	for _, p := range ws.All() {
+		if p.Dir == dir {
+			return p.PackageManager
+		}
+	}
+	return ""
 }
 
 // resolveCharmArgs reshapes base by the charms active on ctx. Each active charm
@@ -153,7 +193,9 @@ var directMagusBinaryWarnOnce sync.Once
 // execCommand runs cmd with args in dir, inheriting stdio and sandbox policy. When
 // env is non-empty it overlays the base environment (the sandbox baseline when
 // present, else the process env); later entries win per Go's exec duplicate-key rule.
-func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture bool) (run.ExecResult, error) {
+// installHint, when non-empty, is the spell's declared install command for cmd,
+// appended to the error when the fork fails because cmd is absent from PATH.
+func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture bool, installHint string) (run.ExecResult, error) {
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
 			slog.WarnContext(ctx, "magus: command spell target called with 'magus' binary",
@@ -187,6 +229,13 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 		// cmd is the executable that was exec'd (markdownlint, go, tsc), not a spell:
 		// a spell is the adapter that chose to run it. Calling it one taught readers
 		// a wrong mapping and sent them looking for a spell by the tool's name.
+		//
+		// A start failure caused by the bin being absent gets the spell's install
+		// hint appended, when it declared one: "shellcheck exited 1" tells a reader
+		// nothing about the fix, and the spell already knows it.
+		if !res.Started && errors.Is(err, exec.ErrNotFound) && installHint != "" {
+			return res, fmt.Errorf("%s exited %d: %s not found on PATH; install: %s", cmd, code, cmd, installHint)
+		}
 		return res, fmt.Errorf("%s exited %d", cmd, code)
 	}
 	return res, nil

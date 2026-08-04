@@ -1,4 +1,5 @@
-// golangci-lint runs as a `go tool` (resolved from go.mod's tool block). The rw
+// golangci-lint runs from PATH, pinned by whatever the workspace uses (mise,
+// asdf, a system package) - the spell's version probe records which. The rw
 // charm inserts --fix, so `magus run lint:rw` applies the autofixable findings.
 import "magus";
 import "magus/spell/go";

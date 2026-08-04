@@ -1,0 +1,14 @@
+// cargo-audit checks Cargo.lock against the RustSec advisory database, so it
+// composes into the canonical `security` target. The verdict tracks the
+// advisory database, not the tree - declare skip_cache on the target so a
+// replayed pass cannot hide a newly published CVE.
+import "magus";
+import "magus/spell/rust";
+
+magus\project({ "spells": [rust], "targets": {
+    "security": {"skip_cache": "reads the RustSec advisory database, which changes independently of this tree"},
+} });
+
+export fun security(ctx: magus\Context, args: [str]) > void {
+    rust["cargo-audit"](ctx);
+}
