@@ -33,7 +33,6 @@ jobs:
       matrix:        ${{ steps.plan.outputs.matrix }}
       count:         ${{ steps.plan.outputs.count }}
       max_parallel:  ${{ steps.plan.outputs.max_parallel }}
-      magus_version: ${{ steps.resolve_magus.outputs.tag }}
     steps:
       - name: Set history path
         run: echo "MAGUS_HISTORY_PATH=$RUNNER_TEMP/magus-history.json" >> "$GITHUB_ENV"
@@ -52,15 +51,6 @@ jobs:
 
       - name: Install pinned toolchain
         run: mise install
-
-      - name: Resolve magus release
-        id: resolve_magus
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       # Builds the magus this very commit defines, from the checkout above, so a
       # change that magusfile.buzz needs is exercised by the run that introduces
@@ -216,7 +206,8 @@ jobs:
       - uses: ./.github/actions/setup-magus
         if: steps.changed.outputs.run == 'true'
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
 
       - name: Exercise each completion script in its shell's official image
         if: steps.changed.outputs.run == 'true'
@@ -257,11 +248,23 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
-      # The released binary, matching the publish workflow; a source build would test a
-      # magus the deploy never runs.
+      # A source build, matching publish-site.yaml. This mirrored the publish workflow on
+      # the released binary so a source build could not test a magus the deploy never
+      # runs - but that pairing breaks for the whole window between a breaking magusfile
+      # change and the release carrying it. The built-in spells were renamed (md ->
+      # markdown, ...) and the magusfile updated to match, so the newest release cannot
+      # load this workspace at all. publish-site.yaml made the same move; the two stay
+      # matched, just on source rather than on the release.
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks the mise-pinned Go. Re-adding mise's puts it back in
+      # front. Same step the preflight and ci jobs already carry.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # deploy-generate throws when either tree lacks its index.html, so it is the
       # assertion. Nothing is uploaded: this proves the build, it does not publish.
@@ -355,7 +358,8 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
 
       - uses: ./.github/actions/magus
         with:
@@ -378,7 +382,8 @@ jobs:
           filter: blob:none
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ needs.preflight.outputs.magus_version }}
+          installation-strategy: source
+          source-path: .
       - name: Summarize CI outcome
         env:
           CI_RESULT: ${{ needs.ci.result }}
