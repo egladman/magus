@@ -49,6 +49,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		viewerBase  string
 		attempts    bool
 		meta        bool
+		publish     bool
 	)
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&budget, "budget", 0, "max nodes in the returned neighborhood (default 50)")
@@ -60,6 +61,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&viewerBase, "url", defaultLogViewerURL, "with --open, base URL of the log viewer page (override for a self-hosted mirror)")
 		fs.BoolVar(&attempts, "attempts", false, "with `output <ref>`, list the ref's stored executions (newest first) instead of printing output")
 		fs.BoolVar(&meta, "meta", false, "with `output <ref>`, show the run's identity instead of its output: descriptor, lineage, cache key, component digests")
+		fs.BoolVar(&publish, "publish", false, "with `output <ref>`, upload this run's output to the remote cache as a signed bundle so a teammate can resolve the same ref (failing runs are never shared automatically)")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--meta]")
@@ -107,21 +109,21 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			return oerr
 		}
 		exclusive := 0
-		for _, set := range []bool{attempts, meta, open || printURL} {
+		for _, set := range []bool{attempts, meta, publish, open || printURL} {
 			if set {
 				exclusive++
 			}
 		}
 		if exclusive > 1 {
-			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, and --open/--print are distinct views; pick one\n")
+			fmt.Fprintf(os.Stderr, "magus query output: --attempts, --meta, --publish, and --open/--print are distinct actions; pick one\n")
 			return errSilent{exitCode: 2}
 		}
-		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, out: outOpts})
+		return queryOutputRef(ctx, root, ref, outputRefOpts{open: open, printURL: printURL, viewerBase: viewerBase, attempts: attempts, meta: meta, publish: publish, out: outOpts})
 	}
-	if open || printURL || attempts || meta {
+	if open || printURL || attempts || meta || publish {
 		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -179,6 +181,7 @@ type outputRefOpts struct {
 	viewerBase string        // log viewer base URL
 	attempts   bool          // list the ref's stored executions instead of printing output
 	meta       bool          // show the run's identity (descriptor, lineage, key digests)
+	publish    bool          // upload this run's output to the remote as a signed bundle
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
@@ -206,6 +209,18 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.meta {
 		return showOutputMeta(m, ref, o.out)
 	}
+	if o.publish {
+		published, perr := m.PublishOutput(ctx, ref)
+		if perr != nil {
+			if errors.Is(perr, fs.ErrNotExist) {
+				return reportRefLookupError(ref, perr)
+			}
+			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
+		}
+		fmt.Printf("published %s to the remote cache\n", published)
+		fmt.Printf("a teammate with the same trust set can now run: %s\n", clihint.QueryOutput.With(published))
+		return nil
+	}
 	if o.open {
 		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
 		// the browser renders pretty from structure.
@@ -218,9 +233,25 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		if desc.Inv != "" {
 			inv, _ = m.InvocationByID(desc.Inv) // best-effort lineage; omitted if the run log aged out
 		}
-		return openOutputInViewer(desc, events, inv, o)
+		// The run's per-class key digests ride along so the viewer can show a
+		// machine-vs-machine key comparison. Best-effort: a run predating key-line
+		// persistence just opens without them.
+		var keyDigests string
+		if lines, lerr := m.OutputKeyLines(ref); lerr == nil {
+			d := cache.ClassDigests(lines)
+			classes := make([]string, len(d))
+			digests := make([]string, len(d))
+			for i, c := range d {
+				classes[i], digests[i] = c.Class, c.Digest
+			}
+			keyDigests = console.KeyDigestsParam(classes, digests)
+		}
+		return openOutputInViewer(desc, events, inv, keyDigests, o)
 	}
-	data, desc, err := m.OutputByRef(ref)
+	// Remote-aware: a ref unknown locally may have been published from CI or a
+	// teammate's machine, so the print path consults the remote bundle namespace
+	// before reporting it missing.
+	data, desc, err := m.OutputByRefRemote(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ref, err)
 	}
@@ -368,7 +399,14 @@ func reportRefLookupError(ref string, err error) error {
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error()).Error())
 		return errSilent{exitCode: 2}
 	case errors.Is(err, fs.ErrNotExist):
+		// Name the stores consulted when the lookup knows them: a foreign ref that was
+		// never published reads exactly like a mistyped one otherwise.
 		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
+		var missing *cache.RefNotFoundError
+		if errors.As(err, &missing) {
+			msg = fmt.Sprintf("%s (consulted: %s). If it came from CI or a teammate, they can share it with `%s`.",
+				missing.Error(), strings.Join(missing.Stores, ", "), clihint.QueryOutput.With(ref, "--publish"))
+		}
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
 		return errSilent{exitCode: 2}
 	default:
@@ -378,8 +416,8 @@ func reportRefLookupError(ref string, err error) error {
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
 // URL instead. It warns when the link nears browser URL-length limits.
-func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, o outputRefOpts) error {
-	openURL, err := console.LogViewerURL(o.viewerBase, desc.Ref, events, inv)
+func openOutputInViewer(desc cache.OutputDescriptor, events []journal.Event, inv journal.Invocation, keyDigests string, o outputRefOpts) error {
+	openURL, err := console.LogViewerURLWithKey(o.viewerBase, desc.Ref, events, inv, keyDigests)
 	if err != nil {
 		return err
 	}

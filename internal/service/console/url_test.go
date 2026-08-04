@@ -95,3 +95,30 @@ func TestKnownSurfaces(t *testing.T) {
 	assert.False(t, IsSurfaceRoute(""), "the console root is not a surface route")
 	assert.False(t, IsSurfaceRoute("settings"), "settings is not a clean-path deep-link surface")
 }
+
+// TestLogViewerURLWithKey: the key directive rides the fragment ahead of the payload,
+// carries only class digests (never key content), and is omitted entirely when the run
+// recorded no key lines - so an old ref's link is byte-identical to the pre-key form.
+func TestLogViewerURLWithKey(t *testing.T) {
+	digests := KeyDigestsParam([]string{"src", "env"}, []string{"aabbccddeeff", "112233445566"})
+	assert.Equal(t, "src:aabbccddeeff,env:112233445566", digests)
+
+	withKey, err := LogViewerURLWithKey("https://example.test/logs/", "out1a2b3c4d5e6f", nil, journal.Invocation{}, digests)
+	require.NoError(t, err)
+	assert.Contains(t, withKey, "#ref=out1a2b3c4d5e6f&key=src%3Aaabbccddeeff%2Cenv%3A112233445566&data=")
+
+	plain, err := LogViewerURL("https://example.test/logs/", "out1a2b3c4d5e6f", nil, journal.Invocation{})
+	require.NoError(t, err)
+	assert.NotContains(t, plain, "&key=")
+
+	empty, err := LogViewerURLWithKey("https://example.test/logs/", "out1a2b3c4d5e6f", nil, journal.Invocation{}, "")
+	require.NoError(t, err)
+	assert.Equal(t, plain, empty, "no digests must reproduce the plain link exactly")
+}
+
+// TestKeyDigestsParamMismatchedLengths: a short digest list truncates rather than
+// panicking or emitting a half-formed pair.
+func TestKeyDigestsParamMismatchedLengths(t *testing.T) {
+	assert.Equal(t, "src:aabb", KeyDigestsParam([]string{"src", "env"}, []string{"aabb"}))
+	assert.Empty(t, KeyDigestsParam(nil, nil))
+}

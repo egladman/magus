@@ -125,6 +125,38 @@ its contents being shown.
 For the LATEST log of a project or target (rather than a specific past execution),
 [`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
 
+## Sharing a ref across machines
+
+A ref is portable arithmetic, but the OUTPUT behind it still has to exist where you
+look. Two paths put it there:
+
+- **Passing runs travel automatically.** When a [remote cache](remote.md) is
+  configured, a pushed artifact now carries the run's descriptor, its key lines, and
+  its build log alongside the manifest and blobs. A teammate who gets a remote cache
+  hit resolves the ref the producer printed, rather than minting a local one for the
+  same inputs.
+- **Failing runs are never shared unless you say so.** A failure is not cached and
+  not pushed, which is exactly backwards from what humans want, so publishing is an
+  explicit act:
+
+  ```sh
+  magus query output out4ef30de6abcd --publish
+  ```
+
+  That uploads a signed **output bundle**: the descriptor, the key lines, and the
+  captured bytes. A bundle carries no manifest and no artifact blobs, so it can never
+  be replayed as a cache hit - a published failure cannot become someone's cached
+  success. Publishing needs a signing key, and reading one needs the matching trust
+  set, the same asymmetry the remote cache already uses.
+
+`magus query output <ref>` consults the local store first and the published bundles
+only if the ref is unknown locally. When nothing has it, the error names the stores it
+checked, so a never-published ref is distinguishable from a typo.
+
+Everything the signature covers grew with this: it now authenticates the build log
+and the sidecars, not just the manifest. An artifact whose log was altered in transit
+is rejected outright instead of having that log written to your cache.
+
 ## Tips and tricks
 
 Copy-paste-ready one-liners:

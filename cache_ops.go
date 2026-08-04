@@ -156,6 +156,32 @@ func (m *Magus) OutputAttempts(ref string) ([]cache.OutputDescriptor, error) {
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).Attempts(ref)
 }
 
+// PublishOutput uploads the run behind ref to the configured remote cache as a signed
+// OUTPUT BUNDLE, and returns the ref a teammate can then resolve. A passing run's
+// output already travels with its cache artifact; this is what makes a FAILING run -
+// never cached, never pushed - shareable, and it is always an explicit act because
+// captured output can contain anything the target printed. The bundle carries no
+// manifest and no blobs, so it can never be replayed as a cache hit. Requires a
+// remote backend and a signing key; [types.ErrNoCache] on an Inspect workspace.
+func (m *Magus) PublishOutput(ctx context.Context, ref string) (string, error) {
+	if m.cache == nil {
+		return "", types.ErrNoCache
+	}
+	return m.cache.PublishOutput(ctx, ref)
+}
+
+// OutputByRefRemote resolves a ref to its captured bytes and descriptor, falling back
+// to the remote published-output namespace when the ref is unknown locally - so an
+// inspect line pasted from CI or a teammate resolves even on a machine that never ran
+// the target. Requires a live cache (the remote backend and trust set live there); on
+// an Inspect workspace it degrades to the local-only path.
+func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, cache.OutputDescriptor, error) {
+	if m.cache == nil {
+		return m.OutputByRef(ref)
+	}
+	return m.cache.OutputByRef(ctx, ref)
+}
+
 // OutputDescriptorByRef resolves a ref to just its stored descriptor, without reading
 // the output blob. The metadata views (`query output <ref> --meta`, `describe target
 // --cache --against <ref>`) want the identity, not the bytes, and a captured log can

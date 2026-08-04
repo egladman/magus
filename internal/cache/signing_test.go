@@ -35,9 +35,9 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	require.NoError(t, err, "newVerifier")
 
 	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
-	sig, err := s.sign(manifest)
+	sig, err := s.sign(manifest, nil)
 	require.NoError(t, err, "sign")
-	assert.NoError(t, v.verify(sig, manifest), "verify valid signature")
+	assert.NoError(t, v.verify(sig, manifest, nil), "verify valid signature")
 	assert.Equal(t, s.keyid, keyID(pub), "signer keyid must match derived keyid")
 }
 
@@ -50,8 +50,8 @@ func TestVerifyRejectsUntrustedKey(t *testing.T) {
 	v, _ := newVerifier([][]byte{pubB}) // trusts B, not A
 
 	manifest := []byte(`{"hash":"x"}`)
-	sig, _ := s.sign(manifest)
-	assert.Error(t, v.verify(sig, manifest), "verify accepted a signature from an untrusted key")
+	sig, _ := s.sign(manifest, nil)
+	assert.Error(t, v.verify(sig, manifest, nil), "verify accepted a signature from an untrusted key")
 }
 
 // TestVerifyRejectsTamperedManifest: the bytes presented at verify time must be
@@ -62,9 +62,9 @@ func TestVerifyRejectsTamperedManifest(t *testing.T) {
 	v, _ := newVerifier([][]byte{pub})
 
 	manifest := []byte(`{"hash":"original"}`)
-	sig, _ := s.sign(manifest)
+	sig, _ := s.sign(manifest, nil)
 	tampered := []byte(`{"hash":"poisoned"}`)
-	assert.Error(t, v.verify(sig, tampered), "verify accepted a signature over different manifest bytes")
+	assert.Error(t, v.verify(sig, tampered, nil), "verify accepted a signature over different manifest bytes")
 }
 
 // TestVerifyRejectsBadAlg: only ed25519 envelopes are accepted.
@@ -72,7 +72,7 @@ func TestVerifyRejectsBadAlg(t *testing.T) {
 	pub, _ := mustKeypair(t)
 	v, _ := newVerifier([][]byte{pub})
 	env, _ := json.Marshal(sigEnvelope{Alg: "rsa", KeyID: keyID(pub)})
-	assert.Error(t, v.verify(env, []byte("m")), "verify accepted a non-ed25519 algorithm")
+	assert.Error(t, v.verify(env, []byte("m"), nil), "verify accepted a non-ed25519 algorithm")
 }
 
 // TestKeyMaterialValidation: malformed key material is rejected at construction.

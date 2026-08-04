@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -35,11 +36,46 @@ const (
 
 // sigEnvelope is the JSON written to signature.json. keyid is derived from the
 // public key (not chosen), so the verifier treats it only as a trust-set lookup hint.
+//
+// Members extends the envelope to cover the artifact's NON-manifest files (the build
+// log, the output descriptor, the key lines): one content hash per cache-relative
+// path. The signature is computed over the manifest bytes CONCATENATED with the
+// canonical rendering of that map (signedPayload), so one signature still
+// authenticates the whole artifact - the manifest already commits to every cas blob,
+// and Members now commits to everything else. An envelope without Members is a
+// pre-Members producer: its manifest and blobs verify exactly as before, and the
+// unauthenticated extras are dropped on import rather than trusted.
 type sigEnvelope struct {
-	Alg            string `json:"alg"`
-	KeyID          string `json:"keyid"`
-	ManifestSHA256 string `json:"manifest_sha256"` // hex; lets a verifier confirm it holds the signed manifest
-	Sig            string `json:"sig"`             // base64(ed25519 signature over the manifest bytes)
+	Alg            string            `json:"alg"`
+	KeyID          string            `json:"keyid"`
+	ManifestSHA256 string            `json:"manifest_sha256"` // hex; lets a verifier confirm it holds the signed manifest
+	Members        map[string]string `json:"members,omitempty"`
+	Sig            string            `json:"sig"` // base64(ed25519 signature over signedPayload)
+}
+
+// signedPayload renders the exact bytes a signature covers: the manifest, then each
+// extra member as "path\x00sha256\n" in sorted path order. Sorting makes the payload
+// independent of tar order, and the NUL separator keeps a crafted path from forging a
+// different (path, hash) split. Empty members reproduce the pre-Members payload
+// byte-for-byte, so an old signature still verifies against this function.
+func signedPayload(manifestBytes []byte, members map[string]string) []byte {
+	if len(members) == 0 {
+		return manifestBytes
+	}
+	paths := make([]string, 0, len(members))
+	for p := range members {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	buf := make([]byte, 0, len(manifestBytes)+len(paths)*80)
+	buf = append(buf, manifestBytes...)
+	for _, p := range paths {
+		buf = append(buf, p...)
+		buf = append(buf, 0)
+		buf = append(buf, members[p]...)
+		buf = append(buf, '\n')
+	}
+	return buf
 }
 
 // KeyMaterial is a freshly minted signing keypair, base64-encoded. SeedB64 is the
@@ -123,14 +159,16 @@ func newSigner(seed []byte) (*signer, error) {
 	return &signer{priv: priv, keyid: keyID(pub)}, nil
 }
 
-// sign returns a signature.json envelope authenticating manifestBytes.
-func (s *signer) sign(manifestBytes []byte) ([]byte, error) {
+// sign returns a signature.json envelope authenticating manifestBytes plus every
+// extra member (path -> content sha256) the artifact ships.
+func (s *signer) sign(manifestBytes []byte, members map[string]string) ([]byte, error) {
 	sum := sha256.Sum256(manifestBytes)
 	env := sigEnvelope{
 		Alg:            sigAlg,
 		KeyID:          s.keyid,
 		ManifestSHA256: hex.EncodeToString(sum[:]),
-		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, manifestBytes)),
+		Members:        members,
+		Sig:            base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, signedPayload(manifestBytes, members))),
 	}
 	return json.Marshal(env)
 }
@@ -164,13 +202,21 @@ func newVerifier(pubkeys [][]byte) (*verifier, error) {
 // keyid resolves to a trusted key, the envelope commits to this exact manifest,
 // and the Ed25519 signature verifies. Every other path is an error, so a caller
 // that treats any error as "reject and fall back to a local build" fails closed.
-func (v *verifier) verify(sigBytes, manifestBytes []byte) error {
+// Extra artifact members are authenticated by the same call: the caller passes the
+// (path -> content sha256) map it actually received, and it must match the signed
+// Members map exactly - a tampered, added, or dropped log is a verification failure,
+// not a silently-trusted file. It returns the set of member paths the signature
+// covers so the caller can commit exactly those.
+func (v *verifier) verify(sigBytes, manifestBytes []byte, gotMembers map[string]string) error {
 	var env sigEnvelope
 	if err := json.Unmarshal(sigBytes, &env); err != nil {
 		return fmt.Errorf("signature: parse: %w", err)
 	}
 	if env.Alg != sigAlg {
 		return fmt.Errorf("signature: unsupported alg %q", env.Alg)
+	}
+	if err := verifyMembers(env.Members, gotMembers); err != nil {
+		return err
 	}
 	// Diagnostic pre-check, not a trust factor: the Ed25519 verify below already
 	// binds the signature to manifestBytes. This just yields a clearer error when
@@ -187,8 +233,32 @@ func (v *verifier) verify(sigBytes, manifestBytes []byte) error {
 	if err != nil {
 		return fmt.Errorf("signature: decode: %w", err)
 	}
-	if !ed25519.Verify(pub, manifestBytes, sig) {
+	if !ed25519.Verify(pub, signedPayload(manifestBytes, env.Members), sig) {
 		return errors.New("signature: verification failed")
+	}
+	return nil
+}
+
+// verifyMembers reports whether the extra members received match the signed set
+// exactly. Both directions matter: an extra file the signature does not cover is
+// unauthenticated content smuggled into a trusted artifact, and a missing one means
+// the artifact was truncated. A pre-Members envelope (signed empty) is accepted only
+// when nothing extra arrived - the caller drops the unauthenticated extras first, so
+// an old producer keeps working without its log ever being trusted.
+func verifyMembers(want, got map[string]string) error {
+	for path, wantSum := range want {
+		gotSum, ok := got[path]
+		if !ok {
+			return fmt.Errorf("signature: artifact is missing signed member %q", path)
+		}
+		if gotSum != wantSum {
+			return fmt.Errorf("signature: member %q content does not match the signature", path)
+		}
+	}
+	for path := range got {
+		if _, ok := want[path]; !ok {
+			return fmt.Errorf("signature: artifact carries unsigned member %q", path)
+		}
 	}
 	return nil
 }

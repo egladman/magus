@@ -405,6 +405,14 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				ref := ""
 				if c.outputs != nil {
 					ref = c.outputs.StepRef(hash)
+					if ref == "" {
+						// A remote import ships the producer's descriptor without its
+						// output blob; completing it with the replayed log bytes makes
+						// this machine resolve the SAME ref the producer printed.
+						if adopted, ok := c.outputs.AdoptImported(hash, logData); ok {
+							ref = adopted
+						}
+					}
 				}
 				if ref == "" {
 					ref = c.recordOutput(ctx, s, hash, logData, result.Duration, nil)

@@ -733,6 +733,55 @@ func (s *OutputStore) removeForProject(project string) {
 	}
 }
 
+// AdoptImported completes an execution record that arrived from a remote artifact.
+// An import ships the producer's DESCRIPTOR but not its output blob (the bytes travel
+// once, as the build log), so the attempt is a descriptor with no sibling .out and
+// stays unresolvable. Given the log bytes a cache hit just replayed, this writes that
+// missing blob and returns the step's portable ref - so a fresh machine answers under
+// the SAME ref the producer printed instead of minting a local one. Reports false
+// when the key has no orphan descriptor to complete (nothing imported, or already
+// completed), leaving the caller to persist its own attempt.
+func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, bool) {
+	dir := filepath.Join(s.outputsDir(), cacheKey)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	stems := make(map[string]bool, len(files)) // stem -> has a blob
+	for _, f := range files {
+		if stem, ok := strings.CutSuffix(f.Name(), descExt); ok {
+			stems[stem] = stems[stem]
+			continue
+		}
+		if stem, ok := strings.CutSuffix(f.Name(), outExt); ok {
+			stems[stem] = true
+		}
+	}
+	for stem, hasBlob := range stems {
+		if hasBlob {
+			continue
+		}
+		if os.WriteFile(filepath.Join(dir, stem+outExt), output, 0o644) != nil {
+			return "", false
+		}
+		return PortableRef(cacheKey), true
+	}
+	return "", false
+}
+
+// newestDescriptor returns the newest stored execution's descriptor for cacheKey -
+// the one a bare step ref answers with. It is what the remote export ships so an
+// importing machine resolves the producer's exact ref. fs.ErrNotExist when the key
+// has no stored execution.
+func (s *OutputStore) newestDescriptor(cacheKey string) (OutputDescriptor, error) {
+	dir := filepath.Join(s.outputsDir(), cacheKey)
+	path := newestAttemptBlob(dir)
+	if path == "" {
+		return OutputDescriptor{}, fs.ErrNotExist
+	}
+	return readDescriptor(descriptorPath(path))
+}
+
 // DescriptorByRef resolves a ref (or unique prefix) to its stored descriptor alone,
 // without reading the output blob - the identity views (`--meta`, `--against`) want
 // the metadata, and a captured log can be large. A resolvable ref whose descriptor is

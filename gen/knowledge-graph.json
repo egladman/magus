@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2468,
-  "edge_count": 5583,
+  "edge_count": 5584,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -29510,6 +29510,14 @@
     {
       "source": "doc:docs/concepts/cache/output-refs.md",
       "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
