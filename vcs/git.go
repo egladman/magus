@@ -412,6 +412,37 @@ func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([
 	return tracked, nil
 }
 
+// IgnoredFiles implements types.IgnoredFileReporter via `git check-ignore`, which
+// prints the subset of its arguments that the ignore rules match.
+//
+// Exit status 1 means "none of them matched" and is a RESULT, not a failure - the
+// one thing that makes this awkward enough to need its own exec instead of
+// vcsOutput, which treats any non-zero exit as an error. Getting that backwards
+// would report every clean workspace as broken.
+//
+// Batched and core.quotePath=false for the same reasons TrackedFiles is.
+func (v gitVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	var ignored []string
+	for start := 0; start < len(paths); start += gitTrackedBatch {
+		end := min(start+gitTrackedBatch, len(paths))
+		args := []string{"-c", "core.quotePath=false", "check-ignore", "--"}
+		args = append(args, paths[start:end]...)
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = dir
+		cmd.Env = gitEnviron()
+		out, err := cmd.Output()
+		if err != nil {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) && ee.ExitCode() == 1 {
+				continue // nothing in this batch is ignored
+			}
+			return nil, fmt.Errorf("git check-ignore: %w", err)
+		}
+		ignored = append(ignored, splitLines(out)...)
+	}
+	return ignored, nil
+}
+
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
 // short hash when no tag is reachable), with a -dirty suffix for a modified tree.
 func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {

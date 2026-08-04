@@ -293,6 +293,25 @@ type TrackedFileReporter interface {
 	TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
 
+// IgnoredFileReporter is an optional capability (sibling of TrackedFileReporter)
+// for VCSDriver implementations that can report which paths the VCS ignores.
+//
+// It answers a different question from TrackedFiles, and the difference is the
+// point. "Untracked" lumps together a file nobody has committed YET (a doc being
+// written) with one nothing should ever commit (a generated artifact); only the
+// ignore rules distinguish them, because a human wrote down which is which. A
+// derived artifact that must be reproducible from a clean checkout therefore
+// filters on ignored, not on untracked - otherwise it would drop work in progress.
+//
+// Callers type-assert for it and skip the question when a backend lacks it, rather
+// than guessing: treating an unknown answer as "not ignored" keeps a backend
+// without ignore support behaving exactly as it did before.
+type IgnoredFileReporter interface {
+	// IgnoredFiles returns the subset of paths the VCS ignores, as given. Paths are
+	// interpreted relative to dir. An empty paths slice returns no results.
+	IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error)
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
