@@ -11,14 +11,21 @@ import "os";
 // stays offline and keyless.
 magus\project({
     "sources": ["magusfile.buzz", "*.buzz",
-                "tasks/**/*.yaml", "lib/**/*.mjs", "tools/**/*.mjs", "tools/**/*.py",
+                "tasks/**/*.yaml", "lib/**/*.mjs", "tools/**/*.mjs",
                 "promptfooconfig.*.yaml",
-                "fixtures/**", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
+                "fixtures/*/.gitkeep", "README.md", ".gitignore", ".npmrc", "package.json", "pnpm-lock.yaml",
                 "pnpm-workspace.yaml"],
-    "outputs": ["results/**"],
-    "no_language": "polyglot harness: promptfoo yaml tasks, .mjs libs, .py analysis tools; no single language pack describes it, and the work runs through promptfoo rather than a toolchain",
+    // fixtures/*/.claude is rendered by render-fixtures, never committed: a
+    // committed snapshot drifts the moment a skill changes (it happened - the
+    // tree hit skill-version 23 while the fixtures still carried 22, minus a
+    // whole skill), and a benchmark of stale content measures nothing.
+    "outputs": ["results/**", "fixtures/*/.claude/**"],
+    "no_language": "promptfoo harness: yaml tasks and .mjs libs/tools; no single language pack describes it, and the work runs through promptfoo rather than a toolchain",
     "targets": {
         "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
+        "analyze": {"skip_cache": "reads run output under results/, which is a declared output rather than a source"},
+        "measure": {"skip_cache": "renders the repo-root skill sources through magus agent install, which live outside this project's sources"},
+        "render-fixtures": {"skip_cache": "renders the skills embedded in the running binary, which no source fingerprint covers"},
         // These targets deliberately produce no result artifact. The live smoke
         // and grid targets retain the project output snapshot.
     },
@@ -52,18 +59,64 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 // tasks, constraints, and lint gate keep working and this comes back by uncommenting.
 // The weekly cron in .github/workflows/skill-evals.yaml is disabled to match.
 //
+// The key is resolved through magus\secret.read rather than letting promptfoo read
+// ambient environment: resolving teaches magus the value, so anything promptfoo or a
+// failing provider echoes back is redacted from captured output, and os\withEnv
+// scopes the variable to this one command. In CI the workflow env block maps the
+// repository secret onto ANTHROPIC_API_KEY, which is exactly what the built-in
+// provider reads; on a laptop export the variable or select a provider spell.
+//
 // // smoke is the PR gate: one trial, a subset of tasks, one model. Needs an API key.
 // export fun smoke(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     os\exec("pnpm", ["run", "smoke"], ".", {});
+//     ctx.needs(render_fixtures);
+//     final key = magus\secret.read("ANTHROPIC_API_KEY");
+//     os\withEnv({"ANTHROPIC_API_KEY": key}, fun () > void {
+//         os\exec("pnpm", args: ["run", "smoke"], dir: ".");
+//     });
 // }
 //
 // // grid is the full run: every skill, both permutations, every model, 5 trials.
 // // Minutes-to-hours and real money. Never on the PR path.
 // export fun grid(ctx: magus\Context, args: [str]) > void {
 //     ctx.needs(preflight);
-//     os\exec("pnpm", ["run", "grid"], ".", {});
+//     ctx.needs(render_fixtures);
+//     final key = magus\secret.read("ANTHROPIC_API_KEY");
+//     os\withEnv({"ANTHROPIC_API_KEY": key}, fun () > void {
+//         os\exec("pnpm", args: ["run", "grid"], dir: ".");
+//     });
 // }
+
+// render-fixtures writes the two permutation workspaces promptfoo points its
+// agents at. Rendered fresh per run rather than committed, so the eval always
+// measures the skills this tree actually ships. The renderer is the running
+// binary for the same reason as measure: the embedded skills live in the
+// binary, and a stale PATH magus would silently render last-generation content.
+export fun render_fixtures(ctx: magus\Context, args: [str]) > void {
+    final bin = os\executable();
+    os\exec(bin, args: ["agent", "install", "--dir", "fixtures/full", "--force", ".claude/skills"], dir: ".");
+    os\exec(bin, args: ["agent", "install", "--dir", "fixtures/simple", "--force", "--simple", ".claude/skills"], dir: ".");
+}
+
+// analyze reduces a results file to the paired full-vs-simple comparison table.
+// No network, no API key; it reads what smoke or grid already wrote.
+export fun analyze(ctx: magus\Context, args: [str]) > void {
+    var results = "results/smoke.json";
+    if (args.len() > 0) { results = args[0]; }
+    os\exec("node", args: ["tools/analyze.mjs", results], dir: ".");
+}
+
+// measure reports compression stats for the embedded skills by rendering both
+// permutations through `magus agent install`. Pass --json to regenerate the
+// committed baseline snapshot.
+export fun measure(ctx: magus\Context, args: [str]) > void {
+    // The embedded skills live in the binary, so the renderer must be the same
+    // magus that runs this target - a stale PATH magus would silently measure
+    // content that does not match this tree.
+    os\withEnv({"MAGUS_BIN": os\executable()}, fun () > void {
+        os\exec("node", args: ["tools/measure_skills.mjs"] + args, dir: ".");
+    });
+}
 
 // security audits what actually ships against the npm advisory database. See
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the

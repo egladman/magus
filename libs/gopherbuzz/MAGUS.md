@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2472 nodes** and **5589 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2478 nodes** and **5593 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -45,7 +45,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
 | project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 93 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| target | 96 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
 | spell | 12 | `magus query kind:spell` | `go`, `markdown`, `rust` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
 | tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
@@ -56,7 +56,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | doc | 295 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 173 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
 | file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1209 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| function | 1212 | `magus query kind:function` | `sel`, `sendObject`, `send` |
 | import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 17 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
-| evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
+| evals | 7 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
@@ -157,6 +157,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `lint` | lint validates every task file against the schema and checks that each named constraint predicate exists. |
+| `render-fixtures` | render-fixtures writes the two permutation workspaces promptfoo points its agents at. |
+| `analyze` | analyze reduces a results file to the paired full-vs-simple comparison table. |
+| `measure` | measure reports compression stats for the embedded skills by rendering both permutations through `magus agent install`. |
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` | ci is LINT ONLY, deliberately. |
 | `preflight` |  |

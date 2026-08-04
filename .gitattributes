@@ -25,6 +25,7 @@ docs/reference/config.md merge=magus linguist-generated
 docs/reference/manpage/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
 docs/src/gen/** merge=magus linguist-generated
+evals/fixtures/*/.claude/** merge=magus linguist-generated
 evals/results/** merge=magus linguist-generated
 gen/*.json merge=magus linguist-generated
 internal/config/gen/*.go merge=magus linguist-generated

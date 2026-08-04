@@ -5,7 +5,7 @@ import test from "node:test";
 const fixtures = new URL("./fixtures/", import.meta.url);
 
 function analyze(name) {
-  return execFileSync("python3", ["tools/analyze.py", new URL(name, fixtures).pathname], {
+  return execFileSync(process.execPath, ["tools/analyze.mjs", new URL(name, fixtures).pathname], {
     cwd: new URL("../", import.meta.url).pathname,
     encoding: "utf8",
   });

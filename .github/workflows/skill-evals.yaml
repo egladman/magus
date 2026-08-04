@@ -13,13 +13,40 @@ permissions:
   contents: read
 
 jobs:
+  # Forks and keyless repositories must skip rather than fail: live model
+  # calls are a measurement harness, never a normal CI requirement.
+  #
+  # The gate is its own job because the secrets context is NOT available in a
+  # job-level `if` - it evaluates empty there, so the previous
+  # `if: secrets.ANTHROPIC_API_KEY != ''` skipped smoke on EVERY dispatch, key
+  # or no key. A job-level env block CAN read secrets, so this job maps the
+  # secret into env and publishes its presence; `needs` IS readable in a
+  # job-level `if`.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      has-key: ${{ steps.check.outputs.has-key }}
+    steps:
+      - id: check
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "has-key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-key=false" >> "$GITHUB_OUTPUT"
+          fi
+
   smoke:
-    # Forks and keyless repositories must skip rather than fail: live model
-    # calls are a measurement harness, never a normal CI requirement.
-    if: secrets.ANTHROPIC_API_KEY != ''
+    needs: gate
+    if: needs.gate.outputs.has-key == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # The env block is the only thing that can read a repository secret, and an
+      # environment variable is exactly what magus's built-in secret provider reads.
+      # The smoke target resolves it with magus\secret.read, so magus redacts the
+      # value from captured output; nothing else in this job touches it.
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       GOEXPERIMENT: jsonv2
     steps:
@@ -44,7 +71,7 @@ jobs:
         run: magus run smoke evals
 
       - name: Analyze paired results
-        run: python3 evals/tools/analyze.py evals/results/smoke.json
+        run: magus run analyze evals
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

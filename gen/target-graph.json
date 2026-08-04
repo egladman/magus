@@ -1037,6 +1037,19 @@
           ]
         },
         {
+          "name": "render-fixtures",
+          "declared": "render_fixtures",
+          "doc": "render-fixtures writes the two permutation workspaces promptfoo points its agents at."
+        },
+        {
+          "name": "analyze",
+          "doc": "analyze reduces a results file to the paired full-vs-simple comparison table."
+        },
+        {
+          "name": "measure",
+          "doc": "measure reports compression stats for the embedded skills by rendering both permutations through `magus agent install`."
+        },
+        {
           "name": "security",
           "doc": "security audits what actually ships against the npm advisory database.",
           "dependencies": [

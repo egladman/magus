@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2472,
-  "edge_count": 5589,
+  "node_count": 2478,
+  "edge_count": 5593,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -10783,11 +10783,21 @@
       }
     },
     {
+      "id": "function:evals/magusfile.buzz:analyze",
+      "kind": "function",
+      "label": "analyze",
+      "doc": "analyze reduces a results file to the paired full-vs-simple comparison table. No network, no API key; it reads what smoke or grid already wrote.",
+      "source": "evals/magusfile.buzz:103",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:evals/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.  security is NOT wired in here either, and that is the same judgment the audit gate makes about a finding it cannot act on. Every high in this tree is transitive through promptfoo (mathjs, sharp, drizzle-orm) - packages this project does not depend on directly and cannot upgrade without overriding another tool's dependency graph. Attempting it cascades into a rollup build the c",
-      "source": "evals/magusfile.buzz:86",
+      "source": "evals/magusfile.buzz:139",
       "attrs": {
         "exported": "true"
       }
@@ -10797,14 +10807,24 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled install can leave a node_modules directory that exists but is incomplete, so isDir alone is not a valid readiness check.",
-      "source": "evals/magusfile.buzz:33"
+      "source": "evals/magusfile.buzz:40"
     },
     {
       "id": "function:evals/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists. No network, no API key.",
-      "source": "evals/magusfile.buzz:45",
+      "source": "evals/magusfile.buzz:52",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:measure",
+      "kind": "function",
+      "label": "measure",
+      "doc": "measure reports compression stats for the embedded skills by rendering both permutations through `magus agent install`. Pass --json to regenerate the committed baseline snapshot.",
+      "source": "evals/magusfile.buzz:112",
       "attrs": {
         "exported": "true"
       }
@@ -10813,7 +10833,17 @@
       "id": "function:evals/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "evals/magusfile.buzz:27",
+      "source": "evals/magusfile.buzz:34",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:evals/magusfile.buzz:render_fixtures",
+      "kind": "function",
+      "label": "render_fixtures",
+      "doc": "render-fixtures writes the two permutation workspaces promptfoo points its agents at. Rendered fresh per run rather than committed, so the eval always measures the skills this tree actually ships. The renderer is the running binary for the same reason as measure: the embedded skills live in the binary, and a stale PATH magus would silently render last-generation content.",
+      "source": "evals/magusfile.buzz:95",
       "attrs": {
         "exported": "true"
       }
@@ -10823,7 +10853,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "evals/magusfile.buzz:71",
+      "source": "evals/magusfile.buzz:124",
       "attrs": {
         "exported": "true"
       }
@@ -21545,7 +21575,7 @@
       "source": "evals",
       "attrs": {
         "engine": "buzz",
-        "target_count": "4"
+        "target_count": "7"
       }
     },
     {
@@ -22338,6 +22368,16 @@
       }
     },
     {
+      "id": "target:evals:analyze",
+      "kind": "target",
+      "label": "analyze",
+      "doc": "analyze reduces a results file to the paired full-vs-simple comparison table.",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:evals:ci",
       "kind": "target",
       "label": "ci",
@@ -22358,11 +22398,32 @@
       }
     },
     {
+      "id": "target:evals:measure",
+      "kind": "target",
+      "label": "measure",
+      "doc": "measure reports compression stats for the embedded skills by rendering both permutations through `magus agent install`.",
+      "source": "evals",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:evals:preflight",
       "kind": "target",
       "label": "preflight",
       "source": "evals",
       "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:evals:render-fixtures",
+      "kind": "target",
+      "label": "render-fixtures",
+      "doc": "render-fixtures writes the two permutation workspaces promptfoo points its agents at.",
+      "source": "evals",
+      "attrs": {
+        "declared_as": "render_fixtures",
         "engine": "buzz"
       }
     },
@@ -28717,14 +28778,6 @@
     },
     {
       "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
       "target": "doc:docs/reference/manpage/magus-graph.md",
       "relation": "references",
       "confidence": "inferred",
@@ -29318,14 +29371,6 @@
     {
       "source": "doc:docs/changelog.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -44045,6 +44090,14 @@
     },
     {
       "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:analyze",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
@@ -44069,7 +44122,23 @@
     },
     {
       "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:measure",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
       "target": "function:evals/magusfile.buzz:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/magusfile.buzz"
+    },
+    {
+      "source": "file:evals/magusfile.buzz",
+      "target": "function:evals/magusfile.buzz:render_fixtures",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -63149,6 +63218,14 @@
     },
     {
       "source": "project:evals",
+      "target": "target:evals:analyze",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
       "target": "target:evals:ci",
       "relation": "contains",
       "confidence": "extracted",
@@ -63165,7 +63242,23 @@
     },
     {
       "source": "project:evals",
+      "target": "target:evals:measure",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
       "target": "target:evals:preflight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals"
+    },
+    {
+      "source": "project:evals",
+      "target": "target:evals:render-fixtures",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
