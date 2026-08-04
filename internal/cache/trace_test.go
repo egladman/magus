@@ -29,7 +29,7 @@ func (r *recTracer) StartSpan(ctx context.Context, name string) (context.Context
 func TestRun_PhaseSpans(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(cdir, WithMutable(true))
+	c, err := Open(t.Context(), cdir, WithMutable(true))
 	require.NoError(t, err)
 
 	srcDir := filepath.Join(root, "p")

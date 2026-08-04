@@ -20,7 +20,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha256Hex(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha256File(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -36,7 +36,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha512Hex(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -44,7 +44,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha512File(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -52,7 +52,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha1Hex(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -60,7 +60,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.CryptoSha1File(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -68,7 +68,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		data := Str(bzArgs, 0)
 		ret0, err := std.CryptoMd5Hex(ctx, data)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -76,7 +76,7 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.CryptoMd5File(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

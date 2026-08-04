@@ -33,12 +33,12 @@ var magusWarnOnce sync.Once
 
 // warnIfMagusBinary emits a one-shot slog warning when cmd resolves to the
 // magus binary. Execution is not blocked; the escape hatch stays open.
-func warnIfMagusBinary(cmd string) {
+func warnIfMagusBinary(ctx context.Context, cmd string) {
 	if filepath.Base(cmd) != "magus" {
 		return
 	}
 	magusWarnOnce.Do(func() {
-		slog.Warn("magusfile: os.exec called with 'magus' binary",
+		slog.WarnContext(ctx, "magusfile: os.exec called with 'magus' binary",
 			"hint", "use magus.cmd({...}) instead - in-process, version-pinned, no arg-quoting issues")
 	})
 }
@@ -133,7 +133,7 @@ var Os = Module{
 		},
 		{
 			Name:    "which",
-			Doc:     "Resolve cmd against PATH and return its absolute path, or \"\" if it is not found. Use it to check a tool is installed before running it (and emit a clear hint/error instead of a cryptic exec failure).",
+			Doc:     "Resolve cmd against PATH and return its absolute path. RAISES when the command is not found - wrap it in try/catch to check a tool is installed and emit a clear hint instead of a cryptic exec failure.",
 			Args:    []Arg{{Name: "cmd", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			Impl:    OsWhich,
@@ -222,10 +222,21 @@ func OsStdinIsTerminal(_ context.Context) (bool, error) {
 	return tty.StdinIsTerminal(), nil
 }
 
-// OsWhich resolves cmd against PATH. A missing command is reported as "" (not an
-// error) so a magusfile can branch on `os.which(cmd) == ""`.
+// OsWhich resolves cmd against PATH, RAISING when it is not there.
+//
+// It used to return "" so a magusfile could branch on `os.which(cmd) == ""`. That is the
+// same sentinel the vcs accessors carried, with the same two problems: the check is
+// optional, so forgetting it hands the empty string on to an exec or a path join; and it
+// is untyped, so nothing tells a reader the value needs testing at all. Raising makes the
+// missing tool a case the author has to answer, in the same shape as every other failure
+// in these modules:
+//
+//	try { final vhs = os\which("vhs"); ... } catch (e) { magus\info("vhs not installed"); }
 func OsWhich(_ context.Context, cmd string) (string, error) {
-	path, _ := exec.LookPath(cmd) // missing command reported as "", per the doc above
+	path, err := exec.LookPath(cmd)
+	if err != nil {
+		return "", types.WrapDiagnostic(types.ToolNotOnPath, err, "%q is not on PATH", cmd)
+	}
 	return path, nil
 }
 
@@ -358,7 +369,7 @@ func looksLikeShellCommand(cmd string) bool {
 // unless opts.allow_failure is true. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
-	warnIfMagusBinary(cmd)
+	warnIfMagusBinary(ctx, cmd)
 	wd := resolveDir(ctx, dir)
 	if wd != "" {
 		if err := checkRead(ctx, wd); err != nil {

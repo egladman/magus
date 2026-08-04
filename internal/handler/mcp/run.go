@@ -101,7 +101,7 @@ func (t *runTargetTool) Invoke(ctx context.Context, req spells.InvokeRequest) (s
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: resolve targets: %w", err)
 	}
 	if len(targets) == 0 {
-		toolLogger(ctx).Warn("mcp: no targets resolved", "raw_target", rawTarget)
+		toolLogger(ctx).WarnContext(ctx, "mcp: no targets resolved", "raw_target", rawTarget)
 		return spells.InvokeResponse{}, errors.New("mcp: no targets resolved for " + rawTarget)
 	}
 

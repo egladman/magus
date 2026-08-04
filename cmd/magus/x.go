@@ -80,7 +80,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	state.LastTarget[chosen.Dir] = targetName
 	_ = interactive.SaveState(state)
 
-	m.LogScope(chosen.Path, "")
+	m.LogScope(ctx, chosen.Path, "")
 
 	if *step {
 		ctx = withStepGate(ctx)

@@ -42,11 +42,38 @@ ci:rw`, and `generate` writes its output locally. CI strips the default
 
 ## Which magus binary
 
-`magus run build .` is the one-shot-per-session build. It works, and it writes
-`./magus` at the repo root; run `./magus <cmd>` after it to exercise your change.
-If a `./magus` is already present and newer than the tree (`magus doctor` reports
-this as the "guard binary" check), it is fine to keep using. Do not expect a
-release binary on PATH.
+DEFAULT: use the released `magus` already on PATH. Do NOT build one.
+
+Building is the exception, and it needs a reason. Rebuild only when you are
+changing what the magus RUNTIME does and need to exercise that change:
+
+- a `magus.project` option, target policy, or other magusfile schema change (the
+  released binary rejects a key it does not know, and then no magus command can
+  even load the workspace)
+- engine, daemon, spell-runtime, or CLI behaviour you are about to run
+- a doctor check whose output you want to see against this tree
+
+Editing docs, workflows, or Go you are only unit-testing (`go test ./...` needs
+no magus binary) requires NO rebuild. The instinct to build first is expensive in
+a way that is invisible locally: the build stamps
+`-X main.version/commit/buildDate` from `git describe` and the commit hash, so the
+LINK step is unshareable across worktrees and across commits within a worktree.
+Roughly 34 worktrees each rebuilding grew `~/Library/Caches/go-build` to 62 GB.
+Reclaim with `go clean -cache`.
+
+When you do need one: `magus run go_build .` writes `./magus`, and unlike
+`magus run build .` it skips the `format` -> `generate` -> `deploy-generate`
+chain that fails in a fresh worktree on a missing `docs/gen/index.html`. Then run
+`./magus <cmd>`. An existing `./magus` newer than the tree (`magus doctor`'s
+"guard binary" check) is fine to keep using; do not rebuild it per command.
+
+Bootstrap deadlock: after a magusfile schema change, EVERY magus command fails at
+workspace load, including the one that would build the binary that understands it.
+Escape by shelving just that hunk - `git stash push -- <file>`, `magus run
+go_build .`, `git stash pop`.
+
+Note `magus affected ci --no-default-charms` DELETES `./magus`: it is a declared
+output of the root project and the read-only run prunes it. Rebuild after gating.
 
 BOTH raw Go entry points are DENIED by the agent guard:
 
@@ -58,9 +85,9 @@ BOTH raw Go entry points are DENIED by the agent guard:
 
 Producing a binary is a write, and writes go through magus - the toolchain verb
 is what has to change, not the destination. `magus run go::go-build .` is the
-one-op form when the whole `build` target is too broad, but note it does NOT
-write `./magus` (only the `build` target's ldflags step does), so rebuild with
-`magus run build .` when you intend to run the result.
+one-op form when you only want the compile checked, but note it does NOT write
+`./magus` and reports `[pass]` while leaving a stale one in place, which reads as
+a successful rebuild. Use `magus run go_build .` when you intend to run the result.
 
 `magus run test .` passes. It previously failed to link with `fingerprint
 mismatch: github.com/egladman/magus ...`, which was mise setting
@@ -73,10 +100,25 @@ Flag placement matters when forwarding: magus flags go BEFORE `--`.
 `magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
 after `--` forwards it to the test binary, which rejects it.
 
-The compatibility contract lives in CI: `setup-magus` runs the pinned,
-checksum-verified release against this repo's magusfile. If `magusfile.buzz`
-ever needs an unreleased magus feature, that is a breaking-change signal to
-surface (release first), not to paper over.
+CI runs `setup-magus` two different ways, on purpose:
+
+- `source-path: .` (preflight, the ci shards, skill-evals, image-snapshot) builds
+  the magus THIS commit defines and runs it against this commit's magusfile. So a
+  change that `magusfile.buzz` needs is exercised by the very run that introduces
+  it - there is no "release first" chicken-and-egg. image-snapshot is here because
+  its targets call `magus\secret.read`, which no release carries yet; move it back
+  to `git-ref` once one does.
+- `git-ref: <latest release tag>` (completions, deploy-build, merge-history,
+  postflight) runs the pinned, checksum-verified release instead. That is the
+  compatibility contract: if one of those jobs breaks because the magusfile
+  needs an unreleased feature, that is a breaking-change signal to surface, not
+  to paper over.
+
+Do NOT write `git-ref: ${{ github.sha }}` for the first case. On a
+`pull_request` event `github.sha` is the ephemeral `refs/pull/N/merge` commit, a
+DESCENDANT of main, which the action's reachable-from-main gate rejects every
+time (it reads as "Refusing to build unreviewed source", which is a misdirect).
+`source-path` is the input for building a checkout you already have.
 
 ## Running the daemon locally
 

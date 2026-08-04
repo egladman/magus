@@ -25,7 +25,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 2)
 		ret0, err := std.HTTPGet(ctx, url, headers, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueHttpHTTPResponse(ret0), nil
 	}))
@@ -36,7 +36,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 3)
 		ret0, err := std.HTTPPost(ctx, url, body, headers, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueHttpHTTPResponse(ret0), nil
 	}))
@@ -48,7 +48,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 4)
 		ret0, err := std.HTTPRequest(ctx, method, url, body, headers, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueHttpHTTPResponse(ret0), nil
 	}))
@@ -56,7 +56,7 @@ func RegisterHttp(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 0)
 		ret0, err := std.HTTPServe(ctx, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return IntVal(ret0), nil
 	}))

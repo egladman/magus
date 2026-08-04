@@ -94,6 +94,8 @@ type Workspace struct {
 	CacheMiss  int   `json:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty"`
 	CacheBytes int64 `json:"cache_bytes,omitempty"`
+	// SecretProvider is the selected provider spell's name; empty = built-in env provider.
+	SecretProvider string `json:"secret_provider,omitempty"`
 }
 
 // StatusReply carries a point-in-time view of the parent's pool.

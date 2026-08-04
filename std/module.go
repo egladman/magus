@@ -89,7 +89,7 @@ type Ret struct {
 	// scalar return.
 	//
 	// It is documentation the CHECKER and the reader can both use, not a
-	// marshalling instruction: the generator already recognises an object by
+	// marshalling instruction: the generator already recognizes an object by
 	// reflecting on the Impl, so the bytes are correct either way. What was
 	// missing is the NAME. Without it a method's return types as {str: any}
 	// everywhere outside the generator, so `magus\cmd(...)` hands back a map

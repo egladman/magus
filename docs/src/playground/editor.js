@@ -118,7 +118,7 @@ const editorTheme = EditorView.theme({
   ".cm-buzz-sig-title": { fontFamily: "var(--pico-font-family-monospace)", fontWeight: "600" },
   ".cm-buzz-sig-doc": { marginTop: "0.25rem", color: "var(--pico-muted-color)", whiteSpace: "normal" },
 
-  // Diagnostics, retuned to Pico's calm palette. CodeMirror's defaults are loud:
+  // Diagnostics, returned to Pico's calm palette. CodeMirror's defaults are loud:
   // a filled red-orange circle in the gutter (drawn via `content: url(<svg>)` on
   // the marker) and a red wavy underline. Both are replaced with Pico's semantic
   // error color (--pico-del-color) at a lower visual weight - a slim rounded bar

@@ -7,7 +7,7 @@
 //   buzzpool: dispatch: stack contains "bundle" (cycle detected)
 //
 // The cycle is named, not merely detected. The message is the path magus walked
-// to find the loop, so the fix is whichever edge you recognise as the wrong one.
+// to find the loop, so the fix is whichever edge you recognize as the wrong one.
 // Delete the ctx.needs(build) inside bundle and run again to watch it clear -
 // build then runs ONCE, for both callers, because dedup is per plan and not per
 // caller. A diamond in your graph costs one build, not two.

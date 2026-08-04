@@ -94,6 +94,7 @@ concepts/operations/
 concepts/output-refs/
 concepts/remote-cache/
 concepts/sandbox/
+concepts/secrets/
 concepts/services/
 concepts/spells/
 concepts/spells/bash/
@@ -160,6 +161,7 @@ glossary/
 guides/
 guides/affected/
 guides/agents/
+guides/authoring-spells/
 guides/daemon/
 guides/debugging/
 guides/download/
@@ -309,6 +311,7 @@ reference/codes/magusfile/MGS1016/
 reference/codes/magusfile/MGS1017/
 reference/codes/magusfile/MGS1018/
 reference/codes/magusfile/MGS1019/
+reference/codes/magusfile/MGS1020/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -331,7 +334,10 @@ reference/codes/sandbox/MGS2007/
 reference/codes/sandbox/MGS2008/
 reference/codes/sandbox/MGS2009/
 reference/codes/sandbox/MGS2010/
+reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS3001/
+reference/codes/sandbox/MGS3002/
+reference/codes/sandbox/MGS3003/
 reference/codes/services/
 reference/codes/services/MGS5001/
 reference/codes/services/MGS5002/
@@ -409,6 +415,7 @@ tags/changed-files/
 tags/changelog/
 tags/charm/
 tags/charms/
+tags/ci-provider/
 tags/ci/
 tags/claude/
 tags/cli/
@@ -424,6 +431,7 @@ tags/container/
 tags/conventions/
 tags/cosign/
 tags/coupling/
+tags/credentials/
 tags/cross-project/
 tags/cycle/
 tags/daemon/
@@ -445,6 +453,7 @@ tags/ed-25519/
 tags/env/
 tags/environment/
 tags/error-codes/
+tags/errors/
 tags/eslint/
 tags/exec/
 tags/extraction/
@@ -452,6 +461,7 @@ tags/filesystem/
 tags/fingerprint/
 tags/fish/
 tags/flags/
+tags/formatter/
 tags/fs/
 tags/generated/
 tags/getting-started/
@@ -463,6 +473,7 @@ tags/go/
 tags/graph/
 tags/graphml/
 tags/grpc/
+tags/host-modules/
 tags/hotspots/
 tags/http/
 tags/image/
@@ -479,6 +490,7 @@ tags/landlock/
 tags/lint/
 tags/linux/
 tags/load/
+tags/logging/
 tags/logs/
 tags/magus-run/
 tags/magus-server/
@@ -498,6 +510,7 @@ tags/monitoring/
 tags/monorepo/
 tags/needs/
 tags/node/
+tags/oci/
 tags/onboarding/
 tags/operations/
 tags/os/
@@ -515,12 +528,15 @@ tags/project/
 tags/projects/
 tags/proto/
 tags/protobuf/
+tags/provider/
 tags/pytest/
 tags/python/
 tags/query/
 tags/race/
 tags/readiness/
+tags/redaction/
 tags/reference/
+tags/registry/
 tags/release/
 tags/remote-cache/
 tags/repl/
@@ -530,6 +546,7 @@ tags/ruff/
 tags/run/
 tags/rust/
 tags/sandbox/
+tags/secrets/
 tags/security/
 tags/self-update/
 tags/service-op/

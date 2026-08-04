@@ -82,15 +82,30 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) Check {
 	}
 }
 
+// checkLanguageCoverage flags a project that binds no toolchain spell, which usually means
+// an import was forgotten and the project's real work is invisible to affected tracking and
+// the cache. Usually, not always: a polyglot harness no single pack describes is legitimate,
+// and a project says so with magus.project's "no_language" key. The opt-out carries a reason
+// rather than a bool so the exemption reads as a decision instead of a silenced check.
 func (*runner) checkLanguageCoverage(projects []*types.Project) Check {
 	var noLang []string
+	exempt := 0
 	for _, p := range projects {
-		if p.Spell == "" {
-			noLang = append(noLang, p.Path)
+		if p.Spell != "" {
+			continue
 		}
+		if p.NoLanguage != "" {
+			exempt++
+			continue
+		}
+		noLang = append(noLang, p.Path)
 	}
 	if len(noLang) == 0 {
-		return Check{Name: "language coverage", Status: StatusOK, Message: "every project matched a spell"}
+		msg := "every project matched a spell"
+		if exempt > 0 {
+			msg = fmt.Sprintf("every project matched a spell or declared no_language (%d exempt)", exempt)
+		}
+		return Check{Name: "language coverage", Status: StatusOK, Message: msg}
 	}
 	slices.Sort(noLang)
 	return Check{
@@ -414,24 +429,71 @@ func (r *runner) cacheDir() string {
 
 // checkCacheYield surfaces the same finding the run path emits as a hint, so `magus
 // doctor` gives the whole picture rather than only the target you happened to run.
-func (r *runner) checkCacheYield() Check {
+//
+// A skip_cache target is excluded rather than reported. Never replaying is what that
+// policy MEANS - a drift gate replaying would skip the check it exists to perform - so
+// counting it here fails a workspace for being correct, and a check that fires on the
+// correct state is one people learn to ignore. The journal cannot tell the two apart on
+// its own: "ran, did not replay" looks identical whether the target was forbidden to
+// replay or merely failed to.
+func (r *runner) checkCacheYield(projects []*types.Project) Check {
 	const name = "cache yield"
 	stalled := cache.StalledTargets(r.cacheDir(), nil)
-	if len(stalled) == 0 {
-		return Check{Name: name, Status: StatusOK, Message: "no target is running uncached"}
+
+	// project path -> normalized target name -> the author's stated reason.
+	declared := map[string]map[string]string{}
+	for _, p := range projects {
+		for target, pol := range p.TargetPolicies {
+			if !pol.SkipCache {
+				continue
+			}
+			if declared[p.Path] == nil {
+				declared[p.Path] = map[string]string{}
+			}
+			declared[p.Path][target] = pol.SkipCacheReason
+		}
 	}
-	details := make([]string, 0, len(stalled)+1)
+
+	var reported []cache.Stalled
+	exempt := 0
 	for _, s := range stalled {
+		// The journal records the invoked form ("generate:rw"); policy is keyed by the
+		// bare normalized name, so the charm suffix has to come off before the lookup.
+		bare := s.Target
+		if t, err := types.ParseTarget(s.Target); err == nil && t.Name != "" {
+			bare = t.Name
+		}
+		if _, ok := declared[s.ProjectPath][types.Normalize(bare)]; ok {
+			exempt++
+			continue
+		}
+		reported = append(reported, s)
+	}
+
+	if len(reported) == 0 {
+		msg := "no target is running uncached"
+		if exempt > 0 {
+			msg = fmt.Sprintf("no target is running uncached (%d declared skip_cache)", exempt)
+		}
+		return Check{Name: name, Status: StatusOK, Message: msg}
+	}
+	details := make([]string, 0, len(reported)+1)
+	for _, s := range reported {
 		details = append(details, fmt.Sprintf("%s %s: %d runs, 0 cached, %.0fs spent (%.0fs avg)",
 			s.Project, s.Target, s.Runs, float64(s.TotalMs)/1000, float64(s.AvgMs())/1000))
 	}
+	// Two causes produce an identical journal, and the old wording asserted the first.
+	// It is wrong for a version-stamped binary: go-build embeds `git describe` and the
+	// commit hash in its ldflags, so every commit legitimately mints a new key and no
+	// footprint change will ever make it replay. magus cannot tell these apart - the key
+	// is opaque and there is no VCS input primitive - so the reader is given both.
 	details = append(details,
-		"a target that never replays usually declares a footprint wider than it reads, so unrelated edits keep changing its key")
+		"two causes look the same here: the target declares a footprint wider than it reads, so unrelated edits keep busting its key; or its key deliberately carries volatile state (a version stamp, a commit hash), which no footprint change will fix. Compare its declared inputs against what it actually reads before assuming the first")
 	return Check{
 		Name:   name,
 		Status: StatusFail,
 		Message: fmt.Sprintf("[%s] %d target(s) executed repeatedly and never replayed from cache",
-			types.TargetNeverReplays, len(stalled)),
+			types.TargetNeverReplays, len(reported)),
 		Details: details,
 	}
 }
@@ -738,24 +800,41 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) Check {
 // has been produced yet, the project simply has not been built and every glob matching zero is
 // expected; reporting then would fire on every fresh clone and train people to ignore it. Only
 // when some outputs exist and one glob still matches nothing is that glob suspect.
+//
+// "Some outputs exist" has to mean UNTRACKED outputs exist. A generated tree that is committed
+// (console/src/gen from buf-generate, proto/gen) is declared as an output for staleness
+// tracking and is present on a fresh clone, so counting it as evidence says "this was built"
+// about a tree nobody has built - and then reports every sibling glob writing to an untracked
+// gen/ as dead. That is the exact false positive this check was written to avoid, arriving
+// through the back door: it fired on console's `gen/**` on every CI runner while passing on
+// every developer machine, where gen/ had been built. A backend that cannot answer "is this
+// tracked?" cannot tell those apart, so it degrades to plain presence rather than guess.
 func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 	const name = "dead output globs"
+
+	var tracked types.TrackedFileReporter
+	if res, err := vcs.Resolve(context.Background(), r.root, "", r.ws.VCSOptions()); err == nil && res.VCS != nil {
+		tracked, _ = res.VCS.(types.TrackedFileReporter)
+	}
+
 	var details []string
 	for _, p := range projects {
 		var dead []string
-		matchedAny := false
+		builtAny := false
 		for _, glob := range p.Outputs {
 			hits, err := filepath.Glob(filepath.Join(p.Dir, filepath.FromSlash(strings.ReplaceAll(glob, "**", "*"))))
 			if err != nil {
 				continue
 			}
 			if len(hits) > 0 {
-				matchedAny = true
+				if provesBuilt(tracked, p.Dir, hits) {
+					builtAny = true
+				}
 				continue
 			}
 			dead = append(dead, glob)
 		}
-		if !matchedAny {
+		if !builtAny {
 			continue
 		}
 		for _, glob := range dead {
@@ -774,6 +853,85 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) Check {
 			len(details), types.CodeURL(types.DeadOutputGlob)),
 		Details: details,
 	}
+}
+
+// checkOutputOwnedByTwoTargets is MGS1020: one output glob declared by two targets in the
+// SAME project. MGS4002 already covers the cross-project shape (two projects, one target);
+// this is its sibling, and the gap it fills is the common one - a generator and a formatter
+// that both rewrite a gen/ tree.
+//
+// Two owners of one file is not an ordering problem, which is why it earns a diagnostic
+// rather than a scheduling fix. Run the generator first and the formatter's edit is what
+// lands, so the generator's next drift gate fails; run the formatter first and its work is
+// immediately overwritten. Whichever goes last wins and the other's gate fails on the next
+// run, forever, at every ordering. The fix is always ownership: one target owns the bytes,
+// and if generated output needs formatting the GENERATOR formats it as its final step.
+//
+// Only DECLARED writes are visible here. A formatter that reformats a tree without
+// declaring ctx.writesFiles is undetectable statically, which is why every formatter in
+// this workspace excludes generated trees by configuration as well.
+func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) Check {
+	const name = "output ownership"
+	var details []string
+	for _, p := range projects {
+		owners := map[string][]string{}
+		for target, refs := range p.TargetOutputs {
+			for _, ref := range refs {
+				if !slices.Contains(owners[ref.Glob], target) {
+					owners[ref.Glob] = append(owners[ref.Glob], target)
+				}
+			}
+		}
+		for glob, targets := range owners {
+			if len(targets) < 2 {
+				continue
+			}
+			slices.Sort(targets)
+			details = append(details, fmt.Sprintf("%s: output glob %q is declared by %s",
+				types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob, strings.Join(targets, " and ")))
+		}
+	}
+	if len(details) == 0 {
+		return Check{Name: name, Status: StatusOK, Message: "every declared output has one owning target"}
+	}
+	slices.Sort(details)
+	return Check{
+		Name:   name,
+		Status: StatusFail,
+		Message: fmt.Sprintf(
+			"%d output glob(s) declared by more than one target; whichever runs last wins and the other's drift gate fails (see %s)",
+			len(details), types.CodeURL(types.OutputOwnedByTwoTargets)),
+		Details: details,
+	}
+}
+
+// provesBuilt reports whether a glob's matches are evidence that the project was actually
+// built, which is true only when nothing the glob matched is committed. Matching a committed
+// file proves the clone happened, not the build.
+//
+// Whether ls-files ECHOES the paths is the whole answer, so its output is only ever tested for
+// emptiness: a directory argument makes it print the tracked files underneath instead of the
+// directory itself, and comparing those names against the globbed ones would never line up.
+// A hit set mixing tracked and untracked files reads as "not evidence", which under-reports
+// rather than over-reports - the right way to be wrong for a check whose failure mode is
+// training people to ignore it.
+func provesBuilt(reporter types.TrackedFileReporter, dir string, hits []string) bool {
+	if reporter == nil {
+		return true
+	}
+	rels := make([]string, 0, len(hits))
+	for _, h := range hits {
+		rel, err := filepath.Rel(dir, h)
+		if err != nil {
+			return true
+		}
+		rels = append(rels, filepath.ToSlash(rel))
+	}
+	found, err := reporter.TrackedFiles(context.Background(), dir, rels)
+	if err != nil {
+		return true
+	}
+	return len(found) == 0
 }
 
 // magusfileSourcesInDir returns every Buzz magusfile source for a project

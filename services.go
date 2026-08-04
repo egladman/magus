@@ -32,7 +32,7 @@ func (m *Magus) newServiceSession(ctx context.Context) *service.Session {
 		// context.Background: release must run even after the run's ctx is cancelled
 		// (Ctrl-C), or the daemon's ref-count would leak and the service never reap.
 		if err := proc.ReleaseService(context.Background(), addr, key); err != nil {
-			slog.Warn("magus: releasing daemon-hosted service failed; it will idle-reap on the daemon",
+			slog.WarnContext(ctx, "magus: releasing daemon-hosted service failed; it will idle-reap on the daemon",
 				slog.String("key", key), slog.String("err", err.Error()))
 		}
 	}

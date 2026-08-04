@@ -59,7 +59,7 @@ func (rt *Runtime) TrackProject(project, target string, outputDirs []string, fn 
 }
 
 // Flush stops the watcher, runs detection, emits findings to w, and persists the report. w may be nil.
-func (rt *Runtime) Flush(_ context.Context, w *report.Writer) error {
+func (rt *Runtime) Flush(ctx context.Context, w *report.Writer) error {
 	rt.rec.close()
 
 	filter := newGitFilter(rt.root)
@@ -82,19 +82,19 @@ func (rt *Runtime) Flush(_ context.Context, w *report.Writer) error {
 		errs = append(errs, fmt.Errorf("race: write report: %w", err))
 	}
 
-	rt.logRaceSummary(findings)
+	rt.logRaceSummary(ctx, findings)
 
 	return errors.Join(errs...)
 }
 
 const inlineCap = 3 // max findings rendered inline in the log summary
 
-func (rt *Runtime) logRaceSummary(active []finding) {
+func (rt *Runtime) logRaceSummary(ctx context.Context, active []finding) {
 	n := len(active)
 	if n == 0 {
 		return
 	}
-	slog.Warn(
+	slog.WarnContext(ctx,
 		types.FormatDiagnostic(types.RaceDetected, fmt.Sprintf("%d filesystem race finding(s)", n)),
 		slog.Int("count", n),
 		slog.Any("races", raceFindings(active)),

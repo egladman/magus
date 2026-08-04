@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -32,7 +31,7 @@ func (f *fakeTel) RecordMCPCall(_ context.Context, c observability.MCPCall) {
 }
 
 func quietLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
 
 func callRequest(name string, args map[string]any) mcplib.CallToolRequest {

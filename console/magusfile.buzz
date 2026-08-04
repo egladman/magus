@@ -1,6 +1,8 @@
 import "magus";
-// Modules the targets use: fs (node_modules guard), os (pnpm/esbuild), vcs (drift gate).
-import "fs";
+// The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
+// question and what this asks instead.
+import "../tools/audit" as audit;
+// Modules the targets use: os (pnpm/esbuild), vcs (drift gate).
 import "os";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
@@ -41,25 +43,29 @@ magus\project({
     "targets": {
         // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
         // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
-        "build": {"skip_cache": true, "exclusive": true},
+        "build": {"skip_cache": "rebuilds gen/ and gates on drift; a replay would skip the git-status check", "exclusive": true},
+        // The advisory database is the input that matters here and it lives on the
+        // registry, not in this tree. A hit would replay a clean bill of health from
+        // before the advisory that now applies to a lockfile nobody touched.
+        "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
     },
 });
 
 export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
 
-// install restores the pinned build-only deps with pnpm (esbuild + the surfaces' d3/uplot/protobuf
-// clients), honoring .npmrc's minimum-release-age supply-chain gate. Guarded on node_modules so a warm
-// local tree skips it while a cold CI checkout installs. NOT npm - pnpm, for the release-age gate.
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. An interrupted install leaves a node_modules
+// that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
+// handing the missing packages straight to tsc/esbuild. Reached once per invocation
+// through preflight, which every target below already needs, so the unconditional
+// --frozen-lockfile costs about a second on a warm tree and never races itself.
 fun install() > void {
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests).
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    install();
     os\exec("pnpm", ["run", "test"], ".", {});
 }
 
@@ -71,7 +77,6 @@ export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     ctx.needs(root\graph_generate);
     final clean_before = vcs\isDirty(["gen"]) == false;
-    install();
     os\exec("pnpm", ["run", "build"], ".", {});
     if (ctx.has_charm("rw")) {
         return;
@@ -87,15 +92,33 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // The Reference drawer imports the search grammar from the shared libs/textsearch
     // source, so gate its type-check + biome here: a lib edit fails console lint too.
     ctx.needs(textsearch\lint);
-    install();
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
     os\exec("pnpm", ["run", "stylelint"], ".", {});
 }
 
-// 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, and the
-// build-plus-drift-gate, all first-class ci steps.
+// security audits the dependency tree against the npm advisory database.
+//
+// --prod, not the whole tree, and that is the whole design. An unscoped audit reports the
+// dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never
+// reaches a browser and cannot be fixed from here. A gate that fails on something you
+// cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds
+// happened. This fails only on what actually ships.
+//
+// It is NOT folded into lint: lint is cached on the tree, and this answer changes when the
+// advisory database does. Its own target keeps that honest (see skip_cache above).
+//
+// The cooling period in .npmrc is the other half and the stronger one: this catches a
+// KNOWN advisory, minimum-release-age keeps an unknown compromise out of the build for ten
+// days in the first place.
+export fun security(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    audit.audit();
+}
+
+// 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the
+// build-plus-drift-gate, and the advisory audit, all first-class ci steps.
 export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
-    ctx.needs(lint, test, build);
+    ctx.needs(lint, test, build, security);
 }

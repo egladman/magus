@@ -28,7 +28,7 @@ import "magus/spell/go";
 magus.project({
     "spells": [go],
     "outputs": ["bin/**"],
-    "targets": {"regen-pgo": {"skip_cache": true}, "lint": {"slots": 4}},
+    "targets": {"regen-pgo": {"skip_cache": "test policy"}, "lint": {"slots": 4}},
 });
 
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }

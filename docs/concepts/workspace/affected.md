@@ -46,7 +46,7 @@ else the adapter's built-in default (`origin/main` for git). Two escape hatches:
 
 - `MAGUS_VCS_COMMAND` / `vcs.command_name` pin or replace the VCS command.
 - `MAGUS_VCS_ENABLED=false` (or `vcs.enabled: false`) short-circuits detection and
-  falls back to the full project set, labelled `vcs disabled`. Use it where no VCS
+  falls back to the full project set, labeled `vcs disabled`. Use it where no VCS
   is available (a release tarball, a fresh container) so a build still runs.
 
 ## Forensic modes

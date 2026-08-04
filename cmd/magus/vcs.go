@@ -270,9 +270,19 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 			continue
 		}
 		plan.keep = append(plan.keep, c.Path)
-		label := types.ProjectLabel(p.Path, p.Dir)
-		if !slices.Contains(plan.rebuild[target], label) {
-			plan.rebuild[target] = append(plan.rebuild[target], label)
+		// The project PATH, not its display label: this string becomes an argument to
+		// `magus run <target> <project>`, and ProjectRef.Display renders the root as its
+		// directory BASENAME so a bare "." never reaches a human-facing log. In a git
+		// worktree that basename is the worktree's own directory name, which is not a
+		// project any workspace knows - so resolve regenerated nothing and died with
+		// `unknown project: "<worktree-dir>"`. Display's own doc draws this line: labels
+		// for reading, the path for anything the user (or this code) feeds back to magus.
+		proj := p.Path
+		if proj == "" {
+			proj = "."
+		}
+		if !slices.Contains(plan.rebuild[target], proj) {
+			plan.rebuild[target] = append(plan.rebuild[target], proj)
 		}
 	}
 	slices.Sort(plan.keep)

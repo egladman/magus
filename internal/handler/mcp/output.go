@@ -106,7 +106,7 @@ func (t *tailLogTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 
 	b, err := os.ReadFile(filepath.Clean(logPath))
 	if err != nil {
-		toolLogger(ctx).Warn("mcp: read log failed", "path", logPath, "error", err)
+		toolLogger(ctx).WarnContext(ctx, "mcp: read log failed", "path", logPath, "error", err)
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: read log: %w", err)
 	}
 

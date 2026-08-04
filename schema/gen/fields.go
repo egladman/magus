@@ -413,6 +413,22 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a",
 	},
 	{
+		GoPath:   "Secret.Interactive",
+		YamlPath: "secret.interactive_timeout",
+		EnvVar:   "MAGUS_SECRET_INTERACTIVE_TIMEOUT",
+		Flag:     fieldtype.FlagNames{Long: "secret-interactive-timeout"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_SECRET_INTERACTIVE_TIMEOUT: Interactive bounds a provider read when stdin is a terminal. Default 60s.",
+	},
+	{
+		GoPath:   "Secret.Unattended",
+		YamlPath: "secret.unattended_timeout",
+		EnvVar:   "MAGUS_SECRET_UNATTENDED_TIMEOUT",
+		Flag:     fieldtype.FlagNames{Long: "secret-unattended-timeout"},
+		Kind:     fieldtype.KindDuration,
+		Usage:    "MAGUS_SECRET_UNATTENDED_TIMEOUT: Unattended bounds a provider read with no terminal to prompt on. Default 10s.",
+	},
+	{
 		GoPath:   "Concurrency",
 		YamlPath: "concurrency",
 		EnvVar:   "MAGUS_CONCURRENCY",

@@ -26,7 +26,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 3)
 		ret0, err := std.OsExec(ctx, cmd, args, dir, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueOsExecResult(ret0), nil
 	}))
@@ -36,7 +36,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 2)
 		ret0, err := std.OsExecSh(ctx, line, dir, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueOsExecResult(ret0), nil
 	}))
@@ -44,7 +44,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		env := StrMap(bzArgs, 0)
 		callback := CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithEnv(ctx, env, callback); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -52,28 +52,28 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		n := Int(bzArgs, 0, 0)
 		callback := CallbackArg(sess, bzArgs, 1)
 		if err := std.OsWithSlots(ctx, n, callback); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("platform", vm.DirectValue("os.platform", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, ret1, ret2, err := std.OsPlatform(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.ListValue([]vm.Value{StrVal(ret0), StrVal(ret1), StrVal(ret2)}), nil
 	}))
 	m.MapSet("exit", vm.DirectValue("os.exit", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		code := Int(bzArgs, 0, 0)
 		if err := std.OsExit(ctx, code); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("sleep", vm.DirectValue("os.sleep", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ms := Float(bzArgs, 0, 0)
 		if err := std.OsSleep(ctx, ms); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -81,35 +81,35 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		cmd := Str(bzArgs, 0)
 		ret0, err := std.OsWhich(ctx, cmd)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("stdinIsTerminal", vm.DirectValue("os.stdinIsTerminal", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsStdinIsTerminal(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
 	m.MapSet("numCpu", vm.DirectValue("os.numCpu", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsNumCPU(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return IntVal(ret0), nil
 	}))
 	m.MapSet("hostname", vm.DirectValue("os.hostname", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsHostname(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("executable", vm.DirectValue("os.executable", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.OsExecutable(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -119,7 +119,7 @@ func RegisterOs(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 2)
 		ret0, err := std.OsRetry(ctx, max, fn, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyVal(ret0), nil
 	}))

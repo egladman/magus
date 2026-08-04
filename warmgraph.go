@@ -146,7 +146,7 @@ func (w *warmGraph) watch(ctx context.Context, root string) (func(), error) {
 				if !ok {
 					// The watcher died; stop trusting the cache and fall back to
 					// always-rebuild so we never serve a graph nothing invalidates.
-					w.log.Warn("magus: knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
+					w.log.WarnContext(ctx, "magus: knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
 					w.stopWatching()
 					return
 				}

@@ -1,6 +1,6 @@
 ---
 title: Run magus from a container image
-description: Pull and run the official magus OCI images from GHCR with Docker, Podman, or any OCI runtime, mount your workspace, extract the binary without running a container, and verify the cosign signature.
+description: Pull and run the official magus OCI images from GHCR or Docker Hub with Docker, Podman, or any OCI runtime, mount your workspace, extract the binary without running a container, read the SBOM, and verify the cosign signature.
 tags:
   [
     container,
@@ -11,8 +11,11 @@ tags:
     podman,
     nerdctl,
     ghcr,
+    docker hub,
     registry,
     cosign,
+    sbom,
+    provenance,
     install,
   ]
 aliases: [guides/download/docker]
@@ -20,9 +23,16 @@ aliases: [guides/download/docker]
 
 # Run magus from a container image
 
-Official images are published to the GitHub Container Registry at
-**`ghcr.io/egladman/magus`**. They are a drop-in alternative to installing the
-binary, which is convenient on CI runners and in throwaway environments.
+Official images are published to two registries:
+
+- **`ghcr.io/egladman/magus`** on the GitHub Container Registry
+- **`docker.io/egladman/magus`** on Docker Hub
+
+Both receive the same tags from the same build, so a given tag is the same image
+digest in either place. Pick whichever your environment already authenticates
+against; GHCR is the primary, and the rest of this page names it for brevity.
+Either way, the images are a drop-in alternative to installing the binary, which
+is convenient on CI runners and in throwaway environments.
 
 They are ordinary [OCI](https://opencontainers.org/) images with nothing
 Docker-specific about them. The examples below use `docker` because it is the
@@ -72,6 +82,47 @@ image, and both follow from the static image carrying no shared libraries at all
 docker pull ghcr.io/egladman/magus:__MAGUS_VERSION__
 ```
 
+### Snapshot images (per commit on main)
+
+Every merge to `main` also publishes a static image tagged with that commit's short
+hash, so you can run an exact commit without waiting for a release:
+
+```sh
+docker run --rm -v "$PWD":/workspace ghcr.io/egladman/magus:a1b2c3d ls
+```
+
+These are **not releases**. They are GHCR-only (never Docker Hub), static-only (no
+`-cgo` variant), have no moving tag to follow, are not pruned on any schedule, and
+carry no compatibility promise. They are signed, but by the CI workflow rather than
+the release workflow, so the verify command below deliberately rejects them - see
+[Verify the signature](#verify-the-signature).
+
+## Build the image yourself
+
+```sh
+magus run image-build
+```
+
+A local build loads a **single architecture** into your docker image store, and says
+which one in the build log. That is a constraint rather than a preference: `docker
+buildx build --load` cannot load a multi-platform result into the image store, so a
+local build has exactly one architecture no matter what. It defaults to your host's,
+so an Apple Silicon machine builds and runs `linux/arm64` natively.
+
+| Command | Builds |
+| --- | --- |
+| `magus run image-build` | cgo variant, host architecture |
+| `magus run image-build:static` | static variant, host architecture |
+| `magus run image-build:static,arm64` | static variant, forced `linux/arm64` |
+| `magus run image-build:amd64` | cgo variant, forced `linux/amd64` |
+
+The `amd64` and `arm64` charms exist for reproducing a failure that only happens on
+the other architecture. They go through QEMU emulation, so expect them to be slow -
+they are a debugging tool, not a second default.
+
+Multi-architecture images are built only when publishing, where the result is pushed
+to a registry rather than loaded locally.
+
 ## Install the binary without running a container
 
 The static image is a single static binary on an empty base, so the image doubles as
@@ -107,8 +158,64 @@ cosign verify ghcr.io/egladman/magus:latest \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+**Use cosign v3 or later.** Signatures are written in the Sigstore bundle format that
+v3 made the default. A v3 client verifies both formats, but a v2 client cannot read a
+v3 signature and reports the image as unverified - which looks exactly like a bad
+signature. Check with `cosign version` before concluding anything from a failure.
+
 A missing or mismatched signature means the image is not an official build. Do not
 run it.
+
+A signature lives in the registry beside the image it covers, so it is pushed to
+each registry separately even though the digest is identical. Verify the reference
+you actually pulled - swap `ghcr.io` for `docker.io` above if that is where the
+image came from.
+
+The identity regexp pins the release workflow specifically, which is what makes the
+command reject a [snapshot image](#snapshot-images-per-commit-on-main):
+those are signed too, but under `ci.yaml`, so they fail this check by design rather
+than by accident. To verify one on purpose, name that workflow instead:
+
+```sh
+cosign verify ghcr.io/egladman/magus:a1b2c3d \
+  --certificate-identity-regexp '^https://github.com/egladman/magus/.github/workflows/ci.yaml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+## Read the SBOM
+
+Every published image carries an [SPDX](https://spdx.dev/) software bill of
+materials and a max-detail [SLSA](https://slsa.dev/) provenance statement, both
+attached as in-toto attestations inside the image index. They are generated by
+BuildKit during the build itself, one per platform, so what they describe is the
+filesystem that actually shipped rather than a later re-scan of it.
+
+Because they are part of the index, no extra registry lookup is needed:
+
+```sh
+docker buildx imagetools inspect ghcr.io/egladman/magus:latest --format '{{ json .SBOM }}'
+docker buildx imagetools inspect ghcr.io/egladman/magus:latest --format '{{ json .Provenance }}'
+```
+
+On a multi-platform tag, pick a platform to avoid dumping every architecture at once:
+
+```sh
+docker buildx imagetools inspect ghcr.io/egladman/magus:latest \
+  --format '{{ json (index .SBOM "linux/arm64").SPDX }}'
+```
+
+The SPDX document is ordinary JSON, so any SBOM tool reads it. To feed it to a
+vulnerability scanner:
+
+```sh
+docker buildx imagetools inspect ghcr.io/egladman/magus:latest \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > magus.spdx.json
+grype sbom:magus.spdx.json
+```
+
+The static image is a single Go binary on an empty base, so expect its SBOM to be
+short: the Go module graph and essentially nothing else. The `-cgo` image also lists
+its distroless/cc glibc layer and `inotify-tools`.
 
 ## Next steps
 

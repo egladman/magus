@@ -52,19 +52,24 @@ const (
 	Kind_KIND_RESULT Kind = 2 // a target finished (pass/fail/cached), with its ref + duration
 	Kind_KIND_SCOPE  Kind = 4 // the run's project scope header
 	Kind_KIND_WARN   Kind = 6 // a magus warning
+	// A credential was READ: the reference and the provider that served it, never the
+	// value. Distinct from WARN because it is not a problem - it is the record that a
+	// build reached for something privileged, which is what an audit answers for.
+	Kind_KIND_SECRET Kind = 10
 )
 
 // Enum value maps for Kind.
 var (
 	Kind_name = map[int32]string{
-		0: "KIND_UNSPECIFIED",
-		7: "KIND_STARTED",
-		8: "KIND_FINISHED",
-		9: "KIND_EXEC",
-		1: "KIND_OUTPUT",
-		2: "KIND_RESULT",
-		4: "KIND_SCOPE",
-		6: "KIND_WARN",
+		0:  "KIND_UNSPECIFIED",
+		7:  "KIND_STARTED",
+		8:  "KIND_FINISHED",
+		9:  "KIND_EXEC",
+		1:  "KIND_OUTPUT",
+		2:  "KIND_RESULT",
+		4:  "KIND_SCOPE",
+		6:  "KIND_WARN",
+		10: "KIND_SECRET",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED": 0,
@@ -75,6 +80,7 @@ var (
 		"KIND_RESULT":      2,
 		"KIND_SCOPE":       4,
 		"KIND_WARN":        6,
+		"KIND_SECRET":      10,
 	}
 )
 
@@ -1168,7 +1174,7 @@ const file_magus_viewer_v1_viewer_proto_rawDesc = "" +
 	"invocation\x123\n" +
 	"\x06filter\x18\x02 \x01(\v2\x1b.magus.viewer.v1.EventQueryR\x06filter\"D\n" +
 	"\x14StreamEventsResponse\x12,\n" +
-	"\x05event\x18\x01 \x01(\v2\x16.magus.viewer.v1.EventR\x05event*\x9d\x01\n" +
+	"\x05event\x18\x01 \x01(\v2\x16.magus.viewer.v1.EventR\x05event*\xae\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fKIND_STARTED\x10\a\x12\x11\n" +
@@ -1178,7 +1184,9 @@ const file_magus_viewer_v1_viewer_proto_rawDesc = "" +
 	"\vKIND_RESULT\x10\x02\x12\x0e\n" +
 	"\n" +
 	"KIND_SCOPE\x10\x04\x12\r\n" +
-	"\tKIND_WARN\x10\x06\"\x04\b\x03\x10\x03\"\x04\b\x05\x10\x05*F\n" +
+	"\tKIND_WARN\x10\x06\x12\x0f\n" +
+	"\vKIND_SECRET\x10\n" +
+	"\"\x04\b\x03\x10\x03\"\x04\b\x05\x10\x05*F\n" +
 	"\x06Stream\x12\x16\n" +
 	"\x12STREAM_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSTREAM_STDOUT\x10\x01\x12\x11\n" +

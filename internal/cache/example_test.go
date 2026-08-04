@@ -26,7 +26,7 @@ func ExampleCache_Run() {
 	}
 	defer os.RemoveAll(dir)
 
-	c, err := Open(dir, WithLog("text", slog.LevelError))
+	c, err := Open(context.Background(), dir, WithLog("text", slog.LevelError))
 	if err != nil {
 		fmt.Println("open:", err)
 		return
@@ -79,7 +79,7 @@ func ExampleCache_RunAll() {
 	}
 	defer os.RemoveAll(dir)
 
-	c, err := Open(dir, WithLog("text", slog.LevelError))
+	c, err := Open(context.Background(), dir, WithLog("text", slog.LevelError))
 	if err != nil {
 		fmt.Println("open:", err)
 		return

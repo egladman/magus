@@ -71,7 +71,9 @@ These are the runtime utility modules. Import each under its bare name - `import
 
 | Module | Description |
 |--------|-------------|
-| [`magus`](magus.md) | Magus core primitives. |
+| [`magus`](magus.md) | Magus core primitives.
+
+Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md). |
 | [`charm`](charm.md) | Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md). |
 
 ## Other

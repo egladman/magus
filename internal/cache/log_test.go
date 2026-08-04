@@ -3,13 +3,13 @@ package cache
 import (
 	"bytes"
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -387,7 +387,7 @@ func TestRecordAttrExtraction(t *testing.T) {
 func TestWithLoggerOption(t *testing.T) {
 	t.Parallel()
 	var c Cache
-	l := slog.New(slog.NewTextHandler(io.Discard, nil))
+	l := slog.New(slog.DiscardHandler)
 	WithLogger(l)(&c)
 	assert.Same(t, l, c.log, "WithLogger did not replace the cache logger")
 }
@@ -681,4 +681,64 @@ func TestRemoteSuffix(t *testing.T) {
 			require.Equal(t, tc.want, remoteSuffix(tc.remote, tc.total))
 		})
 	}
+}
+
+// TestPrettyHandlerRedactsSecrets pins the THIRD path a credential reached the user
+// through, found only by writing a real provider spell and watching a `-vv` run:
+//
+//	$ sh -c echo using token=<the actual token>
+//
+// That line is a slog record rendered by this handler, not a journal event, so neither
+// the output tap nor journal.Emit's redaction covered it. Redacting in printf covers
+// every record kind this handler will ever render rather than just run.exec.
+func TestPrettyHandlerRedactsSecrets(t *testing.T) {
+	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	t.Setenv("MAGUS_TEST_LOG_TOKEN", "ghp_never_echo_me")
+	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_LOG_TOKEN")
+	require.NoError(t, err)
+
+	var sink bytes.Buffer
+	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	slog.New(h).DebugContext(ctx, "run.exec",
+		"cmd", "sh", "args", []string{"-c", "echo tok=ghp_never_echo_me"}, "dir", ".")
+
+	assert.NotContains(t, sink.String(), "ghp_never_echo_me")
+	assert.Contains(t, sink.String(), "***")
+}
+
+// TestPrettyHandlerIsUnchangedWithoutSecrets pins that the funnel is inert on the
+// common path: a run that reads no secret renders byte-for-byte as before.
+func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
+	var sink bytes.Buffer
+	h := NewPrettyHandler(&sink, slog.LevelDebug)
+	slog.New(h).DebugContext(context.Background(), "run.exec",
+		"cmd", "go", "args", []string{"build", "./..."}, "dir", ".")
+
+	assert.Contains(t, sink.String(), "$ go build ./...")
+	assert.NotContains(t, sink.String(), "***")
+}
+
+// TestPrettyHandlerPrintsAfterCancellation pins that a cancelled context does NOT silence
+// a record. PrettyHandler is the DEFAULT handler, and it used to early-return on
+// ctx.Err(). That was inert for as long as it existed - every call site logged through
+// slog.Logger.Info, which passes context.Background() - so nothing noticed. When the run
+// path began passing its real context (so records could reach the secret resolver), the
+// check woke up and started eating output: in a concurrent run the first failure cancels
+// the errgroup, so every [pass]/[fail] line that finished afterwards, the [summary]
+// footer, and the Ctrl-C service-release warning all disappeared from the default format
+// while `-o json` still showed them.
+//
+// A log handler must not use record delivery as a cancellation channel.
+func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
+	var sink bytes.Buffer
+	lg := slog.New(NewPrettyHandler(&sink, slog.LevelInfo))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	lg.InfoContext(ctx, "cache.scope", slog.String("label", "before"), slog.String("source", "x"))
+	cancel()
+	lg.InfoContext(ctx, "cache.scope", slog.String("label", "after"), slog.String("source", "x"))
+
+	out := sink.String()
+	assert.Contains(t, out, "before")
+	assert.Contains(t, out, "after", "a cancelled context must not silence a record")
 }

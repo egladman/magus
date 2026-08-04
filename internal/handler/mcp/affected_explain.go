@@ -37,13 +37,13 @@ func (t *affectedExplainTool) Invoke(ctx context.Context, req spells.InvokeReque
 
 	r, err := t.ws.Affected(ctx, base)
 	if err != nil {
-		toolLogger(ctx).Warn("mcp: affected computation failed", "error", err)
+		toolLogger(ctx).WarnContext(ctx, "mcp: affected computation failed", "error", err)
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: affected: %w", err)
 	}
 
 	g, err := t.ws.Graph()
 	if err != nil {
-		toolLogger(ctx).Warn("mcp: graph load failed", "error", err)
+		toolLogger(ctx).WarnContext(ctx, "mcp: graph load failed", "error", err)
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: graph: %w", err)
 	}
 

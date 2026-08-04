@@ -44,6 +44,8 @@ config sandbox.allow.<name>.name
 config sandbox.allow.<name>.path
 config sandbox.enabled
 config sandbox.env.passthrough
+config secret.interactive_timeout
+config secret.unattended_timeout
 config spells.allow_shadow.<name>.name
 config spells.allow_shadow.<name>.reason
 config target_timeout

@@ -1,0 +1,67 @@
+# `magus vcs resolve` settles a conflicted GENERATED file by regenerating it, which it
+# does by running the producing target over the owning project. The project it names has
+# to be one magus can resolve back to a project - i.e. the workspace PATH.
+#
+# This pins the root project specifically. ProjectRef.Display renders the root as its
+# DIRECTORY BASENAME so a bare "." never appears in a human-facing log, and resolve used
+# that label as the argument. The basename of a checkout is not a project: in a git
+# worktree (or any clone not named after the project) resolve regenerated nothing and
+# died with `unknown project: "<checkout-dir>"`. A testscript workdir has a generated
+# name, so this reproduces the condition without needing a worktree.
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config merge.magus.driver false
+# Name the branch explicitly: git's default is master or main depending on the host's
+# init.defaultBranch, and this script checks one out by name.
+exec git checkout -b main
+
+# Baseline: the generated output committed alongside its source, on main.
+exec git add magus.yaml magusfile.buzz OUT.txt
+exec git commit -m initial
+
+# Two branches that both rewrite the generated file, so merging them conflicts on a
+# path the root project declares as an output.
+exec git checkout -b other
+cp OUT.other.txt OUT.txt
+exec git add OUT.txt
+exec git commit -m other-side
+
+exec git checkout main
+cp OUT.local.txt OUT.txt
+exec git add OUT.txt
+exec git commit -m local-side
+
+! exec git merge other
+stdout 'CONFLICT'
+
+# The regeneration step must name the root project as `.`, never as the workdir's
+# basename. The command it echoes is the assertion: before the fix this read
+# `magus run generate <workdir-basename>` and the run died with `unknown project`.
+# --dry-run would not do here - it reports the plan without the regeneration line.
+exec magus vcs resolve
+stdout 'regenerating: magus run generate \.'
+! stderr 'unknown project'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "targets": {
+        "generate": {"skip_cache": "writes OUT.txt on every run; a replay would skip the write"},
+    },
+});
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("OUT.txt");
+}
+-- OUT.txt --
+generated: base
+-- OUT.local.txt --
+generated: local
+-- OUT.other.txt --
+generated: other

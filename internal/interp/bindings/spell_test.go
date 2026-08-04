@@ -329,22 +329,32 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 	require.NoError(t, runErr, "vcs.commit facade")
 }
 
-// TestVcsCommitEmptyOutsideRepo pins the contract that powers build_date's
-// fallback: outside any repository, vcs.commit() returns the zero object (every
-// field empty), not null — callers test a field (c.date == "") for "no commit".
-func TestVcsCommitEmptyOutsideRepo(t *testing.T) {
+// TestVcsCommitRaisesOutsideRepo pins that an unavailable commit RAISES rather than
+// handing back a zero object to sniff.
+//
+// This test previously asserted the opposite - that vcs.commit() returned an object with
+// every field empty, and that callers should test `c.date == ""`. That is not how a Buzz
+// function reports failure (upstream declares the error in the signature and the caller
+// writes try/catch), and "" is a value some of those fields could legitimately hold, so
+// the check could never distinguish "no commit" from "empty answer". Worse, it made the
+// check optional: every call site had to remember it, and a magusfile that forgot
+// interpolated an empty commit into a version string with nothing to surface it.
+func TestVcsCommitRaisesOutsideRepo(t *testing.T) {
 	dir := t.TempDir() // a bare temp dir, not under version control
 	t.Chdir(dir)
 	writeFile(t, dir, "magusfile.buzz", `import "magus";
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void {
-    final c = vcs.commit();
-    if (c == null) { magus.fatal("vcs.commit should be an empty object, not null, outside a repo"); }
-    if (c.date != "") { magus.fatal("vcs.commit().date should be empty outside a repo"); }
-    if (c.id != "") { magus.fatal("vcs.commit().id should be empty outside a repo"); }
+    var raised = false;
+    try {
+        vcs.commit();
+    } catch (e) {
+        raised = true;
+    }
+    if (!raised) { magus.fatal("vcs.commit should raise outside a repo, not return a zero object"); }
 }`)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)
-	require.NoError(t, runErr, "vcs.commit empty-object case")
+	require.NoError(t, runErr, "vcs.commit raises outside a repo")
 }
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell

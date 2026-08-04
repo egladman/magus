@@ -267,4 +267,7 @@ type StatusWorkspace struct {
 	CacheMiss  int   `json:"cache_miss,omitempty" yaml:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty" yaml:"cache_error,omitempty"`
 	CacheBytes int64 `json:"cache_bytes,omitempty" yaml:"cache_bytes,omitempty"`
+	// SecretProvider is the provider spell the magusfile selected; empty means the
+	// built-in environment provider. The NAME only - never a reference, never a value.
+	SecretProvider string `json:"secret_provider,omitempty" yaml:"secret_provider,omitempty"`
 }

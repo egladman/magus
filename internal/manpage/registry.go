@@ -256,7 +256,7 @@ active VCS adapter must report per-commit files (git can).
 VCS-history lenses (the first argument):
 
   hotspots   Edit frequency x complexity - the prime refactoring targets. The
-             project view is the dependency graph heat-coloured by churn (with
+             project view is the dependency graph heat-colored by churn (with
              authors, recency, blast radius, and CI duration); --files ranks
              individual files by churn x complexity.
   affinity   Projects that change together (temporal coupling). A hidden pair
@@ -451,7 +451,7 @@ results. Checks include:
   - A defined ci target and clean magusfile syntax
   - Dependency graph cycles
   - Workspace-escaping symlinks
-  - Recognised MAGUS_* environment variables (typo detection)
+  - Recognized MAGUS_* environment variables (typo detection)
   - Charm/target name collisions
   - Consistent target naming convention (any casing, but pick one)
   - VCS base-ref reachability
@@ -476,7 +476,7 @@ project-local file → MAGUS_* environment variables → CLI flags.
 
 The view sub-command prints the effective merged configuration. The set
 sub-command writes a key-value pair to the local (or global) config file.
-The init sub-command materialises the built-in defaults to a magus.yaml so
+The init sub-command materializes the built-in defaults to a magus.yaml so
 they can be edited by hand.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
@@ -485,14 +485,14 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	Children: []Command{
 		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
 		{Name: "set", Short: "Write a key to the local (or global) config file"},
-		{Name: "init", Short: "Materialise built-in defaults to magus.yaml"},
+		{Name: "init", Short: "Materialize built-in defaults to magus.yaml"},
 		{Name: "cache", Short: "Manage the build cache (prune --older-than)"},
 	},
 	Examples: []Example{
 		{"Show effective config", "magus config view"},
 		{"Show config as JSON", "magus config view -o json"},
 		{"Set cache to read-only", "magus config set cache.immutable true"},
-		{"Initialise magus.yaml from defaults", "magus config init"},
+		{"Initialize magus.yaml from defaults", "magus config init"},
 	},
 }
 

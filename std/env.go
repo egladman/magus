@@ -136,11 +136,11 @@ func EnvSet(ctx context.Context, name, value string) error {
 	if types.Tracing(ctx) {
 		return nil
 	}
-	slog.Debug("env.set", "name", name)
+	slog.DebugContext(ctx, "env.set", "name", name)
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
 		// Refuse to re-introduce a stripped name; otherwise a spell could set
 		// GITHUB_TOKEN back into magus's env so the next os.exec carries it.
-		slog.Warn("env.set blocked by the sandbox", "name", name)
+		slog.WarnContext(ctx, "env.set blocked by the sandbox", "name", name)
 		return nil
 	}
 	return os.Setenv(name, value)
@@ -154,7 +154,7 @@ func EnvUnset(ctx context.Context, name string) error {
 		return nil
 	}
 	if p := sandbox.FromContext(ctx); p != nil && !p.AllowEnv(name) {
-		slog.Warn("env.unset blocked by the sandbox", "name", name)
+		slog.WarnContext(ctx, "env.unset blocked by the sandbox", "name", name)
 		return nil
 	}
 	return os.Unsetenv(name)
@@ -264,7 +264,7 @@ func EnvLoadDotenv(ctx context.Context, path string) error {
 			continue
 		}
 		if p != nil && !p.AllowEnv(k) {
-			slog.Warn("env.load_dotenv skipped a sandbox-stripped name", "name", k)
+			slog.WarnContext(ctx, "env.load_dotenv skipped a sandbox-stripped name", "name", k)
 			continue
 		}
 		if err := os.Setenv(k, v); err != nil {

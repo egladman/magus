@@ -29,6 +29,13 @@ const (
 	KindResult = "result" // a target finished (pass/fail/cached), with its ref + duration
 	KindScope  = "scope"  // the run's project scope header
 	KindWarn   = "warn"   // a magus warning
+	// KindSecret records that a credential was READ - the reference and the provider
+	// that served it, never the value. A secret read is an auditable act: it is the
+	// moment a build reached for something privileged, and "which references did this
+	// run touch, through which backend" is the question an audit answers. The value is
+	// deliberately absent, and journal.Emit redacts Text anyway, so a future edit that
+	// tries to include one is caught rather than trusted.
+	KindSecret = "secret"
 )
 
 // Stream values for [Event.Stream] on output events.

@@ -290,7 +290,7 @@ func TestCacheRunOptions(t *testing.T) {
 
 	opts := RunOptions(w)
 
-	c, err := cache.Open(cdir, cache.WithMutable(true))
+	c, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
 	require.NoError(t, err)
 	ctx := t.Context()
 	_, err = c.Run(ctx, spec, func(_ context.Context) error {
@@ -298,7 +298,7 @@ func TestCacheRunOptions(t *testing.T) {
 	}, opts...)
 	require.NoError(t, err, "run (miss)")
 
-	c2, err := cache.Open(cdir, cache.WithMutable(true))
+	c2, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
 	require.NoError(t, err)
 	_, err = c2.Run(ctx, spec, func(_ context.Context) error {
 		return os.WriteFile(out, []byte("bin"), 0o755)

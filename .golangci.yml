@@ -28,6 +28,15 @@ linters:
     - prealloc        # suggest slice pre-allocations
     - gosec           # security: subprocess safety, path traversal, etc.
 
+    # --- Secret safety ---
+    # slog's *Context variants are what carry the run's secret resolver, so a
+    # context-less slog.Info/Error redacts against NOTHING and does it silently. That
+    # is not hypothetical: five separate credential leaks on this codebase were all
+    # "one call site forgot". Fixing the existing ones by hand does not hold the line;
+    # this does. Scoped by the exclusions below to the packages a resolved secret can
+    # actually reach - see the note there for why the CLI's own startup is exempt.
+    - sloglint
+
     # --- Style ---
     - revive          # idiomatic naming, exported comments, error-string casing
     - misspell        # common English spelling mistakes in comments and strings
@@ -35,6 +44,17 @@ linters:
     - whitespace      # flag unnecessary blank lines inside functions/blocks
 
   settings:
+    sloglint:
+      # all, not scope: EVERY slog call must take a context. `scope` would only catch a
+      # function that already holds one, which leaves the more dangerous case standing -
+      # a context-free helper on the run path that quietly cannot redact, and that the
+      # next caller assumes is safe. Requiring it everywhere makes the absence of a
+      # context a compile-time-visible design decision instead of an accident.
+      #
+      # The rest of sloglint's opinions (key naming, static messages) stay off: this
+      # rule is about the leak, not a style sweep.
+      context: all
+
     # musttag only sees marshal calls whose argument has a concrete type, so out of
     # the box it is blind to magus's actual output path: every `-o json|yaml` arm
     # funnels through emitFormatted(opts, v any), and an `any` parameter erases the
@@ -167,6 +187,28 @@ linters:
       - path: magefile/
         linters: [gosec]
         text: "subprocess"
+
+      # sloglint's context rule is scoped to where a resolved secret can actually
+      # travel. These paths are exempt because no run context exists to pass:
+      #
+      #   cmd/magus       - argument parsing, version, and the final exitCodeOf line all
+      #                     run outside any workspace Open, so there is no resolver to
+      #                     reach. A run error is redacted at the SDK boundary instead
+      #                     (Magus.redactError), which is why that line is safe without
+      #                     a context.
+      #   internal/config - loads before a workspace exists, by definition.
+      #   internal/report - renders an already-captured result; the bytes it prints
+      #                     were redacted by the capture tap upstream.
+      #
+      # Everything else - run.go, the interp bindings that execute a magusfile, std's
+      # host modules, the sandbox - is on the path a credential travels and is NOT
+      # exempt. Do not add a package here to silence a finding; thread the context.
+      - path: ^cmd/magus/
+        linters: [sloglint]
+      - path: ^internal/config/
+        linters: [sloglint]
+      - path: ^internal/report/
+        linters: [sloglint]
 
 # Report every finding. golangci-lint defaults to max-issues-per-linter: 50 and
 # max-same-issues: 3, which silently hides repeated findings (e.g. a pervasive

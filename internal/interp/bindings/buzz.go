@@ -54,6 +54,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	magus.MapSet("project", buildProject(ctx, obs))
 	magus.MapSet("cache", buildCacheNS(ctx, obs))
 	magus.MapSet("ci", buildCINS(ctx, obs))
+	magus.MapSet("secret", buildSecretNS(ctx, obs))
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,

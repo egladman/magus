@@ -96,7 +96,7 @@ type handlerFn func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.Ca
 
 // adapt converts a SpellDriver into the MCP server's handler signature.
 // Soft errors from Invoke are surfaced as IsError tool results, mirroring the
-// pre-refactor behaviour where validation failures returned via
+// pre-refactor behavior where validation failures returned via
 // NewToolResultError rather than transport errors.
 func adapt(t spells.Driver) handlerFn {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
@@ -226,7 +226,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		}
 		ctx = withLogger(ctx, reqLog)
 
-		reqLog.Info("[AGENT] tool called")
+		reqLog.InfoContext(ctx, "[AGENT] tool called")
 		start := time.Now()
 
 		result, err := fn(ctx, req)
@@ -265,12 +265,12 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		case err != nil:
 			ev.Outcome = trail.OutcomeError
 			ev.Error = err.Error()
-			reqLog.Error("[AGENT] tool error", slog.Duration("duration", dur), slog.String("error", err.Error()))
+			reqLog.ErrorContext(ctx, "[AGENT] tool error", slog.Duration("duration", dur), slog.String("error", err.Error()))
 		case result != nil && result.IsError:
 			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
-			reqLog.Warn("[AGENT] tool failed", slog.Duration("duration", dur))
+			reqLog.WarnContext(ctx, "[AGENT] tool failed", slog.Duration("duration", dur))
 		default:
-			reqLog.Info("[AGENT] tool done", slog.Duration("duration", dur))
+			reqLog.InfoContext(ctx, "[AGENT] tool done", slog.Duration("duration", dur))
 		}
 		trail.Append(trailDir, ev)
 		// Boot-time rotate alone lets a long-lived daemon's trail grow unbounded, so drive a

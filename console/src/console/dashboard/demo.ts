@@ -622,6 +622,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           misses: Math.round(misses * 0.8),
           errors,
           lastAccessTime: timestampFromMs(now - 1200),
+          // One workspace declares a provider and one does not, so the demo shows both
+          // states of the slot: present means a magusfile named a provider spell, absent
+          // means the built-in environment provider applies.
+          secretProvider: "onepassword",
         },
         {
           root: "~/Repos/magus",

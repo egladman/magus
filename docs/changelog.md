@@ -15,6 +15,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.2.1...main
 
+### Added
+
+- A magusfile can read a credential through a declared provider.
+  `magus\secret.provider("<spell>")` selects the backend and `magus\secret.read("<ref>")`
+  reads one reference. Where a secret comes from is a spell's problem, so 1Password, Vault,
+  or AWS Secrets Manager are an `os\exec` away and magus grows no per-provider code; with no
+  provider declared, the built-in one treats a reference as an environment variable name.
+  A value is a secret because it was read through the resolver, never because its name
+  looked credential-shaped, so magus can keep it out of what it persists: the captured
+  output, the raw log, the output store, the journal, and every log format are redacted at
+  their write boundary. See [docs/concepts/secrets.md](concepts/secrets.md), which is
+  also explicit that this reduces blast radius and dwell time versus a `.env` file and does
+  not make anything "secure".
+- Container images are published with an SBOM and provenance, to two registries in one
+  build. Each variant now carries an SPDX SBOM and max-mode SLSA provenance as in-toto
+  attestations, and a single buildx invocation per variant pushes to GHCR and Docker Hub
+  together - not one build per registry, which on a cold CI runner would rebuild every
+  layer. Merges to main publish a per-commit snapshot image. `image-registries` reports the
+  registry table the active charms resolve to, and `image-login` authenticates against it.
+- `magus.project` accepts `"no_language"`, a REASON string explaining why a project binds
+  no toolchain spell. It silences doctor's language-coverage check for a project that is
+  legitimately polyglot (the `evals` harness is the in-repo case) without inviting the
+  check to be switched off wholesale. A bare `true` is rejected: the reason is the point.
+- [MGS1020](reference/codes/magusfile/MGS1020.md) reports a generated file claimed as
+  an output by more than one target, and documents the one-owner rule for generated files.
+
 ### Fixed
 
 - The container images build again. Both Dockerfiles copied only `go.mod` and `go.sum`
@@ -49,6 +75,66 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   it already had the equivalent guard.
 
 ### Changed
+
+- Breaking: `vcs.shortHash`, `vcs.hash`, `vcs.branch`, `vcs.commitDate` and `vcs.commit`
+  now RAISE when no VCS is resolved or its metadata cannot be read. They used to swallow
+  the failure and hand back `""` (or, for `commit`, an object with every field empty), and
+  the module reference told you to test `c.date == ""` to find out.
+
+  That is not how a Buzz function reports a problem - upstream declares the error in the
+  signature and the caller writes try/catch - and the sentinel could not even be trusted:
+  `""` is a value a branch name or a subject line can legitimately hold, so the check could
+  not distinguish "no answer" from "the answer is empty". It also made the check optional,
+  and a magusfile that forgot it interpolated an empty commit into a version string or an
+  image tag with nothing to surface the mistake.
+
+  Migration, where a missing VCS is a real case (building from a release tarball or a
+  container context):
+
+  ```buzz
+  // before
+  final c = vcs\shortHash();
+  if (c == "") { return "unknown"; }
+  return c;
+
+  // after
+  try { return vcs\shortHash(); } catch (e) { return "unknown"; }
+  ```
+
+  `vcs.name()` still returns `""` when nothing is resolved, and remains the way to TEST for
+  a VCS before asking it anything - the same split as `os.env` and `os.lookupEnv`.
+
+- Breaking: container images are signed with cosign v3, so **verifying one needs a v3
+  client**. A v3 client reads both formats; a v2 client cannot read a v3 signature and
+  reports the image as unverified, which is indistinguishable from a bad signature. Run
+  `cosign version` before treating a failure as a compromised image.
+
+  Taken now, deliberately, rather than announced later: no release has been published yet,
+  so nobody is verifying these images with a pinned v2 client. Doing it after a release
+  would have flipped `latest` under readers who never opted in, and the guide tells them a
+  verification failure means "not an official build - do not run it".
+
+  It also unblocks the toolchain. cosign's own 2.x releases do not publish the
+  `cosign_checksums.txt.sigstore.json` that aqua verifies against, so no 2.x version could
+  be installed through the pinned toolchain at all - `mise install` failed outright, in
+  every CI job that runs it rather than only the signing one.
+
+- Breaking: `skip_cache` now requires a REASON string; the bare `true` form no longer
+  loads. `"skip_cache": true` was a flag that recorded a decision and threw away why it was
+  made, so a target opted out of caching in 2025 looked identical to one opted out by
+  accident, and six stale opt-outs survived in this repo alone because nobody could tell
+  which were still load-bearing. Write the reason instead:
+
+  ```buzz
+  "targets": {
+      "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
+  },
+  ```
+
+  A magusfile with the old form fails to load and names the target. This is a per-target
+  policy about a target that must never replay; it is NOT the way to skip the cache for one
+  run - `--no-cache` on the command line is a session-level judgment and stays where it is.
+  `docs/concepts/cache.md` covers the distinction and the mapping from Nx's `cache: false`.
 
 - Breaking: the release archives now name the static build WITHOUT a suffix, and the cgo
   build with `-cgo`. `magus_<version>_<os>_<arch>.tar.gz` used to be the cgo build, and the
@@ -133,7 +219,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `typescript["tsc"]`. Op names are untouched (`cargo-build`, `pytest`, `markdownlint`
   already named their real tool). An unknown import still suggests the right spell, and
   the alias table now holds only genuine synonyms - `javascript`, `js`, `node`,
-  `nodejs`, `cargo`, `python3` - rather than apologising for abbreviations.
+  `nodejs`, `cargo`, `python3` - rather than apologizing for abbreviations.
 - Breaking: spell op names are normalized when the spell is decoded. Op keys are
   validated against a charset that admits `_` and uppercase, but every request arriving
   at dispatch has already been kebab-normalized, and dispatch is a map lookup - so an op
@@ -173,9 +259,9 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   unrelated to anything.
 - Knowledge-graph schema v7. No node or edge shape changed: the bump is because shard
   fingerprints are now computed by streaming fields into SHA256 rather than by hashing
-  marshalled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
+  marshaled JSON, so every fingerprint VALUE differs from a v6 store's. The manifest
   check treats a version mismatch as a full rebuild, which is the whole migration. The
-  old approach marshalled each shard purely to hash the bytes, putting an encode on the
+  old approach marshaled each shard purely to hash the bytes, putting an encode on the
   hot path of every magus command (fingerprinting all shards costs 757 ms at 50k
   projects) and coupling the fingerprint to the storage format, so a future format
   change would have silently invalidated every cached shard. Measured: -44% sec/op,
@@ -239,7 +325,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   imperative steps with the rationale withheld, for a capable model that infers the why and
   would rather spend the context on the task. Both permutations are hand-authored from ONE
   source body (an author brackets the withheld spans), so they cannot describe different
-  behaviour and they share one content digest - `magus graph verify` reports staleness the
+  behavior and they share one content digest - `magus graph verify` reports staleness the
   same way whichever is installed, and the file's stamp records `skill-variant`. Across the
   eight skills the short form is 14% smaller. The docs site now reproduces every skill in
   both forms with a size comparison (`reference/skills/`), generated from the embedded

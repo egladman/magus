@@ -21,7 +21,7 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 		style := Str(bzArgs, 1)
 		ret0, err := std.PlatformArch(ctx, name, style)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -30,7 +30,7 @@ func RegisterPlatform(ctx context.Context, sess *buzz.Session) vm.Value {
 		style := Str(bzArgs, 1)
 		ret0, err := std.PlatformOS(ctx, name, style)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

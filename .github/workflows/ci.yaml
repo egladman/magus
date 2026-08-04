@@ -62,10 +62,15 @@ jobs:
           TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      # Builds the magus this very commit defines, from the checkout above, so a
+      # change that magusfile.buzz needs is exercised by the run that introduces
+      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
+      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
+      # is rejected by the action's reachable-from-main gate every single time.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       # setup-magus builds its bootstrap binary with actions/setup-go, which reads go.mod's
       # `go` directive and PREPENDS that toolchain to PATH. It outranks mise's pinned Go for
@@ -122,10 +127,15 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
+      # Builds the magus this very commit defines, from the checkout above, so a
+      # change that magusfile.buzz needs is exercised by the run that introduces
+      # it. NOT git-ref: ${{ github.sha }} - on a pull_request that expands to the
+      # ephemeral refs/pull/N/merge commit, which is a descendant of main and so
+      # is rejected by the action's reachable-from-main gate every single time.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       # See the preflight job: setup-magus's bootstrap toolchain outranks mise's on PATH.
       - name: Restore the mise-pinned Go toolchain
@@ -263,6 +273,75 @@ jobs:
 
       - name: Assemble the deploy tree
         run: magus run deploy-generate .
+
+  image-snapshot:
+    name: publish snapshot container image
+    needs: [preflight, ci]
+    # Merges to main only, and only once `ci` has actually passed - not `always()`.
+    # A pull request must never reach this job: a fork PR would otherwise push an
+    # image and mint a Sigstore signature off unreviewed code, and a snapshot of a
+    # commit that never landed is not something anyone can go back and `docker run`.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+      id-token: write # cosign keyless (OIDC) signing
+    steps:
+      # Full history + tags: the image bakes version()/commit()/build_date() in via
+      # ldflags, and git describe has to be able to reach the nearest tag.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          version: '2026.4.8'
+          install: false
+
+      - name: Install pinned toolchain
+        run: mise install # cosign, for the signing step inside image-build
+
+      # Built from source, NOT the pinned release: the image-* targets below call
+      # magus\secret.read, which no published release has yet. On a release binary that
+      # namespace is missing, resolvable()'s try/catch swallows the failure, and the job
+      # reports "no usable credentials" while the tokens are sitting right there in env.
+      # Move this back to git-ref once a release carries the secret provider.
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # Same magusfile-driven login as cd.yaml, under the snapshot charm instead - which
+      # lists GHCR alone, so no Docker Hub secret is needed or read here.
+      - name: Verify registry credentials
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: magus run image-registries:snapshot,verify --no-default-charms
+
+      - name: Log in to image registries
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: magus run image-login:snapshot --no-default-charms
+
+      # Static variant only, tagged with the short commit. A snapshot reproduces one
+      # commit, so it gets neither the CGO variant nor a moving tag, and it is signed
+      # under THIS workflow's certificate identity - ci.yaml, not cd.yaml - which is
+      # what makes the release verify command in
+      # docs/guides/download/container-image.md reject a snapshot.
+      - name: Build, push, and sign the snapshot image
+        run: magus run image-build:snapshot --no-default-charms
+
+      # No summary step here on purpose: image-build writes $GITHUB_STEP_SUMMARY itself,
+      # from the references it actually pushed. A step that re-derived them would be
+      # parsing magus's own output back out of a file magus wrote.
 
   merge-history:
     name: merge run history

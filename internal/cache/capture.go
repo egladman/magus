@@ -8,14 +8,19 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/secret"
 )
 
-// lineEmitter taps a step's subprocess output as it is written, WITHOUT changing what
-// reaches the terminal or the raw log file. Each tapped writer passes bytes through verbatim
-// (so the live view and the raw logF are unaffected), then splits them into lines and emits one
-// structured output [journal.Event] per line - tagged with the owning project/target/stream -
-// to the capture logger on ctx (the invocation journal + live stream). The per-ref output store
-// keeps the raw bytes verbatim, NOT these events, so nothing is stored twice.
+// lineEmitter taps a step's subprocess output as it is written. Each tapped writer
+// redacts any resolved secret (see [lineTap.Write]) and otherwise passes bytes through
+// unchanged, then splits them into lines and emits one structured output
+// [journal.Event] per line - tagged with the owning project/target/stream - to the
+// capture logger on ctx (the invocation journal + live stream). The per-ref output
+// store keeps the raw bytes, NOT these events, so nothing is stored twice.
+//
+// Redaction is the ONLY thing that alters what reaches the terminal and the raw log,
+// and it applies to both plus the events, because all three descend from the single
+// Write below.
 type lineEmitter struct {
 	ctx     context.Context
 	project string
@@ -58,9 +63,9 @@ func (c *lineEmitter) emit(stream, text string) {
 	})
 }
 
-// lineTap passes writes through to dest verbatim, then buffers and splits them into
-// newline-terminated lines, emitting one event per complete line. A trailing partial
-// line is emitted by flush() after the run finishes.
+// lineTap redacts resolved secrets from each write, passes the result to dest, then
+// buffers and splits it into newline-terminated lines, emitting one event per complete
+// line. A trailing partial line is emitted by flush() after the run finishes.
 //
 // Safe for concurrent use, which is a requirement rather than a courtesy: ONE pair of
 // taps is put on the context for a whole target body (captureRun), and a target that
@@ -83,8 +88,20 @@ type lineTap struct {
 func (t *lineTap) Write(p []byte) (int, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	n, err := t.dest.Write(p) // verbatim passthrough first - terminal/logF unchanged
-	t.buf = append(t.buf, p[:n]...)
+
+	// Redact any value read through magus\secret.read before ANYTHING sees it: dest is
+	// the terminal and the raw log file, and t.buf becomes the emitted events. run.Exec
+	// redacts its own buffered result separately; this covers the taps, which a target's
+	// own output also reaches.
+	//
+	// The write is reported as len(p) rather than the redacted length: the caller is
+	// os/exec copying a pipe, and a short write makes it stop. Redaction changes how
+	// many bytes we emit, never how many we accepted.
+	scrubbed := secret.Redact(t.c.ctx, p)
+	if _, err := t.dest.Write(scrubbed); err != nil {
+		return 0, err
+	}
+	t.buf = append(t.buf, scrubbed...)
 	for {
 		i := bytes.IndexByte(t.buf, '\n')
 		if i < 0 {
@@ -93,7 +110,7 @@ func (t *lineTap) Write(p []byte) (int, error) {
 		t.c.emit(t.stream, string(t.buf[:i]))
 		t.buf = t.buf[i+1:]
 	}
-	return n, err
+	return len(p), nil
 }
 
 // flush emits any buffered bytes not terminated by a newline (a final partial line).

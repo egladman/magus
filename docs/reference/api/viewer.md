@@ -178,6 +178,7 @@ Kind classifies an Event. Output events carry subprocess text; the rest carry ma
 | `KIND_RESULT` | 2 | a target finished (pass/fail/cached), with its ref + duration |
 | `KIND_SCOPE` | 4 | the run's project scope header |
 | `KIND_WARN` | 6 | a magus warning |
+| `KIND_SECRET` | 10 | A credential was READ: the reference and the provider that served it, never the value. Distinct from WARN because it is not a problem - it is the record that a build reached for something privileged, which is what an audit answers for. |
 
 ### Status
 

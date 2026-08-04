@@ -36,7 +36,7 @@ concurrency: 4
 import "magus";
 import "fs";
 import "spells/acme" as acme;
-magus.project({ "spells": [acme], "targets": {"check": {"skip_cache": true}} });
+magus.project({ "spells": [acme], "targets": {"check": {"skip_cache": "test policy"}} });
 export fun check(ctx: magus\Context, args: [str]) > void {
     fs\writeFile("BODY_RAN", "yes");
     acme["lint"](ctx);

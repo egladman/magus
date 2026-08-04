@@ -129,6 +129,9 @@ export interface WorkspaceView {
   misses?: number;
   errors?: number;
   lastAccessTime?: Timestamp;
+  // Name of the selected secret-provider spell; "" or undefined means the built-in
+  // environment provider. The NAME only - the wire carries no reference and no value.
+  secretProvider?: string;
 }
 export interface ServiceView {
   id: string;
@@ -283,6 +286,7 @@ export function mapStatus(st: Status): StatusView {
       misses: w.cache ? Number(w.cache.misses) : undefined,
       errors: w.cache ? Number(w.cache.errors) : undefined,
       lastAccessTime: w.lastAccessTime,
+      secretProvider: w.secretProvider || undefined,
     })),
     services: (st.services || []).map((sv) => ({
       id: sv.id || "",

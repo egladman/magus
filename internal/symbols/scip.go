@@ -8,6 +8,7 @@ package symbols
 
 import (
 	"cmp"
+	"context"
 	"log/slog"
 	"path"
 	"slices"
@@ -38,7 +39,7 @@ const MaxRefLines = 20
 // file nodes and project->file edges use, so a nested project's symbols land on the right
 // files instead of dangling at the workspace root. projectPath "" or "." leaves paths
 // unchanged (the root project's paths are already workspace-relative).
-func ParseIndex(data []byte, projectPath string) ([]types.KnowledgeSymbol, error) {
+func ParseIndex(ctx context.Context, data []byte, projectPath string) ([]types.KnowledgeSymbol, error) {
 	var idx scip.Index
 	if err := proto.Unmarshal(data, &idx); err != nil {
 		return nil, err
@@ -136,7 +137,7 @@ func ParseIndex(data []byte, projectPath string) ([]types.KnowledgeSymbol, error
 		// index filtered to nothing looks exactly like a scip target that never ran, and
 		// the caller logs nothing for an empty result. The count is what tells those
 		// apart when an indexer's root does not match what magus assumed.
-		slog.Debug("symbols: skipped documents outside the workspace",
+		slog.DebugContext(ctx, "symbols: skipped documents outside the workspace",
 			slog.String("project", projectPath),
 			slog.Int("skipped", skipped),
 			slog.Int("kept", len(idx.Documents)-skipped))

@@ -182,7 +182,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 		// Warn only when a prior store exists and diverges - a first-ever run
 		// under immutable mode is uninitialized, not stale.
 		if old != nil && (changed || old.prunable(present)) {
-			s.log.Warn("magus: knowledge graph is stale but MAGUS_CACHE_IMMUTABLE is set; serving a freshly assembled in-memory graph without persisting")
+			s.log.WarnContext(ctx, "magus: knowledge graph is stale but MAGUS_CACHE_IMMUTABLE is set; serving a freshly assembled in-memory graph without persisting")
 		}
 		return g, nil
 	}
@@ -212,7 +212,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps, inputFPs map[stri
 	// means `magus refs` falls back to loading all symbol shards, never a wrong result -
 	// the index is bound to newMan so a stale one is detected and ignored on read).
 	if err := s.writeXref(shards, newMan); err != nil {
-		s.log.Debug("knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
 	}
 	if old != nil {
 		for name := range old.Shards {
@@ -311,7 +311,7 @@ func (s *Store) mergeCoverageShard(ctx context.Context, g *Graph, man *manifest)
 		return nil
 	}
 	if err := s.readMergeShard(ctx, g, man, CoverageShardName); err != nil {
-		s.log.Debug("knowledge: coverage overlay merge failed", slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "knowledge: coverage overlay merge failed", slog.String("error", err.Error()))
 	}
 	return nil
 }
@@ -492,7 +492,7 @@ func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)
 	defer cancel()
 	if err := s.remote.PutShard(ctx, fp, bytes.NewReader(b)); err != nil {
-		s.log.Debug("knowledge: remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "knowledge: remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
 	}
 }
 

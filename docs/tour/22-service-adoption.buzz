@@ -1,0 +1,77 @@
+// When two services are the same service. Step 9 said magus shares one instance across
+// everything that needs "the same config". Here is what that means, because the
+// answer decides whether your test suite gets one Postgres or four.
+//
+// Sharing is keyed on a CONFIG FINGERPRINT. For a recognized container run it covers
+// image and tag, container ports, declared env, and mount targets. For anything else it
+// covers the raw argv, verbatim - any difference at all is a different service.
+//
+// Two consequences people do not expect:
+//
+//   FLAG ORDER DOES NOT MATTER. The repeatable groups are sorted before hashing, so
+//   `-p 5432:5432 -e A=1` and `-e A=1 -p 5432:5432` are the same service. You do not have
+//   to keep two declarations character-identical to get sharing.
+//
+//   THE WORKSPACE IS PART OF THE SHARING KEY, but not of the fingerprint. Two projects in
+//   ONE workspace with matching config share a running container. The same config in a
+//   DIFFERENT checkout does not - it gets its own. So sharing is scoped to the tree you
+//   are working in, which is what you want when two worktrees are mid-rebase on the same
+//   repo and neither should see the other's database.
+//
+// Below: `db` and `db_same` adopt each other. `db_other_port` does not, because a port is
+// part of the identity. Run `ls` to see the ops, then `run uses_both` and `run uses_other`.
+
+import "magus/spell";
+
+export fun mgs_getName() > str { return "pg"; }
+
+// The baseline. Everything in this command that the fingerprint covers - image, tag, port,
+// env - is part of what makes it THIS service rather than another one.
+fun db(target: Target) > Service {
+    return Service{
+        command = Command{bin = "docker", args = [
+            "run", "--rm",
+            "-p", "5432:5432",
+            "-e", "POSTGRES_PASSWORD=dev",
+            "postgres:16",
+        ]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "127.0.0.1", "-p", "5432"]},
+    };
+}
+
+// ADOPTS db. Same image and tag, same port, same env - only the flag ORDER differs, and
+// order is normalized before hashing. One container serves both.
+fun db_same(target: Target) > Service {
+    return Service{
+        command = Command{bin = "docker", args = [
+            "run", "--rm",
+            "-e", "POSTGRES_PASSWORD=dev",
+            "-p", "5432:5432",
+            "postgres:16",
+        ]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "127.0.0.1", "-p", "5432"]},
+    };
+}
+
+// DOES NOT ADOPT db. One port differs, so the fingerprint differs, so this is a second
+// container. That is correct rather than unfortunate: a dependent connecting on 5433 needs
+// something listening on 5433, and silently handing it the 5432 instance would fail later
+// and further away. If you meant to share, match the config; if you meant two databases,
+// this is how you get them.
+fun db_other_port(target: Target) > Service {
+    return Service{
+        command = Command{bin = "docker", args = [
+            "run", "--rm",
+            "-p", "5433:5432",
+            "-e", "POSTGRES_PASSWORD=dev",
+            "postgres:16",
+        ]},
+        readiness = Command{bin = "pg_isready", args = ["-h", "127.0.0.1", "-p", "5433"]},
+    };
+}
+
+// One map of op name to handler, same as any spell: a handler returning a Service is what
+// makes the op long-running and shared, rather than a separate kind of declaration.
+export fun mgs_listTargets() > any {
+    return {"db": db, "db-same": db_same, "db-other-port": db_other_port};
+}

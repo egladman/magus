@@ -110,6 +110,8 @@ func kindToProto(k string) viewerv1.Kind {
 		return viewerv1.Kind_KIND_SCOPE
 	case journal.KindWarn:
 		return viewerv1.Kind_KIND_WARN
+	case journal.KindSecret:
+		return viewerv1.Kind_KIND_SECRET
 	default:
 		return viewerv1.Kind_KIND_UNSPECIFIED
 	}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 )
 
 // RemoteBackend is a pluggable remote backend for cache artifacts, keyed by (projectPath,
@@ -130,7 +131,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 
 	r, err := c.remote.GetArtifact(ctx, projectPath, hash)
 	if err != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote get %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
@@ -139,7 +140,7 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 	}
 	defer r.Close()
 	if err := c.importArtifact(ctx, r); err != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
@@ -173,7 +174,7 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 	_ = pr.CloseWithError(putErr)
 	exportErr := <-errCh
 	if exportErr != nil || putErr != nil {
-		c.log.Warn("cache.warn", slog.String("msg",
+		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote push %s (%s): export=%v put=%v", s.ProjectPath, shortHash(hash), exportErr, putErr)))
 	}
 }
@@ -189,6 +190,22 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	gz := gzip.NewWriter(w)
 	tw := tar.NewWriter(gz)
 
+	addBytes := func(rel string, data []byte) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := tw.WriteHeader(&tar.Header{
+			Typeflag: tar.TypeReg,
+			Name:     filepath.ToSlash(rel),
+			Size:     int64(len(data)),
+			Mode:     0o644,
+		}); err != nil {
+			return err
+		}
+		_, err := tw.Write(data)
+		return err
+	}
+
 	addFile := func(absPath string) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -201,30 +218,33 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		if err != nil {
 			return err
 		}
-		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     filepath.ToSlash(rel),
-			Size:     int64(len(data)),
-			Mode:     0o644,
-		}); err != nil {
-			return err
-		}
-		_, err = tw.Write(data)
-		return err
+		return addBytes(rel, data)
 	}
 
-	if err := addFile(c.manifestPath(projectPath, hash)); err != nil {
+	// The manifest is the one file redacted on the way out rather than on the way in.
+	// Its Return field is replayed verbatim into a cache HIT (see cache.go's
+	// RecordReturn), so masking it on disk would make a hit differ from a miss - the
+	// invariant types/returns.go exists to hold. Export crosses into a SHARED store,
+	// which is the trust boundary that actually warrants the scrub, so it happens here
+	// and the local entry stays replayable.
+	manifestBytes, err := os.ReadFile(c.manifestPath(projectPath, hash))
+	if err != nil {
+		return fmt.Errorf("exportArtifact: read manifest: %w", err)
+	}
+	manifestBytes = secret.Redact(ctx, manifestBytes)
+	manifestRel, err := filepath.Rel(c.dir, c.manifestPath(projectPath, hash))
+	if err != nil {
+		return fmt.Errorf("exportArtifact: manifest path: %w", err)
+	}
+	if err := addBytes(manifestRel, manifestBytes); err != nil {
 		return fmt.Errorf("exportArtifact: manifest: %w", err)
 	}
 
-	// Sign the manifest's exact on-disk bytes and ship the detached signature.
+	// Sign the bytes actually shipped above, not the on-disk file: a verifier checks the
+	// signature against what it received, so signing the unredacted original would fail.
 	// No signing key → unsigned, which no verifying consumer will accept.
 	if c.signer != nil {
-		mb, err := os.ReadFile(c.manifestPath(projectPath, hash))
-		if err != nil {
-			return fmt.Errorf("exportArtifact: read manifest for signing: %w", err)
-		}
-		sig, err := c.signer.sign(mb)
+		sig, err := c.signer.sign(manifestBytes)
 		if err != nil {
 			return fmt.Errorf("exportArtifact: sign: %w", err)
 		}

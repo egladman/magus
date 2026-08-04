@@ -34,10 +34,16 @@ const (
 // Stalled is one (project, target) pair that executed repeatedly and never replayed
 // from cache. TotalMs is the wall clock spent doing so.
 type Stalled struct {
+	// Project is the human display form ("(root)" for the workspace root).
 	Project string
-	Target  string
-	Runs    int
-	TotalMs int64
+	// ProjectPath is the raw workspace-relative key the journal recorded ("." for the
+	// root). Carried alongside the display form so a caller can look the project up in
+	// the workspace - doctor matches these against per-target policy to tell a target
+	// that CANNOT replay by design from one that merely does not.
+	ProjectPath string
+	Target      string
+	Runs        int
+	TotalMs     int64
 }
 
 // AvgMs is the mean execution time across Runs.
@@ -72,11 +78,12 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 	}
 
 	type tally struct {
-		project string
-		target  string
-		ran     int
-		cached  int
-		totalMs int64
+		project     string
+		projectPath string
+		target      string
+		ran         int
+		cached      int
+		totalMs     int64
 	}
 	tallies := map[string]*tally{}
 	for _, path := range journals {
@@ -87,7 +94,7 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 			key := project + "\x00" + target
 			t := partial[key]
 			if t == nil {
-				t = &tally{project: displayProject(project), target: target}
+				t = &tally{project: displayProject(project), projectPath: project, target: target}
 				partial[key] = t
 			}
 			switch status {
@@ -116,7 +123,7 @@ func StalledTargets(cacheDir string, only map[string]bool) []Stalled {
 	var out []Stalled
 	for _, t := range tallies {
 		if t.cached == 0 && t.ran >= MinRunsForYield && t.totalMs/int64(t.ran) >= MinAvgMsForYield {
-			out = append(out, Stalled{Project: t.project, Target: t.target, Runs: t.ran, TotalMs: t.totalMs})
+			out = append(out, Stalled{Project: t.project, ProjectPath: t.projectPath, Target: t.target, Runs: t.ran, TotalMs: t.totalMs})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].TotalMs > out[j].TotalMs })

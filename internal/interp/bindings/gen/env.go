@@ -20,7 +20,7 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		name := Str(bzArgs, 0)
 		ret0, err := std.EnvGet(ctx, name)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		name := Str(bzArgs, 0)
 		ret0, ret1, err := std.EnvLookup(ctx, name)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.ListValue([]vm.Value{StrVal(ret0), BoolVal(ret1)}), nil
 	}))
@@ -36,21 +36,21 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		name := Str(bzArgs, 0)
 		value := Str(bzArgs, 1)
 		if err := std.EnvSet(ctx, name, value); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
 	m.MapSet("list", vm.DirectValue("env.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.EnvList(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrMapVal(ret0), nil
 	}))
 	m.MapSet("unset", vm.DirectValue("env.unset", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		name := Str(bzArgs, 0)
 		if err := std.EnvUnset(ctx, name); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -58,14 +58,14 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.EnvExpand(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("home", vm.DirectValue("env.home", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.EnvHome(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -74,7 +74,7 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		def := Str(bzArgs, 1)
 		ret0, err := std.EnvGetOr(ctx, name, def)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -82,7 +82,7 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		name := Str(bzArgs, 0)
 		ret0, err := std.EnvRequire(ctx, name)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -90,7 +90,7 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		content := Str(bzArgs, 0)
 		ret0, err := std.EnvParseDotenv(ctx, content)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrMapVal(ret0), nil
 	}))
@@ -98,14 +98,14 @@ func RegisterEnv(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.EnvReadDotenv(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrMapVal(ret0), nil
 	}))
 	m.MapSet("loadDotenv", vm.DirectValue("env.loadDotenv", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		if err := std.EnvLoadDotenv(ctx, path); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))

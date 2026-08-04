@@ -20,7 +20,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		node := Any(bzArgs, 0)
 		ret0, err := std.XMLRender(ctx, node)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -30,7 +30,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		children := Any(bzArgs, 2)
 		ret0, err := std.XMLElement(ctx, tag, attrs, children)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyVal(ret0), nil
 	}))
@@ -38,7 +38,7 @@ func RegisterXml(ctx context.Context, sess *buzz.Session) vm.Value {
 		s := Str(bzArgs, 0)
 		ret0, err := std.XMLParse(ctx, s)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyVal(ret0), nil
 	}))

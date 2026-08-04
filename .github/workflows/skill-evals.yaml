@@ -1,9 +1,13 @@
 name: Skill evals
 
+# MUTED 2026-08-03: the weekly cron is commented out, so this only runs when someone
+# dispatches it by hand. It drives promptfoo against live models and costs real money.
+# The evals `smoke` and `grid` targets it calls are commented out too, so a manual
+# dispatch currently fails on an undefined target - uncomment both together to revive it.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 5 * * 1'
+  # schedule:
+  #   - cron: '0 5 * * 1'
 
 permissions:
   contents: read
@@ -29,10 +33,12 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
+      # See ci.yaml: build from the checkout, not git-ref, so a workflow_dispatch
+      # off a branch is not rejected by the reachable-from-main gate.
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.sha }}
+          source-path: .
 
       - name: Run skill smoke matrix
         run: magus run smoke evals

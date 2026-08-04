@@ -24,7 +24,7 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 	s := NewOutputStore(dir)
 
 	desc0 := OutputDescriptor{Project: "svc/api", Target: "test", Failed: true, ErrMsg: "boom", TimestampMs: 1_700_000_000_000, DurationMs: 1200}
-	ref, err := s.Persist("deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
+	ref, err := s.Persist(context.Background(), "deadbeefcafef00d", []byte("lint: undefined symbol foo\n"), desc0)
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(ref, RefPrefix))
 	assert.Len(t, ref, len(RefPrefix)+refHexLen)
@@ -118,7 +118,7 @@ func TestOutputStoreVerbatimFidelity(t *testing.T) {
 		"with\ttabs\r\nCR", // control chars + CRLF, no final newline
 		"",                 // empty output
 	} {
-		ref, err := s.Persist("k", []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
+		ref, err := s.Persist(context.Background(), "k", []byte(raw), OutputDescriptor{Project: "p", Target: "t"})
 		require.NoError(t, err)
 		got, _, err := s.ByRef(ref)
 		require.NoError(t, err)
@@ -132,9 +132,9 @@ func TestOutputStorePerExecutionRefsAreDistinct(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	const key = "samekey00"
 
-	ref1, err := s.Persist(key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref1, err := s.Persist(context.Background(), key, []byte("run 1\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
-	ref2, err := s.Persist(key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref2, err := s.Persist(context.Background(), key, []byte("run 2\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
 
 	assert.NotEqual(t, ref1, ref2, "two executions of one cache key must mint distinct refs")
@@ -151,14 +151,14 @@ func TestLatestRefsByTarget(t *testing.T) {
 
 	// pkg/a:build ran twice under different charms; the later timestamp wins even though
 	// the two carry distinct repro targets ("build:ro" then "build:rw").
-	older, err := s.Persist("ka1", []byte("old\n"), OutputDescriptor{Project: "pkg/a", Target: "build:ro", TimestampMs: 100, Failed: true})
+	older, err := s.Persist(context.Background(), "ka1", []byte("old\n"), OutputDescriptor{Project: "pkg/a", Target: "build:ro", TimestampMs: 100, Failed: true})
 	require.NoError(t, err)
-	newer, err := s.Persist("ka2", []byte("new\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 200, Failed: false})
+	newer, err := s.Persist(context.Background(), "ka2", []byte("new\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 200, Failed: false})
 	require.NoError(t, err)
 	// A different target, and a project-scoped output that must be skipped.
-	testRef, err := s.Persist("kb", []byte("t\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 150})
+	testRef, err := s.Persist(context.Background(), "kb", []byte("t\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 150})
 	require.NoError(t, err)
-	_, err = s.Persist("kc", []byte("proj\n"), OutputDescriptor{Project: "pkg/a", TimestampMs: 999}) // no target -> skipped
+	_, err = s.Persist(context.Background(), "kc", []byte("proj\n"), OutputDescriptor{Project: "pkg/a", TimestampMs: 999}) // no target -> skipped
 	require.NoError(t, err)
 
 	got := s.LatestRefsByTarget()
@@ -186,13 +186,13 @@ func TestListDescriptors(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	// Two executions of the same target under one cache key (both retained by keep-last-K), a second
 	// target, and a target-less project-scoped run - all four must appear.
-	r1, err := s.Persist("k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
+	r1, err := s.Persist(context.Background(), "k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
 	require.NoError(t, err)
-	r2, err := s.Persist("k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
+	r2, err := s.Persist(context.Background(), "k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
 	require.NoError(t, err)
-	r3, err := s.Persist("k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
+	r3, err := s.Persist(context.Background(), "k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
 	require.NoError(t, err)
-	r4, err := s.Persist("k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
+	r4, err := s.Persist(context.Background(), "k3", []byte("scope\n"), OutputDescriptor{Project: "pkg/b", TimestampMs: 400}) // no target: still listed
 	require.NoError(t, err)
 
 	got := s.ListDescriptors()
@@ -217,7 +217,7 @@ func TestOutputStoreKeepLastK(t *testing.T) {
 
 	var last string
 	for i := 0; i < defaultOutputKeepLast+3; i++ {
-		ref, err := s.Persist(key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
+		ref, err := s.Persist(context.Background(), key, []byte("run\n"), OutputDescriptor{Project: "p", Target: "build"})
 		require.NoError(t, err)
 		last = ref
 	}
@@ -240,13 +240,13 @@ func TestOutputStorePrefixAndAmbiguity(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
 
-	ref, err := s.Persist("k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
+	ref, err := s.Persist(context.Background(), "k1", []byte("body\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
 	data, _, err := s.ByRef(ref)
 	require.NoError(t, err)
 	assert.Equal(t, "body\n", string(data))
 
-	_, err = s.Persist("k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
+	_, err = s.Persist(context.Background(), "k2", []byte("other\n"), OutputDescriptor{Project: "p", Target: "build"})
 	require.NoError(t, err)
 	_, _, err = s.ByRef(RefPrefix) // the bare prefix matches both
 	var amb *AmbiguousRefError
@@ -380,9 +380,9 @@ func TestOutputStoreRemoveForProject(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
 
-	keep, err := s.Persist("ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
+	keep, err := s.Persist(context.Background(), "ka", []byte("a\n"), OutputDescriptor{Project: "keep/me", Target: "build"})
 	require.NoError(t, err)
-	gone, err := s.Persist("kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
+	gone, err := s.Persist(context.Background(), "kb", []byte("b\n"), OutputDescriptor{Project: "drop/me", Target: "build"})
 	require.NoError(t, err)
 
 	s.removeForProject("drop/me")
@@ -425,7 +425,7 @@ func BenchmarkOutputStorePersist(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := range b.N {
-		if _, err := s.Persist(fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
+		if _, err := s.Persist(context.Background(), fmt.Sprintf("deadbeefcafef%03d", i%1000), raw, meta); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -436,7 +436,7 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 	raw := benchRaw(benchLines)
 	dir := b.TempDir()
 	s := NewOutputStore(dir)
-	ref, err := s.Persist("deadbeefcafef00d", raw, benchMeta())
+	ref, err := s.Persist(context.Background(), "deadbeefcafef00d", raw, benchMeta())
 	if err != nil {
 		b.Fatal(err)
 	}

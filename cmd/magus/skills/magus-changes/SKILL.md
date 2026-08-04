@@ -92,7 +92,7 @@ Rules for an entry, all checkable:
   diagnostic code, the target.{{if .Full}} A reader upgrades by searching for those strings.{{end}}
 - Section headings are Keep a Changelog's: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Do not invent one.
-- Write behaviour, not implementation.{{if .Full}} "The graph indexes the build I/O layer" is an
+- Write behavior, not implementation.{{if .Full}} "The graph indexes the build I/O layer" is an
   entry; "refactored the extractor" is not.{{end}}
 - One entry per user-visible change, not per commit.{{if .Full}} Squash a fix-up into the entry
   for the thing it fixed up.{{end}}

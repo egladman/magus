@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/secret"
 )
 
 // RefPrefix begins every target-output reference id ("out1a2b3c"). It is the provenance tag in
@@ -127,7 +129,7 @@ const (
 // keep-last-K. Per-line structured events are NOT stored here - they live in the invocation
 // journal, so no output is stored twice. Returns the minted ref. Best-effort: on error it
 // returns an empty ref and the caller keeps the run's own outcome.
-func (s *OutputStore) Persist(cacheKey string, output []byte, d OutputDescriptor) (string, error) {
+func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (string, error) {
 	ref := s.mintRef(cacheKey)
 	d.Ref = ref
 	dir := filepath.Join(s.outputsDir(), cacheKey)
@@ -141,6 +143,10 @@ func (s *OutputStore) Persist(cacheKey string, output []byte, d OutputDescriptor
 	if err != nil {
 		return "", err
 	}
+	// The descriptor's free-form fields (ErrMsg today) are Go-side strings that never pass
+	// the capture tap, so this is their only write boundary. Redacting the marshaled bytes
+	// rather than each field keeps a field added later covered by construction.
+	descriptor = secret.Redact(ctx, descriptor)
 	if err := os.WriteFile(filepath.Join(dir, ref+descExt), descriptor, 0o644); err != nil {
 		return "", err
 	}

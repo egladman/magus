@@ -243,12 +243,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	m.LogScope(scopeLabel, source)
+	m.LogScope(ctx, scopeLabel, source)
 	// Merge magus.yaml default_charms with any explicit charm on the target - the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
-	m.LogCharms(strings.Join(charms, ","))
+	m.LogCharms(ctx, strings.Join(charms, ","))
 	if len(targets) == 0 {
 		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
 		return nil

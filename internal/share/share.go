@@ -236,6 +236,10 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // cancellation / Close). ttl is the caller-requested lifetime: a non-positive value
 // uses the manager's configured default, and any other value is clamped to
 // [MinTTL, MaxTTL]. consoleDir must contain the built console.
+// No ctx parameter on purpose. A share OUTLIVES the request that opened it - its lifetime
+// is m.parent (the daemon) bounded by ttl, set below - so accepting the caller's context
+// would invite exactly the wrong wiring: the HTTP handler passes r.Context(), and using it
+// here would tear the LAN share down the instant that POST returned.
 func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
 	if err != nil {
@@ -327,15 +331,20 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	}()
 	go func() {
 		<-ctx.Done()
-		shutCtx, sc := context.WithTimeout(context.Background(), 5*time.Second)
+		// WithoutCancel, not Background: this runs precisely BECAUSE ctx is done, so a
+		// shutdown context derived from it directly would arrive already cancelled and
+		// Shutdown would return without draining a single connection. WithoutCancel drops
+		// the cancellation while keeping whatever values the daemon's context carries,
+		// which is what anything logging during shutdown reads.
+		shutCtx, sc := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer sc()
 		_ = srv.Shutdown(shutCtx)
 	}()
 
 	if superseded {
-		m.log.Info("[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
+		m.log.InfoContext(ctx, "[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
-	m.log.Info("[SHARE] LAN share opened",
+	m.log.InfoContext(ctx, "[SHARE] LAN share opened",
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)

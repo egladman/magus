@@ -1,0 +1,88 @@
+// What counts as "the same work". A cache hit means magus decided this run is identical to
+// a previous one, so the surprises all come from things that are part of that identity
+// without looking like inputs. None of these is exotic; each one has cost somebody an
+// afternoon of "why did it rebuild?" or, worse, "why did it NOT rebuild?".
+//
+// Run `run report`, then `run report:loud`, then `run report -- --extra`, and watch which
+// ones say (cached).
+//
+//   1. THE CHARM IS IN THE KEY. `report` and `report:loud` are different entries. A charm
+//      changes what a target does, so a hit across charms would replay the wrong work.
+//      This is the one that surprises people: the target name is identical.
+//
+//   2. THE ARGS AFTER `--` ARE IN THE KEY, and order matters. `-- -run TestFoo` is not the
+//      same run as no args, so the second does not replay the first. Order is significant
+//      because `-run X` and `X -run` are not the same command.
+//
+//   3. THE TOOLCHAIN VERSION IS IN THE KEY. Bumping the pinned Go or pnpm invalidates every
+//      target that spell touches, without a single source file changing. That is correct -
+//      the compiler is an input - and it is why a mise bump rebuilds the world.
+//
+//   4. A TARGET AND THE OP IT WRAPS DO NOT SHARE AN ENTRY. `run test` and
+//      `run go::go-test` hash differently even when the target is a one-line wrapper,
+//      because the target name is part of the key. Running one does not warm the other.
+//
+//   5. A SPELL CONTRIBUTES ITS GLOBS TO EVERY TARGET ON THE PROJECT. That is why an
+//      unrelated file can invalidate a narrow target - and why `ctx.readsFiles(...)`
+//      exists, to opt one target out of the project-wide baseline (see the footprints
+//      step).
+//
+// The rule underneath all five: the key is "everything that could change the OUTPUT",
+// not "the files you thought of". When a hit would be wrong, magus would rather rebuild.
+
+import "magus";
+
+magus\project({
+    "name": "tour-cache-identity",
+    "sources": ["magusfile.buzz", "src/**"],
+    "targets": {
+        // These exist to PRINT, and a replay skips the print - which would hide the very
+        // thing the step is demonstrating. A target whose whole output is a side effect
+        // magus does not capture is exactly what skip_cache is for, and writing the reason
+        // out is the habit worth copying.
+        "prep": {"skip_cache": "prints the dedup marker; a replay would skip the line the step exists to show"},
+        "a": {"skip_cache": "prints; a replay would skip the line the step exists to show"},
+        "b": {"skip_cache": "prints; a replay would skip the line the step exists to show"},
+        "both": {"skip_cache": "fans out to a and b so their markers print every run"},
+    },
+});
+
+// Declares a charm so `report:loud` is a legal invocation. The body does not even read the
+// charm - the point is that the KEY differs regardless, because the charm is part of the
+// run's identity whether or not this target's code branches on it.
+export fun report(ctx: magus\Context, args: [str]) > void {
+    if (ctx.has_charm("loud")) {
+        magus\info("report: running LOUD");
+    } else {
+        magus\info("report: running plain");
+    }
+    if (args.len() > 0) {
+        magus\info("report: extra args changed the key");
+    }
+}
+
+// ctx.needs DEDUPES within a run: a needed target executes ONCE per invocation, however
+// many targets need it. This is why `ci` fanning out to lint, build and test does not run
+// `format` three times - and why a shared setup step is safe to name from every target that
+// depends on it, instead of being hoisted somewhere awkward to avoid repetition.
+//
+// It is per-INVOCATION, not per-machine: it is the dispatcher deduping a dependency graph,
+// not the cache replaying a previous run. Run `both` and count the prep line - one.
+export fun prep(ctx: magus\Context, args: [str]) > void {
+    magus\info("prep: ran once");
+}
+
+export fun a(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(prep);
+    magus\info("a: done");
+}
+
+export fun b(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(prep);
+    magus\info("b: done");
+}
+
+// Both a and b need prep. prep runs once.
+export fun both(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(a, b);
+}

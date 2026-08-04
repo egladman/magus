@@ -11,6 +11,19 @@
 # one spelling the workspace's spelling, which is the only way a prose gate stays useful.
 locale = "en-us"
 
+[default.extend-words]
+# "mis" is a real prefix in this tree ("mis-highlighted", "mis-scope"), and typos reads a
+# hyphenated prefix as a standalone word. Mapping it to itself accepts it rather than
+# rewriting correct prose into "miss-scope".
+mis = "mis"
+# Identifiers and domain terms typos "corrects" into something wrong. Both were caught by
+# running the autofix for the first time: `nd` (a local in docs/site/development.buzz)
+# became the Buzz KEYWORD `and` and stopped the docs project compiling, and "ANDed" (a
+# boolean-query term in the search help text) became "ANDead".
+nd = "nd"
+# typos splits "ANDed" and flags the "Ded" tail, so the accepted word is that fragment.
+Ded = "Ded"
+
 [files]
 # Skip generated / vendored trees and lockfiles - nothing to fix inside them, and
 # they carry byte-identical text `typos` would otherwise re-scan every run.

@@ -83,7 +83,7 @@ Lock is one held per-project workspace lock and the process holding it.  A held 
 |-------|------|---|-------------|
 | `project` | string | 1 | workspace-relative path; "." is the root |
 | `pid` | int32 | 2 | holder's process id |
-| `command` | string | 3 | holder's argv, for recognising what it is |
+| `command` | string | 3 | holder's argv, for recognizing what it is |
 | `dir` | string | 4 | holder's working directory; a path that no longer exists means abandoned |
 | `acquire_time` | Timestamp | 5 | when the holder took it; age is the signal a human reads |
 | `waiters` | repeated LockWaiter | 6 | processes blocked on this lock right now |
@@ -202,6 +202,7 @@ Workspace is one workspace the daemon has loaded.
 | `load_time` | Timestamp | 2 |  |
 | `last_access_time` | Timestamp | 3 |  |
 | `cache` | Cache | 4 | this workspace's cache activity |
+| `secret_provider` | string | 5 | secret\_provider is the NAME of the provider spell this workspace's magusfile selected; empty means no declaration and the built-in environment provider applies. It exists so a reader can see that credential resolution is wired up and through what - the same config visibility the cache cap gets.  The name and nothing else. No reference list, no value: magus does not store secrets, it reads them through a provider, and publishing what a build CAN reach would be a map of what to go after. |
 
 ## Enums
 

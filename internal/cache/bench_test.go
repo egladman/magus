@@ -3,7 +3,6 @@ package cache
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,13 +11,13 @@ import (
 
 // discardLogger is a slog.Logger that drops all output, keeping benchmark
 // results clean.
-var discardLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
+var discardLogger = slog.New(slog.DiscardHandler)
 
 // openBenchCache opens a cache at dir and a discarding logger so benchmark
 // output is not polluted with log lines.
 func openBenchCache(b *testing.B, dir string, mutable bool) *Cache {
 	b.Helper()
-	c, err := Open(dir, WithMutable(mutable), WithLogger(discardLogger))
+	c, err := Open(b.Context(), dir, WithMutable(mutable), WithLogger(discardLogger))
 	if err != nil {
 		b.Fatalf("cache.Open: %v", err)
 	}

@@ -27,7 +27,7 @@ func newMutableCache(t *testing.T) (root, cdir string, c *Cache) {
 	t.Helper()
 	root = t.TempDir()
 	cdir = filepath.Join(t.TempDir(), ".magus")
-	c, err := Open(cdir, WithMutable(true))
+	c, err := Open(t.Context(), cdir, WithMutable(true))
 	require.NoError(t, err, "cache.Open")
 	return root, cdir, c
 }
@@ -85,7 +85,7 @@ func TestMissThenHit(t *testing.T) {
 	require.NotEmpty(t, r1.Hash, "Hash must not be empty after a successful run")
 
 	// Re-open in read-only mode so the second call can hit.
-	c2, err := Open(cdir, WithMutable(false))
+	c2, err := Open(t.Context(), cdir, WithMutable(false))
 	require.NoError(t, err, "cache.Open(read)")
 	r2, err := c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(hit)")
@@ -165,7 +165,7 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	root := t.TempDir()
 	cdir := filepath.Join(t.TempDir(), ".magus")
 	// Do NOT set MAGUS_CACHE_MODE — default (ModeAuto) must write.
-	c, err := Open(cdir)
+	c, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 	writeMain(t, root, "package main")
 	out := touchOut(t, root)
@@ -179,7 +179,7 @@ func TestModeAutoWritesOnMiss(t *testing.T) {
 	require.False(t, r1.Hit, "first Run must miss")
 
 	// Re-open (same dir, same default mode) — must hit.
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open(auto, second)")
 	r2, err := c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "Run(hit)")
@@ -201,7 +201,7 @@ func TestModeAutoReplaysOnHit(t *testing.T) {
 	require.NoError(t, err, "prime")
 
 	// Re-open (default mutable) — must hit without calling fn.
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 	calls := 0
 	r, err := c2.Run(context.Background(), step, func(_ context.Context) error { calls++; return fn(context.Background()) })
@@ -221,14 +221,14 @@ func TestImmutableDoesNotWriteOnMiss(t *testing.T) {
 	step.Outputs = []string{"test/pkg/out.txt"}
 	fn := func(_ context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
 
-	c, err := Open(cdir, WithMutable(false))
+	c, err := Open(t.Context(), cdir, WithMutable(false))
 	require.NoError(t, err, "cache.Open(immutable)")
 	r, err := c.Run(context.Background(), step, fn)
 	require.NoError(t, err, "first Run")
 	require.False(t, r.Hit, "first Run want miss")
 
 	// Re-open mutable — must still miss (nothing was written).
-	c2, err := Open(cdir)
+	c2, err := Open(t.Context(), cdir)
 	require.NoError(t, err, "cache.Open")
 	r, err = c2.Run(context.Background(), step, fn)
 	require.NoError(t, err, "second Run after immutable miss")
@@ -321,7 +321,7 @@ func TestCacheSizeCapAccepted(t *testing.T) {
 	for _, env := range []string{"", "0", "1000", "500KB", "2MB", "1GB", "bad"} {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv("MAGUS_CACHE_SIZE", env)
-			_, err := Open(filepath.Join(t.TempDir(), ".cap"))
+			_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".cap"))
 			assert.NoErrorf(t, err, "Open with MAGUS_CACHE_SIZE=%q", env)
 		})
 	}
@@ -367,7 +367,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 
 	// Import into a new cache directory (immutable so we test read-after-import).
 	dstDir := filepath.Join(t.TempDir(), ".magus-dst")
-	dst, err := Open(dstDir, WithMutable(false))
+	dst, err := Open(t.Context(), dstDir, WithMutable(false))
 	require.NoError(t, err, "Open dst")
 	require.NoError(t, dst.Import(context.Background(), &rawBuf), "Import")
 
@@ -461,7 +461,7 @@ func TestOnResultMultiple(t *testing.T) {
 // that would escape the cache directory via path traversal.
 func TestExportImportUnsafePath(t *testing.T) {
 	dir := t.TempDir()
-	c, err := Open(filepath.Join(dir, ".magus"), WithMutable(false))
+	c, err := Open(t.Context(), filepath.Join(dir, ".magus"), WithMutable(false))
 	require.NoError(t, err)
 
 	// Craft a malicious tar with a path traversal entry.

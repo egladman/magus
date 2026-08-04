@@ -1,5 +1,7 @@
 import "magus";
-// Modules the targets use: fs (writes MAGUS.md, node_modules guard), os (esbuild,
+// The shared advisory gate; see tools/audit.buzz for why an exit code is the wrong question.
+import "../tools/audit" as audit;
+// Modules the targets use: fs (writes MAGUS.md), os (esbuild,
 // TinyGo, npm), vcs (drift gate), http (serve). render.buzz owns the rendering
 // machinery's own imports (markdown, io, std, serialize, encoding).
 import "fs";
@@ -38,6 +40,10 @@ import "magus/spell/typescript";
 // repo-root Go tools through it), NOT added to the project spells list below: docs is
 // not a Go project, so it must not inherit go's **/*.go required-globs or language tag.
 import "magus/spell/go";
+// Imported for its typos op only, NOT added to the project spells list below: binding
+// markdown here would also claim this tree's **/*.md for markdownlint, which the root
+// project already lints. The prose check is the part docs was missing.
+import "magus/spell/markdown";
 
 magus\project({
     "spells": [typescript],
@@ -99,28 +105,21 @@ magus\project({
     // Outputs are owned by the stage that writes them. A project-wide output would make
     // every target snapshot the entire site tree, defeating the cache boundary below.
     "targets": {
-        // ci only composes generate/lint/build/test and writes nothing of its own, so the
-        // cache wrapper had nothing to snapshot and failed the whole project with
-        // "no files matched declared outputs". That is the cost of the per-target output
-        // ownership above: every write belongs to the stage that makes it, and a pure
-        // orchestration target legitimately owns none. Its stages carry their own cache
-        // entries, so nothing is lost by skipping this one. Same fix, same reason, as
-        // evals and docs/guides/integrations/agents.
-        "ci": {"skip_cache": true},
+        "security": {"skip_cache": "reads the npm advisory database, which changes independently of this tree"},
         // generate is the cheap orchestration and drift gate. Its actual work lives in
         // cacheable *-generate stages below, so unchanged docs do not rebuild the site.
-        "generate": {"skip_cache": true, "exclusive": true},
+        "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make", "exclusive": true},
         // render is the FAST re-render path (site_render only, no MAGUS.md/changelog/
         // JS-bundle rebuild, no drift gate) the workspace-root `serve` dev loop calls on
         // a docs change. skip_cache so every invocation actually re-renders gen/.
-        "render": {"skip_cache": true},
+        "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
 		// site-generate incorporates VCS tags and history. Those are deliberately
 		// outside file hashing, so replay is unsafe until the cache has a VCS input
 		// primitive. It still has a narrow target footprint and no output snapshot.
-		"site-generate": {"skip_cache": true},
+		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
         // build-playground shells out to TinyGo (not a CI tool) for a non-deterministic
         // wasm binary; skip_cache so a hit never replays a stale one. Run by hand.
-        "build-playground": {"skip_cache": true},
+        "build-playground": {"skip_cache": "TinyGo emits a non-deterministic wasm binary; a hit would replay a stale one"},
         // build-mermaid / build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
@@ -137,7 +136,20 @@ final DOCS = "docs";        // source docs subtree under ROOT
 final BLOG = "blog";        // source blog subtree under ROOT
 final OUT  = "gen";         // generated site output, under this project
 
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
+export fun preflight(ctx: magus\Context, args: [str]) > void { install(); }
+
+// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// Always let pnpm validate the install. A canceled or interrupted install leaves a
+// node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
+// guard this replaced read that tree as ready and handed the missing packages to
+// esbuild instead - surfacing as `Could not resolve "@codemirror/view"` from
+// build-playground-editor, which reads like a source bug rather than a half-installed
+// tree. On a warm tree --frozen-lockfile is about a second and changes nothing.
+// Reached once per invocation through preflight, so the fan-out of build-* targets
+// below does not race several installs in the same directory.
+fun install() > void {
+    os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
+}
 
 // md-generate refreshes MAGUS.md (the target catalog + dependency graph) from this
 // magusfile, so it stays in lockstep with the targets. generate calls it; run
@@ -264,8 +276,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 export fun format(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
 // lint runs the doc formatter (prettier, via format) plus the client-side TypeScript
 // gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null
-// assertions - see biome.json). Both TS tools need node_modules, so install first like
-// the build-* targets; os.exec raises on a non-zero exit, so either gate fails lint.
+// assertions - see biome.json). Both TS tools need node_modules, which it reaches through
+// format -> generate -> preflight; os.exec raises on a non-zero exit, so either gate fails lint.
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
@@ -274,7 +286,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     // Same reasoning, one directory down: the guide embeds these templates, so their
     // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
-    if (!fs\isDir("node_modules")) { os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {}); }
+    // The docs corpus is the largest prose surface in the workspace and had no spell
+    // check at all - the op was defined and never invoked from any target.
+    markdown.typos(ctx);
     os\exec("pnpm", ["run", "typecheck"], ".", {});
     os\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
@@ -289,6 +303,14 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void {
 
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format, buzz_test);
+}
+
+// security audits what actually ships against the npm advisory database. See
+// console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
+// .npmrc cooling period is the stronger half of this.
+export fun security(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    audit.audit();
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -332,9 +354,6 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void {
     // Declared so the snapshot records THIS artifact. Without it the target inherits the
     // project baseline (the typescript spell's `dist/**`, which this project never writes).
     ctx.writesFiles("gen/assets/mermaid.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-mermaid"], ".", {});
     magus\info("rebuilt gen/assets/mermaid.js");
 }
@@ -347,9 +366,6 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-hljs"], ".", {});
     magus\info("rebuilt gen/assets/hljs.js");
 }
@@ -363,9 +379,6 @@ export fun build_playground_editor(ctx: magus\Context, args: [str]) > void {
     ctx.needs(preflight);
     // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
-    if (!fs\isDir("node_modules")) {
-        os\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    }
     os\exec("pnpm", ["run", "build-editor"], ".", {});
 }
 

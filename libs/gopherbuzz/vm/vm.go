@@ -1966,6 +1966,40 @@ func errRangeOperands(lo, hi Value) error {
 //go:noinline
 func errUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", v.String()) }
 
+// caughtValue renders a host error as the value a `catch` binds.
+//
+// An ordinary error becomes its message, which is what upstream Buzz does and what this
+// package's conformance fixtures pin - a host failure surfaces as a str. Changing that for
+// every error would make this VM disagree with the language it implements, for the
+// convenience of one embedder.
+//
+// An error implementing StructuredError becomes a MAP instead. That is the embedder's
+// opt-in: it decides which of its errors carry identity worth branching on, and gets a
+// value a caller can index rather than a sentence to substring-match. An embedder wanting
+// EVERY error indexable makes every error implement the interface - that uniformity is its
+// policy to set, not this VM's.
+//
+// "message" is filled from Error() when the embedder omits it, so a caught map is always
+// printable.
+func caughtValue(err error) Value {
+	var se StructuredError
+	if !errors.As(err, &se) {
+		return StrValue(err.Error())
+	}
+	fields := se.BuzzError()
+	if len(fields) == 0 {
+		return StrValue(err.Error())
+	}
+	m := NewMap()
+	for k, v := range fields {
+		m.MapSet(k, StrValue(v))
+	}
+	if _, ok := m.MapGet("message"); !ok {
+		m.MapSet("message", StrValue(err.Error()))
+	}
+	return m
+}
+
 //go:noinline
 func errUnknownOpcode(op OpCode) error { return fmt.Errorf("buzz: unknown opcode %d", op) }
 
@@ -2220,7 +2254,7 @@ func (vm *VM) raiseHostError(err error) bool {
 	vm.frames = vm.frames[:entry.frameIdx+1]
 	vm.stack = vm.stack[:entry.stackLen]
 	vm.frames[len(vm.frames)-1].ip = entry.catchIP
-	vm.push(StrValue(err.Error()))
+	vm.push(caughtValue(err))
 	return true
 }
 

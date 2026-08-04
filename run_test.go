@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -412,4 +413,45 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 
 	assert.Equal(t, []string{filepath.Join(m.Root(), "site")}, dirs,
 		"the watched dir is the OWNER's tree, not the declaring project's")
+}
+
+// TestRedactError masks a secret in a run error's message while keeping the chain
+// intact. The CLI's last line on any failure is `slog.Error(err.Error())` with no
+// context, so the log handler's redaction cannot reach it - a magusfile that throws an
+// interpolated credential would print it verbatim as the final thing a user sees. This
+// is the one seam where a run error stops being magus's and becomes the caller's text.
+func TestRedactError(t *testing.T) {
+	m := &Magus{resolver: secret.New()}
+	ctx := secret.ContextWithResolver(t.Context(), m.resolver)
+	t.Setenv("MAGUS_TEST_RUNERR_TOKEN", "ghp_thrown_from_a_magusfile")
+	_, err := m.resolver.Read(ctx, "MAGUS_TEST_RUNERR_TOKEN")
+	require.NoError(t, err)
+
+	t.Run("masks the message", func(t *testing.T) {
+		got := m.redactError(errors.New("auth failed: ghp_thrown_from_a_magusfile"))
+		assert.NotContains(t, got.Error(), "ghp_thrown_from_a_magusfile")
+		assert.Contains(t, got.Error(), "***")
+	})
+
+	t.Run("preserves the chain so errors.As still classifies it", func(t *testing.T) {
+		// exitCodeOf relies on errors.As to recognise ExitError; a redaction that broke
+		// unwrapping would silently turn every exit code into 1.
+		wrapped := fmt.Errorf("target failed with ghp_thrown_from_a_magusfile: %w",
+			types.ExitError{Code: 42})
+		got := m.redactError(wrapped)
+		assert.NotContains(t, got.Error(), "ghp_thrown_from_a_magusfile")
+
+		var exitErr types.ExitError
+		require.True(t, errors.As(got, &exitErr), "the chain must survive redaction")
+		assert.Equal(t, 42, exitErr.Code)
+	})
+
+	t.Run("returns the original error untouched when nothing matched", func(t *testing.T) {
+		orig := errors.New("ordinary failure")
+		assert.Same(t, orig, m.redactError(orig))
+	})
+
+	t.Run("nil in, nil out", func(t *testing.T) {
+		assert.NoError(t, m.redactError(nil))
+	})
 }

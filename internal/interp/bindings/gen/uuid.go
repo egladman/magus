@@ -19,14 +19,14 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("v4", vm.DirectValue("uuid.v4", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.UUIDv4(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("v7", vm.DirectValue("uuid.v7", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.UUIDv7(ctx)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -34,7 +34,7 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 		n := Int(bzArgs, 0, 0)
 		ret0, err := std.UUIDRandomHex(ctx, n)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -42,7 +42,7 @@ func RegisterUuid(ctx context.Context, sess *buzz.Session) vm.Value {
 		n := Int(bzArgs, 0, 0)
 		ret0, err := std.UUIDRandomToken(ctx, n)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

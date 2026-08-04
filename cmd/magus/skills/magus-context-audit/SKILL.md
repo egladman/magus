@@ -84,7 +84,7 @@ session", not "how wrong is the sentence".{{end}}
   happened, not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
   on a grep and is one rule with a carve-out.
-- **A labelled migration note** describing old behavior on purpose.
+- **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 

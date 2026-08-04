@@ -446,7 +446,7 @@ func compressTarGz(ctx context.Context, src, dest string, threads, level int, ma
 		}
 		// pgzip fans out internally; SetConcurrency sets block size and goroutine
 		// count. 256 KiB blocks balance memory vs throughput. threads=1 still uses
-		// pgzip (it serialises gracefully) for code uniformity.
+		// pgzip (it serializes gracefully) for code uniformity.
 		_ = gw.SetConcurrency(256<<10, threads)
 		return gw, nil
 	})

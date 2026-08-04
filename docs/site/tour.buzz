@@ -162,6 +162,9 @@ export fun tourSteps() > [TourStep] {
     steps.append(TourStep{ file = "17-output-refs.buzz", title = "Output refs: what they are, and are not",
         desc = "A failure mints a handle to that run's exact bytes - not a cache key, not deterministic, and not portable off your machine.",
         docLabel = "Output references", docSlug = "concepts/output-refs" });
+    steps.append(TourStep{ file = "18-typed-boundaries.buzz", title = "Typed boundaries: keep the data inside",
+        desc = "A target returns void, so structured data belongs in the magusfile - declare the table once, export a verb per action, and let CI supply only the secrets.",
+        docLabel = "Tips and tricks", docSlug = "guides/tips" });
     return steps;
 }
 

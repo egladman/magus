@@ -45,14 +45,14 @@ func MarkAppliedExternally(fp string) {
 }
 
 // FromConfig assembles a sandbox Policy for root using the sandbox fields of cfg.
-func FromConfig(root string, cfg config.Config) *sandbox.Policy {
+func FromConfig(ctx context.Context, root string, cfg config.Config) *sandbox.Policy {
 	userExtras := make([]filesystem.Rule, 0, len(cfg.Sandbox.Allow))
 	for _, pp := range cfg.Sandbox.Allow {
 		read := true
 		write := pp.Mode == "rw"
 		rule, err := filesystem.ExpandUserRule(pp.Path, read, write)
 		if err != nil {
-			slog.Warn(types.FormatDiagnostic(types.AllowlistUnresolved,
+			slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
 				"sandbox.allow entry failed to resolve; skipped"),
 				"path", pp.Path, "err", err)
 			continue
@@ -63,7 +63,7 @@ func FromConfig(root string, cfg config.Config) *sandbox.Policy {
 	for _, name := range cfg.Sandbox.Env.Passthrough {
 		if strings.Contains(name, "*") {
 			if bad := env.ValidateGlobs([]string{name}); bad != "" {
-				slog.Warn(types.FormatDiagnostic(types.AllowlistUnresolved,
+				slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
 					"sandbox.env.passthrough pattern must end in '*'; ignoring"),
 					"pattern", name)
 				continue
@@ -104,7 +104,7 @@ func Apply(ctx context.Context, policy *sandbox.Policy, root string) (context.Co
 			RecordApply(ctx, secs, "applied", "workspace", policy)
 		case errors.Is(applyErr, sandbox.ErrUnsupported):
 			warnedUnsupported.Do(func() {
-				slog.Warn(types.FormatDiagnostic(types.SandboxUnsupported,
+				slog.WarnContext(ctx, types.FormatDiagnostic(types.SandboxUnsupported,
 					"kernel landlock unavailable; sandbox running with interpreter-level checks only"),
 					"reason", applyErr.Error())
 			})

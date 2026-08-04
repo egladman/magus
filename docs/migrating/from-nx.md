@@ -28,6 +28,9 @@ plainly, and vice versa.
 | `implicitDependencies`                        | `depends_on` in `magus\project`                                                                                                                                                     |
 | `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](../concepts/workspace.md#magusproject-layering-policy)                                                                                |
 | `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
+| `targetDefaults[t].cache: true`               | nothing - caching is already on; see [Caching is on by default](#caching-is-on-by-default-there-is-nothing-to-opt-into)                                                              |
+| `targetDefaults[t].cache: false`              | the `skip_cache` target policy, but only when replay would be _wrong_ (see [cache.md](../concepts/cache.md#opting-out-and-busting))                                                  |
+| `--skip-nx-cache`                             | `--no-cache` (one invocation; still snapshots afterward)                                                                                                                            |
 | `nx affected`                                 | `magus affected`                                                                                                                                                                    |
 | `nx graph`                                    | `magus graph` / `magus affected --graph` / `magus graph open`                                                                                                                       |
 | Nx Cloud remote cache (Nx Replay)             | [magus remote cache](../concepts/cache/remote.md) (self-hosted backends, Ed25519-signed artifacts)                                                                                              |
@@ -50,6 +53,31 @@ understanding of your setup. magus caches exactly what you declare: a spell's
 an input is the one way to get a stale cache hit (see
 [dependencies.md](../concepts/dependencies.md#caching-interplay)). Nothing is inferred
 from source-code analysis.
+
+### Caching is on by default; there is nothing to opt into
+
+In Nx, caching is a per-target opt-in: a target caches because something set
+`"cache": true` for it in `targetDefaults`, and forgetting that is why a task
+you expected to be instant runs in full. magus inverts this. Every target
+caches, keyed by the inputs it declares, with no policy to write. Arriving from
+Nx, the instinct is to hunt for where caching gets switched on. There is no such
+switch, and its absence is the feature: `magus affected ci` is fast because you
+declared inputs correctly, not because you remembered a flag.
+
+The mirror-image trap matters more. `cache: false` in Nx is an ordinary
+performance or correctness dial people reach for freely, and its nearest-looking
+neighbor here is the `skip_cache` target policy. They are not equivalents.
+`skip_cache` is a claim that _replaying this target would produce a wrong
+result_ - it signs a fresh artifact, records a screen capture, mutates
+`go.mod`, or never returns. Reaching for it because a target "should feel fresh"
+disables replay permanently, for every user, on every machine.
+
+If you only distrust the cache for one run, that is `--no-cache`, which still
+refreshes the entry afterward. And if a target seems to need `skip_cache`
+because it produces no files, it does not: a pure orchestration target caches
+correctly with no policy at all. See
+[Opting out and busting](../concepts/cache.md#opting-out-and-busting) for the
+full set of controls and their scopes.
 
 **A canonical target vocabulary, not free-form names.** Nx targets are
 whatever string a plugin or `project.json` names them. magus has seven

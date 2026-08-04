@@ -21,7 +21,7 @@ func TestNewDefaultsLogger(t *testing.T) {
 
 // TestNewKeepsLogger checks a supplied logger rides through unchanged.
 func TestNewKeepsLogger(t *testing.T) {
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.DiscardHandler)
 	b := New(func(http.ResponseWriter, *http.Request) {}, log)
 	assert.Same(t, log, b.Log)
 }

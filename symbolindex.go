@@ -176,7 +176,7 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 	defer close(stop)
 	go si.yieldWatch(ctx, cancel, stop, proj)
 
-	si.log.Debug("magus: background symbol index starting", slog.String("project", proj))
+	si.log.DebugContext(parent, "magus: background symbol index starting", slog.String("project", proj))
 	err := si.runIndex(ctx, proj)
 
 	si.mu.Lock()
@@ -190,7 +190,7 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 		// alone (minInterval measures from the last real run) and re-mark dirty to retry
 		// the next idle window. Not a failure, no backoff.
 		st.dirty = true
-		si.log.Debug("magus: background symbol index yielded to user work", slog.String("project", proj))
+		si.log.DebugContext(parent, "magus: background symbol index yielded to user work", slog.String("project", proj))
 		return
 	}
 	// A run that actually executed (completed or failed) stamps lastRun to throttle re-runs.
@@ -201,7 +201,7 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 		st.backoffTill = si.now().Add(backoffDuration(st.failures))
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
-		si.log.Warn("magus: background symbol index failed, backing off",
+		si.log.WarnContext(parent, "magus: background symbol index failed, backing off",
 			slog.String("project", proj), slog.Int("failures", st.failures), slog.String("error", err.Error()))
 		return
 	}
@@ -222,7 +222,7 @@ func (si *symbolIndexer) yieldWatch(ctx context.Context, cancel context.CancelFu
 			return
 		case <-t.C:
 			if si.contended() {
-				si.log.Debug("magus: yielding background symbol index to user work", slog.String("project", proj))
+				si.log.DebugContext(ctx, "magus: yielding background symbol index to user work", slog.String("project", proj))
 				cancel()
 				return
 			}
@@ -358,7 +358,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 		defer watcher.Close()
 		si.loop(wctx, watcher.Events())
 	}()
-	slog.Default().Debug("magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
+	slog.Default().DebugContext(ctx, "magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)
 		cancel()

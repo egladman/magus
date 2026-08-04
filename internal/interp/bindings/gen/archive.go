@@ -24,7 +24,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveUncompress(ctx, src, dest, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))
@@ -34,7 +34,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		opts := AnyMap(bzArgs, 2)
 		ret0, err := std.ArchiveCompress(ctx, src, dest, opts)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return AnyMapVal(ret0), nil
 	}))

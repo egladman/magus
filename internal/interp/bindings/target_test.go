@@ -2,6 +2,8 @@ package bindings
 
 import (
 	"context"
+	"log/slog"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -10,12 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 )
 
 // noopTargets builds a targets map whose callables are never expected to run, so a
 // test that only exercises name-matching/resolution can supply a target set without
-// caring about dispatch. A nil callable is a valid registered target: dispatchBuzzDeps
+// caring about dispatch. A nil callable is a valid registered target: runBuzzDependencies
 // treats it as a no-op (see the `fn == nil` branch), which mirrors targets that exist
 // in the graph but have no runnable body.
 func noopTargets(names ...string) map[string]vm.Callable {
@@ -321,13 +325,13 @@ func TestBuildCacheNS(t *testing.T) {
 	})
 }
 
-func TestDispatchBuzzDeps(t *testing.T) {
+func TestRunBuzzDependencies(t *testing.T) {
 	t.Run("empty names is a no-op", func(t *testing.T) {
-		require.NoError(t, dispatchBuzzDeps(context.Background(), nil, nil))
+		require.NoError(t, runBuzzDependencies(context.Background(), nil, nil))
 	})
 
 	t.Run("inline path runs each named target once, deduped", func(t *testing.T) {
-		// With no Source/pool in ctx, dispatchBuzzDeps takes the inline sequential
+		// With no Source/pool in ctx, runBuzzDependencies takes the inline sequential
 		// branch and calls each target's callable directly. A name listed twice must
 		// run once (dedupStrings).
 		var buildRuns, testRuns atomic.Int32
@@ -341,18 +345,18 @@ func TestDispatchBuzzDeps(t *testing.T) {
 				return vm.Null, nil
 			},
 		}
-		err := dispatchBuzzDeps(context.Background(), targets, []string{"go-build", "go-test", "go-build"})
+		err := runBuzzDependencies(context.Background(), targets, []string{"go-build", "go-test", "go-build"})
 		require.NoError(t, err)
 		assert.Equal(t, int32(1), buildRuns.Load())
 		assert.Equal(t, int32(1), testRuns.Load())
 	})
 
 	t.Run("nil callable is a registered no-op target", func(t *testing.T) {
-		require.NoError(t, dispatchBuzzDeps(context.Background(), noopTargets("go-build"), []string{"go-build"}))
+		require.NoError(t, runBuzzDependencies(context.Background(), noopTargets("go-build"), []string{"go-build"}))
 	})
 
 	t.Run("unknown target is an error", func(t *testing.T) {
-		err := dispatchBuzzDeps(context.Background(), noopTargets("go-build"), []string{"missing"})
+		err := runBuzzDependencies(context.Background(), noopTargets("go-build"), []string{"missing"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `unknown target "missing"`)
 	})
@@ -363,7 +367,7 @@ func TestDispatchBuzzDeps(t *testing.T) {
 				return vm.Null, stubErr{}
 			},
 		}
-		err := dispatchBuzzDeps(context.Background(), targets, []string{"go-build"})
+		err := runBuzzDependencies(context.Background(), targets, []string{"go-build"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "go-build: ")
 	})
@@ -377,8 +381,135 @@ func TestDispatchBuzzExternalNoCoordinator(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// stubErr is a sentinel error used to prove dispatchBuzzDeps wraps a target failure
+// stubErr is a sentinel error used to prove runBuzzDependencies wraps a target failure
 // with the target name.
 type stubErr struct{}
 
 func (stubErr) Error() string { return "boom" }
+
+// callSecretNS invokes one function on the magus\secret namespace through the same
+// Session CallValue path host code uses, returning the error.
+//
+// It discards the value deliberately: a DirectValue's non-Null result cannot be read back
+// this way (see callVoidDirect). For read() that costs nothing, because the assertion
+// worth making is a SIDE EFFECT - reading registers the value for redaction - which
+// Resolver.Redact observes directly.
+func callSecretNS(t *testing.T, ns vm.Value, name string, args ...vm.Value) error {
+	t.Helper()
+	return callVoidDirect(t, requireDirect(t, ns, name), args...)
+}
+
+func TestSecretNSProviderRecordsSpellHandle(t *testing.T) {
+	r := secret.New()
+	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+
+	handle := vm.NewMap()
+	handle.MapSet("name", vm.StrValue("onepassword"))
+	require.NoError(t, callSecretNS(t, ns, "provider", handle))
+	assert.Equal(t, "onepassword", r.ProviderName())
+}
+
+func TestSecretNSProviderRejectsNonHandles(t *testing.T) {
+	r := secret.New()
+	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+
+	err := callSecretNS(t, ns, "provider")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected an imported spell handle")
+
+	// A map with no name is a map, not a spell handle: catching it here beats a lookup
+	// failure later with nothing to point at.
+	err = callSecretNS(t, ns, "provider", vm.NewMap())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a spell handle")
+	assert.Empty(t, r.ProviderName(), "a rejected handle must not be recorded")
+}
+
+func TestSecretNSReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
+	r := secret.New()
+	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
+	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+
+	require.NoError(t, callSecretNS(t, ns, "read", vm.StrValue("MAGUS_TEST_NS_TOKEN")))
+
+	// Reading through the namespace is what registers the value, so redaction is live
+	// from this point on. That the read happened at all is what this masking proves.
+	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=ns-token-value"))))
+}
+
+func TestSecretNSReadRejectsEmptyReference(t *testing.T) {
+	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+
+	require.ErrorContains(t, callSecretNS(t, ns, "read"), "non-empty reference string")
+	require.ErrorContains(t, callSecretNS(t, ns, "read", vm.StrValue("")), "non-empty reference string")
+}
+
+func TestSecretNSReadSurfacesAnUnsetVariableByName(t *testing.T) {
+	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+
+	err := callSecretNS(t, ns, "read", vm.StrValue("MAGUS_TEST_NS_ABSENT"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "MAGUS_TEST_NS_ABSENT",
+		"the error must name the variable, so the fix is obvious without reading the magusfile")
+}
+
+// eventRecorder captures the journal events emitted during a test.
+type eventRecorder struct {
+	slog.Handler
+	mu     sync.Mutex
+	events []journal.Event
+}
+
+func (h *eventRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *eventRecorder) Handle(_ context.Context, r slog.Record) error {
+	if e, ok := journal.EventFromRecord(r); ok {
+		h.mu.Lock()
+		h.events = append(h.events, e)
+		h.mu.Unlock()
+	}
+	return nil
+}
+
+func (h *eventRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *eventRecorder) WithGroup(string) slog.Handler      { return h }
+
+// TestSecretNSReadIsAudited pins that reading a credential lands in the invocation
+// journal - the durable activity trail. A secret read is the moment a build reaches for
+// something privileged, which is exactly the question an audit answers.
+//
+// The event carries the REFERENCE and the PROVIDER, never the value. journal.Emit
+// redacts Text as a backstop, so this asserts the value is absent on both counts.
+func TestSecretNSReadIsAudited(t *testing.T) {
+	rec := &eventRecorder{}
+	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
+
+	ctx := secret.ContextWithResolver(context.Background(), secret.New())
+	ctx = journal.WithLogger(ctx, slog.New(rec))
+	ctx = journal.WithStep(ctx, "demo", "publish")
+
+	ns := buildSecretNS(ctx, nil)
+	// Called with the run ctx rather than through callSecretNS, which uses
+	// context.Background(): the audit event needs the step and the journal logger, and
+	// in production both ride the ctx the VM hands a host call (the same ctx run.Exec
+	// reads its step from).
+	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
+	defer sess.Close()
+	_, err := sess.CallValue(ctx, requireDirect(t, ns, "read"), []vm.Value{vm.StrValue("MAGUS_TEST_AUDIT_TOKEN")})
+	require.NoError(t, err)
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var found *journal.Event
+	for i := range rec.events {
+		if rec.events[i].Kind == journal.KindSecret {
+			found = &rec.events[i]
+		}
+	}
+	require.NotNil(t, found, "a secret read must be recorded in the journal")
+	assert.Equal(t, "demo", found.Project)
+	assert.Equal(t, "publish", found.Target)
+	assert.Contains(t, found.Text, "MAGUS_TEST_AUDIT_TOKEN", "the reference is the auditable fact")
+	assert.Contains(t, found.Text, "built-in environment provider", "so is which backend served it")
+	assert.NotContains(t, found.Text, "ghp_audit_me_never", "the VALUE must never be recorded")
+}

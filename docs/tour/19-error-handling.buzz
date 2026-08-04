@@ -1,0 +1,88 @@
+// Failing, and deciding what a failure means. A host call that cannot answer RAISES; it
+// never hands back a blank as if the blank were the answer. `vcs\shortHash()` outside a
+// checkout does not return "" - "" is a value a branch name can legitimately hold, so a
+// caller testing for it could never tell "no answer" from "the answer is empty", and the
+// check was optional besides: forget it once and an empty commit lands in a version string
+// with nothing to surface it.
+//
+// So a magusfile answers the question instead of sniffing for it, with try/catch.
+//
+// What `catch` binds is a MAP, always, with at least "message". When the failure carries a
+// diagnostic code it also carries "code" and "url" - the same code the docs, the knowledge
+// graph and `magus explain` key off - so a target can branch on identity rather than
+// substring-matching a sentence that exists for humans and is free to be reworded.
+//
+// Run `run stamp`, then `run tools`, then `run gate`.
+
+import "magus";
+import "os";
+import "vcs";
+
+magus\project({
+    "name": "tour-errors",
+    "targets": {
+        // Reads the advisory-free equivalent of a moving input: the tree's own VCS state.
+        "gate": {"skip_cache": "reports live VCS state; a replay would describe a tree that has since moved"},
+    },
+});
+
+// A failure that is EXPECTED in a known situation. Building outside a checkout is real -
+// a release tarball, a container build context - so it is caught and named once, here,
+// rather than every caller remembering a check the type system never asked for.
+export fun stamp(ctx: magus\Context, args: [str]) > void {
+    var commit = "unknown";
+    try {
+        commit = vcs\shortHash();
+    } catch (e) {
+        magus\info("no VCS here (" + e["message"] + "); stamping as unknown");
+    }
+    magus\info("build stamp: " + commit);
+}
+
+// Branching on the CODE, not the wording. MGS3003 is "tool not on PATH"; anything else is
+// a failure this target has no answer for, so it is re-thrown rather than swallowed.
+// Catching everything and continuing is how a gate stops being a gate.
+export fun tools(ctx: magus\Context, args: [str]) > void {
+    foreach (tool in ["sh", "definitely-absent-zzz"]) {
+        try {
+            magus\info(tool + " -> " + os\which(tool));
+        } catch (e) {
+            if (e["code"] == "MGS3003") {
+                magus\info(tool + " is not installed; skipping the steps that need it");
+            } else {
+                throw e;
+            }
+        }
+    }
+}
+
+// The judgment a real language buys you. A scanner reports whether a problem matches; a
+// gate has to decide whether you can do anything about it today. Fail on what is
+// actionable, report the rest, and carry on. Fail on what nobody can fix and someone will
+// mute the gate within a week.
+export fun gate(ctx: magus\Context, args: [str]) > void {
+    var blocking = mut [<str>];
+    var deferred = mut [<str>];
+
+    foreach (tool in ["sh", "definitely-absent-zzz"]) {
+        try {
+            os\which(tool);
+        } catch (e) {
+            // A tool the project pins is actionable: install it. One it prefers is
+            // not, so it is reported and the build continues.
+            if (tool == "sh") {
+                blocking.append(tool + ": " + e["message"]);
+            } else {
+                deferred.append(tool + ": optional, not installed");
+            }
+        }
+    }
+
+    foreach (d in deferred) {
+        magus\info("[deferred] " + d);
+    }
+    if (blocking.len() > 0) {
+        throw "gate: " + blocking.join(", ");
+    }
+    magus\info("gate: nothing actionable outstanding");
+}

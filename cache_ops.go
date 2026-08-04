@@ -12,20 +12,20 @@ import (
 )
 
 // LogScope emits a scope header through the cache logger. No-op on Inspect workspaces.
-func (m *Magus) LogScope(label, source string) {
+func (m *Magus) LogScope(ctx context.Context, label, source string) {
 	if m.cache == nil {
 		return
 	}
-	m.cache.LogScope(label, source)
+	m.cache.LogScope(ctx, label, source)
 }
 
 // LogCharms emits the active-charm header through the cache logger. No-op on Inspect
 // workspaces.
-func (m *Magus) LogCharms(charms string) {
+func (m *Magus) LogCharms(ctx context.Context, charms string) {
 	if m.cache == nil {
 		return
 	}
-	m.cache.LogCharms(charms)
+	m.cache.LogCharms(ctx, charms)
 }
 
 // PruneCache removes entries older than cutoff and GC-collects orphaned blobs.
@@ -84,6 +84,16 @@ func (m *Magus) CacheDiskBytes() int64 {
 	}
 	return m.cache.DiskBytes()
 }
+
+// SecretProvider returns the NAME of the secret-provider spell this workspace's magusfile
+// selected, or "" when none is declared and the built-in environment provider applies.
+//
+// The name only. There is deliberately no accessor for the references a workspace can
+// reach, let alone their values: a standing inventory of what a build can fetch is a map
+// of what to go after, and magus does not store secrets in the first place - it reads them
+// through a provider. Which provider is loaded is configuration a reader should be able to
+// see; what it can reach is not magus's to publish.
+func (m *Magus) SecretProvider() string { return m.resolver.ProviderName() }
 
 // MetricsSnapshot returns this workspace's current metrics as standard OTLP protobuf (an
 // ExportMetricsServiceRequest), or (nil, nil) when metrics collection was not enabled at Open

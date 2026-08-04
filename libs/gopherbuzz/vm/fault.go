@@ -26,3 +26,24 @@ func (k FaultKind) String() string {
 		return "unknown"
 	}
 }
+
+// StructuredError is an optional interface a host error may implement to reach a Buzz
+// `catch` as a MAP rather than a flat string.
+//
+// Without it, `catch (e)` binds err.Error() and a magusfile can only substring-match to
+// find out what went wrong - the same stringly-typed fragility that a typed error exists
+// to remove. With it, the embedder decides the shape, and a caller writes
+// `if (e.code == "MGS2001")`.
+//
+// Deliberately a map of primitives rather than a Value: this package must not require an
+// embedder to build VM values, and the embedder must not need to know how a Value is
+// represented. Keys map to Buzz map entries; a nil or empty map falls back to the string
+// form, so implementing this badly degrades rather than breaks.
+//
+// The "message" key is reserved: when absent, the raiser fills it from Error(), so every
+// caught value carries something printable no matter what the embedder supplied.
+type StructuredError interface {
+	error
+	// BuzzError returns the fields to expose on the caught value.
+	BuzzError() map[string]string
+}

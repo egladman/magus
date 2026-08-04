@@ -32,7 +32,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph of **2360 nodes** and **5308 edges** (schema v7). Query it instead of grepping:
+This workspace has a knowledge graph of **2468 nodes** and **5584 edges** (schema v7). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind:spell, project:pkg/foo, relation:uses, free text, -negation
@@ -44,30 +44,29 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Kind | Count | List them | Anchors (most connected) |
 |---|--:|---|---|
-| project | 10 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 99 | `magus query kind:target` | `content-generate`, `site-generate`, `skills-generate` |
-| spell | 13 | `magus query kind:spell` | `go`, `rust`, `typescript` |
+| project | 9 | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
+| target | 93 | `magus query kind:target` | `content-generate`, `skills-generate`, `site-generate` |
+| spell | 12 | `magus query kind:spell` | `go`, `markdown`, `rust` |
 | op | 56 | `magus query kind:op` | `go-build`, `go-fmt`, `go-mod-edit` |
-| tool | 14 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
-| charm | 5 | `magus query kind:charm` | `rw`, `cd`, `gha` |
+| tool | 15 | `magus query kind:tool` | `sh`, `go`, `pnpm` |
+| charm | 9 | `magus query kind:charm` | `rw`, `cd`, `snapshot` |
 | module | 23 | `magus query kind:module` | `fs`, `charm`, `magus` |
 | method | 162 | `magus query kind:method` | `archive.compress`, `archive.uncompress`, `charm.after` |
-| diagnostic | 47 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
-| doc | 265 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 142 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
-| file | 225 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
-| function | 1170 | `magus query kind:function` | `sel`, `sendObject`, `send` |
-| import | 123 | `magus query kind:import` | `std`, `magus`, `fs` |
+| diagnostic | 54 | `magus query kind:diagnostic` | `MGS2001`, `MGS1002`, `MGS4001` |
+| doc | 293 | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir | 171 | `magus query kind:dir` | `libs/gopherbuzz/examples/bubblegum`, `std/examples/fs`, `docs/reference/buzz` |
+| file | 232 | `magus query kind:file` | `magusfile.buzz`, `libs/gopherbuzz/examples/bubblegum/config.buzz`, `libs/gopherbuzz/examples/bubblegum/platform/macos/cocoa.buzz` |
+| function | 1209 | `magus query kind:function` | `sel`, `sendObject`, `send` |
+| import | 124 | `magus query kind:import` | `std`, `magus`, `fs` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `NOTE`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 34 | `magus query project:.` | `skills-generate`, `generate`, `lint` |
-| cmd/magus/starter | 7 | `magus query project:cmd/magus/starter` | `format`, `ci`, `build` |
-| console | 5 | `magus query project:console` | `build`, `ci`, `preflight` |
-| docs | 16 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
+| . | 34 | `magus query project:.` | `skills-generate`, `generate`, `image-build` |
+| console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
+| docs | 17 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 3 | `magus query project:docs/guides/integrations/agents` | `lint`, `ci`, `preflight` |
-| evals | 5 | `magus query project:evals` | `preflight`, `lint`, `ci` |
+| evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 9 | `magus query project:libs/diagnostics` | `format`, `mod-sync`, `generate` |
 | libs/gopherbuzz | 11 | `magus query project:libs/gopherbuzz` | `format`, `build`, `mod-sync` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
@@ -82,6 +81,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `lint` | lint runs the doc formatter (prettier, via format) plus the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
 | `build` |  |
 | `test` |  |
+| `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: TinyGo compiles ../cmd/buzz-playground into vendor/playground/buzz.wasm, and the matching wasm_exec.js glue is copied beside it. |
 | `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. |

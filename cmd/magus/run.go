@@ -196,12 +196,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		scopeLabel = fmt.Sprintf("%d projects", len(targets))
 	}
-	m.LogScope(scopeLabel, source)
+	m.LogScope(ctx, scopeLabel, source)
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work - and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
-	m.LogCharms(strings.Join(charms, ","))
+	m.LogCharms(ctx, strings.Join(charms, ","))
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
 		// workspace - a degenerate or wrong-workspace resolution, not "nothing to do".

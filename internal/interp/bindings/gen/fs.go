@@ -23,7 +23,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		pattern := Str(bzArgs, 0)
 		ret0, err := std.FsGlob(ctx, pattern)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
@@ -31,7 +31,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsDirname(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -39,7 +39,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsBasename(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -47,7 +47,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsExists(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -55,7 +55,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsReadFile(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -63,7 +63,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		content := Str(bzArgs, 1)
 		if err := std.FsWriteFile(ctx, path, content); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -71,7 +71,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		perm := Int(bzArgs, 1, 493)
 		if err := std.FsMkdirAll(ctx, path, perm); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -79,14 +79,14 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		parts := VariadicStr(bzArgs, 0)
 		ret0, err := std.FsJoin(ctx, parts...)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
 	m.MapSet("removeAll", vm.DirectValue("fs.removeAll", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := Str(bzArgs, 0)
 		if err := std.FsRemoveAll(ctx, path); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -94,7 +94,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsListDir(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
@@ -102,7 +102,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsExt(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -110,7 +110,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsIsDir(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -118,7 +118,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsIsFile(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return BoolVal(ret0), nil
 	}))
@@ -126,7 +126,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsStat(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return buzzValueFsFileInfo(ret0), nil
 	}))
@@ -134,7 +134,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		src := Str(bzArgs, 0)
 		dst := Str(bzArgs, 1)
 		if err := std.FsCopyFile(ctx, src, dst); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -142,7 +142,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		src := Str(bzArgs, 0)
 		dst := Str(bzArgs, 1)
 		if err := std.FsCopyDir(ctx, src, dst); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -150,7 +150,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		paths := StrSlice(bzArgs, 0)
 		callback := CallbackArg(sess, bzArgs, 1)
 		if err := std.FsWatch(ctx, paths, callback); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -158,7 +158,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		root := Str(bzArgs, 0)
 		callback := CallbackArg(sess, bzArgs, 1)
 		if err := std.FsWalk(ctx, root, callback); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -166,7 +166,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		content := Str(bzArgs, 1)
 		if err := std.FsAppendFile(ctx, path, content); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -174,7 +174,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		mode := Int(bzArgs, 1, 0)
 		if err := std.FsChmod(ctx, path, mode); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -182,7 +182,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		target := Str(bzArgs, 0)
 		link := Str(bzArgs, 1)
 		if err := std.FsSymlink(ctx, target, link); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))
@@ -190,7 +190,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsReadlink(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -198,7 +198,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		prefix := Str(bzArgs, 0)
 		ret0, err := std.FsTempDir(ctx, prefix)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -206,7 +206,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		ret0, err := std.FsReadLines(ctx, path)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrSliceVal(ret0), nil
 	}))
@@ -214,7 +214,7 @@ func RegisterFs(ctx context.Context, sess *buzz.Session) vm.Value {
 		path := Str(bzArgs, 0)
 		lines := StrSlice(bzArgs, 1)
 		if err := std.FsWriteLines(ctx, path, lines); err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return vm.Null, nil
 	}))

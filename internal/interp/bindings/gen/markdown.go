@@ -20,7 +20,7 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 		source := Str(bzArgs, 0)
 		ret0, err := std.MarkdownToHTML(ctx, source)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -28,7 +28,7 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 		source := Str(bzArgs, 0)
 		ret0, err := std.MarkdownFrontmatter(ctx, source)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))
@@ -36,7 +36,7 @@ func RegisterMarkdown(ctx context.Context, sess *buzz.Session) vm.Value {
 		source := Str(bzArgs, 0)
 		ret0, err := std.MarkdownStripFrontmatter(ctx, source)
 		if err != nil {
-			return vm.Null, err
+			return vm.Null, HostError(err)
 		}
 		return StrVal(ret0), nil
 	}))

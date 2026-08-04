@@ -124,7 +124,17 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	regFn := registerName(m.Name)
 	fmt.Fprintf(&body, "// %s builds the %q module map and returns it.\n", regFn, m.Name)
 	if m.Doc != "" {
-		fmt.Fprintf(&body, "// %s\n", m.Doc)
+		// Every line prefixed, not just the first: a module Doc may be several
+		// paragraphs (the magus module's names the provider namespaces it cannot
+		// declare), and emitting an embedded newline raw put prose outside the comment
+		// and failed gofmt with "expected declaration, found <first word of line 2>".
+		for _, line := range strings.Split(m.Doc, "\n") {
+			if line == "" {
+				fmt.Fprintln(&body, "//")
+				continue
+			}
+			fmt.Fprintf(&body, "// %s\n", line)
+		}
 	}
 	fmt.Fprintf(&body, "func %s(ctx context.Context, sess *buzz.Session) vm.Value {\n", regFn)
 	fmt.Fprintln(&body, "\t_ = ctx")
@@ -227,13 +237,13 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 	switch len(meth.Returns) {
 	case 0:
 		fmt.Fprintf(w, "\t\tif err := std.%s(%s); err != nil {\n", std.MethodFuncName(meth), callStr)
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		fmt.Fprintln(w, "\t\treturn vm.Null, nil")
 	case 1:
 		fmt.Fprintf(w, "\t\tret0, err := std.%s(%s)\n", std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		value, err := returnConv(meth.Returns[0], reflect.TypeOf(meth.Impl).Out(0), "ret0", objects)
 		if err != nil {
@@ -248,7 +258,7 @@ func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buz
 		lhsParts = append(lhsParts, "err")
 		fmt.Fprintf(w, "\t\t%s := std.%s(%s)\n", strings.Join(lhsParts, ", "), std.MethodFuncName(meth), callStr)
 		fmt.Fprintln(w, "\t\tif err != nil {")
-		fmt.Fprintln(w, "\t\t\treturn vm.Null, err")
+		fmt.Fprintln(w, "\t\t\treturn vm.Null, HostError(err)")
 		fmt.Fprintln(w, "\t\t}")
 		items := make([]string, len(meth.Returns))
 		for i, ret := range meth.Returns {

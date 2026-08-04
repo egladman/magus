@@ -635,8 +635,12 @@ export fun nap(ctx: magus\Context, _a: [str]) > void {
 	require.NoError(t, runTargetIn(t, dir, "nap"))
 }
 
-// TestOsWhich verifies os.which resolves a real command to a non-empty path and
-// returns "" for a missing one (asserted inside the magusfile via os.exit).
+// TestOsWhich verifies os.which resolves a real command to a non-empty path and RAISES
+// for a missing one (asserted inside the magusfile via os.exit).
+//
+// It used to return "" for a missing command so a caller could branch on equality. That
+// made the check optional - forget it and the empty string flows into an exec or a path
+// join - and it is not how the rest of these modules report an unavailable answer.
 func TestOsWhich(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -646,7 +650,9 @@ import "os";
 
 export fun checkwhich(ctx: magus\Context, _a: [str]) > void {
     if (os.which("sh") == "") { os.exit(2); }
-    if (os.which("definitely-no-such-cmd-zzz") != "") { os.exit(3); }
+    var raised = false;
+    try { os.which("definitely-no-such-cmd-zzz"); } catch (e) { raised = true; }
+    if (!raised) { os.exit(3); }
 }
 `), 0o644))
 	require.NoError(t, runTargetIn(t, dir, "checkwhich"))
@@ -1103,13 +1109,24 @@ import "magus";
 import "vcs";
 
 export fun check(ctx: magus\Context, args: [str]) > void {
-    // All may be empty or false outside a repo; just confirm they don't crash.
-    var h     = vcs.shortHash();
-    var b     = vcs.branch();
-    var d     = vcs.commitDate();
-    var dirty = vcs.isDirty();
-    var msg = h + b + d + "{dirty}";
-    if (msg.len() < 0) { throw "unreachable"; }
+    // This runs with the process cwd inside magus's own checkout (no t.Chdir), so a VCS
+    // IS resolved and every accessor returns a real value. That is the case worth pinning
+    // here; the no-VCS path, where these now RAISE rather than hand back "", is covered by
+    // TestVcsCommitRaisesOutsideRepo, which chdirs to a bare temp dir to get there.
+    final h = vcs.shortHash();
+    final b = vcs.branch();
+    if (h == "") { throw "shortHash returned empty inside a repo"; }
+    if (b == "") { throw "branch returned empty inside a repo"; }
+    vcs.commitDate();
+
+    // isDirty RAISES here, and that is the point of the change. A VCS resolves (the
+    // process cwd is inside magus's checkout) but the probe runs in this temp dir, so
+    // git status exits 128. That used to be swallowed into a plain false - a drift gate
+    // asking whether its output changed would have been told clean by a check that never
+    // ran. An unreadable tree has no answer, so it says so.
+    var raised = false;
+    try { vcs.isDirty(); } catch (e) { raised = true; }
+    if (!raised) { throw "isDirty must raise when the status probe fails, not report clean"; }
 }
 `)
 	_, runErr := interp.RunDir(context.Background(), dir, "check", nil)

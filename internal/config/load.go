@@ -133,7 +133,7 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 
 // warnIfConcurrencyHigh emits a single warning when the configured concurrency
 // is more than 2× the local CPU count. This is informational only; magus
-// honours the explicit value because the planning host's NumCPU may not
+// honors the explicit value because the planning host's NumCPU may not
 // match the executor's (e.g. a CI shard running on a different runner).
 func warnIfConcurrencyHigh(concurrency, numCPU int) {
 	if concurrency <= 0 || numCPU <= 0 {
@@ -252,7 +252,7 @@ func parseBoolEnv(v string, fallback bool) bool {
 // Validate is run on the result; errors from either step are returned as
 // structured errors (*ValidationError for validation failures, plain errors
 // for YAML syntax and unknown-field errors). When strict is false the
-// behaviour mirrors the internal loadFileInto: unknown keys are silently
+// behavior mirrors the internal loadFileInto: unknown keys are silently
 // ignored and Validate is not run.
 func LoadFile(path string, strict bool) (Config, error) {
 	data, err := os.ReadFile(path)

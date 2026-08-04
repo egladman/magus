@@ -20,7 +20,7 @@ project-local file → MAGUS_\* environment variables → CLI flags.
 
 The view sub-command prints the effective merged configuration. The set
 sub-command writes a key-value pair to the local (or global) config file.
-The init sub-command materialises the built-in defaults to a magus.yaml so
+The init sub-command materializes the built-in defaults to a magus.yaml so
 they can be edited by hand.
 
 Configuration is stored in magus.yaml (or .magus.yaml). The canonical
@@ -35,7 +35,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 : Write a key to the local (or global) config file
 
 **init**
-: Materialise built-in defaults to magus.yaml
+: Materialize built-in defaults to magus.yaml
 
 **cache**
 : Manage the build cache (prune --older-than)
@@ -60,7 +60,7 @@ magus config view -o json
 magus config set cache.immutable true
 ```
 
-*Initialise magus.yaml from defaults*
+*Initialize magus.yaml from defaults*
 
 ```sh
 magus config init

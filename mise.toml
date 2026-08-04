@@ -26,6 +26,30 @@ pnpm = "10.33.0"
 # how CI ended up building the linter with a different toolchain than it analyzed with, and
 # panicking. A pinned prebuilt binary has no toolchain to drift against.
 "aqua:golangci/golangci-lint" = "2.12.2"
+# Signs every pushed image digest, driven by the cosign spell from image_build. It was
+# never pinned here despite cd.yaml claiming it came from mise, and no GitHub runner
+# image ships it - the signing step was relying on a tool nothing installed.
+#
+# Held on the 2.x line deliberately. cosign 3 makes the Sigstore bundle the default
+# on-registry signature format, and while a v3 client reads v2 layouts, a v2 client
+# CANNOT verify a v3 signature. Taking v3 would silently break the `cosign verify`
+# command documented in docs/guides/download/container-image.md for every user who has
+# not upgraded, including against `latest`, which they did not re-pull to opt in.
+# Upstream still ships 2.x releases alongside 3.x. Moving to v3 is an announced,
+# documented change, not a pin bump.
+# v3, and that is also what makes aqua work. aqua verifies the download against
+# `cosign_checksums.txt.sigstore.json`; NO 2.x release publishes that asset (2.6.3 and
+# 2.6.4 both fail with "no asset found"), because the Sigstore bundle is exactly what v3
+# made the default. Holding v2 therefore meant no aqua install at all, which took every
+# `mise install` in ci.yaml down with it - not just the signing job.
+#
+# Moving to v3 IS a breaking change for anyone verifying an image with a v2 client: a v3
+# client reads v2 layouts, but a v2 client cannot verify a v3 signature, and the verify
+# command in docs/guides/download/container-image.md tells a reader to treat a failure as
+# "not an official build". There are no published users yet, so this is the moment to take
+# it rather than announce it later against a `latest` that moved under people. The docs and
+# the CHANGELOG say so.
+"aqua:sigstore/cosign" = "3.1.2"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
 tinygo = "0.41.1"
 "aqua:WebAssembly/binaryen" = "129"
