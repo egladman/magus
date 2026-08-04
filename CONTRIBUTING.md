@@ -60,7 +60,7 @@ gets you both binaries at the pinned versions.
 ## Adding to a public surface
 
 magus promises that a magusfile which works today keeps working, and there is no
-plan for a 2.0. [docs/concepts/compatibility.md](docs/concepts/compatibility.md)
+plan for a 2.0. [docs/concepts/compatibility.md](https://github.com/egladman/magus/blob/main/docs/concepts/compatibility.md)
 is the promise itself; this is how to work inside it.
 
 **Add, never substitute.** A new `magus\project` key goes beside the existing
@@ -97,7 +97,7 @@ this repo builds magus from source in CI. Add the feature first, cut the tag, th
 raise the floor to the tag.
 
 Downstream users, who run released binaries, get
-[MGS1021](docs/reference/codes/magusfile/MGS1021.md) naming both fixes instead of
+[MGS1021](https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1021.md) naming both fixes instead of
 an error from wherever the magusfile happened to break first.
 
 **Before 1.0, renaming is on the table; after, it is not.** magus is pre-1.0, so a
