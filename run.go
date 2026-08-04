@@ -217,15 +217,26 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 }
 
 // anyProjectDeclaresCI reports whether any project in scope declares a ci target.
-// ci lives in the magusfile (composed via magus.needs), never in a spell, so it
-// extracts each project's declared target nodes statically (the same AST extractor
-// TargetGraph uses, never a raw text scan, so `ci` in a comment or string can't
-// false-positive) and short-circuits on the first ci found. The returned error is
+// ci lives in the magusfile (composed via magus.needs), never in a spell - except
+// for a provided project, which has no magusfile at all, so its bound spell's ci
+// op is the only place ci can live. A magusfile project is checked by extracting
+// its declared target nodes statically (the same AST extractor TargetGraph uses,
+// never a raw text scan, so `ci` in a comment or string can't false-positive) and
+// short-circuiting on the first ci found; a spell op named ci must NOT satisfy the
+// anchor there, since the magusfile is the definition. The returned error is
 // non-nil if a source couldn't be located, so a (false, err) result means "couldn't
 // determine", not "definitely no ci" - the caller must not block on it.
 func anyProjectDeclaresCI(projects []*types.Project) (bool, error) {
 	var scanErr error
 	for _, p := range projects {
+		if _, ok := p.Origin.Provider(); ok {
+			for _, s := range p.ResolvedSpells {
+				if slices.Contains(s.Targets(), types.TargetCI) {
+					return true, nil
+				}
+			}
+			continue
+		}
 		srcs, err := interp.FindAll(p.Dir)
 		if err != nil {
 			scanErr = err

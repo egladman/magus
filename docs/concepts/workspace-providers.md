@@ -163,6 +163,16 @@ op in the project's own directory, and most tools infer the project from it
 infer it needs the project to reach the command another way - through the
 environment, or through a wrapper script the argv names.
 
+`magus affected ci` anchors on a target named `ci`. For a provided project, a
+bound spell satisfies that anchor the same way it satisfies `build` or `test`:
+by exporting a `ci` op. For a project with its own magusfile, the magusfile
+stays the only place a `ci` target can live - a spell's `ci` op only reaches
+projects that have none.
+
+A provided project also has no magusfile body to call `magus\secret.read`
+from; a `Command`'s [`secrets` field](secrets.md) is how it reaches a
+credential instead.
+
 ## Precedence
 
 1. **A magusfile wins.** A directory that declares itself keeps its own

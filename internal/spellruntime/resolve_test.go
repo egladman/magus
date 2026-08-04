@@ -84,6 +84,23 @@ export fun mgs_listTargets() > any {
 	assert.Contains(t, spec.Ops, "build", "Targets[\"build\"] missing")
 }
 
+// TestResolve_RecordTargetsSecrets verifies a record op's `secrets` map (env var
+// name -> provider reference) round-trips through a real Buzz session into
+// Op.Secrets — the by-value form a spell can declare without the typed Command
+// object (gen/types/command.buzz), proving the StrMap decode path works end to end,
+// not only against the Go-level test double in decode_test.go.
+func TestResolve_RecordTargetsSecrets(t *testing.T) {
+	src := `
+export fun mgs_getName() > str { return "secretpkg"; }
+export fun mgs_listTargets() > any {
+    return {"publish": {"bin": "npm", "args": ["publish"], "secrets": {"NPM_TOKEN": "NPM_TOKEN"}}};
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"NPM_TOKEN": "NPM_TOKEN"}, spec.Ops["publish"].Secrets)
+}
+
 // TestResolve_FunctionValueTargets verifies the op form: mgs_listTargets returning
 // {str: fun(Target) Command} handlers, referenced by value, each returning the
 // {bin, args, charms} Command it declares. Handlers are called once at resolution to

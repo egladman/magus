@@ -18,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
@@ -368,8 +369,57 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 		}
 		opts.env = env
 	}
+	if len(op.Secrets) > 0 {
+		env, err := resolveSecretEnv(ctx, req.Target, op.Secrets, opts.env)
+		if err != nil {
+			return nil, err
+		}
+		opts.env = env
+	}
 	_, err := runCommand(ctx, op, opts)
 	return nil, err
+}
+
+// resolveSecretEnv resolves op.Secrets (env var name -> provider reference) through
+// the run's secret resolver and merges the result into base - any magus-reserved env
+// already set for this op (today, only MAGUS_SYMBOL_INDEX on the scip op) - returning
+// the combined overlay for this one child process. secret.Resolver.Read is what
+// registers each value for redaction (internal/secret), so a secret reaching a child
+// through this path is masked out of captured output the same as one a magusfile body
+// read directly.
+//
+// Names are resolved in sorted order so resolution - and any provider logging along
+// the way - is deterministic regardless of map iteration order.
+//
+// A name already present in base is an error rather than a silently dropped or
+// overridden value: base is magus's own reserved env for this op, and a declared
+// secret landing on the same name is an authoring bug in a security-sensitive path,
+// not something to resolve quietly by picking a winner.
+func resolveSecretEnv(ctx context.Context, target string, refs, base map[string]string) (map[string]string, error) {
+	resolver := secret.ResolverFromContext(ctx)
+	if resolver == nil {
+		return nil, fmt.Errorf("spell: op %q declares secrets but no secret resolver is on this run", target)
+	}
+	names := make([]string, 0, len(refs))
+	for name := range refs {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	env := base
+	for _, name := range names {
+		if _, exists := env[name]; exists {
+			return nil, fmt.Errorf("spell: op %q secret env %q collides with a reserved env var", target, name)
+		}
+		v, err := resolver.Read(ctx, refs[name])
+		if err != nil {
+			return nil, fmt.Errorf("spell: op %q secret %q: %w", target, name, err)
+		}
+		if env == nil {
+			env = make(map[string]string, len(names))
+		}
+		env[name] = v
+	}
+	return env, nil
 }
 
 // symbolIndexEnv resolves the cache destination for a `scip` op run and returns it as

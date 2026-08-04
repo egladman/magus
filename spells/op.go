@@ -44,6 +44,21 @@ type Command struct {
 	// belongs on Command because it is declared by a Command-returning handler;
 	// Op carries the resolved copy that dispatch reads.
 	Capture bool `json:"capture,omitempty"`
+	// Secrets declares the environment this command needs, as env var name -> provider
+	// reference: {"NPM_TOKEN": "NPM_TOKEN"} means "set $NPM_TOKEN in this child from
+	// whatever the workspace's secret provider resolves that reference to". A command
+	// op's argv is static (see the type doc above), so it is the one op shape that can
+	// never read magus\secret.read from a magusfile body - and a "provided" project (a
+	// workspace provider, no magusfile at all) cannot reach a magusfile body either.
+	// This is the declarative escape hatch for both: the refs are resolved through the
+	// same secret.Resolver a magusfile uses, at spawn, and injected into ONLY this one
+	// child process's environment - never into Args, never logged, never returned by
+	// `magus describe`. Resolver.Read registers every value it hands back for
+	// redaction (internal/secret), so a secret that reaches a child via this field is
+	// masked out of captured output exactly as one read in a magusfile body is. Charms
+	// cannot patch this field; they patch Args only. Refs are static data (never a
+	// value), so the op stays hashable and describable without ever holding a secret.
+	Secrets map[string]string `json:"secrets,omitempty"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command

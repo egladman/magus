@@ -2,6 +2,7 @@ package magus
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,9 +11,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
+
+func init() {
+	// A spell whose ci op stands in for a provider-driven toolchain's own composed
+	// pipeline (e.g. `nx run project:ci`) - the RunCI anchor tests below need a
+	// registered spell with a ci op, and a provided project has no magusfile to
+	// declare one in.
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell("ci-capable", spells.WithTargets("ci")))
+}
 
 // These tests live in package magus, beside no provider.go, because what they cover
 // is the LOAD ORDER in magus.go: that providers run after magusfile evaluation and
@@ -141,4 +151,64 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), string(types.ProviderPathRejected))
+}
+
+// TestRunCIAnchorAllowsProvidedProjectWithCIOp verifies the RunCI anchor check
+// (anyProjectDeclaresCI) counts a provided project whose bound spell exposes a ci
+// op. A provider workspace has no magusfile for ci to live in, so the spell op is
+// the only place it can - and `magus run ci` already dispatches to it via the
+// ordinary spell fan-out, so RunCI refusing first with MGS1001 would be blocking a
+// run that would otherwise succeed.
+func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
+	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ci-capable"}})
+	reg := NewWorkspaceRegistry()
+	reg.AddProvider("nx")
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	err = m.RunCI(ctx, []types.Target{{Path: "libs/foo", Name: "ci"}})
+	assert.False(t, errors.Is(err, types.NoCITarget),
+		"a provided project whose spell has a ci op must satisfy the anchor, got: %v", err)
+}
+
+// TestRunCIAnchorRejectsProvidedProjectWithoutCIOp verifies the anchor still
+// refuses a provided project when none of its bound spells declare a ci op -
+// counting provided projects at all must not make the anchor unconditionally pass.
+func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")
+	withProvided(t, spells.ProvidedProject{Path: "libs/foo", Spells: []string{"ts"}})
+	reg := NewWorkspaceRegistry()
+	reg.AddProvider("nx")
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	err = m.RunCI(ctx, []types.Target{{Path: "libs/foo", Name: "ci"}})
+	assert.True(t, errors.Is(err, types.NoCITarget),
+		"a provided project with no ci-declaring spell must still hit the anchor, got: %v", err)
+}
+
+// TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject pins the existing rule as
+// unchanged: for a magusfile project the magusfile is the definition, so a bound
+// spell's ci op must NOT satisfy the anchor - only counting it for provided
+// projects, which have no magusfile to shadow.
+func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
+	root := makeWorkspaceRoot(t, "magusfile.buzz")
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell("ci-capable"))
+
+	ctx := context.Background()
+	m, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	defer func() { _ = m.Close() }()
+
+	err = m.RunCI(ctx, []types.Target{{Path: ".", Name: "ci"}})
+	assert.True(t, errors.Is(err, types.NoCITarget),
+		"a spell ci op must not satisfy the anchor for a magusfile project, got: %v", err)
 }

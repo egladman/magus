@@ -23,6 +23,11 @@ type Obj interface {
 	Bool(key string) bool
 	// Strs returns the list-of-strings at key; absent or empty yields nil.
 	Strs(key string) []string
+	// StrMap returns the string-to-string map at key (a Command's `secrets`: env var
+	// name -> provider reference); absent or empty yields (nil, nil). A present value
+	// that is not a string is an error naming key, since a mistyped entry here would
+	// otherwise resolve nothing at spawn with no signal until the run that needed it.
+	StrMap(key string) (map[string]string, error)
 	// Obj returns the nested record at key and whether it was present as one.
 	Obj(key string) (Obj, bool)
 	// Objs returns the list of nested records at key, for a field that is an
@@ -192,6 +197,18 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
+	// Qualify with spell/op only when named. The by-value entrypoint
+	// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix would
+	// read as a bug in the surfaced message; the engine path always names both.
+	where := ""
+	if spellName != "" || opName != "" {
+		where = fmt.Sprintf("spell %q op %q ", spellName, opName)
+	}
+	secrets, err := o.StrMap("secrets")
+	if err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand secrets: %w", where, err)
+	}
+	c.Secrets = secrets
 	charms, ok := o.Obj("charms")
 	if !ok {
 		return c, nil
@@ -222,13 +239,6 @@ func decodeCommand(spellName, opName string, o Obj) (spells.Command, error) {
 			ch.Ops = append(ch.Ops, po)
 		}
 		if err := spells.ValidatePatch(ch.Ops); err != nil {
-			// Qualify with spell/op only when named. The by-value entrypoint
-			// (DecodeCommandValue) passes neither, so an empty `spell "" op ""` prefix
-			// would read as a bug in the surfaced message; the engine path always names both.
-			where := ""
-			if spellName != "" || opName != "" {
-				where = fmt.Sprintf("spell %q op %q ", spellName, opName)
-			}
 			return spells.Command{}, fmt.Errorf("%scharm %q: %w", where, cn, err)
 		}
 		cm[cn] = ch
