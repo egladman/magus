@@ -51,13 +51,13 @@ func WithSources(paths ...string) ProjectOption {
 	}
 }
 
-// WithExclusive marks a project as must-not-run-alongside-peers in a RunAll batch.
 // WithName sets the project's declared display name, overriding the
 // path-derived default. See types.Project.Name for why the root needs it.
 func WithName(name string) ProjectOption {
 	return func(p *types.Project) error { p.Name = name; return nil }
 }
 
+// WithExclusive marks a project as must-not-run-alongside-peers in a RunAll batch.
 func WithExclusive() ProjectOption {
 	return func(p *types.Project) error { p.Exclusive = true; return nil }
 }

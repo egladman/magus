@@ -21,9 +21,11 @@ import (
 // of event; the lifecycle pair brackets the content kinds.
 const (
 	// Lifecycle events bracket an invocation.
+
 	KindStarted  = "started"  // invocation opens: command lineage + magus version
 	KindFinished = "finished" // invocation closes: overall pass/fail outcome
 	// Content events, produced between the lifecycle pair.
+
 	KindExec   = "exec"   // a subprocess is about to run: the command line (groups the output below it)
 	KindOutput = "output" // a subprocess stdout/stderr line
 	KindResult = "result" // a target finished (pass/fail/cached), with its ref + duration

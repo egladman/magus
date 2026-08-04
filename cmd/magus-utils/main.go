@@ -9,6 +9,7 @@
 //
 // Each subcommand reads a Go or Buzz source of truth and emits its mirror; none
 // is ever linked into the magus binary.
+
 package main
 
 import (

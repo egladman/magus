@@ -5,6 +5,7 @@
 // and CORS-locks it to the single site origin serving the page. The static sibling (a JSON
 // blob for `graph open --serve`) is httpx.BlobServer. It lives in the same package as the
 // viewer wire encoders, so it calls EncodeEvent directly.
+
 package viewer
 
 import (

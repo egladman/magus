@@ -381,6 +381,7 @@ const (
 	FormatTemplate Format = "template" // -o template=<go-template>
 
 	// Graph-only output formats. Not accepted by other commands.
+
 	FormatDot      Format = "dot"
 	FormatMermaid  Format = "mermaid"
 	FormatTree     Format = "tree"

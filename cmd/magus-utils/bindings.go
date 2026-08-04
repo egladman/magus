@@ -1,6 +1,7 @@
 // Subcommand `bindings` emits per-VM trampoline code from std.Module
 // declarations. The generated file registers the module's methods on a backend
 // Session: decode args, call the Impl in the host package, encode results.
+
 package main
 
 import (

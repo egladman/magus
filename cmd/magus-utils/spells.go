@@ -9,6 +9,7 @@
 // Only self-contained spells are compiled: a spell whose source imports a host
 // module (e.g. spells/github/actions, a function-op spell) needs bindings a bare
 // compile can't resolve, so it is not a built-in and is skipped.
+
 package main
 
 import (

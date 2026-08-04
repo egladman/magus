@@ -22,7 +22,7 @@ type graphSource interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
 }
 
-// graphHandler serves GET /api/v1/graph.
+// GraphHandler serves GET /api/v1/graph.
 //
 // Query params (the frozen v1 contract the browser Graph Explorer already speaks):
 //   - (none)            -> the whole knowledge graph

@@ -234,7 +234,7 @@ func (m *Magus) ListArtifacts(ctx context.Context, projectPath, wsPath string) (
 	return m.cache.ListArtifacts(ctx, projectPath, wsPath)
 }
 
-// MaterializeArtifact writes a cached version to dst, cloning from the store when
+// GetArtifact writes a cached version to dst, cloning from the store when
 // the filesystem supports reflink.
 func (m *Magus) GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error {
 	if m.cache == nil {

@@ -290,9 +290,6 @@ func WithOpaque() Option {
 	return func(s *Spell) { s.opaque = true }
 }
 
-// WithInvoker sets the function that runs a target; a spell with none is a no-op.
-// The invoker receives the full request (so function-ops can read Params) and
-// returns structured Data (nil for fork targets), surfaced via InvokeResponse.
 // WithInternal marks a registration as dispatch plumbing rather than a spell a
 // user binds, keeping it out of every surface that enumerates spells.
 //
@@ -310,6 +307,9 @@ func WithInternal() Option {
 	return func(s *Spell) { s.internal = true }
 }
 
+// WithInvoker sets the function that runs a target; a spell with none is a no-op.
+// The invoker receives the full request (so function-ops can read Params) and
+// returns structured Data (nil for fork targets), surfaced via InvokeResponse.
 func WithInvoker(fn func(ctx context.Context, req InvokeRequest) (any, error)) Option {
 	return func(s *Spell) { s.invoke = fn }
 }

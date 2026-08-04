@@ -6,6 +6,7 @@
 // and internal/interp/bindings/modules.go) - so importing that path already
 // brings the type into a magusfile's or spell's scope for annotations and
 // literals, with no separate import required.
+
 package main
 
 import (

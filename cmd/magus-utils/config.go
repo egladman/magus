@@ -1,6 +1,7 @@
 // Subcommand `config` renders the config-derived artifacts. The generator itself
 // lives in internal/config/generate, beside the schema whose tags it interprets;
 // this file is only the flag parsing that names the outputs.
+
 package main
 
 import (

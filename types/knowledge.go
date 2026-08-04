@@ -53,6 +53,7 @@ const (
 	// PROVENANCE (which layer produced them), not by an accident of naming: a method is
 	// bound to a host module, a function is authored in Buzz, a symbol comes from SCIP.
 	// They never overlap (SCIP does not index .buzz), so a definition lands in exactly one.
+
 	KindMethod     = "method" // a callable bound to a host module (fs.stat) - magus's built-in API surface
 	KindDiagnostic = "diagnostic"
 	KindDoc        = "doc"       // markdown doc page (phase 4)

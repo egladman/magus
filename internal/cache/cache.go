@@ -801,8 +801,8 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	return results, err
 }
 
-// Clean removes cached manifests for the given project paths (all if none given).
-// Orphaned blobs are GC'd after manifests are deleted.
+// Delete removes cached manifests for the given project paths (all if none given).
+// Orphaned blobs are collected after manifests are deleted.
 func (c *Cache) Delete(ctx context.Context, projectPaths ...string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -1007,7 +1007,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 	return nil
 }
 
-// GC evicts LRU entries to the size cap and removes unreferenced CAS blobs.
+// Evict removes LRU entries down to the size cap, then collects unreferenced CAS
+// blobs.
 func (c *Cache) Evict(ctx context.Context) error {
 	c.evictOldest(ctx, c.sizeCap())
 	return c.gcBlobs(ctx)

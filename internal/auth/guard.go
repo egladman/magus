@@ -21,7 +21,7 @@ import (
 //	share token     read-only viewer credential: lives solely on the ephemeral
 //	                LAN share listener (its own per-session verifier); neither
 //	                verifier here ever accepts it.
-//
+
 // VerifyBearer reports whether presented is an accepted daemon DATA-surface
 // credential: the retrievable cli token OR a non-expired named connector token.
 // Both tiers are re-read from disk on every call, so a rotate, create, or revoke
