@@ -72,20 +72,29 @@ jobs:
       - name: Install pinned toolchain
         run: mise install
 
-      - name: Resolve magus release
-        id: resolve_magus
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="$(gh release view --repo egladman/magus --json tagName -q .tagName)"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-
-      # The released binary, not a source build: the dogfooding contract is that the magus
-      # which builds this workspace is one users already have. See CONTRIBUTING.md.
+      # A source build of this very commit, NOT the latest release.
+      #
+      # This step used to install the released binary, on the dogfooding contract that the
+      # magus which builds this workspace is one users already have. That contract makes
+      # main red for the whole window between a breaking magusfile change and the release
+      # that carries it: the built-in spells were renamed (md -> markdown, py -> python,
+      # rs -> rust, ts -> typescript), the magusfile was updated to match, and every site
+      # deploy since has failed on `no spell "markdown"` because the newest release predates
+      # the rename. Publishing the site is the wrong place to discover that.
+      #
+      # The check itself is worth keeping, just not here and not as a deploy blocker. It
+      # belongs on a job whose failure means "cut a release", rather than one whose failure
+      # means the docs stop updating.
       - uses: ./.github/actions/setup-magus
         with:
-          git-ref: ${{ steps.resolve_magus.outputs.tag }}
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which PREPENDS
+      # to PATH and outranks the mise-pinned Go the content generators above rely on. Re-adding
+      # mise's puts it back in front (GITHUB_PATH prepends). Mirrors the same step in ci.yaml.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       # Three target names, no logic. Each project builds its OWN tree - a root target that
       # wrote into docs/ trips MGS3001, because a parent writing into a descendant project
