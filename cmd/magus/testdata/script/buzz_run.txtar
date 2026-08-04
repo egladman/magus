@@ -2,8 +2,9 @@
 # inline with -e, plus a -t mode that runs a file's test "..." {} blocks. A runner
 # that cannot report a failing test is worse than none, so this exercises both a
 # passing and a failing test file. It also pins the diagnostic shape (a BZZ code
-# plus a see: URL) and the one deliberate gap the help text calls out: the
-# magus.* namespace exists in `magus buzz --workspace` but not here.
+# plus a see: URL) and where the magus.* namespace stops here: `import "magus"`
+# resolves and the nested-command members work, while the members that need a
+# magusfile raise MGS1022 instead of the import failing outright.
 
 # a script file that produces output
 exec magus buzz hello.buzz
@@ -36,10 +37,20 @@ stderr '1 of 1 tests failed'
 stderr '\[BZZ1001\] buzz: line 1:1: undefined: std'
 stderr 'see: https://.*BZZ1001'
 
-# the magus.* namespace is deliberately unavailable here (use `magus buzz --workspace` for
-# that); importing it fails the same way any missing module would
+# `import "magus"` resolves, and a member that needs no magusfile runs
+exec magus buzz -e 'import "std"; import "magus"; std\print(magus\normalize("HTTPServer"));'
+stdout 'http-server'
+
+# a member that declares into the workspace magus is loading names the constraint,
+# rather than the import failing and reading as "there is no such module"
+! exec magus buzz -e 'import "magus"; magus\project({});'
+stderr '\[MGS1022\] magus.project: only callable from a magusfile'
+stderr 'see: https://.*MGS1022'
+
+# magus\Context is the target-declaration TYPE, which only the magusfile engine
+# declares; use `magus buzz --workspace` for that surface
 ! exec magus buzz -e 'import "magus"; final c = magus\Context{};'
-stderr '\[BZZ2001\] buzz: import "magus": module not found'
+stderr '\[BZZ1002\] buzz: line 1:40: undefined type "Context"'
 
 -- hello.buzz --
 import "std";

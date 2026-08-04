@@ -32,6 +32,9 @@ func init() { Register(Magus) }
 // as hand-written trampolines in bindings/magus.go.
 var Magus = Module{
 	Name: "magus",
+	// The first paragraph stays one short line with no ". " in it: cmd/magus-docs
+	// derives the page's frontmatter description from the doc's first sentence, and a
+	// second sentence up here would drag a paragraph break into the YAML.
 	Doc: "Magus core primitives.\n\n" +
 		"Three provider namespaces are wired by the runtime rather than declared here, so " +
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
@@ -39,7 +42,13 @@ var Magus = Module{
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
 		"the credentials read through it. Each takes an imported spell handle. See " +
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
-		"and [CI integration](../../guides/integrations/ci.md).",
+		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
+		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile. The " +
+		"members that declare into the workspace magus is loading (`magus\\project`, the provider " +
+		"selections above) and the ones served in-process from a loaded workspace (`ls`, `targets`, " +
+		"`affected`, `graph`, `where`) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script; " +
+		"the nested-command methods (`cmd`, `run`, `describe`, `insight`, `doctor`) work there and " +
+		"discover the workspace themselves.",
 	Methods: []Method{
 		{
 			Name: "cmd",
@@ -193,6 +202,18 @@ var typedMagusSubcommands = map[string]bool{
 	"run": true, "describe": true, "insight": true, "doctor": true,
 }
 
+// errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
+// without the loaded workspace it reads from. Every such member serves its answer
+// IN-PROCESS off types.WorkspaceFromContext, which magus.Open puts there for a
+// magusfile target; a `magus buzz` script has no workspace open, and shelling out
+// (magus.describe/cmd, which fork and rediscover the root) is what it reaches for
+// instead. Coded so the constraint is greppable and linkable rather than one more
+// bare sentence.
+func errNoWorkspace(member string) error {
+	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
+		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not a magus buzz script; from a script use magus\\describe/magus\\cmd, which run a nested magus and discover the workspace themselves", member)
+}
+
 // MagusLs lists the workspace's projects from the workspace already open on ctx.
 //
 // It is the first of the read-only verbs served IN-PROCESS. The typed methods below it
@@ -208,7 +229,7 @@ var typedMagusSubcommands = map[string]bool{
 func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.ProjectsOutput{}, errors.New("magus.ls: no workspace on the context (magus.ls is callable from a magusfile target, not a bare script)")
+		return types.ProjectsOutput{}, errNoWorkspace("ls")
 	}
 	return ws.ListProjects(ctx)
 }
@@ -220,7 +241,7 @@ func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
 func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.TargetGraphOutput{}, errors.New("magus.targets: no workspace on the context (magus.targets is callable from a magusfile target, not a bare script)")
+		return types.TargetGraphOutput{}, errNoWorkspace("targets")
 	}
 	return ws.TargetGraph(ctx)
 }
@@ -235,7 +256,7 @@ func MagusTargets(ctx context.Context) (types.TargetGraphOutput, error) {
 func MagusAffected(ctx context.Context, base string) (types.AffectedResult, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.AffectedResult{}, errors.New("magus.affected: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return types.AffectedResult{}, errNoWorkspace("affected")
 	}
 	res, err := ws.Affected(ctx, base)
 	if err != nil {
@@ -251,7 +272,7 @@ func MagusAffected(ctx context.Context, base string) (types.AffectedResult, erro
 func MagusGoModReplaceArgs(ctx context.Context) ([]string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return nil, errors.New("magus.goModReplaceArgs: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return nil, errNoWorkspace("go_mod_replace_args")
 	}
 	dir, err := EffectiveCwd(ctx)
 	if err != nil {
@@ -437,7 +458,7 @@ func sameDirectory(a, b string) bool {
 func MagusWhere(ctx context.Context, dir string) (string, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return "", errors.New("magus.where: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return "", errNoWorkspace("where")
 	}
 	p, ok := ws.Where(dir)
 	if !ok {
@@ -451,7 +472,7 @@ func MagusWhere(ctx context.Context, dir string) (string, error) {
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.GraphView{}, errors.New("magus.graph: no workspace on the context (callable from a magusfile target, not a bare script)")
+		return types.GraphView{}, errNoWorkspace("graph")
 	}
 	g, err := ws.Graph()
 	if err != nil {

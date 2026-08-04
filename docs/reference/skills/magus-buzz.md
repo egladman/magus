@@ -2,8 +2,8 @@
 title: magus-buzz
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz]
-skill_full_bytes: 6233
-skill_simple_bytes: 5265
+skill_full_bytes: 7082
+skill_simple_bytes: 6075
 ---
 
 # magus-buzz
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `23` |
 | `knowledge-schema-version` | `7` |
-| `skill-content` | `0a72e9e76c60` |
+| `skill-content` | `d8c8251eafcf` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -117,10 +117,35 @@ import "fs"; import "json";   // host modules
 ```
 
 Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
-`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
-`platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
-`xml`, `yaml`. The `magus` module itself is NOT available here - it needs a
-magusfile's targets, so use it from a magusfile, not a standalone script.
+`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `magus`, `os`,
+`path`, `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`,
+`vcs`, `xml`, `yaml`.
+
+### Calling magus from a script
+
+`import "magus"` works in a script. Ask magus about the workspace through it
+rather than shelling out to the binary - it is in-process, version-pinned, and
+has no arg-quoting to get wrong:
+
+```buzz
+import "std"; import "magus";
+
+fun main() > void {
+    // opts.quiet captures the output instead of echoing it
+    final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
+    std\print(res.stdout);
+}
+main();
+```
+
+WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
+
+Members that need a magusfile raise MGS1022 naming the constraint: the ones
+that declare into a workspace being loaded (`magus\project`, the provider
+selections) have no script equivalent, and the ones that read a loaded workspace
+(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+nested commands above.
 
 ## Two rules that cause most first-try failures
 
@@ -294,9 +319,34 @@ import "fs"; import "json";   // host modules
 ```
 
 Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
-`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `os`, `path`,
-`platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`, `vcs`,
-`xml`, `yaml`. The `magus` module itself is NOT available here, so use it from a magusfile, not a standalone script.
+`encoding`, `env`, `fmt`, `fs`, `http`, `json`, `markdown`, `magus`, `os`,
+`path`, `platform`, `semver`, `strings`, `template`, `time`, `toml`, `uuid`,
+`vcs`, `xml`, `yaml`.
+
+### Calling magus from a script
+
+`import "magus"` works in a script. Ask magus about the workspace through it
+rather than shelling out to the binary:
+
+```buzz
+import "std"; import "magus";
+
+fun main() > void {
+    // opts.quiet captures the output instead of echoing it
+    final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
+    std\print(res.stdout);
+}
+main();
+```
+
+WRONG: `os\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
+CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
+
+Members that need a magusfile raise MGS1022 naming the constraint: the ones
+that declare into a workspace being loaded (`magus\project`, the provider
+selections) have no script equivalent, and the ones that read a loaded workspace
+(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+nested commands above.
 
 ## Two rules that cause most first-try failures
 

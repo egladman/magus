@@ -18,9 +18,11 @@ import (
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
 // Buzz interpreter with the full magus module surface (Buzz stdlib plus every
-// magus host module: fs, os, http, markdown, template, ...). The magus.* namespace
-// (targets, needs) is not installed, since it needs a magusfile; for that use
-// `magus buzz --workspace` or run a magusfile target.
+// magus host module: fs, os, http, markdown, template, ...) and the magus.*
+// namespace. The magus.* members that declare into a workspace being loaded
+// (magus\project and the provider selections) raise MGS1022 here, since a script
+// has no magusfile to declare into; `magus buzz --workspace` is the REPL with a
+// magusfile actually loaded.
 //
 // This is the in-binary form of the former standalone magus-buzz tool, folded into
 // the main command (like `kubectl kustomize`) so a clean Buzz runner is always
@@ -92,11 +94,16 @@ func buzzCmd(ctx context.Context, args []string) error {
 	sess := buzz.NewSession(ctx, opts...)
 	defer func() { _ = sess.Close() }()
 	// Install the full magus module surface (Buzz stdlib + assert/suite + every
-	// magus host module), the same one the magusfile engine uses minus the magus.*
-	// namespace, which needs a magusfile's targets. Sharing one registration keeps
-	// `magus buzz` and magusfile execution in lock-step: any module a script or test
-	// imports resolves the same way in both, with no per-surface module list.
+	// magus host module), the same one the magusfile engine uses. Sharing one
+	// registration keeps `magus buzz` and magusfile execution in lock-step: any
+	// module a script or test imports resolves the same way in both, with no
+	// per-surface module list.
 	bindings.RegisterModuleSurface(ctx, sess)
+	// The magus.* namespace on top, so `import "magus"` resolves here too. The
+	// members that declare into a workspace being loaded (magus\project,
+	// magus\cache.remote, magus\ci.provider) raise MGS1022 on this surface; the rest
+	// (magus\describe, magus\cmd, magus\run, ...) work.
+	bindings.RegisterMagusNamespace(ctx, sess)
 	// Install the magus/spell and magus/charm source modules too, so a spell file
 	// (which imports them) and its `test "..." {}` blocks run here: `magus buzz -t`
 	// is the spell test harness.
@@ -112,8 +119,9 @@ func buzzCmd(ctx context.Context, args []string) error {
 }
 
 // buzzRepl opens an interactive Buzz REPL with the same module surface as
-// `magus buzz` scripts (Buzz stdlib plus every magus host module), and without the
-// magus.* namespace (that needs a magusfile - use `magus buzz --workspace` for it). It reuses
+// `magus buzz` scripts: Buzz stdlib, every magus host module, and the magus.*
+// namespace minus the members that declare into a magusfile (use `magus buzz
+// --workspace` when the magusfile's own targets and locals are wanted). It reuses
 // the shared REPL driver (internal/interp.Repl), the same one the workspace REPL runs, so
 // line editing, multi-line input, and the .commands behave identically. The session
 // is embedded: a REPL is top-level statements by nature, so upstream strict mode
@@ -122,6 +130,7 @@ func buzzRepl(ctx context.Context) error {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
 	bindings.RegisterModuleSurface(ctx, sess)
+	bindings.RegisterMagusNamespace(ctx, sess)
 	return interp.Repl(ctx, buzzengine.Wrap(sess), interp.ReplOptions{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
@@ -245,8 +254,9 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run Buzz source from a REPL, file, stdin, or an inline snippet. With no")
 	fmt.Fprintln(os.Stderr, "argument on a terminal it opens a REPL; a piped or redirected stdin runs")
-	fmt.Fprintln(os.Stderr, "as a script. The Buzz stdlib plus every magus host module (fs, os, http,")
-	fmt.Fprintln(os.Stderr, "markdown, ...) are available; use `magus buzz --workspace` for the magus.* namespace.")
+	fmt.Fprintln(os.Stderr, "as a script. The Buzz stdlib, every magus host module (fs, os, http,")
+	fmt.Fprintln(os.Stderr, "markdown, ...), and the magus.* namespace are available; use `magus buzz")
+	fmt.Fprintln(os.Stderr, "--workspace` for a REPL with the magusfile itself loaded.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Flags:")
 	fmt.Fprintln(os.Stderr, "  -e <code>   execute code given on the command line instead of a file")

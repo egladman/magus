@@ -105,6 +105,88 @@ func TestRegisterModuleSurfaceWithModules(t *testing.T) {
 	assert.Equal(t, "json", mocked.String())
 }
 
+// scriptSession builds the session a `magus buzz` script runs in: the shared host
+// module surface plus the magus.* namespace, parsed upstream-strict like the real
+// runner, so a test snippet exercises the same rules a script does.
+func scriptSession(t *testing.T) *buzz.Session {
+	t.Helper()
+	ctx := context.Background()
+	sess := buzz.NewSession(ctx)
+	t.Cleanup(func() { _ = sess.Close() })
+	RegisterModuleSurface(ctx, sess)
+	RegisterMagusNamespace(ctx, sess)
+	return sess
+}
+
+// TestScriptImportsMagus is the regression for `import "magus"` failing outright in
+// a script with BZZ2001 module-not-found. A missing import reads as "no such
+// module"; the namespace resolves now, and the members that need no magusfile run.
+func TestScriptImportsMagus(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "std";
+import "magus";
+
+fun main() > void {
+    std\assert(magus\normalize("HTTPServer") == "http-server", message: "normalize");
+}
+main();
+`)
+	require.NoError(t, err)
+}
+
+// TestScriptWithholdsDeclaringMembers locks the other half of that change: the
+// members that DECLARE into the workspace magus is loading raise MGS1022 in a
+// script instead of recording onto a registry that is not there and returning null,
+// which the caller would read as success.
+func TestScriptWithholdsDeclaringMembers(t *testing.T) {
+	for _, call := range []string{
+		`magus\project({})`,
+		`magus\cache.remote({"name": "s3"})`,
+		`magus\ci.provider({"name": "actions"})`,
+	} {
+		t.Run(call, func(t *testing.T) {
+			sess := scriptSession(t)
+			err := sess.Exec(context.Background(), fmt.Sprintf(`
+import "magus";
+
+fun main() > void { %s; }
+main();
+`, call))
+			require.Error(t, err)
+			assert.ErrorIs(t, err, types.MagusfileOnlyMember)
+		})
+	}
+}
+
+// TestScriptWorkspaceReadersRaiseCoded covers the second class the same code
+// carries: a reader served in-process from the workspace on the context has none in
+// a script. It must fail with MGS1022 pointing at the nested-command alternative,
+// not with a nil-map panic or an empty result that reads as "no projects".
+func TestScriptWorkspaceReadersRaiseCoded(t *testing.T) {
+	sess := scriptSession(t)
+	err := sess.Exec(context.Background(), `
+import "magus";
+
+fun main() > void { magus\ls(); }
+main();
+`)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.MagusfileOnlyMember)
+}
+
+// TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
+// surfaces buildMagusNS serves. They must carry the SAME member names - a script
+// that cannot see a member has no way to learn it exists - so the surfaces differ
+// only in what a member does when called, which is what MGS1022 reports.
+func TestMagusSurfacesExposeSameMembers(t *testing.T) {
+	sess := scriptSession(t)
+	script := sess.GetGlobal("magus")
+	require.True(t, script.IsMap(), "magus namespace is not installed for a script")
+
+	assert.ElementsMatch(t, MagusModuleKeys(), script.MapKeys())
+}
+
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
 // documented) but never exposed to Buzz sessions - the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with generated bindings
