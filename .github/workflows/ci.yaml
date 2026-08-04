@@ -158,6 +158,18 @@ jobs:
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.preflight.outputs.count }}
 
+      # A drift failure names WHICH files changed; this shows WHAT changed in them.
+      # Without it, a difference that only appears on the runner can only be chased by
+      # reproducing the runner - and for a platform-specific drift that is precisely the
+      # thing a laptop cannot do. Cheap, runs only on failure, and the diff is the whole
+      # answer every time this gate fires.
+      - name: Show generated-file drift
+        if: failure()
+        run: |
+          git status --porcelain
+          git diff --stat
+          git diff | head -300
+
       - name: Upload shard history
         if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
