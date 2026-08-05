@@ -40,7 +40,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops)),
+			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.ReadinessProbes)),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
 			spells.WithCommandExplainer(newCommandExplainer(spec.Ops)),
 			spells.WithCommandConflicts(newCommandConflictChecker(spec.Ops)),
@@ -242,13 +242,56 @@ func noResult() (any, error) {
 // declared command as a subprocess. An unknown target is a no-op, matching the
 // fan-out-and-skip dispatch model. Every op is a command; in-VM work (a cache
 // backend) is dispatched separately (see newBuzzSpellInvoker), not through here.
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, req spells.InvokeRequest) (any, error) {
+// readinessMemo records the outcome of each readiness probe per (bin, dir) for the
+// life of the process. A probe forks, so re-running it for every op of every project
+// would cost more than the failure it prevents; and its answer cannot change mid-run
+// in a way magus could act on - a daemon that dies after the check fails the op
+// anyway, with the tool's own message.
+var readinessMemo sync.Map // key "bin\x00dir" -> error (nil when ready)
+
+// checkReady gates an op on its tool being usable, when the spell declared a probe
+// for that tool. Resolved through the op's own Bin, so no op restates which tool it
+// runs, and a spell driving both docker and hadolint gates only the former.
+//
+// The probe's OUTPUT never enters a cache key: it is a precondition, not an input.
+// `docker info` reports running containers and disk usage, so keying on it would
+// invalidate every entry on every run.
+func checkReady(ctx context.Context, readiness map[string]spells.Command, op spells.Op, dir string) error {
+	probe, ok := readiness[op.Bin]
+	if !ok || probe.Bin == "" {
+		return nil
+	}
+	key := op.Bin + "\x00" + dir
+	if cached, hit := readinessMemo.Load(key); hit {
+		if cached == nil {
+			return nil
+		}
+		return cached.(error)
+	}
+	_, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir})
+	var out error
+	if err != nil {
+		out = types.DiagnosticErrorf(types.ToolNotReady,
+			"%s is installed but not ready: `%s` failed. The op %q needs it running",
+			op.Bin, strings.Join(append([]string{probe.Bin}, probe.Args...), " "), op.Bin)
+	}
+	readinessMemo.Store(key, out)
+	return out
+}
+
+func dispatchOp(ctx context.Context, ops map[string]spells.Op, readiness map[string]spells.Command, req spells.InvokeRequest) (any, error) {
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
 	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
+	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
+	// and the point is to fail with what is actually wrong rather than let the op
+	// fork and report a build failure for a project with nothing wrong with it.
+	if err := checkReady(ctx, readiness, op, req.Dir); err != nil {
+		return nil, err
+	}
 	opts := commandOpts{cwd: req.Dir, args: project.ExtraArgs(ctx)}
 	// The reserved `scip` op writes its index into the cache, not the tree: magus
 	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command
@@ -291,9 +334,9 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, 
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
 // are command-only (cmd/args/charms data, no script body).
-func newSpellInvoker(targets map[string]spells.Op) func(context.Context, spells.InvokeRequest) (any, error) {
+func newSpellInvoker(targets map[string]spells.Op, readiness map[string]spells.Command) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, req)
+		return dispatchOp(ctx, targets, readiness, req)
 	}
 }
 
@@ -413,7 +456,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.ReadinessProbes)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 

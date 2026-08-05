@@ -1,0 +1,66 @@
+package bindings
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// A failing probe must stop the op BEFORE it forks, and say what is actually wrong.
+// Without this the op ran, the tool failed on its own terms, and magus reported a
+// build failure for a project with nothing wrong with it.
+func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	err := checkReady(context.Background(), readiness, op, t.TempDir())
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, types.ToolNotReady), "want MGS3004, got %v", err)
+	assert.Contains(t, err.Error(), "faketool")
+	assert.Contains(t, err.Error(), "not ready")
+}
+
+// A passing probe lets the op through.
+func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "exit 0"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+	assert.NoError(t, checkReady(context.Background(), readiness, op, t.TempDir()))
+}
+
+// An op whose tool declares no probe is never gated - the hadolint-beside-docker case.
+func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"docker": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	}
+	lint := spells.Op{Command: spells.Command{Bin: "hadolint"}}
+	assert.NoError(t, checkReady(context.Background(), readiness, lint, t.TempDir()),
+		"linting a Dockerfile must not wait on the docker daemon")
+}
+
+// The probe forks, so it must run once per (bin, dir) and not once per op.
+func TestReadinessProbeIsMemoized(t *testing.T) {
+	readinessMemo.Clear()
+	dir := t.TempDir()
+	// A probe that succeeds only while the marker is absent: if it ran twice, the
+	// second call would see the file it created and fail.
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "test ! -e ran && touch ran"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	require.NoError(t, checkReady(context.Background(), readiness, op, dir))
+	assert.NoError(t, checkReady(context.Background(), readiness, op, dir),
+		"probe re-ran; a forked check must be memoized per (bin, dir)")
+}
