@@ -1,0 +1,83 @@
+// Comment when a pull request opts a target out of caching.
+//
+// `skip_cache` is a real cost: that target re-runs on every invocation for everyone,
+// forever. magus already requires a REASON for it, which makes the intent auditable -
+// this surfaces that reason at review time, when it can still be argued, instead of
+// leaving it to be discovered by whoever wonders why the cache never hits.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "os";
+import "advice";
+import "std";
+
+final section = "skip-cache";
+
+// optedOut returns the reasons added by this diff, one line each. Pure over the diff so
+// the parse is testable. The reason is what magus stores, so it is what gets quoted.
+export fun optedOut(diff: str) > [str] {
+    var found = mut [];
+    foreach (line in diff.split("\n")) {
+        if (!line.startsWith("+")) { continue; }
+        if (line.indexOf("skip_cache") == null) { continue; }
+        final trimmed = line.sub(1).trim();
+        if (trimmed != "") { found.append(trimmed); }
+    }
+    return found;
+}
+
+fun body(entries: [str]) > str {
+    var text = "**This pull request opts a target out of the cache:**\n\n";
+    foreach (e in entries) { text = text + "- `" + e + "`\n"; }
+    return text
+        + "\nA target with `skip_cache` re-runs on every invocation, for every "
+        + "contributor and every CI run - it never replays and never contributes to a "
+        + "cache hit downstream. That is the right call for anything whose answer depends "
+        + "on something magus cannot see (a clock, a network, a credential), and the "
+        + "wrong one for work that is merely slow.\n\n"
+        + "The reason above is stored with the declaration, so this is only a nudge to "
+        + "make sure it is the reason you meant.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("skip-cache: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "skip-cache: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final diff = os\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "*.buzz"],
+        dir: ".", opts: {"allow_failure": true}).stdout;
+    final entries = optedOut(diff);
+    if (entries.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("skip-cache: nothing opted out");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, body: body(entries));
+    std\print("skip-cache: advised on {entries.len()} declaration(s)");
+}
+
+main();
+
+test "optedOut keeps added skip_cache lines with their reason" {
+    // A raw string: the fixture is a magusfile fragment full of braces, and a plain
+    // string reads a brace as the start of an interpolation.
+    final diff = `+        "watch": {"skip_cache": "blocks on a filesystem watch loop"},
+-        "old": {"skip_cache": "removed"},
+         "untouched": context
+`;
+    final got = optedOut(diff);
+    std\assert(got.len() == 1, message: "only the added line");
+    std\assert(got[0].indexOf("watch loop") != null, message: "carries the reason");
+}
+
+test "optedOut ignores a diff that does not opt anything out" {
+    std\assert(optedOut("+    ctx.needs(build);\n").len() == 0, message: "nothing to say");
+}

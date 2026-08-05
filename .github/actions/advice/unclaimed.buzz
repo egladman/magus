@@ -1,0 +1,82 @@
+// Comment when a pull request changes files no project declares.
+//
+// An unclaimed path invalidates no cache key and feeds no target, so nothing in the
+// pipeline reads it: the green check below says nothing whatsoever about those files.
+// That is the most misleading state CI can be in, because it looks identical to a change
+// that was actually verified.
+//
+// Usually it means a project's `sources` glob is too narrow, or the file belongs to a
+// directory nobody declared as a project yet.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "unclaimed";
+
+fun changed(base: str, head: str) > [str] {
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = os\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
+        dir: ".", opts: {"allow_failure": true});
+    var paths = mut [];
+    foreach (line in res.stdout.split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+fun body(files: [str], total: int) > str {
+    var text = "**" + "{files.len()}" + " of the " + "{total}" + " files in this pull "
+        + "request are claimed by no project:**\n\n";
+    foreach (f in files) { text = text + "- `" + f + "`\n"; }
+    return text
+        + "\nNo project declares them as sources, so they invalidate no cache key and "
+        + "feed no target. Whatever the checks below report, they did not check these.\n\n"
+        + "If that is wrong, widen the owning project's `sources` in its magusfile - or "
+        + "declare the directory as a project if it is not one yet. If they really are "
+        + "outside the build (an editor config, a note to yourself), this is correct and "
+        + "worth knowing anyway.\n\n"
+        + "`magus describe file <path>` explains any one of them.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("unclaimed: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "unclaimed: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    final paths = changed(base, head: head);
+    if (paths.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        return;
+    }
+    var found = mut [];
+    foreach (f in magus\describeFile(paths).files) {
+        if (f.role == "unclaimed") { found.append(f.path); }
+    }
+    if (found.len() == 0) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("unclaimed: every changed file is claimed");
+        return;
+    }
+    advice\publish(repo, pr: pr, name: section, body: body(found, total: paths.len()));
+    std\print("unclaimed: advised on " + found.join(", "));
+}
+
+main();
+
+test "body says the checks did not verify the unclaimed files" {
+    final text = body([".editorconfig"], total: 4);
+    std\assert(text.indexOf("1 of the 4 files") != null, message: "counts them against the change");
+    std\assert(text.indexOf("did not check these") != null, message: "says the green check is silent on them");
+    std\assert(text.indexOf("sources") != null, message: "names the fix");
+}

@@ -1,0 +1,115 @@
+// Show how far a pull request reaches: the projects it touches, everything downstream of
+// them, and the dependency graph of that reach as a diagram GitHub renders inline.
+//
+// The point is the butterfly effect. A one-file change can put a dozen projects into the
+// build, and nothing in a diff says so - GitHub sees files, magus sees the graph those
+// files sit in. Fires only past a threshold, because "your change affects one project"
+// is not worth anybody's attention.
+//
+// The threshold is a SHARE of the workspace, not a number: five projects is most of a
+// small workspace and a rounding error in a large one, so a hardcoded count would be
+// wrong for every repository but the one it was tuned on.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
+import "os";
+import "advice";
+import "magus";
+import "std";
+
+final section = "blast-radius";
+
+fun changed(base: str, head: str) > [str] {
+    os\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    final res = os\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
+        dir: ".", opts: {"allow_failure": true});
+    var paths = mut [];
+    foreach (line in res.stdout.split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+// trips reports whether `reached` of `total` projects is enough to be worth saying. Pure,
+// so the rule is testable and reviewable in one place.
+export fun trips(reached: int, total: int, share: float) > bool {
+    if (reached < 2) { return false; }
+    if (total <= 0) { return false; }
+    // Multiplied, not divided: reached / total is INTEGER division here, so 5 of 10
+    // came out 0 and the threshold never tripped.
+    return reached >= total * share;
+}
+
+fun body(projects: [str], total: int, diagram: str) > str {
+    var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
+        + " projects in the workspace:**\n\n";
+    foreach (p in projects) { text = text + "- `" + p + "`\n"; }
+    text = text + "\nEverything listed rebuilds and retests, including projects you did "
+        + "not edit - they depend on one you did. If that is more than this change needs "
+        + "to touch, splitting it makes each piece cheaper to review and to revert.\n";
+    if (diagram != "") {
+        text = text + "\n<details><summary>Dependency graph of the reach</summary>\n\n"
+            + "```mermaid\n" + diagram + "\n```\n\n</details>\n";
+    }
+    return text + "\nWhy a project is in the set: `magus affected --explain <project>`.\n";
+}
+
+fun main() > void {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("blast-radius: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "blast-radius: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+    var share = 0.5;
+    final configured = advice\env("FANOUT_SHARE");
+    if (configured != "") { share = std\parseFloat(configured) ?? 0.5; }
+
+    // The projects this PR reaches, from the workspace's own affected calculation rather
+    // than from the paths: affected walks dependents, which is the whole point.
+    final res = magus\cmd("affected", args: ["--base", "origin/" + base, "-o", "name"],
+        opts: {"quiet": true, "allow_failure": true});
+    var reached = mut [];
+    foreach (line in res.stdout.split("\n")) {
+        if (line != "") { reached.append(line); }
+    }
+
+    var total = 0;
+    foreach (p in magus\targetGraph().projects) { total = total + 1; }
+    if (!trips(reached.len(), total: total, share: share)) {
+        advice\publish(repo, pr: pr, name: section, body: "");
+        std\print("blast-radius: {reached.len()} of {total} projects; below the threshold");
+        return;
+    }
+
+    var argv = mut ["deps"];
+    foreach (p in reached) { argv.append(p); }
+    argv.append("-o");
+    argv.append("mermaid");
+    final drawn = magus\cmd("graph", args: argv, opts: {"quiet": true, "allow_failure": true});
+    var diagram = "";
+    if (drawn.ok) { diagram = drawn.stdout; }
+
+    advice\publish(repo, pr: pr, name: section, body: body(reached, total: total, diagram: diagram));
+    std\print("blast-radius: advised on {reached.len()} of {total}");
+}
+
+main();
+
+test "trips fires when the reach is at or over the share" {
+    std\assert(trips(5, total: 10, share: 0.5), message: "half the workspace");
+    std\assert(trips(9, total: 10, share: 0.5), message: "most of it");
+}
+
+test "trips stays quiet for a small reach" {
+    std\assert(!trips(1, total: 10, share: 0.5), message: "one project is never worth saying");
+    std\assert(!trips(3, total: 10, share: 0.5), message: "under the share");
+}
+
+test "trips needs at least two projects however small the workspace" {
+    std\assert(!trips(1, total: 1, share: 0.5), message: "a single-project workspace always reaches everything");
+}
