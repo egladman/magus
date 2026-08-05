@@ -19,6 +19,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
+	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
 	{Name: "ExecResult", Type: reflect.TypeFor[types.ExecResult](), RuntimeObject: true},
 	{Name: "CommitAuthor", Type: reflect.TypeFor[types.CommitAuthor](), RuntimeObject: true},
 	{Name: "Commit", Type: reflect.TypeFor[types.CommitRecord](), RuntimeObject: true},
@@ -82,6 +83,51 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
+}
+
+// boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`
+// rather than as a bare `str`.
+//
+// The cases are listed here rather than derived because reflect cannot enumerate a
+// named type's constants - it sees only the underlying kind. That is the whole reason
+// a registry exists: without it every one of these crosses as an untyped string, and a
+// magusfile typo is a silent miss instead of a compile error.
+//
+// A case must be a legal Buzz identifier, and the first entry is the field's default,
+// so a zero-valued case belongs first.
+var boundaryEnums = []boundaryEnum{
+	{
+		Name:  "PlatformSensitivity",
+		Type:  reflect.TypeFor[types.PlatformSensitivity](),
+		Cases: []enumCase{{"inherit", ""}, {"dependent", "dependent"}, {"independent", "independent"}},
+	},
+	{
+		Name:  "VersionComponent",
+		Type:  reflect.TypeFor[spells.VersionComponent](),
+		Cases: []enumCase{{"none", ""}, {"major", "major"}, {"minor", "minor"}, {"patch", "patch"}},
+	},
+}
+
+type boundaryEnum struct {
+	Name  string
+	Type  reflect.Type
+	Cases []enumCase
+}
+
+// enumCase is one case: the Buzz identifier and the string it carries.
+type enumCase struct {
+	Name  string
+	Value string
+}
+
+// buzzEnumFor returns the enum a Go type mirrors as, if any.
+func buzzEnumFor(rt reflect.Type) (boundaryEnum, bool) {
+	for _, e := range boundaryEnums {
+		if e.Type == rt {
+			return e, true
+		}
+	}
+	return boundaryEnum{}, false
 }
 
 type boundaryType struct {

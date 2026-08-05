@@ -790,6 +790,21 @@ func (v Value) MapKeys() []string { return v.asMap().Keys }
 // MapView returns the underlying map Value for maps and object instances.
 // For maps it returns self. For object instances it returns a Value wrapping
 // the fields map. Returns (Null, false) for all other types.
+// EnumValue returns an enum case's backing value - what `Enum.case.value` yields -
+// and whether v is an enum case at all.
+//
+// It exists for a HOST reading a Buzz record, not for Buzz code, which already has
+// `.value`. Without it an embedder sees only the opaque case object, so a field typed
+// as an enum reads as absent rather than as its string: a spell writing
+// `upTo = VersionComponent.patch` would decode to nothing, silently, which is the one
+// failure mode a typed enum was adopted to prevent.
+func (v Value) EnumValue() (Value, bool) {
+	if v.tag() != tagEnumVal {
+		return Null, false
+	}
+	return v.asEnumVal().Val, true
+}
+
 func (v Value) MapView() (Value, bool) {
 	switch v.tag() {
 	case tagMap:

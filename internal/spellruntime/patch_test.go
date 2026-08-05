@@ -230,6 +230,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "docker",
 		Needs:      []string{"Dockerfile", ".dockerignore", "**/*"},
 		VersionCmd: []string{"docker", "--version"},
+		VersionKey: spells.VersionKey{UpTo: spells.VersionPatch},
 		// hadolint is a second binary the spell drives, pinned by no manifest, so it
 		// needs its own probe: upgrading it changes lint verdicts with nothing in any
 		// cache key to notice.
@@ -246,6 +247,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "go",
 		Needs:      []string{"**/*.go", "**/*.txtar", "go.mod", "go.sum", "go.work", "go.work.sum"},
 		VersionCmd: []string{"go", "version"},
+		// `go version` prints the host platform; patch extraction sheds it.
+		VersionKey:  spells.VersionKey{UpTo: spells.VersionPatch},
+		VersionKeys: map[string]spells.VersionKey{"golangci-lint": {UpTo: spells.VersionPatch}},
 		// golangci-lint runs from PATH rather than `go tool`, so it is pinned outside
 		// the module graph and `go version` no longer implies it.
 		VersionCmds: map[string][]string{
@@ -333,6 +337,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:       "rust",
 		Needs:      []string{"**/*.rs", "Cargo.toml", "Cargo.lock"},
 		VersionCmd: []string{"rustc", "--version"},
+		VersionKey: spells.VersionKey{UpTo: spells.VersionPatch},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
 		Manifests:  []string{"Cargo.toml"},

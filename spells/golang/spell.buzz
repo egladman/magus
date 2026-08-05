@@ -41,11 +41,11 @@ export fun mgs_getVersionCommands() > {str: [str]} {
 // and scanner versions. Extracting a semver there would take the Go version (printed
 // first) and throw the database date away, leaving a newly published CVE unable to
 // invalidate a cached pass. The default - the whole output - is the correct answer.
-export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = "patch"}; }
+export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = VersionComponent.patch}; }
 
 export fun mgs_getVersionKeys() > {str: VersionKey} {
     return {
-        "golangci-lint": VersionKey{upTo = "patch"},
+        "golangci-lint": VersionKey{upTo = VersionComponent.patch},
     };
 }
 

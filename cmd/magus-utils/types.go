@@ -58,6 +58,18 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	fmt.Fprintln(&b, "// see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun")
 	fmt.Fprintln(&b, "// `go generate`, never this file.")
 	fmt.Fprintln(&b)
+	// An enum a field references must be declared before the object that uses it,
+	// so it is emitted into the same file rather than a shared one: these mirrors are
+	// bundled per module, and a cross-file reference would need an import the bundle
+	// has no way to supply.
+	for _, e := range enumsUsedBy(rt) {
+		fmt.Fprintf(&b, "export enum<str> %s {\n", e.Name)
+		for _, c := range e.Cases {
+			fmt.Fprintf(&b, "    %s = %q,\n", c.Name, c.Value)
+		}
+		fmt.Fprintln(&b, "}")
+		fmt.Fprintln(&b)
+	}
 	fmt.Fprintf(&b, "export object %s {\n", name)
 	if err := renderFields(&b, rt); err != nil {
 		return nil, err
@@ -115,6 +127,12 @@ func buzzType(t reflect.Type) (typeName, zero string, err error) {
 	// d.String(), not d.Nanoseconds().
 	if t == reflect.TypeOf(time.Duration(0)) {
 		return "str", `""`, nil
+	}
+	// A registered named string type mirrors as its enum, so a magusfile writes
+	// VersionComponent.patch and a typo is a compile error rather than a value that
+	// decodes to nothing. Checked before the Kind switch, which would see only String.
+	if e, ok := buzzEnumFor(t); ok {
+		return e.Name, e.Name + "." + e.Cases[0].Name, nil
 	}
 	switch t.Kind() {
 	case reflect.String:
@@ -207,4 +225,24 @@ func buzzFieldName(f reflect.StructField) string {
 		return `@"` + name + `"`
 	}
 	return name
+}
+
+// enumsUsedBy returns the enums rt's exported fields reference, in registry order and
+// deduplicated, so each is declared once ahead of the object that uses it.
+func enumsUsedBy(rt reflect.Type) []boundaryEnum {
+	seen := map[string]bool{}
+	var out []boundaryEnum
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		if !f.IsExported() || f.Tag.Get("buzz") == "-" {
+			continue
+		}
+		e, ok := buzzEnumFor(f.Type)
+		if !ok || seen[e.Name] {
+			continue
+		}
+		seen[e.Name] = true
+		out = append(out, e)
+	}
+	return out
 }
