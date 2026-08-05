@@ -116,15 +116,18 @@ func probeBridgeReachability(d *DaemonInfo) Check {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		// Connection refused or timeout: the MCP HTTP server is not up.
+		// Connection refused or timeout: the MCP HTTP server is not up. That is a
+		// SKIP, not a failure. The daemon is optional - a workspace is not broken for
+		// running without one - so this check verified nothing rather than finding
+		// something wrong, and reporting it as a failure made every daemonless run
+		// (most local runs, and CI) carry a red line nobody can act on. A reachable
+		// endpoint behaving badly is still a failure; see the status switch below.
 		return Check{
 			Name:    name,
-			Status:  StatusFail,
-			Message: fmt.Sprintf("bridge endpoint not reachable at %s", url),
+			Status:  StatusSkip,
+			Message: fmt.Sprintf("no daemon serving %s", url),
 			Details: []string{
-				err.Error(),
-				"start the daemon: magus server start",
-				"retrieve the bearer token: magus config mcp token print",
+				"start one with `magus server start` to check the console bridge",
 			},
 		}
 	}
