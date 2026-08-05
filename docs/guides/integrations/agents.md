@@ -379,21 +379,32 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     writes its declared outputs as it runs, so a tree is routinely dirty with
     generated files you did not edit; sweeping them into a commit about something
     else is how a focused change becomes unreviewable.
+  - piping OR redirecting magus's own output (`| tail`, `> file`, `>> file`,
+    `2>&1`). The equivalent is exact: `-o name|json|template=` returns the field
+    the filter was reaching for, and every run already persists its full log, so
+    a failure prints that path with the ref. A pipe additionally REPLACES the exit
+    status with the last stage's, so `magus affected ci | tail` reports tail's
+    success and a failing gate reads as exit 0. `magus query output <ref>` is the
+    one exemption - a raw captured tool log has no schema to project.
+  - running magus from a COPY of the workspace in a temp or scratchpad directory
+    (`cd /tmp/... && magus ...`, including via a variable assigned earlier on the
+    same line). The verdict would describe a tree nobody ships: generated files
+    land in the copy, the cache is split, and duplicated spell sources trip
+    MGS1002. A genuinely different workspace is `--root <path>`.
 - `advise`, with `context` to inject while the call proceeds:
   - `git commit` / `git add <paths>` - classify the dirty tree first. Deliberate
     staging is the replacement the rule above points at, so it is never denied.
   - a path-scoped `git checkout -- <paths>` / `git restore` - regenerated output
     is a declared target output; reverting it because you did not hand-edit it is
     what makes CI fail on drift.
-  - trimming magus's own output with the shell (`| tail`, `2>&1`) - magus has
-    `-s/--silent` and `-o json|name|template`, and `magus query output <ref>`
-    for a failing target's full log.
   - a repo-wide text search (`grep -r`, `rg`, `find -name`) - the graph answers
     structural questions from declared sources (`magus refs` for a code symbol,
     `magus query` for a domain entity).
-  - `cd <dir> && magus ...` - magus is CWD-relative, and the project is always an
-    explicit argument, so the `cd` is how the right command lands on the wrong
-    project.
+  - `cd <dir> && magus ...` WITHIN the workspace - magus is CWD-relative, and the
+    project is always an explicit argument, so the `cd` is how the right command
+    lands on the wrong project. (A `cd` into a temp or scratchpad copy is denied
+    outright, above: that one changes what the answer means, not just where it
+    runs.)
 - `pass`: everything else.
 
 `magus hook --path <file>` is the one rule that is not a heuristic. It

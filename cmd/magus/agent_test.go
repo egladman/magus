@@ -367,6 +367,21 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "MAGUS_X=1 magus query foo | grep bar", deny: true},
 		{command: "magus describe targets | wc -l", deny: true},
 		{command: "magus run test -s | grep -i fail | head -3", deny: true},
+		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
+		// verdict describes a tree nobody will ship. Taken from a real observed
+		// command that chained a raw `go test`, four redirected magus runs and a
+		// hand-rolled PASS/FAIL loop onto one `cd` into a scratchpad copy.
+		{command: `SP=/private/tmp/claude-501/x/scratchpad; cd "$SP/fixci" && ./magus run generate:rw .`, deny: true},
+		{command: "cd /tmp/copy && magus run lint .", deny: true},
+		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", deny: true},
+		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", deny: true},
+		// A cd WITHIN the workspace stays an advisory: naming the project is the
+		// fix, and the run still describes the tree that ships.
+		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},
+		// --root is the sanctioned way to mean a different workspace, and a temp
+		// path merely MENTIONED is not a relocation.
+		{command: "magus run test . --root /tmp/other-workspace"},
+		{command: "magus graph export -o json --tee /tmp/graph.json"},
 		// REDIRECTS are denied on the same footing as pipes, and for the same
 		// measured reason. These all passed until 2026-08-04, and one session used
 		// every shape below to hide a gate's output from itself: `> /dev/null 2>&1`
@@ -735,6 +750,30 @@ func TestGuardKnownHoles(t *testing.T) {
 				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
 		})
 	}
+}
+
+// TestDenyOutranksHeldAdvisory pins severity ordering across rules. A git rule
+// that merely ADVISES used to answer first and return, so appending `git commit`
+// to an otherwise-denied line downgraded the whole verdict to an advisory. That is
+// not hypothetical: the observed command cd'd into a scratchpad copy, sent four
+// magus runs to /dev/null, and ended in `git commit` - and the guard said "advise".
+func TestDenyOutranksHeldAdvisory(t *testing.T) {
+	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
+
+	require.NotEmpty(t, evaluateBashGuard(offending).Deny, "the line alone must deny")
+	for _, suffix := range []string{
+		"; git commit -q -m x && git log --oneline -1",
+		"; git status --porcelain",
+		"; git add -- file.go",
+	} {
+		assert.NotEmpty(t, evaluateBashGuard(offending+suffix).Deny,
+			"appending %q must not downgrade a deny to an advisory", suffix)
+	}
+
+	// The advisory still surfaces when nothing denies - holding it must not drop it.
+	plain := evaluateBashGuard("git commit -q -m x")
+	assert.Empty(t, plain.Deny)
+	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
 }
 
 // TestOutputGuardNamesTheReplacement pins the REASON each output denial gives,

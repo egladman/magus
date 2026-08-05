@@ -192,8 +192,15 @@ deliberately instead:
   `-s/--silent` to bound it (silent already trims, so filtering it is never the
   careful version). You never need to capture console output: every run persists
   its full log and a failure prints that path, and `--tee <file>` mirrors only
-  STRUCTURED output (`-o json|yaml|jsonl|template`), never console text. `magus query output <ref>` is the one command you may pipe or
-  redirect: a raw captured tool log has no schema to project.
+  STRUCTURED output (`-o json|yaml|jsonl|template`), never console text.
+  `magus query output <ref>` is the one command you may pipe or redirect: a raw
+  captured tool log has no schema to project.
+- Run magus from the workspace and NAME the project (`magus run <target>
+  <project>`) instead of `cd`-ing to it. Running magus inside a temp or
+  scratchpad COPY of the tree is denied outright: the verdict would describe a
+  tree nobody ships, generated files land in the copy, the cache splits, and
+  duplicated spell sources trip MGS1002. A different workspace is `--root
+  <path>`; a pristine tree is a throwaway `git worktree`, not a copy.
 
 ## Rules
 

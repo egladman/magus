@@ -36,6 +36,24 @@ magus run <target>           # top-level targets: build, test, lint, format, gen
 magus affected ci            # the final gate: full pipeline over everything a diff reaches
 ```
 
+Ask magus for the output you want; never filter or capture it with the shell.
+Piping AND redirecting magus output are both denied by the guard:
+
+```sh
+magus <cmd> -o name          # just the ids/names - what grep/awk/cut were reaching for
+magus <cmd> -o json          # the structured record; -o template='{{.Field}}' for one field
+magus <cmd> -s               # quiet until something fails, then diagnostics + the log path
+magus query output <ref>     # a failing target's full captured log (the ONE pipeable command)
+```
+
+A pipe also replaces the exit status with the last stage's, so `magus affected ci
+| tail` reports tail's success and a failing gate reads as exit 0. `> file` and
+`2>&1` are never needed: every run persists its full log and a failure prints
+that path. Run magus from the workspace and name the project (`magus run <target>
+<project>`) rather than `cd`-ing; a different workspace is `--root <path>`, and
+running magus inside a temp or scratchpad COPY of the tree is denied outright
+because the verdict would describe a tree nobody ships.
+
 Generated files are declared. Classify changed paths before reading diffs or
 committing: `magus describe file <path>...` reports each path's owning project
 and role (output = generated: never hand-edit, regenerate and commit with the

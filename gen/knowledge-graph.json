@@ -3,8 +3,8 @@
   "schema_version": 7,
   "directed": true,
   "multigraph": false,
-  "node_count": 2468,
-  "edge_count": 5584,
+  "node_count": 2472,
+  "edge_count": 5589,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1459,7 +1459,7 @@
       "source": "evals/fixtures",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "46",
+        "dir_files": "50",
         "dir_languages": "claude,markdown"
       }
     },
@@ -1470,7 +1470,7 @@
       "source": "evals/fixtures/full",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "22",
+        "dir_files": "24",
         "dir_languages": "claude,markdown"
       }
     },
@@ -1481,7 +1481,7 @@
       "source": "evals/fixtures/full/.claude",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "21",
+        "dir_files": "23",
         "dir_languages": "markdown"
       }
     },
@@ -1492,7 +1492,7 @@
       "source": "evals/fixtures/full/.claude/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "20",
+        "dir_files": "22",
         "dir_languages": "markdown"
       }
     },
@@ -1534,6 +1534,17 @@
       "kind": "dir",
       "label": "evals/fixtures/full/.claude/skills/magus-context-audit",
       "source": "evals/fixtures/full/.claude/skills/magus-context-audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/full/.claude/skills/magus-delegate-ultra",
+      "kind": "dir",
+      "label": "evals/fixtures/full/.claude/skills/magus-delegate-ultra",
+      "source": "evals/fixtures/full/.claude/skills/magus-delegate-ultra",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "1",
@@ -1613,7 +1624,7 @@
       "source": "evals/fixtures/simple",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "22",
+        "dir_files": "24",
         "dir_languages": "claude,markdown"
       }
     },
@@ -1624,7 +1635,7 @@
       "source": "evals/fixtures/simple/.claude",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "21",
+        "dir_files": "23",
         "dir_languages": "markdown"
       }
     },
@@ -1635,7 +1646,7 @@
       "source": "evals/fixtures/simple/.claude/skills",
       "attrs": {
         "dir_commits": "0",
-        "dir_files": "20",
+        "dir_files": "22",
         "dir_languages": "markdown"
       }
     },
@@ -1677,6 +1688,17 @@
       "kind": "dir",
       "label": "evals/fixtures/simple/.claude/skills/magus-context-audit",
       "source": "evals/fixtures/simple/.claude/skills/magus-context-audit",
+      "attrs": {
+        "dir_commits": "0",
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:evals/fixtures/simple/.claude/skills/magus-delegate-ultra",
+      "kind": "dir",
+      "label": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra",
+      "source": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra",
       "attrs": {
         "dir_commits": "0",
         "dir_files": "1",
@@ -5259,6 +5281,15 @@
       }
     },
     {
+      "id": "doc:evals/fixtures/full/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/full/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "source": "evals/fixtures/full/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
       "id": "doc:evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
       "kind": "doc",
       "label": "evals/fixtures/full/.claude/skills/magus-docs/SKILL.md",
@@ -5344,6 +5375,15 @@
       "kind": "doc",
       "label": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
       "source": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:evals/fixtures/simple/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "kind": "doc",
+      "label": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "source": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -25981,6 +26021,14 @@
     },
     {
       "source": "dir:evals/fixtures/full/.claude/skills",
+      "target": "dir:evals/fixtures/full/.claude/skills/magus-delegate-ultra",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-delegate-ultra"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills",
       "target": "dir:evals/fixtures/full/.claude/skills/magus-docs",
       "relation": "contains",
       "confidence": "extracted",
@@ -26058,6 +26106,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "evals/fixtures/full/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/full/.claude/skills/magus-delegate-ultra",
+      "target": "doc:evals/fixtures/full/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-delegate-ultra/SKILL.md"
     },
     {
       "source": "dir:evals/fixtures/full/.claude/skills/magus-docs",
@@ -26157,6 +26213,14 @@
     },
     {
       "source": "dir:evals/fixtures/simple/.claude/skills",
+      "target": "dir:evals/fixtures/simple/.claude/skills/magus-delegate-ultra",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills",
       "target": "dir:evals/fixtures/simple/.claude/skills/magus-docs",
       "relation": "contains",
       "confidence": "extracted",
@@ -26234,6 +26298,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "evals/fixtures/simple/.claude/skills/magus-context-audit/SKILL.md"
+    },
+    {
+      "source": "dir:evals/fixtures/simple/.claude/skills/magus-delegate-ultra",
+      "target": "doc:evals/fixtures/simple/.claude/skills/magus-delegate-ultra/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-delegate-ultra/SKILL.md"
     },
     {
       "source": "dir:evals/fixtures/simple/.claude/skills/magus-docs",
@@ -32426,6 +32498,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/guides/getting-started.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "diagnostic:MGS1002",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",

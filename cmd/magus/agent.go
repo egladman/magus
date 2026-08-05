@@ -846,6 +846,72 @@ func magusRedirected(command string) bool {
 	return found
 }
 
+// throwawayDirRe matches a path under a temp root, or any path with a scratchpad
+// segment - the places a COPY of a workspace gets made rather than checked out.
+var throwawayDirRe = regexp.MustCompile(`^(/private)?/(tmp|var/folders)/|/scratchpad(/|$)`)
+
+// assignmentRe and cdTargetRe recover `NAME=value` and the argument of a `cd`.
+var (
+	assignmentRe = regexp.MustCompile(`(?:^|[;&|]\s*|\s)([A-Za-z_]\w*)=("?)([^"'\s;&|]+)`)
+	cdTargetRe   = regexp.MustCompile(`\bcd\s+["']?([^"'\s;&|]+)`)
+)
+
+// magusInThrowawayCopy reports a magus command being run from a COPY of a
+// workspace in a temp or scratchpad directory.
+//
+// This is denied rather than advised because of what it produces: a verdict about
+// a tree nobody will ship. A gate that passes in a stale duplicate is worse than
+// no gate - the real tree stays unverified while reading as green. It also splits
+// the cache (a second .magus alongside the real one), strands every generated file
+// the run writes inside the copy, and duplicates spell sources, which is its own
+// diagnostic (MGS1002).
+//
+// The observed shape is a whole pipeline chained onto it:
+//
+//	SP=/private/tmp/.../scratchpad; cd "$SP/fixci" && go test ./std/ 2>&1 | tail -3 && ./magus run generate:rw . -s >/dev/null 2>&1
+//
+// so the assignment is resolved too - keying only on a literal `cd /tmp/...`
+// would miss the form that actually gets written.
+//
+// A genuinely different workspace is not this: that is `--root <path>`, which
+// says so explicitly and keeps one cache.
+func magusInThrowawayCopy(command string) bool {
+	if !mentionsMagusCommand(command) {
+		return false
+	}
+	vars := map[string]string{}
+	for _, m := range assignmentRe.FindAllStringSubmatch(command, -1) {
+		vars[m[1]] = m[3]
+	}
+	for _, m := range cdTargetRe.FindAllStringSubmatch(command, -1) {
+		if throwawayDirRe.MatchString(expandGuardVars(m[1], vars)) {
+			return true
+		}
+	}
+	return false
+}
+
+// expandGuardVars substitutes $NAME and ${NAME} from assignments made earlier on
+// the same line. Anything it cannot resolve is left as written, so an unknown
+// variable simply fails to match rather than matching everything.
+func expandGuardVars(s string, vars map[string]string) string {
+	for name, val := range vars {
+		s = strings.ReplaceAll(s, "${"+name+"}", val)
+		s = strings.ReplaceAll(s, "$"+name, val)
+	}
+	return s
+}
+
+// mentionsMagusCommand reports whether the line actually RUNS magus, so the
+// throwaway-copy rule cannot fire on a line that merely names a temp path.
+func mentionsMagusCommand(command string) bool {
+	cmds, parsed := parseGuardCommands(command)
+	if !parsed {
+		return false
+	}
+	return slices.ContainsFunc(cmds, func(c guardCommand) bool { return c.Name == "magus" })
+}
+
 // lastOfPipeline and firstOfPipeline resolve the commands immediately either
 // side of one pipe, descending through a longer pipeline to reach them.
 func lastOfPipeline(s *syntax.Stmt) []guardCommand {
@@ -1261,6 +1327,11 @@ const (
 		"  -o json --tee <file>         mirror STRUCTURED output to a file (--tee only writes -o json|yaml|jsonl|template, never console text)\n" +
 		"Redirecting is denied because it hides the one thing you need next. -s/--silent stays quiet UNTIL something fails, then prints the likely diagnostics plus that log path - so `-s > /dev/null 2>&1` throws away precisely what silent mode exists to print, leaving an exit code and a re-run. `2>&1` is never needed: magus already writes diagnostics where you are reading.\n" +
 		outputGuardTail
+	throwawayCopyDeny = "RUN MAGUS IN THE REAL WORKSPACE, NOT A COPY OF IT. This `cd`s into a temp or scratchpad directory and runs magus there, so whatever it reports describes a tree nobody will ship:\n" +
+		"  - a gate that passes in a stale duplicate leaves the real tree unverified while reading as green\n" +
+		"  - every file the run generates lands in the copy and is lost\n" +
+		"  - the copy gets its own .magus cache, so nothing is shared and duplicated spell sources trip MGS1002\n" +
+		"Run the command from the workspace itself, and name the project rather than moving: `magus run <target> <project>`. If you genuinely mean a DIFFERENT workspace, say so explicitly with `--root <path>` - that keeps one cache and one account of what was verified. To compare against a pristine tree, use a throwaway `git worktree`, which is a real checkout rather than a copy."
 	outputGuardTail = "The one command you MAY pipe or redirect is `magus query output <ref>`: it returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
 )
 
@@ -1306,13 +1377,26 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about the SHAPE of the line - a pipe, a redirect, a cd
 	// before a magus call - rather than about which program runs.
+	// A matched git rule that only ADVISES is held, not returned: returning it here
+	// let a trailing `git commit` downgrade a deny to an advisory, because this ran
+	// before the rules below. Observed on a real command that cd'd into a scratchpad
+	// copy, redirected four magus runs to /dev/null, and ended with `git commit` -
+	// the git advisory answered and the two denials never got to speak. Deny always
+	// outranks advise, whichever rule saw the line first.
+	var advisory bashGuardVerdict
 	cmds, parsed := parseGuardCommands(command)
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
-			return v
+			if v.Deny != "" {
+				return v
+			}
+			advisory = v
 		}
 	} else if v, matched := gitGuardFallback(command); matched {
-		return v
+		if v.Deny != "" {
+			return v
+		}
+		advisory = v
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(command)
@@ -1320,6 +1404,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case rawToolDeny:
 		match, _ := rawToolMatch(rawToolCmd)
 		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContextFor(match))}
+	case magusInThrowawayCopy(command):
+		return bashGuardVerdict{Deny: throwawayCopyDeny}
 	case magusPipedToFilter(command):
 		return bashGuardVerdict{Deny: outputPipeDeny}
 	case magusRedirected(command):
@@ -1329,7 +1415,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	case guardCodeSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: searchGuardReason}
 	}
-	return bashGuardVerdict{}
+	// Nothing denied, so a held git advisory is the answer after all.
+	return advisory
 }
 
 func runGuardContextFor(match guardToolMatch) string {
