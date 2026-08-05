@@ -1,14 +1,20 @@
-// Show how far a pull request reaches: the projects it touches, everything downstream of
-// them, and the dependency graph of that reach as a diagram GitHub renders inline.
+// Show how far a pull request reaches: every project that rebuilds, and WHY each one is
+// in the set.
 //
-// The point is the butterfly effect. A one-file change can put a dozen projects into the
-// build, and nothing in a diff says so - GitHub sees files, magus sees the graph those
-// files sit in. Fires only past a threshold, because "your change affects one project"
-// is not worth anybody's attention.
+// The tone is the hard part, and it is deliberate. A large reach is a property of how the
+// workspace is wired, not a fact about the person's change - one edited file can pull in
+// a dozen projects because they sit downstream of it, which is a decision someone else
+// made long ago. A comment that reads "your change is too big" blames the author for the
+// graph's shape, and people stop reading a bot that scolds them.
 //
-// The threshold is a SHARE of the workspace, not a number: five projects is most of a
-// small workspace and a rounding error in a large one, so a hardcoded count would be
-// wrong for every repository but the one it was tuned on.
+// So: state what rebuilds, name the chain that pulled each one in, and stop. The reviewer
+// gets the same information as the author. Splitting is mentioned only where it would
+// actually help, and NOT where the coupling is upstream of the diff - telling someone to
+// split a change whose fan-out is structural is advice that cannot be followed.
+//
+// A chain, not a diagram: the target graph is already rendered elsewhere, and a picture
+// answers "what does the graph look like" while a reader here is asking "why is docs in
+// my build". `magus affected --explain` answers exactly that, per project.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
 import "os";
@@ -39,18 +45,71 @@ export fun trips(reached: int, total: int, share: float) > bool {
     return reached >= total * share;
 }
 
-fun body(projects: [str], total: int, diagram: str) > str {
-    var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
-        + " projects in the workspace:**\n\n";
-    foreach (p in projects) { text = text + "- `" + p + "`\n"; }
-    text = text + "\nEverything listed rebuilds and retests, including projects you did "
-        + "not edit - they depend on one you did. If that is more than this change needs "
-        + "to touch, splitting it makes each piece cheaper to review and to revert.\n";
-    if (diagram != "") {
-        text = text + "\n<details><summary>Dependency graph of the reach</summary>\n\n"
-            + "```mermaid\n" + diagram + "\n```\n\n</details>\n";
+// chain pulls the dependency path out of `magus affected --explain <project>` output,
+// whose shape is "  via a -> b:" followed by the files. Empty when the project was
+// edited directly, which is its own answer.
+export fun chain(explain: str) > str {
+    foreach (line in explain.split("\n")) {
+        final trimmed = line.trim();
+        if (!trimmed.startsWith("via ")) { continue; }
+        final rest = trimmed.sub("via ".len());
+        final colon = rest.indexOf(":");
+        if (colon == null) { return rest.trim(); }
+        return rest.sub(0, colon).trim();
     }
-    return text + "\nWhy a project is in the set: `magus affected --explain <project>`.\n";
+    return "";
+}
+
+// hub returns the project that most of the reach passes through, or "" when no single one
+// dominates. It is the most useful sentence in the comment: naming one edge explains a
+// dozen rows at once.
+export fun hub(chains: [str]) > str {
+    var best = "";
+    var bestCount = 0;
+    foreach (c in chains) {
+        if (c == "") { continue; }
+        final head = c.split(" ")[0];
+        var count = 0;
+        foreach (other in chains) {
+            if (other.startsWith(head)) { count = count + 1; }
+        }
+        if (count > bestCount) { best = head; bestCount = count; }
+    }
+    if (bestCount < 2) { return ""; }
+    return best;
+}
+
+fun body(projects: [str], chains: [str], total: int, share: float) > str {
+    var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
+        + " projects.**\n\n"
+        + "That is a property of how this workspace is wired rather than a comment on the "
+        + "size of the change: a project is here because it sits downstream of one you "
+        + "edited. Concretely, all " + "{projects.len()}" + " rebuild and retest.\n\n"
+        + "| project | why it is in the set |\n| --- | --- |\n";
+    for (var i = 0; i < projects.len(); i = i + 1) {
+        var why = "edited directly";
+        if (chains[i] != "") { why = "via `" + chains[i] + "`"; }
+        text = text + "| `" + projects[i] + "` | " + why + " |\n";
+    }
+    final through = hub(chains);
+    if (through != "") {
+        text = text + "\nMost of that reach passes through `" + through + "`.\n";
+    }
+    // Only where splitting could actually help. Past a very high share the coupling is
+    // upstream of the diff, and splitting just makes two changes that each rebuild
+    // everything.
+    if (projects.len() < total) {
+        text = text + "\nIf this is more than the change needs to touch, splitting it "
+            + "makes each piece cheaper to review and to revert.\n";
+    } else {
+        text = text + "\nEverything is downstream of what you edited, so splitting the "
+            + "change would not shrink any piece - the coupling is upstream of this diff.\n";
+    }
+    return text
+        + "\nIf that matches what you expected, there is nothing to do here. If it does "
+        + "not, the surprise is in the dependency graph rather than in this pull request: "
+        + "`magus affected --explain <project>` lists the files that pulled one in, and "
+        + "`magus path <a> <b>` shows how any two connect.\n";
 }
 
 fun main() > void {
@@ -86,15 +145,15 @@ fun main() > void {
         return;
     }
 
-    var argv = mut ["deps"];
-    foreach (p in reached) { argv.append(p); }
-    argv.append("-o");
-    argv.append("mermaid");
-    final drawn = magus\cmd("graph", args: argv, opts: {"quiet": true, "allow_failure": true});
-    var diagram = "";
-    if (drawn.ok) { diagram = drawn.stdout; }
+    var chains = mut [];
+    foreach (p in reached) {
+        final explained = magus\cmd("affected", args: ["--explain", p, "--base", "origin/" + base],
+            opts: {"quiet": true, "allow_failure": true});
+        chains.append(chain(explained.stdout));
+    }
 
-    advice\publish(repo, pr: pr, name: section, body: body(reached, total: total, diagram: diagram));
+    advice\publish(repo, pr: pr, name: section,
+        body: body(reached, chains: chains, total: total, share: share));
     std\print("blast-radius: advised on {reached.len()} of {total}");
 }
 
@@ -112,4 +171,21 @@ test "trips stays quiet for a small reach" {
 
 test "trips needs at least two projects however small the workspace" {
     std\assert(!trips(1, total: 1, share: 0.5), message: "a single-project workspace always reaches everything");
+}
+
+test "chain reads the dependency path out of an explain block" {
+    std\assert(chain("docs\n  via . -> docs:\n    magusfile.buzz\n") == ". -> docs", message: "the chain");
+}
+
+test "chain is empty for a project that was edited directly" {
+    std\assert(chain("docs\n    docs/index.md\n") == "", message: "no via line");
+}
+
+test "hub names the project most of the reach passes through" {
+    std\assert(hub([". -> docs", ". -> console", "libs/x -> y"]) == ".", message: "the dominant edge");
+}
+
+test "hub stays quiet when nothing dominates" {
+    std\assert(hub(["a -> b"]) == "", message: "one chain is not a pattern");
+    std\assert(hub([]) == "", message: "nothing at all");
 }

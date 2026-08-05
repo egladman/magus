@@ -51,9 +51,9 @@ inputs:
     default: 'true'
   blast-radius:
     description: >
-      Comment when a change reaches a large share of the workspace, with the dependency
-      graph of that reach. Threshold is `fanout-share`, not a count: five projects is
-      most of a small workspace and a rounding error in a large one.
+      Comment when a change reaches a large share of the workspace, naming the dependency
+      chain that pulled each project in. Threshold is `fanout-share`, not a count: five
+      projects is most of a small workspace and a rounding error in a large one.
     required: false
     default: 'true'
   fanout-share:
