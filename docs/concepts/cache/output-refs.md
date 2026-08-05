@@ -58,7 +58,7 @@ refactor` always searches the graph.
 - `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
 - `magus query output out1a2b3c --attempts` - list the ref's stored executions.
 - `magus query output out1a2b3c --meta` - the run's identity: descriptor, lineage,
-  cache key, and per-class key digests.
+  cache key, per-class key digests, and the VCS revision its inputs were read at.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
 an ambiguous prefix lists the candidates.
@@ -99,7 +99,18 @@ magus query output out4ef30de6abcd --meta
 ```
 
 shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
-compact enough to compare across machines to learn WHICH class disagrees - and
+compact enough to compare across machines to learn WHICH class disagrees - and a
+`rev:` line: the VCS revision the run's inputs were read at, with a `(dirty:
+...)` note when the working tree had uncommitted changes, and a `recorded at X,
+you are on Y.` line when it differs from your current HEAD.
+
+`rev:` is provenance, not part of the key: the cache key pins a TREE STATE
+through its source content hashes, never a commit, so two different commits
+with identical file contents key identically. The recorded revision names
+whichever commit the FIRST run to mint this key happened to be on, which can
+differ from HEAD even on a cache hit whose bytes reproduce perfectly - checking
+out that commit is not the fix for a mismatch. Whether the key still matches is
+the question that matters, and
 
 ```sh
 magus describe target build . --cache --against out4ef30de6abcd
@@ -251,6 +262,44 @@ When a ref cannot be resolved, `magus query` reports a coded
   stored output, so the lookup is ambiguous.
 - [MGS8003](../../reference/codes/outputref/MGS8003.md): `magus query output` was given an argument
   that is not a well-formed `ref<hex>` id, so it cannot name a stored output.
+
+### Reproducing a ref that resolves nowhere
+
+On MGS8001, `magus query output <ref>` does not just report the ref missing. A
+ref cannot be decoded back into a target - it is a truncated hash, not an
+encoding - but it CAN be predicted: `magus describe target <target> --cache`
+already prints the ref a run of that target's exact current inputs would print,
+so the lookup sweeps every candidate target in the workspace, keys each one
+exactly as a run would, and compares. A match is exact in the same sense
+`--cache --against` is exact: cache-key equality, not a heuristic.
+
+One match leads with the command:
+
+```text
+Nothing has produced it here, but this workspace would print it for:
+  magus run test --no-default-charms
+```
+
+No match is the informative branch, not a failure:
+
+```text
+No target in this workspace keys to that ref at the current tree, which means the
+run that printed it had different inputs (a different commit, uncommitted change,
+or environment).
+```
+
+followed by `magus describe target <target> --cache --against <ref>` once you know
+which target it should be, and the `--publish` hint above for the case where
+someone else already has the bytes.
+
+Two things worth stating precisely, since getting them wrong defeats the point:
+
+- **`--base` plays no part.** `--base` scopes which targets `magus affected` treats
+  as changed; it does not change what any one target hashes to. The command to
+  reproduce a ref is always `magus run <target> [project]` - no `--base`.
+- **A ref minted by a run that forwarded extra args after `--` cannot be
+  predicted.** Those arguments are part of the key, and a prediction computes a
+  key with none to compare against.
 
 ## The artifact twin: history and diff
 

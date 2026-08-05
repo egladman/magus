@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2417,
-  "edge_count": 5457,
+  "edge_count": 5461,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -27184,6 +27184,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS8001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "doc:CONTRIBUTING.md",
       "relation": "references",
       "confidence": "extracted",
@@ -27856,6 +27864,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS8001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "doc:docs/concepts/compatibility.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28260,6 +28276,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/concepts/cache/output-refs.md"
+    },
+    {
+      "source": "doc:docs/concepts/cache/output-refs.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/concepts/cache/output-refs.md"
     },
     {
@@ -33626,6 +33650,14 @@
       "source": "doc:docs/reference/codes/outputref/MGS8001.md",
       "target": "diagnostic:MGS8001",
       "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/outputref/MGS8001.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8001.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/outputref/MGS8001.md"

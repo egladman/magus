@@ -117,9 +117,15 @@ failure adds the reproduce command and an inspect hint:
   reproduce: magus run generate:rw docs
 ```
 
-References are **local to your machine**. One pasted from CI or a teammate
-resolves to nothing, which is why the inspect hint disappears when magus
-detects CI. See [output references](../concepts/cache/output-refs.md).
+References are **portable**: the same inputs mint the same ref on every machine,
+so one pasted from CI or a teammate resolves in your checkout once your cache
+holds a run of those exact inputs. The inline `inspect:` hint above is still
+suppressed when magus detects CI, but that is about the runner, not the ref -
+by the time anyone reads the log, the ephemeral job that printed it is usually
+gone, and the failing output is already inline above it. If a ref resolves
+nowhere locally, `magus query output <ref>` sweeps the workspace for a target
+whose live cache key predicts it and prints the command that reproduces it. See
+[output references](../concepts/cache/output-refs.md).
 
 For structural questions, the knowledge graph commands answer different shapes
 of "why":

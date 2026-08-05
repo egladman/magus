@@ -46,6 +46,19 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   explicit act. A bundle carries no manifest and no artifact blobs, so a published failure
   can never replay as someone's cache hit. Passing runs still travel automatically, and
   their artifact now carries the run's descriptor and key inputs as well.
+- An unresolvable `magus query output <ref>` (MGS8001) is no longer a dead end. magus
+  sweeps every candidate target in the workspace, keys each exactly as a run would, and
+  compares against the ref - the same prediction `describe target --cache` already does
+  for one target on demand. One match prints the exact `magus run <target> [project]`
+  that would reproduce it; no match says plainly that the run which printed it had
+  different inputs (a different commit, an uncommitted change, or an environment), which
+  is a finding, not a failed lookup. `--base` plays no part in either case - it scopes
+  which targets `affected` treats as changed, not what a target hashes to. `--meta` also
+  gains a `rev:` line: the VCS revision the run's inputs were read at, with a `(dirty:
+  ...)` note and a `recorded at X, you are on Y.` callout when it differs from HEAD - the
+  key pins a tree state, never a commit, so this is provenance, not something to check
+  out. A ref minted by a run that forwarded extra arguments after `--` still cannot be
+  predicted, since those arguments are part of the key and a prediction has none.
 
 ### Security
 
