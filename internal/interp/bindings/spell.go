@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/internal/interactive/tty"
+	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -292,17 +293,37 @@ const readinessGrace = 30 * time.Second
 // was consumed and a re-run replays from cache.
 func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string) error {
 	cmdline := strings.Join(append([]string{probe.Bin}, probe.Args...), " ")
-	notReady := func() error {
-		return types.DiagnosticErrorf(types.ToolNotReady,
-			"%s is installed but not ready: `%s` failed. The op %q needs it running",
-			tool, cmdline, tool)
+	// Captured so the tool's OWN diagnosis reaches the user. `docker info` says
+	// "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the
+	// docker daemon running?" - it names the socket and asks the right question,
+	// which is strictly better than anything magus can say about a tool it does not
+	// own. Paraphrasing it was throwing away the most actionable line available.
+	probeOp := spells.Op{Command: probe, Capture: true}
+	probeOp.Command.Capture = true
+
+	notReady := func(res run.ExecResult, cause error) error {
+		msg := strings.TrimSpace(res.Stderr)
+		if msg == "" {
+			msg = strings.TrimSpace(res.Stdout)
+		}
+		// Wrapped, not formatted in: errors.Is still reaches the underlying exec
+		// failure, matching how MGS3003 wraps its cause in std/os.go.
+		if msg == "" {
+			return types.WrapDiagnostic(types.ToolNotReady, cause,
+				"%s is installed but not ready: `%s` failed. The op %q needs it running",
+				tool, cmdline, tool)
+		}
+		return types.WrapDiagnostic(types.ToolNotReady, cause,
+			"%s is installed but not ready. The op %q needs it running, and `%s` said:\n  %s",
+			tool, tool, cmdline, strings.ReplaceAll(msg, "\n", "\n  "))
 	}
 
-	if _, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir}); err == nil {
+	res, err := runCommand(ctx, probeOp, commandOpts{cwd: dir})
+	if err == nil {
 		return nil
 	}
 	if !tty.StdinIsTerminal() {
-		return notReady()
+		return notReady(res, err)
 	}
 
 	slog.WarnContext(ctx, "waiting for tool to become ready",
@@ -316,12 +337,13 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 			return ctx.Err()
 		case <-time.After(time.Second):
 		}
-		if _, err := runCommand(ctx, spells.Op{Command: probe}, commandOpts{cwd: dir}); err == nil {
+		res, err = runCommand(ctx, probeOp, commandOpts{cwd: dir})
+		if err == nil {
 			slog.InfoContext(ctx, "tool became ready", slog.String("tool", tool))
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return notReady()
+			return notReady(res, err)
 		}
 	}
 }

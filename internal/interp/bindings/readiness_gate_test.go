@@ -29,6 +29,36 @@ func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 	assert.Contains(t, err.Error(), "not ready")
 }
 
+// The tool's own diagnosis is what tells someone what to fix - `docker info` names the
+// socket and asks whether the daemon is running. Paraphrasing it discarded the most
+// actionable line available, so the probe's output must reach the error.
+func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "echo 'Cannot connect to the daemon at /var/run/x.sock' >&2; exit 1"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	err := checkReady(context.Background(), readiness, op, t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "/var/run/x.sock", "the probe's own message was discarded")
+	assert.True(t, errors.Is(err, types.ToolNotReady), "wrapping must not lose the code")
+}
+
+// A silent probe still produces a usable error rather than a dangling colon.
+func TestReadinessErrorWithoutProbeOutput(t *testing.T) {
+	readinessMemo.Clear()
+	readiness := map[string]spells.Command{
+		"faketool": {Bin: "sh", Args: []string{"-c", "exit 1"}},
+	}
+	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
+
+	err := checkReady(context.Background(), readiness, op, t.TempDir())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "needs it running")
+	assert.True(t, errors.Is(err, types.ToolNotReady))
+}
+
 // A passing probe lets the op through.
 func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 	readinessMemo.Clear()
