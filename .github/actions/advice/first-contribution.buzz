@@ -1,8 +1,8 @@
 // Orient someone opening their first pull request against this repository.
 //
 // Fires once, ever, per person: the moment they have a merged pull request it retracts
-// itself and never returns. That is what keeps it a welcome rather than a banner - it
-// costs a regular contributor nothing, because they never see it.
+// itself and never returns. A regular contributor never sees it, which is what keeps it
+// a welcome instead of a banner.
 //
 // What it says is chosen for the mistakes a newcomer to a MAGUS workspace makes, not for
 // generic repository etiquette: generated files are regenerated rather than edited, and

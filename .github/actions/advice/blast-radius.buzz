@@ -82,9 +82,9 @@ export fun hub(chains: [str]) > str {
 fun body(projects: [str], chains: [str], total: int, share: float) > str {
     var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
         + " projects.**\n\n"
-        + "That is a property of how this workspace is wired rather than a comment on the "
-        + "size of the change: a project is here because it sits downstream of one you "
-        + "edited. Concretely, all " + "{projects.len()}" + " rebuild and retest.\n\n"
+        + "The reach comes from how this workspace is wired: a project is here because "
+        + "it sits downstream of one you edited. All " + "{projects.len()}" + " of them "
+        + "rebuild and retest.\n\n"
         + "| project | why it is in the set |\n| --- | --- |\n";
     for (var i = 0; i < projects.len(); i = i + 1) {
         var why = "edited directly";
@@ -106,8 +106,8 @@ fun body(projects: [str], chains: [str], total: int, share: float) > str {
             + "change would not shrink any piece - the coupling is upstream of this diff.\n";
     }
     return text
-        + "\nIf that matches what you expected, there is nothing to do here. If it does "
-        + "not, the surprise is in the dependency graph rather than in this pull request: "
+        + "\nIf that matches what you expected, there is nothing to do here. If it "
+        + "surprises you, look at the dependency graph before this pull request: "
         + "`magus affected --explain <project>` lists the files that pulled one in, and "
         + "`magus path <a> <b>` shows how any two connect.\n";
 }

@@ -30,9 +30,9 @@ export fun raised(diff: str) > str {
 
 fun body(floor: str) > str {
     return "**This pull request raises the magus version floor to `" + floor + "`.**\n\n"
-        + "`required_version` is checked before the magusfile is evaluated, so anyone on "
-        + "an older magus will not be able to load this workspace at all once this "
-        + "merges - not just the changed targets, every command. Upgrade first:\n\n"
+        + "magus checks `required_version` before it evaluates the magusfile, so once "
+        + "this merges an older magus cannot load this workspace at all - not just the "
+        + "changed targets, every command. Upgrade first:\n\n"
         + "```sh\nmagus self update\n```\n";
 }
 

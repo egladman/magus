@@ -32,8 +32,8 @@ fun body(entries: [str]) > str {
         + "\nA target with `skip_cache` re-runs on every invocation, for every "
         + "contributor and every CI run - it never replays and never contributes to a "
         + "cache hit downstream. That is the right call for anything whose answer depends "
-        + "on something magus cannot see (a clock, a network, a credential), and the "
-        + "wrong one for work that is merely slow.\n\n"
+        + "on something magus cannot see (a clock, a network), and the wrong one for "
+        + "work that is only slow.\n\n"
         + "The reason above is stored with the declaration, so this is only a nudge to "
         + "make sure it is the reason you meant.\n";
 }

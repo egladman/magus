@@ -35,9 +35,9 @@ fun body(files: [str], total: int) > str {
         + "\nNo project declares them as sources, so they invalidate no cache key and "
         + "feed no target. Whatever the checks below report, they did not check these.\n\n"
         + "If that is wrong, widen the owning project's `sources` in its magusfile - or "
-        + "declare the directory as a project if it is not one yet. If they really are "
+        + "declare the directory as a project if it is not one yet. If they belong "
         + "outside the build (an editor config, a note to yourself), this is correct and "
-        + "worth knowing anyway.\n\n"
+        + "still worth knowing.\n\n"
         + "`magus describe file <path>` explains any one of them.\n";
 }
 
