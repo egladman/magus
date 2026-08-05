@@ -1,0 +1,29 @@
+# `magus query output <ref>` on a ref no local run ever produced. The not-exist path
+# must render RefNotFoundError's message exactly once (it already says "consulted:
+# ..."; a prior version appended "(consulted: ...)" a second time), then best-effort
+# invert the ref back to a workspace target via IdentifyRef. Here the ref matches no
+# target's live key, so the message stays informative rather than reading as a failure
+# to try.
+
+! exec magus query output outdeadbeef0000
+stderr 'MGS8001'
+stderr 'no stored output for ref "outdeadbeef0000"; consulted: local cache'
+! stderr 'consulted: local cache \(consulted'
+stderr 'No target in this workspace keys to that ref at the current tree'
+stderr 'magus describe targets <target> --cache --against outdeadbeef0000'
+stderr 'magus query output outdeadbeef0000 --publish'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

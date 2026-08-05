@@ -659,7 +659,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	if against != "" {
 		desc, aerr := m.OutputDescriptorByRef(against)
 		if aerr != nil {
-			return reportRefLookupError(against, aerr)
+			return reportRefLookupError(ctx, m, against, aerr)
 		}
 		storedRef, storedKey = desc.Ref, desc.Key
 		if storedRef == "" {

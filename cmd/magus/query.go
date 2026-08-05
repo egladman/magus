@@ -204,10 +204,10 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		return err
 	}
 	if o.attempts {
-		return listOutputAttempts(m, ref, o.out)
+		return listOutputAttempts(ctx, m, ref, o.out)
 	}
 	if o.meta {
-		return showOutputMeta(m, ref, o.out)
+		return showOutputMeta(ctx, m, ref, o.out)
 	}
 	if o.publish {
 		published, perr := m.PublishOutput(ctx, ref)
@@ -230,7 +230,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		// the browser renders pretty from structure.
 		data, desc, err := m.OutputByRef(ref)
 		if err != nil {
-			return reportRefLookupError(ref, err)
+			return reportRefLookupError(ctx, m, ref, err)
 		}
 		events := console.StitchDisplayEvents(data, desc)
 		var inv journal.Invocation
@@ -255,7 +255,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// before reporting it missing.
 	data, desc, err := m.OutputByRefRemote(ctx, ref)
 	if err != nil {
-		return reportRefLookupError(ref, err)
+		return reportRefLookupError(ctx, m, ref, err)
 	}
 	if o.out.Format == FormatJSON || o.out.Format == FormatYAML {
 		return emitFormatted(o.out, outputRefRecord{OutputDescriptor: desc, Output: string(data)})
@@ -268,10 +268,10 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 // first. Every attempt of a step shares the step's ref; the attempt id is the
 // execution-unique handle, and passing a full attempt id to `magus query output`
 // retrieves that exact execution's bytes.
-func listOutputAttempts(m *magus.Magus, ref string, out OutputOptions) error {
+func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
 	list, err := m.OutputAttempts(ref)
 	if err != nil {
-		return reportRefLookupError(ref, err)
+		return reportRefLookupError(ctx, m, ref, err)
 	}
 	if out.Format == FormatJSON || out.Format == FormatYAML {
 		return emitFormatted(out, list)
@@ -318,10 +318,10 @@ type outputMetaRecord struct {
 // component classes - the machine-comparable half of the works-on-my-machine story
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
-func showOutputMeta(m *magus.Magus, ref string, out OutputOptions) error {
+func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
 	desc, err := m.OutputDescriptorByRef(ref)
 	if err != nil {
-		return reportRefLookupError(ref, err)
+		return reportRefLookupError(ctx, m, ref, err)
 	}
 	var digests []cache.ClassDigest
 	lines, lerr := m.OutputKeyInputs(ref)
@@ -393,8 +393,12 @@ func showOutputMeta(m *magus.Magus, ref string, out OutputOptions) error {
 }
 
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
-// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code.
-func reportRefLookupError(ref string, err error) error {
+// missing/aged-out, or an unexpected error) as a coded diagnostic + exit code. On the
+// missing-ref path it also prints a best-effort suggestion inverting the ref back to the
+// workspace target(s) that could have minted it - see printRefIdentitySuggestion. m may be
+// nil at call sites with no loaded Magus in scope; the suggestion is then skipped, not
+// attempted against a nil receiver.
+func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err error) error {
 	var amb *cache.AmbiguousRefError
 	switch {
 	case errors.As(err, &amb):
@@ -402,18 +406,70 @@ func reportRefLookupError(ref string, err error) error {
 		return errSilent{exitCode: 2}
 	case errors.Is(err, fs.ErrNotExist):
 		// Name the stores consulted when the lookup knows them: a foreign ref that was
-		// never published reads exactly like a mistyped one otherwise.
+		// never published reads exactly like a mistyped one otherwise. Render the message
+		// ONCE - RefNotFoundError.Error() already includes "consulted: <stores>".
 		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
 		var missing *cache.RefNotFoundError
 		if errors.As(err, &missing) {
-			msg = fmt.Sprintf("%s (consulted: %s). If it came from CI or a teammate, they can share it with `%s`.",
-				missing.Error(), strings.Join(missing.Stores, ", "), clihint.QueryOutput.With(ref, "--publish"))
+			msg = missing.Error()
 		}
 		fmt.Fprintf(os.Stderr, "magus query: %s\n", types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error())
+		printRefIdentitySuggestion(ctx, m, ref)
 		return errSilent{exitCode: 2}
 	default:
 		return fmt.Errorf("magus query: look up output ref %q: %w", ref, err)
 	}
+}
+
+// printRefIdentitySuggestion best-effort-inverts a missing ref back to the workspace
+// target(s) that could have minted it (Magus.IdentifyRef) and prints the finding to
+// stderr. A nil m, or IdentifyRef itself erroring (e.g. types.ErrNoCache on an Inspect
+// workspace), both skip silently: a best-effort suggestion must never turn a lookup
+// error into a different one.
+func printRefIdentitySuggestion(ctx context.Context, m *magus.Magus, ref string) {
+	if m == nil {
+		return
+	}
+	matches, err := m.IdentifyRef(ctx, ref, globalCfg.DefaultCharms)
+	if err != nil {
+		return
+	}
+	switch len(matches) {
+	case 0:
+		// Informative, not a failure to try: nothing here keys to the ref because the
+		// run that printed it had different inputs, not because this lookup is broken.
+		fmt.Fprintln(os.Stderr, "No target in this workspace keys to that ref at the current tree, which means the run that printed it had different inputs (a different commit, uncommitted change, or environment).")
+		fmt.Fprintf(os.Stderr, "Once you know which target it should be: %s\n", clihint.DescribeTargets.With("<target>", "--cache", "--against", ref))
+		fmt.Fprintf(os.Stderr, "If someone else has it, they can share it with: %s\n", clihint.QueryOutput.With(ref, "--publish"))
+	case 1:
+		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for:")
+		fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(matches[0]))
+	default:
+		fmt.Fprintln(os.Stderr, "Nothing has produced it here, but this workspace would print it for any of:")
+		for _, mt := range matches {
+			fmt.Fprintf(os.Stderr, "  %s\n", refMatchCommand(mt))
+		}
+	}
+}
+
+// refMatchCommand renders a RefMatch as the "magus run" invocation that would key it:
+// the target name (with a :charm1,charm2 suffix when the match required explicit
+// charms), the project (omitted for the workspace root, "."), and --no-default-charms
+// when the match required the bare CI variant - this workspace's own default_charms
+// would otherwise apply and mint a different key.
+func refMatchCommand(mt magus.RefMatch) string {
+	target := mt.Target
+	if len(mt.Charms) > 0 {
+		target += ":" + strings.Join(mt.Charms, ",")
+	}
+	args := []string{target}
+	if mt.Project != "." {
+		args = append(args, mt.Project)
+	}
+	if len(mt.Charms) == 0 && len(globalCfg.DefaultCharms) > 0 {
+		args = append(args, "--no-default-charms")
+	}
+	return clihint.Run.With(args...)
 }
 
 // openOutputInViewer builds the viewer URL and opens a browser; --print emits the
